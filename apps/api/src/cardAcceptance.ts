@@ -36,7 +36,8 @@ export function returnText(criteria: string[], result: StoredAcceptance, workerO
   for (const issue of result.sourceWordIssues ?? [])
     missed.push(`本人原话「${issue.quote}」${issue.kind === "missing" ? "说了要的没做" : "没要的做了"}，${issue.reason}`);
   if (!missed.length) return null;
-  return `${workerOnly ? "你能补的" : "验收没过"}：${missed.join("。")}。改完再交回。`;
+  // 验收员写的那几句自己常带句号：每段先去掉末尾的「。」再连，不出「。。」。
+  return `${workerOnly ? "你能补的" : "验收没过"}：${missed.map((text) => text.trim().replace(/。+$/, "")).join("。")}。改完再交回。`;
 }
 
 /** 通过时写进执行事项的验收记录：by 记推进人，agentHandbackId 表示是 Agent 验收；本人「仍然通过」时 verdict 写推翻的原因。 */
