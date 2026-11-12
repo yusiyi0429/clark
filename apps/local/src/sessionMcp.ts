@@ -154,7 +154,7 @@ const SUBMIT_VERDICT = {
 /** 只有卡有（主循环第 60 条）。 */
 const PROPOSE_AGREEMENT_CHANGE = {
   name: "propose_agreement_change",
-  description: "提议改这张卡的约定（完成标准，要时连交代）：本人提了交代以外的新事、要就在这里做时，或者原来的标准做不到、要换个说法时用。不直接生效：本人在网页上选改不改，结果会告诉你；定之前照原来的约定做。",
+  description: "提议改这张卡的约定（完成标准，要时连交代）：本人提了交代以外的新事、要就在这里做时，或者原来的标准做不到、要换个说法时用。不直接生效：本人在网页上选改不改，结果会告诉你。本人提的新事等定了再动手，定之前不按旧约定交回；原来约定里的事可以接着做。",
   inputSchema: {
     type: "object",
     properties: {
