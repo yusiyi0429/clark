@@ -92,6 +92,24 @@ describe("越界路径识别", () => {
     expect(out("Bash", { command: 'rg "\\bfoo\\d+" src' })).toEqual([]);
   });
 
+  it("同一条命令里先赋成字面路径的变量先代入再判（3700 卡 Q）；认不出的照旧越界，脚本块的 } 不粘进路径", () => {
+    const f = join(other, "existing.txt");
+    // 卡 Q 那种只读核对：变量指向工作目录，不越界、「自动」档不用问
+    const q = `$d='${cwd}'; $files = Get-ChildItem $d; foreach ($f in $files) { Get-Content "$d\\$f"}; Get-Content "$D\\a.txt"`;
+    expect(out("PowerShell", { command: q })).toEqual([]);
+    expect(autoAllowed("PowerShell", { command: q }, scope)).toBe(true);
+    expect(out("PowerShell", { command: `$d="${cwd}\\src"; Get-Content "\${d}\\a.ts"` })).toEqual([]);
+    expect(out("Bash", { command: `d='${cwd}'; cat "$d/a.txt"; e=src; ls $e/x` })).toEqual([]);
+    // 变量指向外面：代入后照样越界，给人看的是代入后的路径
+    expect(out("PowerShell", { command: `$o='${other}'; Get-Content "$o\\existing.txt"` })).toEqual([f]);
+    // 认不出的：赋成别的、带别的变量、+=、前后两个值、没赋过 → 照旧按越界；foreach 后面的 } 不跟着
+    expect(out("PowerShell", { command: `$d = Join-Path $env:TEMP x; Get-Content "$d\\a"` })).toEqual(["$d\\a"]);
+    expect(out("PowerShell", { command: `$d="$env:TEMP\\x"; Get-Content "$d\\a"` })).toEqual(["$d\\a"]);
+    expect(out("PowerShell", { command: `$d='${cwd}'; $d += '\\..\\..'; Get-Content "$d\\a"` })).toEqual(["$d\\a"]);
+    expect(out("PowerShell", { command: `$d='${cwd}'; $d='${other}'; Get-Content "$d\\a"` })).toEqual(["$d\\a"]);
+    expect(out("PowerShell", { command: 'foreach ($f in $list) { Get-Content "$d\\$f"}' })).toEqual(["$d\\$f"]);
+  });
+
   it("「这张卡都允许」要放开的范围越界就不给：加外面的目录、放行外面或上级目录、放行碰外面文件的命令", () => {
     const reach = (s: unknown) => suggestionsReachOutside(s, scope);
     const rule = (p: string) => "//" + p.replace(/\\/g, "/").replace(/^([A-Za-z]):/, (_, d: string) => d.toLowerCase()).replace(/^\//, "") + "/**";
