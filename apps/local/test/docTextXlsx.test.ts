@@ -35,19 +35,19 @@ const book = (amount?: string, cached?: boolean) =>
 const EXPECTED = [
   "## 预算",
   "",
-  "| A | B | C |",
-  "| --- | --- | --- |",
-  "| 项目 | 金额 | 日期 |",
-  "| 新首页 | 1200 | 2026-11-11 |",
-  "| 右栏 | 800.5 | 2026-11-11 12:00:00 |",
-  "| 合计 | =SUM(B2:B3) | TRUE |",
-  "| 合并说明 |  |  |",
+  "|  | A | B | C |",
+  "| --- | --- | --- | --- |",
+  "| 1 | 项目 | 金额 | 日期 |",
+  "| 2 | 新首页 | 1200 | 2026-11-11 |",
+  "| 3 | 右栏 | 800.5 | 2026-11-11 12:00:00 |",
+  "| 4 | 合计 | =SUM(B2:B3) | TRUE |",
+  "| 6 | 合并说明 |  |  |",
   "",
   "## 备注",
   "",
-  "| A | B |",
-  "| --- | --- |",
-  "|  | 隐藏表里的字 |",
+  "|  | A | B |",
+  "| --- | --- | --- |",
+  "| 2 |  | 隐藏表里的字 |",
   "",
   "## 图",
   "",
@@ -65,9 +65,9 @@ describe("Excel 转文字", () => {
     expect(sheets.map((s) => [s.name, s.hidden, s.rows.length])).toEqual([["预算", false, 5], ["备注", true, 1], ["图", false, 0]]);
     const total = sheets[0].rows[3];
     expect(total).toMatchObject({ row: 4, cells: [{ col: "A", text: "合计" }, { col: "B", text: "=SUM(B2:B3)" }, { col: "C", text: "TRUE" }] });
-    expect(markdown.slice(total.start, total.end)).toBe("| 合计 | =SUM(B2:B3) | TRUE |");
+    expect(markdown.slice(total.start, total.end)).toBe("| 4 | 合计 | =SUM(B2:B3) | TRUE |");
     expect(sheets[0].rows[4]).toMatchObject({ row: 6, cells: [{ col: "A", text: "合并说明" }] });
-    expect(markdown.slice(sheets[1].start, sheets[1].end)).toBe("## 备注\n\n| A | B |\n| --- | --- |\n|  | 隐藏表里的字 |");
+    expect(markdown.slice(sheets[1].start, sheets[1].end)).toBe("## 备注\n\n|  | A | B |\n| --- | --- | --- |\n| 2 |  | 隐藏表里的字 |");
     expect(markdown.slice(sheets[2].start, sheets[2].end)).toBe("## 图\n\n【图表】");
   });
 
@@ -108,7 +108,7 @@ describe("Excel 转文字", () => {
       '<row r="3"><c r="A3"><v>3</v></c><c r="B3"><f>A3*2+$A$1</f></c></row>';
     const a = convert(makeXlsx([{ name: "表", data: shared }])).markdown;
     expect(a).toBe(convert(makeXlsx([{ name: "表", data: expanded }])).markdown);
-    expect(a).toContain("| 3 | =A3\\*2+$A$1 |");
+    expect(a).toContain("| 3 | 3 | =A3\\*2+$A$1 |");
   });
 
   it("改了一个格子的值，前后只差那一格", () => {
@@ -118,7 +118,7 @@ describe("Excel 转文字", () => {
     const { before: b } = changedSpan(before.markdown, after.markdown);
     expect(b).toBe("2");
     // 调用方用位置找回是哪一行
-    const at = before.markdown.indexOf("| 新首页 | 1200 |") + "| 新首页 | 1".length;
+    const at = before.markdown.indexOf("| 2 | 新首页 | 1200 |") + "| 2 | 新首页 | 1".length;
     expect(before.sheets[0].rows.find((r) => r.start <= at && at < r.end)?.row).toBe(2);
   });
 
@@ -162,7 +162,7 @@ describe("Excel 转文字", () => {
       Array.from({ length: 200 }, (_, i) => `<row r="${i + 2}" s="1" customFormat="1"><c r="XFD${i + 2}" s="1"/></row>`).join("") +
       '<row r="1048576" s="1" customFormat="1"><c r="XFD1048576" s="1"/></row>';
     const after = '<mergeCells count="1"><mergeCell ref="C3:XFD1048576"/></mergeCells>';
-    expect(convert(makeXlsx([{ name: "表", data, after }])).markdown).toBe("## 表\n\n| A |\n| --- |\n| 1 |\n");
+    expect(convert(makeXlsx([{ name: "表", data, after }])).markdown).toBe("## 表\n\n|  | A |\n| --- | --- |\n| 1 | 1 |\n");
   });
 
   it("批注写在表格后面，按行列排、空的不写、多行缩进；合并区里被盖住的格子存了同样的字也只写左上角", () => {
@@ -178,11 +178,11 @@ describe("Excel 转文字", () => {
       [
         "## 需求",
         "",
-        "| A | B | C |",
-        "| --- | --- | --- |",
-        "| 需求分级 |  |  |",
-        "| 1 | 甲 | 说明 |",
-        "| 2 | 乙 | 说明 |",
+        "|  | A | B | C |",
+        "| --- | --- | --- | --- |",
+        "| 1 | 需求分级 |  |  |",
+        "| 2 | 1 | 甲 | 说明 |",
+        "| 3 | 2 | 乙 | 说明 |",
         "",
         "### 批注",
         "",

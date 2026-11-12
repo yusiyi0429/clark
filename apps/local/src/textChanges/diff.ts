@@ -45,8 +45,11 @@ export function lineRegions(aLines: string[], bLines: string[], budget: Budget =
   return regions(intern(aLines), intern(bLines), budget);
 }
 
-/** 比两份文字，回逐处改动；同样的输入永远同样的结果，id 是 c1、c2… 按位置排。 */
-export function diffText(before: string, after: string): TextChange[] {
+/**
+ * 比两份文字，回逐处改动；同样的输入永远同样的结果，id 是 c1、c2… 按位置排。
+ * lineKey：对行时拿它算出来的去比（比如去掉 Excel 的行号），算出来一样的行不算改过。
+ */
+export function diffText(before: string, after: string, lineKey?: (line: string) => string): TextChange[] {
   if (before === after) return [];
   const budget: Budget = { steps: 0 };
   const aLines = splitLines(before);
@@ -54,7 +57,8 @@ export function diffText(before: string, after: string): TextChange[] {
   const aStarts = lineStarts(aLines);
   const bStarts = lineStarts(bLines);
   const spans: Array<[TextSpan, TextSpan]> = [];
-  for (const [as, ae, bs, be] of lineRegions(aLines, bLines, budget)) {
+  const keys = (lines: string[]) => (lineKey ? lines.map(lineKey) : lines);
+  for (const [as, ae, bs, be] of lineRegions(keys(aLines), keys(bLines), budget)) {
     const a = { start: aStarts[as], end: aStarts[ae] };
     const b = { start: bStarts[bs], end: bStarts[be] };
     if (a.start === a.end || b.start === b.end) spans.push([a, b]); // 整行新增或整行删除
