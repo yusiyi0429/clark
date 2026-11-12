@@ -317,3 +317,6 @@
   .rescheduleIcon { display: block; }
   .rescheduleText { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 }
+
+/* 新首页深色（会议页挪进新首页后）：顶栏底色变深，没开始的会那段时间的深色字看不清，只换成字色变量；浅色不变。 */
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .slot:not([data-timeline='ended']) .slotTime { color: var(--ink); }

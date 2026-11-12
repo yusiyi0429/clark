@@ -9,3 +9,21 @@
 .root :global(.ts-detail) { overflow: auto; overscroll-behavior: contain; padding: 0 0 var(--ts-content-bottom, 24px); scroll-padding-bottom: var(--ts-content-bottom, 24px); outline: none; }
 .root :global(.ts-row) { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .root :global(.ts-between) { justify-content: space-between; }
+
+/*
+ * 新首页深色：阅读页底色（顶栏渐变 header-capsule 的 ::before 也读它）换成新首页的面板色。
+ * 会议页自己在 .ts-detail 上写死了 #fff（meeting-workspace），框架上又带 data-theme="light"（HeroUI 浅色把 --surface 改回白），
+ * 所以先在根上记下新首页的 --surface，再交给 .ts-detail；不然深色下顶栏是一条白带。
+ * 会议页的 .workspace 也把 --ink-muted 写死成浅色用的 #63686f，一起换回新首页的。
+ * 减少透明度时 header-capsule 写死的 #fcfdfe 也在这里接住。浅色和老页面不变。
+ */
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .root { --meeting-home-surface: var(--surface); --meeting-home-muted: var(--ink-muted); }
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .root :global(.ts-detail) { --ts-reading-surface: var(--meeting-home-surface); --ink-muted: var(--meeting-home-muted); }
+/* 顶栏底色变深以后，顶栏里写死的深色字（标题、返回、选中的那一段）换成新首页的字色。 */
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .root :global(.ts-detail-header > h1) { color: var(--ink); }
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .root :global([data-timeline=ended] .ts-detail-header > h1),
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .root :global(.ts-detail-header > .ts-row > .button:first-child) { color: var(--ink-muted); }
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .root :global(.ts-detail-header [aria-checked='true']) { color: var(--tianshu-blue-secondary); }
+@media (prefers-reduced-transparency: reduce) {
+  :global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .root :global(.ts-detail-header)::before { background: var(--ts-reading-surface); }
+}
