@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { api, gitRepo, pair, raw, startTestRunner, tempDir, ORIGIN } from "./helpers.js";
-import { agreementInBrief, CHINESE_RULE, EDIT_SCOPE_RULE, systemPrompt } from "../src/rolePrompt.js";
+import { agreementInBrief, CHINESE_RULE, EDIT_SCOPE_RULE, saidBrief, systemPrompt } from "../src/rolePrompt.js";
 
 async function until<T>(fn: () => Promise<T | null | undefined | false> | T | null | undefined | false, ms = 10_000): Promise<T> {
   const t0 = Date.now();
@@ -387,7 +387,7 @@ describe("规划员和验收员", { timeout: 30_000 }, () => {
       await until(async () => h.events(vb.id).some((e) => e.type === "user_message"));
       const bad = await h.mcp(vb.id, "submit_verdict", { ...PASSING, sourceWordIssues: [{ quote: "要有记住我", kind: "missing", reason: "x" }] });
       expect(bad.isError).toBe(true);
-      expect(bad.content[0]!.text).toContain("不是本人原话里的话");
+      expect(bad.content[0]!.text).toContain("「要有记住我」不是本人原话或本人在子会话里说的话");
       expect((await h.mcp(vb.id, "submit_verdict", PASSING)).content[0]!.text).toBe("结论已交：过了。");
       // 交代里没有原话时不能写 sourceWordIssues
       words = undefined;
@@ -407,6 +407,43 @@ describe("规划员和验收员", { timeout: 30_000 }, () => {
       expect((await h.mcp(p.id, "propose_plan", { ...PLAN, cards })).content[0]!.text).toContain("已交第 1 次计划");
       const plan = await until(() => h.cloud.items.find((i) => i.type === "card_plan" && i.subject.taskId === "T-sw"));
       expect(plan.data.cards.map((x: any) => x.sourceWords ?? null)).toEqual([["登录页要有忘记密码"], null]);
+    } finally {
+      await h.t.cleanup();
+    }
+  });
+
+  it("本人在卡的子会话里说的（3700 卡 U）：回答提问选的、写的和插话按先后接在原话后面，quote 能核对上；网页转的改法、约定改了的通知不算", async () => {
+    const h = await setup(3);
+    try {
+      const MD = "## 本人原话\n\n> 登录页要有忘记密码\n\n# 验收交代";
+      h.cloud.setBrief(() => ({ status: 200, body: { markdown: MD, criteria: CRITERIA, role: REVIEWER, failStreak: 0, sourceWords: ["登录页要有忘记密码"] } }));
+      const ASK = [{ question: "风险.md 怎么做？", header: "做法", multiSelect: false, options: [{ label: "就在这里做并改约定", description: "" }, { label: "另开一个", description: "" }] }];
+      const SAID = "另外在 验收1112\\ 里再新建一个 风险.md\n写三条";
+      const issue = { quote: "风险.md 写三条", kind: "missing", reason: "风险.md 只有两条" };
+      h.fake({ ask: ASK, verdict: { ...PASSING, sourceWordIssues: [issue] } });
+      const a = await h.open(h.card("A"));
+      const q = await until(async () => (await h.session(a.id)).session.pendingQuestion);
+      expect((await h.call("POST", `/v1/sessions/${a.id}/questions/${encodeURIComponent(q.requestId)}`, { choices: [["就在这里做并改约定"]], text: "风险.md 写三条" })).status).toBe(200);
+      await h.waitStatus(a.id, "idle");
+      // 先后说三句：本人的插话夹在网页转的两句中间，每句做完一轮
+      const say = async (body: unknown) => {
+        expect((await h.call("POST", `/v1/sessions/${a.id}/messages`, body)).status).toBe(200);
+        await h.allow(a.id);
+        await h.waitStatus(a.id, "idle");
+      };
+      await say({ text: "验收没过：第 2 条「有截图」，没截图；怎么补：补一张登录后的截图。改完再交回。" });
+      await say({ text: SAID });
+      await say({ text: "卡的约定改了（第 2 版）。按新的做，交回时逐条对新的完成标准自评。\n新的完成标准：\n1. 页面能登录", agreementRevision: 2 });
+
+      await h.handBack(a.id);
+      const v = await until(async () => (await h.verifies())[0]);
+      await h.waitStatus(v.id, "done");
+      const said = ["就在这里做并改约定", "风险.md 写三条", SAID];
+      expect(h.events(v.id).find((e) => e.type === "user_message").text).toBe(`${MD}\n\n${saidBrief(said)}`);
+      expect(saidBrief(said)).toBe("## 本人在这个子会话里说的\n\n按先后排，接在本人原话后面。\n\n> 就在这里做并改约定\n\n> 风险.md 写三条\n\n> 另外在 验收1112\\ 里再新建一个 风险.md\n> 写三条");
+      // quote 是本人在子会话里说的：认，判没过
+      expect(h.events(a.id).find((e) => e.type === "verdict")).toMatchObject({ passed: false, returnText: "验收没过：本人原话「风险.md 写三条」漏了：风险.md 只有两条。改完再交回。" });
+      expect((await until(() => h.cloud.items.find((i) => i.type === "verdict"))).data.sourceWordIssues).toEqual([issue]);
     } finally {
       await h.t.cleanup();
     }
@@ -663,6 +700,12 @@ describe("规矩和交代（不起进程）", () => {
     const card = systemPrompt("card", null, [], null);
     expect(card).toContain("先提新的完成标准，等本人定了再动手做这件新事；不要先做，也不要先按旧约定交回");
     expect(card).not.toContain("定之前照原来的约定做");
+  });
+
+  it("验收员（3700 卡 U）：原话也认本人在子会话里说的；前后冲突以后说的为准，和改过的约定冲突以新约定为准", () => {
+    const verify = systemPrompt("verify", null, [], null);
+    expect(verify).toContain("交代里有「本人原话」或「本人在这个子会话里说的」时");
+    expect(verify).toContain("这些话前后冲突时，以后说的为准。交代里有「约定后来改过」那段时，原话和本人改过或确认过的新约定冲突的地方以新约定为准，不写进 sourceWordIssues。");
   });
 
   it("从开工交代里认出约定：云端的交代、网页自己拼的、还没写标准的、认不出的", () => {

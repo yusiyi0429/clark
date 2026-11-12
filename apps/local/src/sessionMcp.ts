@@ -119,7 +119,7 @@ const PROPOSE_PLAN = {
 };
 const SUBMIT_VERDICT = {
   name: "submit_verdict",
-  description: "交验收结论（只交一次）：每条完成标准判一次（index 从 1 起，条数照交代），met 达到、partial 部分、unmet 没达到、needs_person 要本人补（执行方标了、而且确实只有本人能做），写理由（reason）、依据（evidence），没达到的写怎么补（fix）和谁来补（fixBy）；标准以外的建议放 beyondScope；交代里有「本人原话」时再对一遍原话，对不上的写 sourceWordIssues；summary 一句人话：卡在哪、要谁做什么，不写行号、不复述标准。",
+  description: "交验收结论（只交一次）：每条完成标准判一次（index 从 1 起，条数照交代），met 达到、partial 部分、unmet 没达到、needs_person 要本人补（执行方标了、而且确实只有本人能做），写理由（reason）、依据（evidence），没达到的写怎么补（fix）和谁来补（fixBy）；标准以外的建议放 beyondScope；交代里有「本人原话」或「本人在这个子会话里说的」时再对一遍，对不上的写 sourceWordIssues（前后冲突以后说的为准，和改过的约定冲突以新约定为准）；summary 一句人话：卡在哪、要谁做什么，不写行号、不复述标准。",
   inputSchema: {
     type: "object",
     properties: {
@@ -139,7 +139,7 @@ const SUBMIT_VERDICT = {
       beyondScope: { type: "array", items: { type: "string" } },
       sourceWordIssues: {
         type: "array",
-        description: "交代里有「本人原话」时，产出和原话明显对不上的地方：quote 原样抄是哪一句，kind 是 missing（漏了原话里明说的）或 extra（做了原话里没要的），reason 为什么。有一条就是没过；对得上就不写",
+        description: "交代里有「本人原话」或「本人在这个子会话里说的」时，产出和这些话明显对不上的地方：quote 原样抄是哪一句，kind 是 missing（漏了里面明说的）或 extra（做了里面没要的），reason 为什么。有一条就是没过；对得上就不写",
         items: {
           type: "object",
           properties: { quote: { type: "string" }, kind: { type: "string", enum: ["missing", "extra"] }, reason: { type: "string" } },

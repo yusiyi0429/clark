@@ -35,7 +35,7 @@ import type { ModelProfiles } from "./models.js";
 import { isInside, type Folders } from "./folders.js";
 import type { Outbox } from "./outbox.js";
 import { SESSION_MCP_NAME, sessionToolNames, type SessionToolset } from "./sessionMcp.js";
-import { agreementInBrief, changesBrief, criticAgents, returnText, reviewMessage, systemPrompt } from "./rolePrompt.js";
+import { agreementInBrief, changesBrief, criticAgents, returnText, reviewMessage, saidBrief, systemPrompt } from "./rolePrompt.js";
 import { addWorktree, branchName, cardDiff, changedFiles, commitAll, deleteBranch, git, mergeBranch, pruneRepo, removeWorktree, repoHead } from "./git.js";
 import { ensureFeishuPlugin, larkSkills } from "./agents/feishuPlugin.js";
 import { AGENT_NAME, earlierTurns, handoffText, otherRules } from "./handoff.js";
@@ -60,6 +60,8 @@ const WRITE_TOOLS = ["Edit", "MultiEdit", "Write", "NotebookEdit", "Bash", "Powe
 const PRIORITY: Record<TLocalSessionKind, number> = { verify: 0, plan: 1, card: 2, topic: 2 };
 /** 验收交代取不到（没连天枢、断网、天枢出错）时多久再试一次。 */
 const BRIEF_RETRY_MS = 15_000;
+/** 网页替本人转进卡的会话的固定格式的话的开头（不是本人说的，验收员的原话里不算）：验收没过的改法、约定改了的通知。 */
+const RELAYED = ["验收没过：", "卡的约定改了（第 "];
 /** 验收员一轮做完没交结论时，本机提醒它一次。 */
 const VERIFY_NUDGE = "还没交结论：请逐条判完，用 submit_verdict 交一次。";
 /** 一个会话最多留几个后台任务（先丢最早的已结束的）。 */
@@ -2474,9 +2476,11 @@ export class SessionManager {
       const model = await this.d.models.resolve(this.d.models.forTier(tier));
       if (rec.status !== "queued" || !rec.briefPending) continue;
       // 交代、模型一次填好再标成能开始：中间不能有 await，免得别处的 pump 拿着空的第一句话、执行方的模型先开了它。
-      const markdown = changes ? `${brief.markdown}\n\n${changes}` : brief.markdown;
+      // 本人在卡的子会话里亲手说的话按先后接在原话后面（3700 验收：插话要的 风险.md 被判成原话里没要）
+      const said = rec.parentId ? this.saidInCard(rec.parentId) : [];
+      const markdown = [brief.markdown, ...(said.length ? [saidBrief(said)] : []), ...(changes ? [changes] : [])].join("\n\n");
       Object.assign(rec, { briefPending: false, queuedMessage: markdown, criteria: brief.criteria, failStreak: brief.failStreak, role: brief.role, modelTier: tier,
-        sourceWords: (brief.sourceWords ?? []).filter((w) => w.trim()) });
+        sourceWords: [...(brief.sourceWords ?? []), ...said].filter((w) => w.trim()) });
       if (model) Object.assign(rec, { modelProfileId: model.profileId, modelLabel: model.label });
       this.waitNotes.delete(rec.id);
       this.save(rec);
@@ -2488,6 +2492,19 @@ export class SessionManager {
       this.briefTimer = setTimeout(() => { this.briefTimer = null; void this.pullBriefs(); }, BRIEF_RETRY_MS);
       this.briefTimer.unref?.();
     }
+  }
+
+  /**
+   * 本人在卡的会话里亲手说的话，按先后：网页上说的插话，回答提问时选的选项和写的话，都是原文。
+   * 网页替本人转的固定格式的话不算：验收没过的改法（useAutoReturn 送的云端 returnText）、约定改了的通知（云端 cardAgreements.ts）。
+   */
+  private saidInCard(cardSessionId: string): string[] {
+    const out: string[] = [];
+    for (const e of this.d.log.after(cardSessionId, 0)) {
+      if (e.type === "user_message" && e.source === "web" && !RELAYED.some((p) => e.text.startsWith(p))) out.push(e.text);
+      else if (e.type === "question_resolved" && e.choices) out.push(...e.choices.filter((c) => c.length).map((c) => c.join("、")), e.text ?? "");
+    }
+    return out.map((w) => w.trim()).filter(Boolean);
   }
 
   private waitNote(rec: SessionRecord, text: string) {
@@ -2515,12 +2532,12 @@ export class SessionManager {
     if (twice.length) throw new SessionError("validation", `第 ${[...new Set(twice)].join("、")} 条判了不止一次`);
     const missing = Array.from({ length: n }, (_, k) => k + 1).filter((i) => !seen.includes(i));
     if (missing.length) throw new SessionError("validation", `第 ${missing.join("、")} 条还没判（完成标准共 ${n} 条）`);
-    // 原话对不上的地方（16.8）：quote 必须是某段原话或其中一截
+    // 原话对不上的地方（16.8）：quote 必须是某段原话（含本人在卡的子会话里说的）或其中一截
     const words = rec.sourceWords ?? [];
     const issues = (Array.isArray(input.sourceWordIssues) ? input.sourceWordIssues : [])
       .map((i: any) => ({ quote: String(i?.quote ?? "").trim(), kind: i?.kind, reason: String(i?.reason ?? "").trim() })) as TLocalSourceWordIssue[];
     const notQuoted = issues.filter((i) => !i.quote || !words.some((w) => w.includes(i.quote)));
-    if (notQuoted.length) throw new SessionError("validation", words.length ? `「${notQuoted[0]!.quote}」不是本人原话里的话，quote 要原样抄` : "这次的交代里没有本人原话，不用写 sourceWordIssues");
+    if (notQuoted.length) throw new SessionError("validation", words.length ? `「${notQuoted[0]!.quote}」不是本人原话或本人在子会话里说的话，quote 要原样抄` : "这次的交代里没有本人原话，也没有本人在子会话里说的话，不用写 sourceWordIssues");
     const verdict: TLocalVerdict = {
       passed: judged.every((c) => c.verdict === "met") && !issues.length, summary: input.summary.trim(), criteria: judged,
       beyondScope: Array.isArray(input.beyondScope) ? input.beyondScope.map((s) => String(s).trim()).filter(Boolean) : [],

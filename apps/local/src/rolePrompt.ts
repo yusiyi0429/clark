@@ -71,7 +71,8 @@ const VERIFY_RULES = `## 规矩
 - 每条没达到的（partial、unmet、needs_person）都写 fixBy：执行方能补的写 worker，只有本人能补的写 person（needs_person 一定是 person）。达到的不写。
 - summary 写一句人话：卡在哪、要谁做什么（例：「候选名和含义都齐了，近似商标要你登录商标网查」）。不写行号，不复述标准原文。
 - 对照交代里的改动：完成标准没要求的新增或改动的文件（报告、命令输出、临时文件等），逐个指出来，写进相关那条的理由或 beyondScope。
-- 交代里有「本人原话」时：逐条判完完成标准，再对一遍原话。产出明显漏了原话里明说的（missing），或做了原话里没要的（extra），写进 sourceWordIssues：quote 原样抄是哪一句，再写为什么。有一条就是没过，完成标准全达到也一样；拿不准的不写。
+- 交代里有「本人原话」或「本人在这个子会话里说的」时：逐条判完完成标准，再对一遍这些话。产出明显漏了里面明说的（missing），或做了里面没要的（extra），写进 sourceWordIssues：quote 原样抄是哪一句，再写为什么。有一条就是没过，完成标准全达到也一样；拿不准的不写。
+  这些话前后冲突时，以后说的为准。交代里有「约定后来改过」那段时，原话和本人改过或确认过的新约定冲突的地方以新约定为准，不写进 sourceWordIssues。
 - 判完用 submit_verdict 交一次结论，然后停下。
 ${CHINESE_RULE}`;
 
@@ -192,6 +193,11 @@ export function returnText(criteria: string[], judged: TLocalVerdictCriterion[],
     .map((c) => `第 ${c.index} 条「${criteria[c.index - 1] ?? ""}」，${c.reason}；怎么补：${c.fix ?? "补上能核对的证据"}`);
   const words = issues.map((i) => `本人原话「${i.quote}」${i.kind === "missing" ? "漏了" : "里没要这个"}：${i.reason}`);
   return `验收没过：${[...missed, ...words].join("。")}。改完再交回。`;
+}
+
+/** 验收员交代里接在本人原话后面的一段：本人在卡的子会话里亲手说的话，按先后，一句一块（和云端「本人原话」一样的引用样式）。 */
+export function saidBrief(said: string[]): string {
+  return ["## 本人在这个子会话里说的", "", "按先后排，接在本人原话后面。", "", ...said.flatMap((text) => [...text.split("\n").map((line) => `> ${line}`), ""])].join("\n").trimEnd();
 }
 
 /** 验收员交代末尾接上的这次交回的改动（卡在工作树里做时）：基线到交回的提交。验收员只读、不能跑命令，改动全靠这里和读文件。 */
