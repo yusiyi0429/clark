@@ -137,7 +137,7 @@ export const CardSourceWordIssue = Type.Object({
  * 下面三样是主循环第 61、62 条加的，云端都带；标成可选只为老数据：
  * - gaps：没达到的几条（见 CardGapItem，按 index 排）；通过的、还没结论的为空数组。
  * - relay：这次交回最近一次从手机或别的电脑登记的「再改一轮」「我来补」（见 CardRelayView）；没登记过为 null。
- * - passedWithGap：本人「就到这里」了（没过或等本人补的那次被推翻成通过），见 CardGapPass；没有为 null。
+ * - passedWithGap：本人「就到这里」了（没过或等本人补的那次被推翻成通过；或本人推翻过的通过又「就到这里」），见 CardGapPass；没有为 null。
  */
 export const CardHandbackBrief = Type.Object({
   id: Type.String({ format: "uuid" }),
