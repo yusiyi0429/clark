@@ -32,6 +32,12 @@ describe("头一两句", () => {
     expect(firstSentences(null)).toBeNull();
     expect(firstSentences("长".repeat(300))).toHaveLength(200);
   });
+
+  it("冒号、逗号、顿号结尾的行话没说完：直接接下一行，不补「；」（3700 验收「三件事都做完了：；已删除…」）", () => {
+    expect(firstSentences("三件事都做完了：\n- 已删除旧文件\n- 改了配置\n- 跑过测试")).toBe("三件事都做完了：已删除旧文件；改了配置。"); // 照旧只取前两句
+    expect(firstSentences("改了登录页，\n顺手修了错字、\n补了测试")).toBe("改了登录页，顺手修了错字、补了测试");
+    expect(firstSentences("Done:\n- removed old files")).toBe("Done: removed old files");
+  });
 });
 
 describe("停了、要人介入都报给云端", { timeout: 30_000 }, () => {
