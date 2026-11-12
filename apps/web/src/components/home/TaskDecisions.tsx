@@ -43,7 +43,7 @@ export const markAnswered = (id: string, answer: string) => {
 
 /** 框要的那次交回：云端的摘要（项目动态带的、卡详情里的都行）；卡详情里的多带验收员逐条的理由。 */
 export type HandbackForBox = Pick<TCardHandbackBrief, "id" | "outcome" | "headline" | "sourceWordIssues" | "returnText" | "returnedAt">
-  & Partial<Pick<TCardHandbackBrief, "gaps" | "relay" | "passedWithGap">> & { result?: TCardHandbackView["result"] };
+  & Partial<Pick<TCardHandbackBrief, "gaps" | "relay" | "passedWithGap" | "overruled" | "overruleReason">> & { result?: TCardHandbackView["result"] };
 
 /** 推翻的原因上限（OverruleCardHandbackRequest.reason）；我来补的上限（CardRelayRequest.text）。 */
 const REASON_MAX = 200;
@@ -84,7 +84,7 @@ export function HandbackDecision({ cardId, handback, here, via, onFill, onLook, 
   const [answer, setAnswer] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const needs = handback.outcome === "needs_person";
-  const title = handback.headline?.trim() || (needs ? "等你补" : "验收两次没过");
+  const title = handbackTitle(handback);
   const gaps = handback.gaps ?? [];
   const relay = handback.relay ?? null;
   const settled = (text: string) => <DecisionBox kind="question" testId="handback-decision" title={title} options={[]} onPick={() => undefined} resolved={text} />;
@@ -140,6 +140,16 @@ export function HandbackDecision({ cardId, handback, here, via, onFill, onLook, 
     <DecisionBox kind="question" testId="handback-decision" title={title} body={body} options={options} onPick={([index]) => pick(options[index!]!.label)}
       footer={relay?.state === "failed" ? <FailedLine inline note={relay.message || "没送到"} onRetry={() => undefined} /> : undefined} />
   );
+}
+
+/**
+ * 框的第一行：验收员那一句人话（headline）。通过被本人推翻成没过、因此受阻的，写推翻时的原因（overruleReason）——headline 是验收员判通过时那句。
+ * 都没有时写「等你补」「验收两次没过」。
+ */
+export function handbackTitle(handback: Pick<HandbackForBox, "outcome" | "headline" | "overruled" | "overruleReason">): string {
+  const reason = handback.outcome === "pass" && handback.overruled ? handback.overruleReason?.trim() : null;
+  if (reason) return `你推翻了：${reason}`;
+  return handback.headline?.trim() || (handback.outcome === "needs_person" ? "等你补" : "验收两次没过");
 }
 
 /** 两句是不是同一句：不看首尾空白和句末标点。 */

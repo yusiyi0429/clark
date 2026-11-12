@@ -34,7 +34,7 @@ import { useCardDetail, type CardDetail } from "./useCardDetail";
 import { SourceWordIssues, SourceWords } from "./SourceWords";
 import { MergeAction } from "@/components/work/MergeAction";
 import { ApprovalDecision, QuestionDecision, awayChip } from "@/components/work/decisions";
-import { HandbackDecision, MergeDecision, useRelayNow } from "@/components/home/TaskDecisions";
+import { HandbackDecision, MergeDecision, handbackTitle, useRelayNow } from "@/components/home/TaskDecisions";
 import { ATTENTION_LABEL, attentionOf, isMergeLater, viewAsk, type Attention } from "@/lib/home/attention";
 import { DecisionBox, FailedLine, PendingBoxes, PendingDock, failureOf, type Failure } from "@/components/work/DecisionBox";
 import { useViewChrome } from "@/components/home/view";
@@ -248,7 +248,7 @@ export function CardSession({ cardId, embedded = false, waiting, queued = null }
   const ws = session?.workspace;
   const mergeLater = embedded && attention !== "merge" && !!session && ws?.kind === "worktree" && !!ws.needsMerge && !ws.mergedCommit && isMergeLater(session.id);
   const settled = (title: string, answerText: string) => <DecisionBox kind="question" title={title} options={[]} onPick={() => undefined} resolved={answerText} />;
-  const tail = !embedded ? asking : blockedAnswer && handback ? settled(handback.headline ?? "验收", blockedAnswer) : mergeLater ? settled(`「${item.title}」无法合回`, "先不合") : null;
+  const tail = !embedded ? asking : blockedAnswer && handback ? settled(handbackTitle(handback), blockedAnswer) : mergeLater ? settled(`「${item.title}」无法合回`, "先不合") : null;
   const dock = <PendingDock above latest={{ visible: !scroll.atBottom, jump: scroll.jumpToLatest }} />;
   // 新首页里输入框只在这台电脑上跑着这张卡时出（别处看摘要）；老页面照旧灰着。
   // 输入框下面一行的右边写「执行方 · 模型」（21 条），来源在悬停里：这台电脑上的会话报的（实际跑的优先），没有时退回「来源 · 模型」、再退回云端记的。文件夹在左边。
