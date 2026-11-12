@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { api, gitRepo, pair, raw, startTestRunner, tempDir, ORIGIN } from "./helpers.js";
-import { agreementInBrief, EDIT_SCOPE_RULE, systemPrompt } from "../src/rolePrompt.js";
+import { agreementInBrief, CHINESE_RULE, EDIT_SCOPE_RULE, systemPrompt } from "../src/rolePrompt.js";
 
 async function until<T>(fn: () => Promise<T | null | undefined | false> | T | null | undefined | false, ms = 10_000): Promise<T> {
   const t0 = Date.now();
@@ -649,6 +649,13 @@ describe("规矩和交代（不起进程）", () => {
     expect(EDIT_SCOPE_RULE).toContain("改了哪几处");
     for (const kind of ["card", "topic"] as const) expect(systemPrompt(kind, null, [], null)).toContain(EDIT_SCOPE_RULE);
     for (const kind of ["plan", "verify"] as const) expect(systemPrompt(kind, null, [], null)).not.toContain(EDIT_SCOPE_RULE);
+  });
+
+  it("给本人看的话用中文（3700 卡 R、S）：卡、专题、自由子会话、规划员、验收员的规矩里都有；点名 description 和「其他」", () => {
+    expect(CHINESE_RULE).toContain("description");
+    expect(CHINESE_RULE).toContain("写「其他」，不写 Other");
+    for (const kind of ["card", "topic", "plan", "verify"] as const) expect(systemPrompt(kind, null, [], null)).toContain(CHINESE_RULE);
+    expect(systemPrompt("topic", null, [], null, null, [], [], true)).toContain(CHINESE_RULE);
   });
 
   it("从开工交代里认出约定：云端的交代、网页自己拼的、还没写标准的、认不出的", () => {
