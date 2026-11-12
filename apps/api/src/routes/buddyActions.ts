@@ -12,6 +12,7 @@ import {
 import type { FeishuClient } from "../feishu/client.js";
 import { sendFeishuText } from "../feishu/messages.js";
 import { personDisplayNames } from "../people.js";
+import { projectHistoryReader } from "../sourceWords.js";
 import { idParams, type AppInstance, type Guard, type RouteContext } from "./shared.js";
 
 /**
@@ -21,7 +22,8 @@ import { idParams, type AppInstance, type Guard, type RouteContext } from "./sha
 export function registerBuddyActionRoutes(app: AppInstance, ctx: RouteContext, options: { feishu?: FeishuClient } = {}): void {
   const { q, env, fail, requirePerson, requireServiceToken, peopleDirectory } = ctx;
   const names = () => personDisplayNames(peopleDirectory);
-  const deps: BuddyDeps = { app, q, env, now: ctx.now, names, stream: ctx.chat ? (runId, event) => ctx.chat!.inject(runId, event) : undefined };
+  const deps: BuddyDeps = { app, q, env, now: ctx.now, names, stream: ctx.chat ? (runId, event) => ctx.chat!.inject(runId, event) : undefined,
+    history: projectHistoryReader(ctx) };
   const requireMember: Guard = async (req, reply) => {
     await requirePerson(req, reply);
     if (reply.sent) return reply;
