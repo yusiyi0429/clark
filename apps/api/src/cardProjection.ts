@@ -100,7 +100,14 @@ export function handbackGaps(row: Pick<HandbackRow, "criteria" | "claims" | "res
 /** 交回的分支和提交、验的提交（卡在工作树里做时才有，ADR 0038）。 */
 export const cardGit = (row: Pick<HandbackRow, "git" | "verified_commit">): TCardGit | null => row.git ? { ...row.git, verifiedCommit: row.verified_commit } : null;
 
-export function handbackBrief(row: HandbackRow): TCardHandbackBrief {
+/** 这张卡被本人推翻过几次、最后一次推翻的原因（受阻框第一行用）；没推翻过为 null。 */
+export function cardOverrules(rows: Pick<HandbackRow, "overruled_at" | "overrule_reason">[]): { count: number; reason: string } | null {
+  const overruled = rows.filter((row) => row.overruled_at && row.overrule_reason).sort((a, b) => b.overruled_at!.getTime() - a.overruled_at!.getTime());
+  return overruled.length ? { count: overruled.length, reason: overruled[0].overrule_reason! } : null;
+}
+
+/** cardHandbacks 是这张卡的全部交回（算推翻了几次）；不给只看这一次。 */
+export function handbackBrief(row: HandbackRow, cardHandbacks: HandbackRow[] = [row]): TCardHandbackBrief {
   const criteria = row.result?.criteria ?? [], gap = gapPass(row);
   return { id: row.id, attempt: row.attempt, status: row.status, outcome: row.outcome, met: criteria.filter((item) => item.verdict === "met").length, total: criteria.length,
     headline: row.result?.headline ?? null, returnText: row.return_text, returnedAt: row.returned_at?.toISOString() ?? null, overruled: row.overruled_at !== null,
@@ -108,8 +115,8 @@ export function handbackBrief(row: HandbackRow): TCardHandbackBrief {
     sourceWordIssues: row.result?.sourceWordIssues ?? [], gaps: handbackGaps(row), relay: row.relay ? relayView(row.relay) : null,
     // 有缺口通过（主循环第 62 条「就到这里」）：没过、等本人补的那次被本人推翻成通过。
     passedWithGap: gap ? { reason: gap.reason, at: gap.at.toISOString() } : null,
-    // 受阻是本人推翻造成的时候（通过被推翻成没过），受阻框第一行写推翻的原因。
-    overruleReason: row.overruled_at ? row.overrule_reason : null };
+    // 受阻是本人推翻造成的时候（通过被推翻成没过），受阻框第一行写推翻了几次、最后一次的原因。
+    overrules: cardOverrules(cardHandbacks) };
 }
 
 /** 列和标记（第 3 节）：handbacks、runs 都是新的在前。 */
@@ -164,7 +171,7 @@ export async function cardsOf(q: Query, rows: CardRow[]): Promise<Map<string, TT
     const role = row.role_id ? roles.get(row.role_id) : undefined;
     return [row.id, { ...stageAndWait(row, own, ownRuns), role: role ? roleRef(role) : null, executor: row.executor, model: row.model,
       criterion: row.criterion_index && row.criterion_text ? { index: row.criterion_index, text: row.criterion_text } : null,
-      run: ownRuns[0] ? runBrief(ownRuns[0]) : null, handback: own[0] ? handbackBrief(own[0]) : null, deliverable, after: row.after_card_ids.filter((id) => agentCards.has(id)), sourceWords: row.source_words }];
+      run: ownRuns[0] ? runBrief(ownRuns[0]) : null, handback: own[0] ? handbackBrief(own[0], own) : null, deliverable, after: row.after_card_ids.filter((id) => agentCards.has(id)), sourceWords: row.source_words }];
   }));
 }
 

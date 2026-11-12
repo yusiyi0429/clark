@@ -29369,10 +29369,24 @@
                               }
                             ]
                           },
-                          "overruleReason": {
+                          "overrules": {
                             "anyOf": [
                               {
-                                "type": "string"
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "count",
+                                  "reason"
+                                ],
+                                "properties": {
+                                  "count": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "reason": {
+                                    "type": "string"
+                                  }
+                                }
                               },
                               {
                                 "type": "null"
@@ -57469,10 +57483,24 @@
                           }
                         ]
                       },
-                      "overruleReason": {
+                      "overrules": {
                         "anyOf": [
                           {
-                            "type": "string"
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "count",
+                              "reason"
+                            ],
+                            "properties": {
+                              "count": {
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "reason": {
+                                "type": "string"
+                              }
+                            }
                           },
                           {
                             "type": "null"
@@ -59054,10 +59082,24 @@
                                       }
                                     ]
                                   },
-                                  "overruleReason": {
+                                  "overrules": {
                                     "anyOf": [
                                       {
-                                        "type": "string"
+                                        "additionalProperties": false,
+                                        "type": "object",
+                                        "required": [
+                                          "count",
+                                          "reason"
+                                        ],
+                                        "properties": {
+                                          "count": {
+                                            "minimum": 1,
+                                            "type": "integer"
+                                          },
+                                          "reason": {
+                                            "type": "string"
+                                          }
+                                        }
                                       },
                                       {
                                         "type": "null"
@@ -68283,10 +68325,24 @@
                               }
                             ]
                           },
-                          "overruleReason": {
+                          "overrules": {
                             "anyOf": [
                               {
-                                "type": "string"
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "count",
+                                  "reason"
+                                ],
+                                "properties": {
+                                  "count": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "reason": {
+                                    "type": "string"
+                                  }
+                                }
                               },
                               {
                                 "type": "null"
@@ -70217,10 +70273,24 @@
                                 }
                               ]
                             },
-                            "overruleReason": {
+                            "overrules": {
                               "anyOf": [
                                 {
-                                  "type": "string"
+                                  "additionalProperties": false,
+                                  "type": "object",
+                                  "required": [
+                                    "count",
+                                    "reason"
+                                  ],
+                                  "properties": {
+                                    "count": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "reason": {
+                                      "type": "string"
+                                    }
+                                  }
                                 },
                                 {
                                   "type": "null"
@@ -71663,10 +71733,24 @@
                                       }
                                     ]
                                   },
-                                  "overruleReason": {
+                                  "overrules": {
                                     "anyOf": [
                                       {
-                                        "type": "string"
+                                        "additionalProperties": false,
+                                        "type": "object",
+                                        "required": [
+                                          "count",
+                                          "reason"
+                                        ],
+                                        "properties": {
+                                          "count": {
+                                            "minimum": 1,
+                                            "type": "integer"
+                                          },
+                                          "reason": {
+                                            "type": "string"
+                                          }
+                                        }
                                       },
                                       {
                                         "type": "null"
@@ -73084,10 +73168,24 @@
                                 }
                               ]
                             },
-                            "overruleReason": {
+                            "overrules": {
                               "anyOf": [
                                 {
-                                  "type": "string"
+                                  "additionalProperties": false,
+                                  "type": "object",
+                                  "required": [
+                                    "count",
+                                    "reason"
+                                  ],
+                                  "properties": {
+                                    "count": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "reason": {
+                                      "type": "string"
+                                    }
+                                  }
                                 },
                                 {
                                   "type": "null"
@@ -77575,10 +77673,24 @@
                               }
                             ]
                           },
-                          "overruleReason": {
+                          "overrules": {
                             "anyOf": [
                               {
-                                "type": "string"
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "count",
+                                  "reason"
+                                ],
+                                "properties": {
+                                  "count": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "reason": {
+                                    "type": "string"
+                                  }
+                                }
                               },
                               {
                                 "type": "null"
@@ -79260,10 +79372,24 @@
                                     }
                                   ]
                                 },
-                                "overruleReason": {
+                                "overrules": {
                                   "anyOf": [
                                     {
-                                      "type": "string"
+                                      "additionalProperties": false,
+                                      "type": "object",
+                                      "required": [
+                                        "count",
+                                        "reason"
+                                      ],
+                                      "properties": {
+                                        "count": {
+                                          "minimum": 1,
+                                          "type": "integer"
+                                        },
+                                        "reason": {
+                                          "type": "string"
+                                        }
+                                      }
                                     },
                                     {
                                       "type": "null"
@@ -80626,10 +80752,24 @@
                                 }
                               ]
                             },
-                            "overruleReason": {
+                            "overrules": {
                               "anyOf": [
                                 {
-                                  "type": "string"
+                                  "additionalProperties": false,
+                                  "type": "object",
+                                  "required": [
+                                    "count",
+                                    "reason"
+                                  ],
+                                  "properties": {
+                                    "count": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "reason": {
+                                      "type": "string"
+                                    }
+                                  }
                                 },
                                 {
                                   "type": "null"
@@ -98966,10 +99106,24 @@
                       }
                     ]
                   },
-                  "overruleReason": {
+                  "overrules": {
                     "anyOf": [
                       {
-                        "type": "string"
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "count",
+                          "reason"
+                        ],
+                        "properties": {
+                          "count": {
+                            "minimum": 1,
+                            "type": "integer"
+                          },
+                          "reason": {
+                            "type": "string"
+                          }
+                        }
                       },
                       {
                         "type": "null"
@@ -100284,10 +100438,24 @@
                           }
                         ]
                       },
-                      "overruleReason": {
+                      "overrules": {
                         "anyOf": [
                           {
-                            "type": "string"
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "count",
+                              "reason"
+                            ],
+                            "properties": {
+                              "count": {
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "reason": {
+                                "type": "string"
+                              }
+                            }
                           },
                           {
                             "type": "null"
@@ -102098,10 +102266,24 @@
                                 }
                               ]
                             },
-                            "overruleReason": {
+                            "overrules": {
                               "anyOf": [
                                 {
-                                  "type": "string"
+                                  "additionalProperties": false,
+                                  "type": "object",
+                                  "required": [
+                                    "count",
+                                    "reason"
+                                  ],
+                                  "properties": {
+                                    "count": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "reason": {
+                                      "type": "string"
+                                    }
+                                  }
                                 },
                                 {
                                   "type": "null"
@@ -104061,10 +104243,24 @@
                                 }
                               ]
                             },
-                            "overruleReason": {
+                            "overrules": {
                               "anyOf": [
                                 {
-                                  "type": "string"
+                                  "additionalProperties": false,
+                                  "type": "object",
+                                  "required": [
+                                    "count",
+                                    "reason"
+                                  ],
+                                  "properties": {
+                                    "count": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "reason": {
+                                      "type": "string"
+                                    }
+                                  }
                                 },
                                 {
                                   "type": "null"
@@ -104635,10 +104831,24 @@
               }
             ]
           },
-          "overruleReason": {
+          "overrules": {
             "anyOf": [
               {
-                "type": "string"
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "count",
+                  "reason"
+                ],
+                "properties": {
+                  "count": {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                }
               },
               {
                 "type": "null"
@@ -106232,10 +106442,24 @@
                               }
                             ]
                           },
-                          "overruleReason": {
+                          "overrules": {
                             "anyOf": [
                               {
-                                "type": "string"
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "count",
+                                  "reason"
+                                ],
+                                "properties": {
+                                  "count": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "reason": {
+                                    "type": "string"
+                                  }
+                                }
                               },
                               {
                                 "type": "null"
@@ -107053,10 +107277,24 @@
                     }
                   ]
                 },
-                "overruleReason": {
+                "overrules": {
                   "anyOf": [
                     {
-                      "type": "string"
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "count",
+                        "reason"
+                      ],
+                      "properties": {
+                        "count": {
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "reason": {
+                          "type": "string"
+                        }
+                      }
                     },
                     {
                       "type": "null"
@@ -116778,6 +117016,34 @@
                 "type": "string"
               }
             }
+          },
+          "stopWhy": {
+            "anyOf": [
+              {
+                "const": "turn_done",
+                "type": "string"
+              },
+              {
+                "const": "interrupted",
+                "type": "string"
+              },
+              {
+                "const": "held",
+                "type": "string"
+              },
+              {
+                "const": "error",
+                "type": "string"
+              },
+              {
+                "const": "killed",
+                "type": "string"
+              },
+              {
+                "const": "runner_restart",
+                "type": "string"
+              }
+            ]
           }
         }
       },
@@ -117524,6 +117790,34 @@
                       "type": "string"
                     }
                   }
+                },
+                "stopWhy": {
+                  "anyOf": [
+                    {
+                      "const": "turn_done",
+                      "type": "string"
+                    },
+                    {
+                      "const": "interrupted",
+                      "type": "string"
+                    },
+                    {
+                      "const": "held",
+                      "type": "string"
+                    },
+                    {
+                      "const": "error",
+                      "type": "string"
+                    },
+                    {
+                      "const": "killed",
+                      "type": "string"
+                    },
+                    {
+                      "const": "runner_restart",
+                      "type": "string"
+                    }
+                  ]
                 }
               }
             }
@@ -119404,6 +119698,34 @@
                             "type": "string"
                           }
                         }
+                      },
+                      "stopWhy": {
+                        "anyOf": [
+                          {
+                            "const": "turn_done",
+                            "type": "string"
+                          },
+                          {
+                            "const": "interrupted",
+                            "type": "string"
+                          },
+                          {
+                            "const": "held",
+                            "type": "string"
+                          },
+                          {
+                            "const": "error",
+                            "type": "string"
+                          },
+                          {
+                            "const": "killed",
+                            "type": "string"
+                          },
+                          {
+                            "const": "runner_restart",
+                            "type": "string"
+                          }
+                        ]
                       }
                     }
                   }
@@ -120362,6 +120684,34 @@
                           "type": "string"
                         }
                       }
+                    },
+                    "stopWhy": {
+                      "anyOf": [
+                        {
+                          "const": "turn_done",
+                          "type": "string"
+                        },
+                        {
+                          "const": "interrupted",
+                          "type": "string"
+                        },
+                        {
+                          "const": "held",
+                          "type": "string"
+                        },
+                        {
+                          "const": "error",
+                          "type": "string"
+                        },
+                        {
+                          "const": "killed",
+                          "type": "string"
+                        },
+                        {
+                          "const": "runner_restart",
+                          "type": "string"
+                        }
+                      ]
                     }
                   }
                 }
@@ -122758,10 +123108,24 @@
                       }
                     ]
                   },
-                  "overruleReason": {
+                  "overrules": {
                     "anyOf": [
                       {
-                        "type": "string"
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "count",
+                          "reason"
+                        ],
+                        "properties": {
+                          "count": {
+                            "minimum": 1,
+                            "type": "integer"
+                          },
+                          "reason": {
+                            "type": "string"
+                          }
+                        }
                       },
                       {
                         "type": "null"
@@ -123233,10 +123597,24 @@
                       }
                     ]
                   },
-                  "overruleReason": {
+                  "overrules": {
                     "anyOf": [
                       {
-                        "type": "string"
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "count",
+                          "reason"
+                        ],
+                        "properties": {
+                          "count": {
+                            "minimum": 1,
+                            "type": "integer"
+                          },
+                          "reason": {
+                            "type": "string"
+                          }
+                        }
                       },
                       {
                         "type": "null"
@@ -125865,10 +126243,24 @@
                           }
                         ]
                       },
-                      "overruleReason": {
+                      "overrules": {
                         "anyOf": [
                           {
-                            "type": "string"
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "count",
+                              "reason"
+                            ],
+                            "properties": {
+                              "count": {
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "reason": {
+                                "type": "string"
+                              }
+                            }
                           },
                           {
                             "type": "null"
@@ -126340,10 +126732,24 @@
                           }
                         ]
                       },
-                      "overruleReason": {
+                      "overrules": {
                         "anyOf": [
                           {
-                            "type": "string"
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "count",
+                              "reason"
+                            ],
+                            "properties": {
+                              "count": {
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "reason": {
+                                "type": "string"
+                              }
+                            }
                           },
                           {
                             "type": "null"
@@ -127789,10 +128195,24 @@
                                 }
                               ]
                             },
-                            "overruleReason": {
+                            "overrules": {
                               "anyOf": [
                                 {
-                                  "type": "string"
+                                  "additionalProperties": false,
+                                  "type": "object",
+                                  "required": [
+                                    "count",
+                                    "reason"
+                                  ],
+                                  "properties": {
+                                    "count": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "reason": {
+                                      "type": "string"
+                                    }
+                                  }
                                 },
                                 {
                                   "type": "null"
@@ -128264,10 +128684,24 @@
                                 }
                               ]
                             },
-                            "overruleReason": {
+                            "overrules": {
                               "anyOf": [
                                 {
-                                  "type": "string"
+                                  "additionalProperties": false,
+                                  "type": "object",
+                                  "required": [
+                                    "count",
+                                    "reason"
+                                  ],
+                                  "properties": {
+                                    "count": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "reason": {
+                                      "type": "string"
+                                    }
+                                  }
                                 },
                                 {
                                   "type": "null"
@@ -130359,10 +130793,24 @@
                                 }
                               ]
                             },
-                            "overruleReason": {
+                            "overrules": {
                               "anyOf": [
                                 {
-                                  "type": "string"
+                                  "additionalProperties": false,
+                                  "type": "object",
+                                  "required": [
+                                    "count",
+                                    "reason"
+                                  ],
+                                  "properties": {
+                                    "count": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "reason": {
+                                      "type": "string"
+                                    }
+                                  }
                                 },
                                 {
                                   "type": "null"

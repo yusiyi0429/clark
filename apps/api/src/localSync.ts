@@ -217,7 +217,8 @@ async function applyType(client: PoolClient, deps: Pick<SyncDeps, "storageDir" |
       const ask = status === "idle" && question ? { kind: "question", request: question }
         : status === "waiting_permission" && permission ? { kind: "permission", request: permission } : null;
       await client.query(`UPDATE local_runs SET state=$2,state_seq=$3,title=$4,model_label=$5,ended_at=$6,running_at=COALESCE(running_at,$7),waiting_for=$8,hold=$9::jsonb,
-        ask=$10::jsonb,permission_mode=COALESCE($11,permission_mode),held_by=$12::jsonb WHERE id=$1`, [run.id, status, seq, title, modelLabel, ENDED_STATES.has(status) ? at : null,
+        ask=$10::jsonb,permission_mode=COALESCE($11,permission_mode),held_by=$12::jsonb,
+        stop_why=CASE WHEN $2 IN ('starting','running','queued') THEN NULL ELSE stop_why END WHERE id=$1`, [run.id, status, seq, title, modelLabel, ENDED_STATES.has(status) ? at : null,
         status === "running" ? at : null, status === "queued" && waitingFor?.length ? waitingFor : null, hold ? JSON.stringify({ reason: hold.reason, until: hold.until }) : null,
         ask ? JSON.stringify(ask) : null, permissionMode ?? null,
         // 在等普通文件夹空出来（第 68 条）：占着它的是谁，只有 queued 带。
@@ -350,6 +351,8 @@ async function applyType(client: PoolClient, deps: Pick<SyncDeps, "storageDir" |
     case "stopped": {
       // 子会话停了（18 节第 10 条）：卡和专题在项目里的记一条报告，提交以后由路由补位置（不触发模型，主循环第 63 条）。规划员、验收员不报。
       if (run.kind !== "card" && run.kind !== "topic") return {};
+      // 停下的原因记在会话上（左栏「做完一轮」还是「已停下」），开始下一轮时清掉。
+      await client.query("UPDATE local_runs SET stop_why=$2 WHERE id=$1", [run.id, item.data.why]);
       await note(client, run, at, item.data.blocker ? `停了：${item.data.blocker}` : "停了", false);
       return recordStopReport(client.query.bind(client), owner.personId, run, item.data, at);
     }

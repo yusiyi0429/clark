@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { THomeItem } from "@warmap/contracts";
 import type { HomeProject, SubSession, WorkHomeData } from "@/lib/home/types";
 import { fromHome, projectWorking } from "@/lib/home/projects";
-import { LeftColumn, STAGE_BASE, letterOf, planOrder, stageScale, subLetters, subsSummary } from "./LeftColumn";
+import { LeftColumn, STAGE_BASE, letterOf, planOrder, stageScale, subDot, subIcon, subLetters, subsSummary } from "./LeftColumn";
 
 const data = { period: "2026-11", projects: [], archivedCount: 0, month: { missions: [] }, waiting: [], other: { subSessions: [], items: [] } } as unknown as WorkHomeData;
 const projectsOf = (used: WorkHomeData) => used.projects.map((project) => fromHome(project, used, new Map()));
@@ -130,6 +130,14 @@ describe("子会话的字母和状态点（18.10）", () => {
     // 云端带了字母就照它的（删过的不复用，可以跳号）；null（「其他」里的）不画。
     const fromCloud = [{ id: "c1", kind: "card", letter: "A", updatedAt: "a" }, { id: "c3", kind: "card", letter: "C", updatedAt: "b" }, { id: "t1", kind: "topic", letter: null, updatedAt: "c" }] as unknown as SubSession[];
     expect([...subLetters(fromCloud, at)]).toEqual([["card:c1", "A"], ["card:c3", "C"]]);
+  });
+
+  it("停着、不在等什么的：一轮做完读「做完一轮」，真停了（本人停、强停、本机程序重启）和云端没报原因的读「已停下」", () => {
+    const stopped = (stopWhy?: SubSession["stopWhy"]) => ({ state: "waiting" as const, waiting: null, unseen: true, ...(stopWhy ? { stopWhy } : {}) });
+    expect(subDot(stopped("turn_done"))).toEqual({ tone: "stopped", label: "做完一轮" });
+    expect(subIcon(stopped("turn_done"))).toEqual({ state: "stopped", label: "做完一轮" });
+    for (const why of ["interrupted", "killed", "runner_restart"] as const) expect(subDot(stopped(why))?.label).toBe("已停下");
+    expect(subIcon(stopped())).toEqual({ state: "stopped", label: "已停下" });
   });
 
   it("行首字母方块；行尾在跑灰点、停了蓝点、要介入黄点，排队的行尾什么都不画（47 条）；读屏按状态读", () => {

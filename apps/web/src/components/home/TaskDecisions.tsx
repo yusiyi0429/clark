@@ -43,7 +43,7 @@ export const markAnswered = (id: string, answer: string) => {
 
 /** 框要的那次交回：云端的摘要（项目动态带的、卡详情里的都行）；卡详情里的多带验收员逐条的理由。 */
 export type HandbackForBox = Pick<TCardHandbackBrief, "id" | "outcome" | "headline" | "sourceWordIssues" | "returnText" | "returnedAt">
-  & Partial<Pick<TCardHandbackBrief, "gaps" | "relay" | "passedWithGap" | "overruled" | "overruleReason">> & { result?: TCardHandbackView["result"] };
+  & Partial<Pick<TCardHandbackBrief, "gaps" | "relay" | "passedWithGap" | "overruled" | "overrules">> & { result?: TCardHandbackView["result"] };
 
 /** 推翻的原因上限（OverruleCardHandbackRequest.reason）；我来补的上限（CardRelayRequest.text）。 */
 const REASON_MAX = 200;
@@ -142,13 +142,14 @@ export function HandbackDecision({ cardId, handback, here, via, onFill, onLook, 
   );
 }
 
+const TIMES = ["", "一", "两", "三", "四", "五", "六", "七", "八", "九"];
 /**
- * 框的第一行：验收员那一句人话（headline）。通过被本人推翻成没过、因此受阻的，写推翻时的原因（overruleReason）——headline 是验收员判通过时那句。
- * 都没有时写「等你补」「验收两次没过」。
+ * 框的第一行：验收员那一句人话（headline）。通过被本人推翻成没过、因此受阻的，写「你推翻了两次：最后一次的原因」（overrules；
+ * 和首页「等你」那一行云端写的一字不差，1–9 次写汉字）——headline 是验收员判通过时那句。都没有时写「等你补」「验收两次没过」。
  */
-export function handbackTitle(handback: Pick<HandbackForBox, "outcome" | "headline" | "overruled" | "overruleReason">): string {
-  const reason = handback.outcome === "pass" && handback.overruled ? handback.overruleReason?.trim() : null;
-  if (reason) return `你推翻了：${reason}`;
+export function handbackTitle(handback: Pick<HandbackForBox, "outcome" | "headline" | "overruled" | "overrules">): string {
+  const times = handback.outcome === "pass" && handback.overruled ? handback.overrules : null;
+  if (times) return `你推翻了${TIMES[times.count] ?? ` ${times.count} `}次：${times.reason}`;
   return handback.headline?.trim() || (handback.outcome === "needs_person" ? "等你补" : "验收两次没过");
 }
 

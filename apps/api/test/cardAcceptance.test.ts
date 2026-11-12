@@ -142,7 +142,10 @@ describe("Agent 验收：队列、推翻、退回记录", { timeout: 30_000 }, (
       const second = await f.handBack(id);
       await f.settle();
       expect((await f.call("POST", `/api/me/cards/${id}/handbacks/${second}/overrule`, { reason: "录屏不是新人" })).statusCode).toBe(200);
-      expect((await f.view(id)).task.card).toMatchObject({ stage: "doing", wait: "blocked", handback: { attempt: 2, outcome: "pass", overruled: true, passedWithGap: null, overruleReason: "录屏不是新人" } });
+      expect((await f.view(id)).task.card).toMatchObject({ stage: "doing", wait: "blocked", handback: { attempt: 2, outcome: "pass", overruled: true, passedWithGap: null, overrules: { count: 1, reason: "录屏不是新人" } } });
+      // 首页「等你」那一行和受阻框第一行同一句：推翻了几次、最后一次的原因，不写验收员判通过时那句。
+      const waiting = (await f.call("GET", "/api/me/work-home")).json().waiting as { kind: string; summary: string | null }[];
+      expect(waiting.find((item) => item.kind === "verdict")?.summary).toBe("你推翻了一次：录屏不是新人");
 
       const proposals = async () => (await f.t.sql("SELECT 1 FROM role_proposals WHERE task_id=$1", [id])).length;
       const before = await proposals();

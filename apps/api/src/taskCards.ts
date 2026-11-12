@@ -160,8 +160,8 @@ export async function ownCard(q: Query, ownerId: string, id: string, forUpdate =
   return row as CardRow & { version: number; title: string };
 }
 
-export function handbackView(row: HandbackRow, names: Map<string, string>, expectedSeconds: number): TCardHandbackView {
-  return { ...handbackBrief(row), runId: row.run_id, criteria: row.criteria, claims: row.claims, summary: row.summary, outputIds: row.output_ids,
+export function handbackView(row: HandbackRow, names: Map<string, string>, expectedSeconds: number, cardHandbacks: HandbackRow[] = [row]): TCardHandbackView {
+  return { ...handbackBrief(row, cardHandbacks), runId: row.run_id, criteria: row.criteria, claims: row.claims, summary: row.summary, outputIds: row.output_ids,
     result: row.result ? { criteria: row.result.criteria.map((item) => ({ ...item, text: row.criteria[item.index - 1] ?? "" })), beyondScope: row.result.beyondScope } : null,
     error: row.status === "failed" ? row.error : null, startedAt: row.started_at?.toISOString() ?? null, expectedSeconds,
     overrule: row.overruled_at && row.overruled_by && row.overrule_reason
@@ -185,7 +185,7 @@ export async function readCardDetail(q: Query, ownerId: string, id: string, name
   const outputs = (await q("SELECT * FROM local_outputs WHERE task_id=$1 ORDER BY created_at DESC,id", [id])).rows as OutputRow[];
   const expected = await acceptanceExpectedSeconds(q);
   return { task, letter: (await letterOfSub(q, "card", id))?.letter ?? null, brief: card.brief, standards: taskStandards(card.done_definition), runs: await runViews(q, await recentRuns(q, { taskId: id }, 5)),
-    handbacks: handbacks.map((row) => handbackView(row, names, expected)), outputs: outputs.map(outputView), agreement: await agreementView(q, id) };
+    handbacks: handbacks.map((row) => handbackView(row, names, expected, handbacks)), outputs: outputs.map(outputView), agreement: await agreementView(q, id) };
 }
 
 /**
