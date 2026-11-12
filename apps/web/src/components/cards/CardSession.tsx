@@ -59,6 +59,9 @@ const money = (usd: number | null) => (usd === null ? null : `约 $${usd.toFixed
  * 批准、提问不在这台电脑上时写「等你 · {电脑名}」（away）。首页数据里它在排队时照写排队的状态词（queued，「已排队 · 等 B」，第 68 条）。
  * 别的照会话和阶段：已停止、已停下（一轮做完）、受阻（不是验收没过的）、重做中、已排队、进行中…。
  */
+/** 手机上（没有右栏）没选过看哪边时：不在这台电脑上先看摘要；有等你处理的框（受阻、等你补、提议）先看对话，框钉在下面。 */
+export const paneFirst = (hasSession: boolean, hasBox: boolean) => !hasSession && !hasBox;
+
 export function stateChip(attention: Attention | null, rest: CardWait | null, stage: CardStage, away: string | null, queued: string | null = null): { text: string; tone: "neutral" | "warn" | "wait" } {
   if (attention) return { text: (attention === "approval" || attention === "question") && away ? away : ATTENTION_LABEL[attention], tone: "wait" };
   if (queued) return { text: queued, tone: "neutral" };
@@ -288,7 +291,7 @@ export function CardSession({ cardId, embedded = false, waiting, queued = null }
   // 新首页的展示区（5.4.3「页头」）：上一级 / 名字，右边状态 chip、「停止」或「推翻」（弱按钮）、信息图标；下面是对话，点信息图标换成结果。模型和文件夹在输入框下面一行。
   if (embedded) {
     const inSide = !!side;
-    const showPane = side ? side.open : details ?? !session;
+    const showPane = side ? side.open : details ?? paneFirst(!!session, !!pinned);
     const openDetails = (open?: boolean) => (side ? side.toggle(open) : setDetails(open ?? !showPane));
     const chipOf = stateChip(attention, session ? localWait(view) : card.wait, stage, !canAct && device ? awayChip(device) : null, queued);
     const handback = detail.handbacks[0] ?? null;
