@@ -508,3 +508,11 @@
 /* 新首页深色（会议页挪进新首页后）：「逐字稿」这类小标题和段数小字在深底上看不清，只换成新首页的字色变量；浅色不变。 */
 :global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .reviewSection h3 { color: var(--ink); }
 :global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .count { color: var(--ink-muted); }
+
+/* 新首页深色（会议页挪进新首页后）：预审、材料、记录区的次要按钮照新首页次要按钮；按下的那颗和提示卡不动。浅色不变。 */
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .briefActions button:not([aria-pressed=true]), :global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .stageActions button, :global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .tocToggle, :global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .editCancel { background: var(--meeting-home-default, var(--default)); color: var(--meeting-home-default-fg, var(--default-foreground)); border-color: transparent; outline-color: transparent; box-shadow: none; }
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .briefActions button:not([aria-pressed=true]):hover, :global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .stageActions button:hover:not(:disabled), :global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .tocToggle:hover, :global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .editCancel:hover { background: var(--meeting-home-default-hover, var(--default-hover)); }
+/* 页面里的「重新安排会议」小弹层：里面的输入框已经变深，弹层本身照新首页弹层（面板色、细边）。 */
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .editPopover { border-color: var(--hairline); background: var(--meeting-home-surface, var(--surface)); }
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .editTitle { color: var(--ink); }
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .editField > span { color: var(--ink-muted); }
