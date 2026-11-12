@@ -658,6 +658,12 @@ describe("规矩和交代（不起进程）", () => {
     expect(systemPrompt("topic", null, [], null, null, [], [], true)).toContain(CHINESE_RULE);
   });
 
+  it("做到一半本人提了要改约定的新事（3700 卡 R）：卡的规矩写先提、等本人定了再做，不先按旧约定交回", () => {
+    const card = systemPrompt("card", null, [], null);
+    expect(card).toContain("先提新的完成标准，等本人定了再动手做这件新事；不要先做，也不要先按旧约定交回");
+    expect(card).not.toContain("定之前照原来的约定做");
+  });
+
   it("从开工交代里认出约定：云端的交代、网页自己拼的、还没写标准的、认不出的", () => {
     const md = ["# 执行事项：A", "", "## 交代", "", "第一行", "第二行", "", "## 完成标准（交回时逐条写证据）", "", "1. 页面能登录", "2. 有截图", "", "## 这次不包括", "", "- 注册页"].join("\n");
     expect(agreementInBrief(md)).toEqual({ standards: ["页面能登录", "有截图"], brief: "第一行\n第二行" });
