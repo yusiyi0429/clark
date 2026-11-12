@@ -417,14 +417,14 @@ export const SubLetter = ({ letter, inline = false }: { letter: string; inline?:
  * 要人介入（问题、批准、验收拿主意、等你补、合回）黄点；排队不出点（行尾写在等什么）。读屏按状态读。
  */
 const ASK: Record<NonNullable<SubSession["waiting"]>, string> = { approval: "等你批准", question: "在问你", verdict: "等你拿主意", needs_person: "等你补", merge: "等你合回" };
-export function subDot(sub: Pick<SubSession, "state" | "waiting" | "unseen">): { tone: "running" | "stopped" | "attention"; label: string } | null {
+export function subDot(sub: Pick<SubSession, "state" | "waiting" | "unseen" | "stopWhy">): { tone: "running" | "stopped" | "attention"; label: string } | null {
   const state = treeState(sub.state);
   if (state === "queued") return null;
   if (state === "running") return { tone: "running", label: "在跑" };
   if (state === "waiting" && sub.waiting) return { tone: "attention", label: ASK[sub.waiting] };
   // 蓝点只是提醒（26 条）：停了、本人还没看过才画，打开过就消失（云端算 unseen）。
   if (!sub.unseen) return null;
-  return state === "done" ? { tone: "stopped", label: "已完成" } : { tone: "stopped", label: "已停下" };
+  return state === "done" ? { tone: "stopped", label: "已完成" } : { tone: "stopped", label: stoppedLabel(sub) };
 }
 
 /** 派活单的先后：卡按看板里建出来的时间（一次开工建的几张按派活单的顺序建），没读到的和专题排在后面、按最近动静。 */
@@ -448,10 +448,13 @@ export const treeState = (state: SubSession["state"]): SubSession["state"] => (s
  * 一个子会话的图标和读法（树、事件行共用）：第一次验收没过画进行中；停下了、没在问你（waiting 没有具体等什么）是「已停下」——
  * Square、--ink-faint，不是等你（契约 aa6aba9e：一轮做完停下的不进等你）。
  */
-export function subIcon(sub: Pick<SubSession, "state" | "waiting">): { state: IconState; label?: string } {
-  if (sub.state === "waiting" && !sub.waiting) return { state: "stopped", label: "已停下" };
+export function subIcon(sub: Pick<SubSession, "state" | "waiting" | "stopWhy">): { state: IconState; label?: string } {
+  if (sub.state === "waiting" && !sub.waiting) return { state: "stopped", label: stoppedLabel(sub) };
   return { state: treeState(sub.state) };
 }
+
+/** 停着、不在等什么的读法：一轮正常做完、在等本人下一句的「做完一轮」（和项目动态那行报告同一个说法）；本人停的、强停、出错、本机程序重启打断的、云端没报原因的「已停下」。 */
+export const stoppedLabel = (sub: Pick<SubSession, "stopWhy">) => (sub.stopWhy === "turn_done" ? "做完一轮" : "已停下");
 
 /** flat：「其他」组里的，没有上一级，不缩进、不画竖线（状态位在 x=16，名字在 x=40）。 */
 function Subs({ subs, letters, view, go, flat = false }: { subs: SubSession[]; letters: ReadonlyMap<string, string>; view: View; go: (href: string) => void; flat?: boolean }) {

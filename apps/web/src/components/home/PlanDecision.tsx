@@ -32,7 +32,7 @@ import { SLOT_CAP, startBatch, type StartPlan } from "@/lib/work/queue";
 import { QUEUE_LABEL, liveSessions, type Worker } from "@/lib/work/workers";
 import type { SubSession } from "@/lib/home/types";
 import { ICON as STATE_ICON, StateIcon } from "./StateIcon";
-import { subIcon } from "./LeftColumn";
+import { stoppedLabel, subIcon } from "./LeftColumn";
 import { subQueueText } from "@/lib/home/derive";
 import h from "@/styles/home.module.css";
 import x from "@/styles/decision-box.module.css";
@@ -402,8 +402,8 @@ const WAIT_TEXT: Record<string, string> = { approval: "等你批准", question: 
 export function subStage(sub: SubSession): string {
   switch (sub.state) {
     case "queued": return subQueueText(sub)!;
-    // 停下了、没在问你：「已停下」（契约 aa6aba9e）；第一次验收没过是进行中的「重做中」（5.4.2），不是失败。
-    case "waiting": return sub.waiting ? WAIT_TEXT[sub.waiting] ?? "等你" : "已停下";
+    // 停下了、没在问你：一轮做完的「做完一轮」，真停了的「已停下」（契约 aa6aba9e、stopWhy）；第一次验收没过是进行中的「重做中」（5.4.2），不是失败。
+    case "waiting": return sub.waiting ? WAIT_TEXT[sub.waiting] ?? "等你" : stoppedLabel(sub);
     case "done": return "已完成";
     case "failed": return "重做中";
     default: return "进行中";
