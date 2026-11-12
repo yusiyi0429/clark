@@ -192,7 +192,8 @@ export function returnText(criteria: string[], judged: TLocalVerdictCriterion[],
   const missed = judged.filter((c) => c.verdict !== "met")
     .map((c) => `第 ${c.index} 条「${criteria[c.index - 1] ?? ""}」，${c.reason}；怎么补：${c.fix ?? "补上能核对的证据"}`);
   const words = issues.map((i) => `本人原话「${i.quote}」${i.kind === "missing" ? "漏了" : "里没要这个"}：${i.reason}`);
-  return `验收没过：${[...missed, ...words].join("。")}。改完再交回。`;
+  // 每段先去掉末尾的「。」再连（理由、改法、原因写了句号会拼出「。。」）
+  return `验收没过：${[...missed, ...words].map((s) => s.trim().replace(/。+$/, "")).join("。")}。改完再交回。`;
 }
 
 /** 验收员交代里接在本人原话后面的一段：本人在卡的子会话里亲手说的话，按先后，一句一块（和云端「本人原话」一样的引用样式）。 */

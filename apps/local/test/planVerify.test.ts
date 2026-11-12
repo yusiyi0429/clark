@@ -4,7 +4,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { api, gitRepo, pair, raw, startTestRunner, tempDir, ORIGIN } from "./helpers.js";
-import { agreementInBrief, CHINESE_RULE, EDIT_SCOPE_RULE, saidBrief, systemPrompt } from "../src/rolePrompt.js";
+import type { TLocalSourceWordIssue, TLocalVerdictCriterion } from "@warmap/contracts";
+import { agreementInBrief, CHINESE_RULE, EDIT_SCOPE_RULE, returnText, saidBrief, systemPrompt } from "../src/rolePrompt.js";
 
 async function until<T>(fn: () => Promise<T | null | undefined | false> | T | null | undefined | false, ms = 10_000): Promise<T> {
   const t0 = Date.now();
@@ -706,6 +707,14 @@ describe("规矩和交代（不起进程）", () => {
     const verify = systemPrompt("verify", null, [], null);
     expect(verify).toContain("交代里有「本人原话」或「本人在这个子会话里说的」时");
     expect(verify).toContain("这些话前后冲突时，以后说的为准。交代里有「约定后来改过」那段时，原话和本人改过或确认过的新约定冲突的地方以新约定为准，不写进 sourceWordIssues。");
+  });
+
+  it("没过的改法（3700 卡 U）：理由、改法、原因末尾带了「。」也不拼出「。。」", () => {
+    const judged = [{ index: 1, verdict: "unmet", reason: "没截图", evidence: null, fix: "补一张登录后的截图。", fixBy: "worker" }] as TLocalVerdictCriterion[];
+    const issues = [{ quote: "别动注册页", kind: "extra", reason: "注册页也改了。" }] as TLocalSourceWordIssue[];
+    const text = returnText(CRITERIA, judged, issues);
+    expect(text).toBe("验收没过：第 1 条「页面能登录」，没截图；怎么补：补一张登录后的截图。本人原话「别动注册页」里没要这个：注册页也改了。改完再交回。");
+    expect(text).not.toContain("。。");
   });
 
   it("从开工交代里认出约定：云端的交代、网页自己拼的、还没写标准的、认不出的", () => {
