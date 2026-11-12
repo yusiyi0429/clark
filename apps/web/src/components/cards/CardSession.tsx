@@ -53,21 +53,21 @@ const workHref = (taskId: string | null) => (taskId ? `/me/work/tasks/${encodeUR
 const VERDICT: Record<string, string> = { met: "达到", partial: "部分达到", unmet: "未达到", needs_person: "要你补" };
 const money = (usd: number | null) => (usd === null ? null : `约 $${usd.toFixed(usd < 1 ? 3 : 2)}`);
 
+/** 手机上（没有右栏）没选过看哪边时：不在这台电脑上先看摘要；有等你处理的框（受阻、等你补、提议）先看对话，框钉在下面。 */
+export const paneFirst = (hasSession: boolean, hasBox: boolean) => !hasSession && !hasBox;
+
 /**
  * 新首页页头的状态 chip（5.4.3「状态 chip」、5.6 状态词）：中性、警告、等你（中性底加强调色圆点）三档；新首页不用成功色。
  * 「等你」档只给等本人处理的框（attention，第 54 条，和左栏的点同一个来源）：等你批准、在问你、等你拿主意、等你合回；
  * 批准、提问不在这台电脑上时写「等你 · {电脑名}」（away）。首页数据里它在排队时照写排队的状态词（queued，「已排队 · 等 B」，第 68 条）。
- * 别的照会话和阶段：已停止、已停下（一轮做完）、受阻（不是验收没过的）、重做中、已排队、进行中…。
+ * 别的照会话和阶段：做完一轮（等本人下一句，和项目动态那行报告同一个说法）、已停下（本人停的、强停、本机程序重启打断）、受阻（不是验收没过的）、重做中、已排队、进行中…。
  */
-/** 手机上（没有右栏）没选过看哪边时：不在这台电脑上先看摘要；有等你处理的框（受阻、等你补、提议）先看对话，框钉在下面。 */
-export const paneFirst = (hasSession: boolean, hasBox: boolean) => !hasSession && !hasBox;
-
 export function stateChip(attention: Attention | null, rest: CardWait | null, stage: CardStage, away: string | null, queued: string | null = null): { text: string; tone: "neutral" | "warn" | "wait" } {
   if (attention) return { text: (attention === "approval" || attention === "question") && away ? away : ATTENTION_LABEL[attention], tone: "wait" };
   if (queued) return { text: queued, tone: "neutral" };
   if (rest === "blocked") return { text: "受阻", tone: "warn" };
-  if (rest === "paused") return { text: "已停止", tone: "neutral" };
-  if (rest === "reply") return { text: "已停下", tone: "neutral" };
+  if (rest === "paused") return { text: "已停下", tone: "neutral" };
+  if (rest === "reply") return { text: "做完一轮", tone: "neutral" };
   if (rest === "review_failed") return { text: "重做中", tone: "neutral" };
   return { text: stage === "todo" ? "已排队" : STAGES.find((entry) => entry.id === stage)?.label ?? "进行中", tone: "neutral" };
 }

@@ -94,9 +94,9 @@ describe("子会话页头的状态 chip（5.4.3、5.6、第 54 条）", () => {
     expect(stateChip("verdict", "blocked", "doing", "等你 · ThinkPad")).toEqual({ text: "等你拿主意", tone: "wait" });
     expect(stateChip("merge", null, "done", null)).toEqual({ text: "等你合回", tone: "wait" });
   });
-  it("没有框的不是等你档：一轮做完是「已停下」，停了是「已停止」", () => {
-    expect(stateChip(null, "reply", "doing", null)).toEqual({ text: "已停下", tone: "neutral" });
-    expect(stateChip(null, "paused", "doing", null)).toEqual({ text: "已停止", tone: "neutral" });
+  it("没有框的不是等你档：一轮做完是「做完一轮」，真停了（本人停、强停、本机程序重启）是「已停下」", () => {
+    expect(stateChip(null, "reply", "doing", null)).toEqual({ text: "做完一轮", tone: "neutral" });
+    expect(stateChip(null, "paused", "doing", null)).toEqual({ text: "已停下", tone: "neutral" });
     expect(stateChip(null, "approval", "doing", null)).toEqual({ text: "进行中", tone: "neutral" });
   });
   it("手机上不在这台电脑上：有等你处理的框先看对话（框在下面），没有才先看摘要", () => {
