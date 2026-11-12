@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { foldEvents } from "@/lib/local/sessionView";
 import type { TurnFile } from "@/lib/local/fileChanges";
-import { TurnFilesContext, TurnFilesLine, latestFilesSeq, turnFileText } from "./TurnFiles";
+import { TurnFilesContext, TurnFilesLine, latestFilesSeq, turnFileText, turnFilesView } from "./TurnFiles";
 
 const at = "2026-11-11T08:00:00Z";
 const tf = (path: string, change: TurnFile["change"] = "modified", count: number | null = 1, detail: TurnFile["detail"] = "full"): TurnFile => ({ path, absolutePath: `C:/w/${path}`, change, detail, count });
@@ -48,6 +48,28 @@ describe("对话里一轮末尾那一行（第 72 条，事件 files_changed）"
     expect(three).toContain("改了 b.md · 已恢复 ›");
     expect(render(["a", "b", "c", "d", "e"].map((path) => tf(`${path}.md`)))).toContain("改了 5 个文件 ›");
     expect(render([tf("a.md"), tf("b.md")], 98)).toContain("改了 100 个文件 ›");
+  });
+
+  it("卡的子会话和自由子会话共用的 turnFilesView：这台电脑上能点、按轮读剩几处、认恢复过的；手机、别的电脑上点不开也不读", async () => {
+    const asked: unknown[] = [];
+    const runner = { readFileChanges: async (_id: string, query: unknown) => { asked.push(query); return { detail: "full", changes: [{}, {}] } as never; } };
+    const files = [{ path: "周报.md", restoredAt: "2026-11-12T01:00:00Z" }, { path: "合同.docx" }] as never[];
+    const entries = foldEvents([{ seq: 4, at, type: "files_changed", turn: 2, files: [tf("周报.md", "modified", 3)], more: 0 }] as never).entries;
+    const open = () => undefined;
+    const here = turnFilesView(runner, "s1", files, entries, open);
+    expect(here.open).toBe(open);
+    expect(here.latest).toBe(4);
+    expect(here.version).toBe(files);
+    expect(here.restored("周报.md")).toBe(true);
+    expect(here.restored("合同.docx")).toBe(false);
+    expect(await here.count!("周报.md", 2)).toBe(2);
+    expect(asked).toEqual([{ path: "周报.md", range: "turn", turn: 2 }]);
+    const away = turnFilesView(runner, null, files, entries, open);
+    expect(away.open).toBeNull();
+    expect(away.count).toBeUndefined();
+    const html = renderToStaticMarkup(<TurnFilesContext.Provider value={here}><TurnFilesLine seq={4} turn={2} files={[tf("周报.md", "modified", 3), tf("旧安排.md", "deleted")]} more={0} /></TurnFilesContext.Provider>);
+    expect(html.match(/<button/g)).toHaveLength(2);
+    expect(html).toContain("删了 旧安排.md ›");
   });
 
   it("没有看文件的地方（专题会话页，没包 TurnFilesContext）：只写字、不能点", () => {

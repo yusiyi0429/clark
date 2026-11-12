@@ -34,6 +34,9 @@ import { startTopic } from "@/lib/local/start";
 import { WAIT_LABEL, canCommand, waitTone } from "@/lib/board/cards";
 import { addTopicVersionToPending, patchTopic, readTopic, readTopicVersion } from "@/lib/board/cloud";
 import { REMARK_PLUGINS } from "@/lib/markdown";
+import { FilePreview, localChangedFile, type PreviewFile } from "@/components/cards/FilePreview";
+import { TurnFilesContext, turnFilesView } from "@/components/cards/TurnFiles";
+import { filesSignal, useSessionFiles } from "@/lib/local/sessionFiles";
 import { ReviewDialog, ReviewDoc, isReview, reviewText } from "./Review";
 import s from "@/styles/v2-session.module.css";
 
@@ -94,6 +97,19 @@ export function TopicSession({ topicId, embedded = false, waiting = null, queued
   const models = useSessionModels(local.runner, local.models, session, local.refresh, () => showWorkspaceToast({ text: "没换成" }), local.status, local.sources !== null);
   // 说一句：一按就先画出来（useSessionSend）。
   const send = useSessionSend(local.runner, session?.id ?? null, view, { kind: "topic", id: topicId });
+  // 自由子会话改的是项目文件夹：和卡的子会话一样，一轮末尾那一行点了在右边的面板位看那一轮的改动，按处或整个文件恢复（第 72 条）。
+  const free = !!detail?.topic.free;
+  const fileSession = free && embedded && side && ready && !handheld ? session?.id ?? null : null;
+  const files = useSessionFiles(local.runner, fileSession, filesSignal(view.status, view.entries));
+  const [preview, setPreview] = useState<PreviewFile | null>(null);
+  const showPanel = side?.show;
+  const openChanges = useCallback((path: string, turn?: number) => {
+    if (!fileSession) return;
+    const wholeFile = session?.workspace?.kind !== "worktree" && !!files.find((file) => file.path === path)?.restorable;
+    setPreview(localChangedFile(local.runner, fileSession, path, { turn, wholeFile }));
+    showPanel?.("file");
+  }, [local.runner, fileSession, files, session?.workspace?.kind, showPanel]);
+  const closePreview = useCallback(() => { setPreview(null); showPanel?.(null); }, [showPanel]);
   // 没成的不弹 toast：发消息交给输入框，批准、回答交给选项框，这页的按钮后面各自写「失败 · 重试」。
   const [failed, setFailed] = useState<{ at: "doc" | "head"; retry: () => void; reason: string } | null>(null);
   const act = (at: "doc" | "head", action: () => Promise<unknown>) => { setFailed(null); action().catch((error: unknown) => setFailed({ at, retry: () => act(at, action), reason: error instanceof Error ? error.message : "" })); };
@@ -102,7 +118,6 @@ export function TopicSession({ topicId, embedded = false, waiting = null, queued
   if (!detail) return <div className={s.page} aria-busy />;
 
   const { topic } = detail;
-  const free = !!topic.free;
   const shown = version ?? detail.current;
   const hasDraft = detail.versions.some((entry) => entry.kind === "draft");
   const wait = session ? localWait(view) : null;
@@ -183,8 +198,8 @@ export function TopicSession({ topicId, embedded = false, waiting = null, queued
       <div className={s.chat}>
         <div className={s.scroll} ref={scroll.scrollRef}>
           <div ref={scroll.contentRef}>
-            {session ? <SessionTranscript entries={send.entries} agentName={HARNESS_NAME[session.agent]} canAct={canAct} onResend={(entry) => void say(entry.text).catch(() => showWorkspaceToast({ text: "没发出去" }))} onRetry={send.retry} draft={draft} drafted={drafted} device={device} live={running(status)} starting={status === "starting"} ended={ended} pinned={embedded} onDecide={(request, decision, options) => decide(request.requestId, decision, options)} tail={embedded ? null : asking} asking={question}
-              stopped={embedded ? view.stopped : null} onResume={canAct ? () => void say("接着做").catch(() => showWorkspaceToast({ text: "没发出去" })) : undefined} />
+            {session ? <TurnFilesContext.Provider value={free ? turnFilesView(local.runner, fileSession, files, view.entries, openChanges) : null}><SessionTranscript entries={send.entries} agentName={HARNESS_NAME[session.agent]} canAct={canAct} onResend={(entry) => void say(entry.text).catch(() => showWorkspaceToast({ text: "没发出去" }))} onRetry={send.retry} draft={draft} drafted={drafted} device={device} live={running(status)} starting={status === "starting"} ended={ended} pinned={embedded} onDecide={(request, decision, options) => decide(request.requestId, decision, options)} tail={embedded ? null : asking} asking={question}
+              stopped={embedded ? view.stopped : null} onResume={canAct ? () => void say("接着做").catch(() => showWorkspaceToast({ text: "没发出去" })) : undefined} /></TurnFilesContext.Provider>
               : <div className={s.feed}><span className={s.evt}>{topic.title}</span>
                   {ready && topic.status === "active" && !embedded ? <div className={s.actions}><HeroButton variant="primary" size="sm" onPress={() => setStarting(true)}>开始</HeroButton></div> : null}
                 </div>}
@@ -230,6 +245,7 @@ export function TopicSession({ topicId, embedded = false, waiting = null, queued
         </header>
         <div className={s.body} data-solo="">{showDoc && !side ? <div className={s.paneScroll}>{doc}</div> : chat}</div>
         {side && !free ? <SideContent side={side}><div className={s.page} data-embedded="" data-side="">{doc}</div></SideContent> : null}
+        {side && free && preview ? <SideContent side={side} kind="file"><FilePreview file={preview} onClose={closePreview} canRestore={!running(status)} wide={side.wide} onWide={side.setWide} /></SideContent> : null}
         {dialogs}
       </div>
     );
