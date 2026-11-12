@@ -1,6 +1,6 @@
 import type { Pool } from "pg";
 import type { TBackgroundItem, TBackgroundResponse, TBackgroundState, TCard, TCardMerge, TCardTaskView, THomeItem, THomeProject, THomeProjectGoal,
-  TLocalFolderHolder, TLocalTaskBudgetView, TMyMeetingCard, TMyMeetingConfirm, TNexusConfirmationItem, TSubSession, TSubSessionState, TWorkerQueueReason, TWorkHomeResponse } from "@warmap/contracts";
+  TLocalFolderHolder, TLocalStopReason, TLocalTaskBudgetView, TMyMeetingCard, TMyMeetingConfirm, TNexusConfirmationItem, TSubSession, TSubSessionState, TWorkerQueueReason, TWorkHomeResponse } from "@warmap/contracts";
 import { assembleWaiting, HELD } from "./homeWaiting.js";
 import { planTaskMissions, type MissionRow } from "./homePlan.js";
 import { failStreak, type HandbackRow } from "./cardProjection.js";
@@ -253,6 +253,11 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
   // 蓝点（17.2 第 25 条）：停下的时间晚于本人上次打开它。
   const seen = await seenTimes(q, ownerId);
   for (const sub of subs) sub.unseen = unseenSince(sub.stoppedAt, seen.get(`sub:${sub.id}`));
+  // 停下的原因（左栏「做完一轮」还是「已停下」）：只给停着、不在等什么的，照本机最近一次报的 stopped。
+  const stoppedSubs = subs.filter((sub) => sub.state === "waiting" && !sub.waiting && sub.sessionId);
+  const stopWhy = new Map(stoppedSubs.length ? ((await q("SELECT id::text,stop_why FROM local_runs WHERE id=ANY($1::uuid[]) AND stop_why IS NOT NULL",
+    [stoppedSubs.map((sub) => sub.sessionId)])).rows as { id: string; stop_why: TLocalStopReason }[]).map((row) => [row.id, row.stop_why]) : []);
+  for (const sub of stoppedSubs) { const why = stopWhy.get(sub.sessionId!); if (why) sub.stopWhy = why; }
 
   const order = (a: HomeSub, b: HomeSub) => STATE_ORDER.indexOf(a.state) - STATE_ORDER.indexOf(b.state) || b.updatedAt.localeCompare(a.updatedAt);
   const view = ({ planTaskId: _task, projectId: _project, runUpdatedAt: _at, acceptedAt: _accepted, mergeRun: _run, ask: _ask, stoppedAt: _stopped, ...sub }: HomeSub): TSubSession => sub;
