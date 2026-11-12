@@ -184,3 +184,7 @@ button.source:focus-visible { outline: 2px solid #1f5fd6; outline-offset: 2px; b
   .actions > .primary, .actions > .ghost { flex: 1 1 auto; }
   .reason { min-height: var(--touch-hit, 44px); }
 }
+
+/* 新首页深色（会议页挪进新首页后）：参会人、段落正文、「不写进本体」的深色字在深底上看不清，只换成新首页的字色变量；浅色不变。 */
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .props dd, :global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .body { color: var(--ink); }
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .toggle { color: var(--ink-muted); }

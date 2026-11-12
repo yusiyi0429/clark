@@ -188,7 +188,7 @@ export async function unreadThreads(q: Query, personId: string) {
     WHERE tm.person_id=$1 AND tm.left_at IS NULL AND tm.object_type IN ('issue','meeting','task')
     GROUP BY tm.object_type,tm.object_id,i.title,m.title,t.title ORDER BY max(msg.id) DESC`, [personId])).rows;
   return { threads: rows.map((row) => ({ objectType: row.object_type, objectId: row.object_id, title: row.title,
-    unread: row.unread, href: row.object_type === "task" ? `/me/tasks/${row.object_id}` : `/me/${row.object_type === "issue" ? "issues" : "meetings"}/${row.object_id}` })) };
+    unread: row.unread, href: row.object_type === "task" ? `/me/tasks/${row.object_id}` : row.object_type === "issue" ? `/me/issues/${row.object_id}` : `/me/work/meetings/${row.object_id}` })) };
 }
 
 /** 参会名单是真相源；保留离群历史，新增或重新列入参会人时恢复群资格。 */

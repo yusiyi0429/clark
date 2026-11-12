@@ -46,6 +46,7 @@ import { HomeComposer, HomeView, WaitingList, type SendTarget } from "./HomeView
 import { LeftColumn, SubLetter, subKey, subLetters, type RowActions } from "./LeftColumn";
 import { ForeignTaskInfo, TaskInfo } from "./TaskInfo";
 import { MissionInfo } from "./MissionInfo";
+import { MeetingView } from "./MeetingView";
 import { ProjectInfo } from "./ProjectInfo";
 import { ProjectTrail } from "./ProjectParts";
 import { LeftResize, RightResize, useFileWidth, useLeftWidth, useRightWidth } from "./LeftResize";
@@ -572,6 +573,7 @@ function HomeFrame({ account }: { account: Account }) {
         return <NewSubView key={project.id} project={project} onCreate={(text) => createFree(project.id, text)} />;
       }
       case "transfer": return <TransferView key={current.id} id={current.id} go={go} onChanged={api.refresh} />;
+      case "meeting": return <MeetingView key={current.id} id={current.id} go={go} />;
       case "buddy": return <BuddyView buddy={buddy} outbox={outbox} consume={consume} onSpeaking={setSpeaking} context={buddyContext} onClearContext={() => setBuddyContext(null)} />;
       case "mission": {
         const mission = data.month.missions.find((entry) => entry.missionId === current.id);

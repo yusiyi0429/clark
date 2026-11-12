@@ -208,7 +208,7 @@ describe("对话里约会议：起草不写库，约好只建一场，已约读�
       origin_ref: { type: "booking", draftId: card.draftId } });
     expect((rows[0].participants as { personId: string }[]).map((person) => person.personId)).toEqual(expect.arrayContaining([RENHAO, SIYI]));
 
-    expect(await status(member, card.draftId)).toEqual({ meeting: { id: meetingId, title: "新 Chat 切换", href: `/me/meetings/${meetingId}` } });
+    expect(await status(member, card.draftId)).toEqual({ meeting: { id: meetingId, title: "新 Chat 切换", href: `/me/work/meetings/${meetingId}` } });
     // 别人拿同一个 draftId 读不到这场会。
     expect(await status(await t.loginCookie(), card.draftId)).toEqual({ meeting: null });
   });

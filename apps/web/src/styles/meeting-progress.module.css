@@ -112,3 +112,6 @@
   .quiet.quiet, .link input, .read.read { min-height: var(--touch-hit, 28px); }
   .link { width: 100%; }
 }
+
+/* 新首页深色（会议页挪进新首页后）：当前这一步的深色字在深底上看不清，只换成新首页的字色变量；浅色不变。 */
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .step[data-state='current'] { color: var(--ink); }

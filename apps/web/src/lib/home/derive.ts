@@ -66,7 +66,7 @@ export function waitingHref(item: Pick<WaitingItem, "open"> & Partial<Pick<Waiti
     case "topic": return topicHref(open.id);
     // 子会话的提问和批准由项目对话转达（14.3）：落在对话里那个子会话的框上。
     case "project": return open.focus ? `${projectHref(open.id)}#${askAnchor(open.focus.sessionId)}` : projectHref(open.id);
-    case "meeting": return `/me/meetings/${encodeURIComponent(open.id)}`;
+    case "meeting": return `/me/work/meetings/${encodeURIComponent(open.id)}`;
     // 具体某张卡去那张卡；拍板人那一侧没有具体的卡（轮次），去原来列着轮次的首页通知栏。
     case "mission_card": return open.round ? "/me" : `/me/mission-cards/${encodeURIComponent(open.id)}`;
     case "role": return pageHref("roles");

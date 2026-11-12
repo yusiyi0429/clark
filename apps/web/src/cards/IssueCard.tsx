@@ -211,8 +211,8 @@ export function IssueCard({ card, collection = [], onCard, onNavigate, readOnly 
           <button
             type="button"
             className={s.meetingCard}
-            data-origin={`${readOnly ? "/me" : ""}/meetings/${meeting.card.objectRef.id}`}
-            onClick={(event) => onNavigate(`${readOnly ? "/me" : ""}/meetings/${meeting.card.objectRef.id}`, event.currentTarget)}
+            data-origin={`${readOnly ? "/me/work" : ""}/meetings/${meeting.card.objectRef.id}`}
+            onClick={(event) => onNavigate(`${readOnly ? "/me/work" : ""}/meetings/${meeting.card.objectRef.id}`, event.currentTarget)}
           >
             <CalendarDays className={s.meetingIcon} size={15} aria-hidden="true" />
             <span className={s.meetingKicker}>本议题已安排上会</span>

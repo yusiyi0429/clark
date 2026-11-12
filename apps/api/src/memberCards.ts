@@ -63,5 +63,5 @@ export function projectMemberMeetingCardFromCard(card: TCard, viewerId?: string)
     } : {}),
   },
     actions: isHost ? card.actions.filter((action) => HOST_MEETING_ACTIONS.includes(action.actionType)) : [],
-    navigation: [{ href: `/me/meetings/${card.objectRef.id}`, label: "会议" }] };
+    navigation: [{ href: `/me/work/meetings/${card.objectRef.id}`, label: "会议" }] };
 }

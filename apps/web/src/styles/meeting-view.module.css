@@ -1,0 +1,11 @@
+/*
+ * 来源：ts-design 0.4.0 dist/components.css 的 .ts-detail（滚动、底部留白）、.ts-row、.ts-between；
+ * 基础字号行高照老外壳（ts-design/styles.css 带进来的页面基础样式，16px / 1.6）。不抄背景。
+ * 会议屏幕挪进新首页后只在这一页的根上生效：整份 ts-design/styles.css 引进新首页会带变别的页面，所以只抄这几条。
+ * ts-design 升级时对照这几条跟着改。
+ */
+.root { font-size: 16px; line-height: 1.6; }
+/* 高度由 detail-frame 的 .reader（flex: 1）给，这里不写 height。 */
+.root :global(.ts-detail) { overflow: auto; overscroll-behavior: contain; padding: 0 0 var(--ts-content-bottom, 24px); scroll-padding-bottom: var(--ts-content-bottom, 24px); outline: none; }
+.root :global(.ts-row) { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.root :global(.ts-between) { justify-content: space-between; }

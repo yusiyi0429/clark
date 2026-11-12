@@ -184,7 +184,7 @@ export function registerInternalMeetingRoutes(app: AppInstance, ctx: RouteContex
           : !meetingHasEnded(row, now) ? "in_progress" : "awaiting_record",
         startsAt: row.scheduled_at.toISOString(), endsAt: row.ends_at.toISOString(), endedAt: row.ended_at?.toISOString() ?? null,
         host: person(row.lead_dri_id), participants: row.participants.map((item) => person(item.personId)),
-        issueIds: row.issue_ids, href: hrefOf(view, `/meetings/${row.id}`),
+        issueIds: row.issue_ids, href: view.role === "ceo" ? `/meetings/${row.id}` : `/me/work/meetings/${row.id}`,
       })),
     };
   });
