@@ -20,6 +20,16 @@ describe("对话里一轮末尾那一行（第 72 条，事件 files_changed）"
     expect(latestFilesSeq(view.entries)).toBe(2);
   });
 
+  it("开了新一轮（后面来了本人的话）以后不再算最近一轮：那一行停在最后读到的处数，不去重读", () => {
+    // 真本机对更早的一轮给的是当时的改动，不扣恢复过的：重读会让「2 处」跳回「3 处」。
+    const events = [
+      { seq: 1, at, type: "user_message", text: "改周报" },
+      { seq: 2, at, type: "files_changed", turn: 1, files: [tf("周报.md", "modified", 3)], more: 0 },
+    ];
+    expect(latestFilesSeq(foldEvents(events as never).entries)).toBe(2);
+    expect(latestFilesSeq(foldEvents([...events, { seq: 3, at, type: "user_message", text: "接着改" }] as never).entries)).toBeNull();
+  });
+
   it("字：改了几处、新建、删了、只知道改过的不写处数、恢复过或剩 0 处的写「已恢复」", () => {
     expect(turnFileText(tf("docs/周报.md", "modified", 2), false)).toBe("改了 周报.md · 2 处");
     expect(turnFileText(tf("新的.md", "added"), false)).toBe("新建 新的.md");
