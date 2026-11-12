@@ -1,7 +1,7 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
 import { CardHandbackBrief, CardSourceWordIssue } from "./taskCardView.js";
 import { Budget } from "./budget.js";
-import { LocalPermissionBrief, LocalPermissionDecisionRequest, LocalPermissionMode, LocalQuestionAnswerRequest, LocalQuestionRequestView } from "./localRunner.js";
+import { LocalPermissionBrief, LocalPermissionDecisionRequest, LocalPermissionMode, LocalQuestionAnswerRequest, LocalQuestionRequestView, LocalStopReason } from "./localRunner.js";
 import { PersonRef, ProjectTransfer } from "./projectTransfers.js";
 import { RoleRef } from "./roles.js";
 import { WorkerQueueReason, WorkerResources } from "./workers.js";
@@ -114,6 +114,11 @@ export const SubSession = Type.Object({
   heldBy: Type.Optional(Type.Object({
     kind: Type.Union([Type.Literal("card"), Type.Literal("topic")]), id: Type.String({ minLength: 1 }), letter: Nullable(SubSessionLetter), title: Type.String(),
   }, strict)),
+  /**
+   * 停下的原因（同本机 stopped 条目的 why，见 LocalStopReason）：只在 state = waiting、waiting = null 时带，照这个会话最近一次报的 stopped。
+   * 界面 turn_done（一轮正常做完、在等本人下一句）写「做完一轮」，别的写「已停下」。本机没报过（老数据）不带，照旧「已停下」。
+   */
+  stopWhy: Type.Optional(LocalStopReason),
 }, strict);
 
 /**

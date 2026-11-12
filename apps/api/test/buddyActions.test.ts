@@ -358,16 +358,27 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
       expect((await feed()).filter((item) => item.kind === "sub_session_report")).toEqual([{ kind: "sub_session_report", id: expect.any(String), at: expect.any(String),
         afterSequence: null, sub: { kind: "card", id: a, letter: "A", title: "规划员岗位初版" }, why: "turn_done", summary: "规划员岗位写好了，放在 planner.md。", blocker: null,
         outputs: [{ outputId, title: "规划员岗位", fileName: "planner.md" }, { outputId: null, title: "截图", fileName: "a.png" }] }]);
+      // 左栏：一轮正常做完写「做完一轮」，云端带 stopWhy = turn_done；开始下一轮就清掉。
+      const leftSub = async () => ((await f.call("GET", "/api/me/work-home")).json().projects as { projectId: string; subSessions: { id: string; state: string; stopWhy?: string }[] }[])
+        .find((entry) => entry.projectId === project)!.subSessions.find((entry) => entry.id === a)!;
+      expect(await leftSub()).toMatchObject({ state: "waiting", stopWhy: "turn_done" });
       // 重开 = 往里说「接着做」；再停住一次是第二条报告。
       await act("sub_session_restart", { letter: "A" });
       expect((await claim()).map((entry) => entry.command)).toEqual([{ type: "message", text: "接着做" }]);
       await status("running");
+      expect((await leftSub()).stopWhy).toBeUndefined();
+      expect(await f.t.sql("SELECT stop_why FROM local_runs WHERE id=$1", [session])).toEqual([{ stop_why: null }]);
       await report("stopped", { why: "held", summary: null, blocker: "订阅额度用完，14:00 恢复", outputs: [] });
       expect((await feed()).filter((item) => item.kind === "sub_session_report").map((item) => [item.why, item.blocker])).toEqual([["turn_done", null],
         ["held", "订阅额度用完，14:00 恢复"]]);
       // 已经存下的旧摘要，读的时候也去掉。
       await f.t.sql("UPDATE sub_session_reports SET summary='三件事都做完了：；已删除旧的 planner.md。' WHERE why='held'");
       expect((await feed()).find((item) => item.kind === "sub_session_report" && item.why === "held").summary).toBe("三件事都做完了：已删除旧的 planner.md。");
+      // 本机程序重启打断的停下也收（报告表的检查原来不认 runner_restart）；停着不在等什么，左栏写「已停下」。
+      await report("stopped", { why: "runner_restart", summary: null, blocker: null, outputs: [] });
+      await status("exited");
+      expect(await leftSub()).toMatchObject({ state: "waiting", stopWhy: "runner_restart" });
+      await status("running");
       // 主循环第 63 条：报告不再替本人给项目主管线发一句、不让它回一小轮——项目对话里一条消息都没有（没跑模型）。
       await new Promise((resolve) => setTimeout(resolve, 300));
       expect(await f.t.sql(`SELECT 1 FROM conversation_messages m JOIN conversations c ON c.id=m.conversation_id WHERE c.scope=$1`, [`project:${project}`])).toEqual([]);
