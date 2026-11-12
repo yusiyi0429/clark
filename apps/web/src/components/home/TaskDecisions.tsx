@@ -118,14 +118,15 @@ export function HandbackDecision({ cardId, handback, here, via, onFill, onLook, 
     if (label === "改完成标准") return onEdit();
     setMode("stop");
   };
-  const mine = gaps.filter((gap) => gap.fixBy === "person");
+  // 要你做的那几条；和第一行同一句的不再写一遍。
+  const mine = gaps.filter((gap) => gap.fixBy === "person").map((gap) => ({ index: gap.index, text: gap.fix ?? gap.short })).filter((row) => sameLine(row.text) !== sameLine(title));
   const unmet = handback.result?.criteria.filter((row) => row.verdict !== "met") ?? [];
   const opinion = unmet.length ? unmet.map((row) => (
     <li key={row.index}><span>{row.text}</span>{row.reason ? <small>{row.reason}</small> : null}{row.fix ? <small>改法：{row.fix}</small> : null}</li>
   )) : gaps.length ? gaps.map((gap) => <li key={gap.index}><span>{gap.short}</span>{gap.fix ? <small>改法：{gap.fix}</small> : null}</li>)
     : handback.returnText ? <li><span style={{ whiteSpace: "pre-wrap" }}>{handback.returnText}</span></li> : null;
   const body = needs
-    ? (mine.length ? <ul className={h.wordIssues} data-testid="handback-needs">{mine.map((gap) => <li key={gap.index}>{gap.fix ?? gap.short}</li>)}</ul> : undefined)
+    ? (mine.length ? <ul className={h.wordIssues} data-testid="handback-needs">{mine.map((row) => <li key={row.index}>{row.text}</li>)}</ul> : undefined)
     : opinion || handback.sourceWordIssues.length ? <>
       <button type="button" className={x.fold} aria-expanded={open} onClick={() => setOpen(!open)} data-testid="handback-opinion">
         {open ? <ChevronDown size={16} strokeWidth={1.8} aria-hidden /> : <ChevronRight size={16} strokeWidth={1.8} aria-hidden />}验收意见
@@ -140,6 +141,9 @@ export function HandbackDecision({ cardId, handback, here, via, onFill, onLook, 
       footer={relay?.state === "failed" ? <FailedLine inline note={relay.message || "没送到"} onRetry={() => undefined} /> : undefined} />
   );
 }
+
+/** 两句是不是同一句：不看首尾空白和句末标点。 */
+const sameLine = (text: string) => text.trim().replace(/[。.！!；;，,]+$/, "");
 
 type WriteBox = { title: string; gaps: readonly TCardGapItem[]; onCancel: () => void; onSubmit: (text: string) => Promise<unknown> };
 

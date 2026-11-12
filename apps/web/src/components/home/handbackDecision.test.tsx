@@ -39,6 +39,12 @@ describe("等你补的框", () => {
     expect(options(html)).toEqual(["我来补", "就到这里", "改完成标准"]);
     expect(page).toContain("我来补|（推荐）");
   });
+  it("要你做的那一条和第一行是同一句：只写一遍", () => {
+    const same = handback({ headline: "登录中国商标网查这 3 个名字，把近似商标的申请号贴回来。" });
+    const html = render(same);
+    expect(html.match(/登录中国商标网查这 3 个名字/g)).toHaveLength(1);
+    expect(html).not.toContain("handback-needs");
+  });
   it("手机上、不在这台电脑上：选项一个不少", () => {
     expect(options(render(handback(), false))).toEqual(["我来补", "就到这里", "改完成标准"]);
     expect(options(render(handback({ outcome: "fail" }), false))).toEqual(["再改一轮", "我去看看", "改完成标准", "就到这里"]);
