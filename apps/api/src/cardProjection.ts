@@ -107,7 +107,9 @@ export function handbackBrief(row: HandbackRow): TCardHandbackBrief {
     createdAt: row.created_at.toISOString(), finishedAt: row.finished_at?.toISOString() ?? null, git: cardGit(row),
     sourceWordIssues: row.result?.sourceWordIssues ?? [], gaps: handbackGaps(row), relay: row.relay ? relayView(row.relay) : null,
     // 有缺口通过（主循环第 62 条「就到这里」）：没过、等本人补的那次被本人推翻成通过。
-    passedWithGap: gap ? { reason: gap.reason, at: gap.at.toISOString() } : null };
+    passedWithGap: gap ? { reason: gap.reason, at: gap.at.toISOString() } : null,
+    // 受阻是本人推翻造成的时候（通过被推翻成没过），受阻框第一行写推翻的原因。
+    overruleReason: row.overruled_at ? row.overrule_reason : null };
 }
 
 /** 列和标记（第 3 节）：handbacks、runs 都是新的在前。 */
