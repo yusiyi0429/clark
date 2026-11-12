@@ -429,8 +429,8 @@ async function rateTask(deps: MonthReviewDeps & { agent: MonthReviewAgent; event
     rest = [];
   }
   const cards = rest.length ? (await q("SELECT id::text,title,status,criterion_index FROM tasks WHERE plan_task_id=$1 AND status<>'returned'", [taskId])).rows as CardRow[] : [];
-  const handbacks = cards.length ? (await q(`SELECT task_id::text,status,outcome,overruled_at FROM card_handbacks WHERE task_id=ANY($1::uuid[]) ORDER BY attempt DESC`,
-    [cards.map((card) => card.id)])).rows as { task_id: string; status: string; outcome: "pass" | "fail" | null; overruled_at: Date | null }[] : [];
+  const handbacks = cards.length ? (await q(`SELECT task_id::text,status,outcome,overruled_at,gap_closed_at FROM card_handbacks WHERE task_id=ANY($1::uuid[]) ORDER BY attempt DESC`,
+    [cards.map((card) => card.id)])).rows as { task_id: string; status: string; outcome: "pass" | "fail" | null; overruled_at: Date | null; gap_closed_at: Date | null }[] : [];
   const passed = (card: CardRow) => {
     const latestDone = handbacks.find((row) => row.task_id === card.id && row.status === "done" && effectiveOutcome(row) !== null);
     return latestDone ? effectiveOutcome(latestDone) === "pass" : false;

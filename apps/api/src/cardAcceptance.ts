@@ -274,6 +274,7 @@ async function openReworkCard(client: PoolClient, ownerId: string, cardId: strin
  * - 通过的推翻、在工作树里做（git 不为空）、本机验收员判的，而合回结果还没报上来：409 MERGE_PENDING，等报上来再推翻。
  * - 通过的推翻（没合回）：卡回进行中，验收记录清掉，从准备中拿掉（已经进了某一版的不能推翻）；推翻的原因当改法，等网页送回执行方。
  * - 没过的推翻（「仍然通过」）：卡完成、进准备中，验收记录写本人，verdict 写推翻的原因。
+ * - 已经推翻过的通过（算没过）、卡还没完成：这一下是「就到这里」，卡完成、进准备中，记成有缺口通过（gap_closed_at），不再算一次推翻，返回 null。
  * 两个方向都记一条要写的岗位修改，返回它的 id（没记为 null），调用方提交后排队。
  */
 export function overruleHandback(pool: Pool, ownerId: string, cardId: string, handbackId: string, reason: string, now: Date, names: Map<string, string>): Promise<string | null> {
@@ -282,10 +283,18 @@ export function overruleHandback(pool: Pool, ownerId: string, cardId: string, ha
   return inTransaction(pool, async (client) => {
     const { task, row } = await lockedHandback(client, ownerId, cardId, handbackId);
     if (row.status !== "done" || !row.outcome) throw new CardError(409, "NOT_JUDGED", "这次交回还没有验收结论");
-    if (row.overruled_at) throw new CardError(409, "ALREADY_OVERRULED", "这次验收已经推翻过了");
+    // 本人推翻过的通过（算没过，连着前一次没过就受阻）、卡还没完成：再点就是「就到这里」，照样记成有缺口通过，不再算一次推翻（不记岗位修改）。
+    const closingOverruledPass = row.overruled_at !== null && row.outcome === "pass" && !row.gap_closed_at && task.status !== "done";
+    if (row.overruled_at && !closingOverruledPass) throw new CardError(409, "ALREADY_OVERRULED", "这次验收已经推翻过了");
     const latest = (await client.query("SELECT max(attempt)::int AS n FROM card_handbacks WHERE task_id=$1", [cardId])).rows[0].n as number;
     if (row.attempt !== latest) throw new CardError(409, "NOT_LATEST", "只能推翻最近一次交回的验收");
     const who = names.get(ownerId) ?? ownerId;
+    if (closingOverruledPass) {
+      if (task.status !== "returned") await completeCard(client, task, handbackId, acceptanceRecord(ownerId, handbackId, row.criteria, row.result, now, `就到这里：${text}`));
+      await client.query("UPDATE card_handbacks SET gap_closed_at=$2,gap_close_reason=$3 WHERE id=$1", [handbackId, now, text]);
+      await tellGroup(client, cardId, ownerId, `${who}就到这里，算通过：${text}`);
+      return null;
+    }
     if (row.outcome === "pass") {
       // 在工作树里做的（git 不为空），本机验收员判过了会自动合回，合回结果晚到的话推翻时选错路：等它报上来再推翻。云端判过的本机不合回，照旧。
       if (row.git && !row.merge && row.verifier_source === "local") throw new CardError(409, "MERGE_PENDING", "这张卡的合回结果还没报上来，等电脑上线以后再推翻");

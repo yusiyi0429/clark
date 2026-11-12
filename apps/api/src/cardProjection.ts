@@ -18,6 +18,8 @@ export type HandbackRow = { id: string; task_id: string; run_id: string | null; 
   summary: string | null; output_ids: string[]; status: TCardHandbackBrief["status"]; started_at: Date | null; finished_at: Date | null; error: string | null;
   result: StoredAcceptance | null; outcome: TCardHandbackOutcome | null; return_text: string | null; returned_at: Date | null; overruled_at: Date | null;
   overruled_by: string | null; overrule_reason: string | null; created_at: Date;
+  /** 本人推翻过的通过造成受阻后「就到这里」的时间和原因（迁移 279）。 */
+  gap_closed_at?: Date | null; gap_close_reason?: string | null;
   verifier_source: "cloud" | "local" | null; verifier_model: string | null; verifier_role_id: string | null; verifier_role_version: number | null;
   git: TLocalGitRef | null; verified_commit: string | null;
   /** 「我来补」送到的时间（主循环第 61 条）。 */
@@ -57,9 +59,18 @@ export function outcomeOf(result: StoredAcceptance): TCardHandbackOutcome {
   return result.criteria.some((item) => item.verdict !== "met" && fixByOf(item) === "person") ? "needs_person" : "fail";
 }
 
-/** 推翻过的验收按本人的判断算：通过的推翻算没过；没过的、等本人补的推翻（「就到这里」）算通过。 */
-export const effectiveOutcome = (row: Pick<HandbackRow, "outcome" | "overruled_at">): TCardHandbackOutcome | null =>
-  row.outcome && row.overruled_at ? (row.outcome === "pass" ? "fail" : "pass") : row.outcome;
+/**
+ * 推翻过的验收按本人的判断算：通过的推翻算没过；没过的、等本人补的推翻（「就到这里」）算通过。
+ * 通过的推翻以后又「就到这里」了（gap_closed_at）算通过。
+ */
+export const effectiveOutcome = (row: Pick<HandbackRow, "outcome" | "overruled_at" | "gap_closed_at">): TCardHandbackOutcome | null =>
+  row.gap_closed_at ? "pass" : row.outcome && row.overruled_at ? (row.outcome === "pass" ? "fail" : "pass") : row.outcome;
+
+/** 有缺口通过（主循环第 62 条「就到这里」）：没过、等本人补的那次被推翻成通过；或本人推翻过的通过又「就到这里」了。不是为 null。 */
+export function gapPass(row: Pick<HandbackRow, "outcome" | "overruled_at" | "overrule_reason" | "gap_closed_at" | "gap_close_reason">): { reason: string; at: Date } | null {
+  if (row.gap_closed_at && row.gap_close_reason) return { reason: row.gap_close_reason, at: row.gap_closed_at };
+  return row.overruled_at && row.outcome !== "pass" && row.overrule_reason ? { reason: row.overrule_reason, at: row.overruled_at } : null;
+}
 
 /** 连续几次没过（从最近一次往前数，排队或在验收的不算；等本人补的那次跳过，不算也不打断）。 */
 export function failStreak(handbacks: Pick<HandbackRow, "status" | "outcome" | "overruled_at">[]): number {
@@ -90,13 +101,13 @@ export function handbackGaps(row: Pick<HandbackRow, "criteria" | "claims" | "res
 export const cardGit = (row: Pick<HandbackRow, "git" | "verified_commit">): TCardGit | null => row.git ? { ...row.git, verifiedCommit: row.verified_commit } : null;
 
 export function handbackBrief(row: HandbackRow): TCardHandbackBrief {
-  const criteria = row.result?.criteria ?? [];
+  const criteria = row.result?.criteria ?? [], gap = gapPass(row);
   return { id: row.id, attempt: row.attempt, status: row.status, outcome: row.outcome, met: criteria.filter((item) => item.verdict === "met").length, total: criteria.length,
     headline: row.result?.headline ?? null, returnText: row.return_text, returnedAt: row.returned_at?.toISOString() ?? null, overruled: row.overruled_at !== null,
     createdAt: row.created_at.toISOString(), finishedAt: row.finished_at?.toISOString() ?? null, git: cardGit(row),
     sourceWordIssues: row.result?.sourceWordIssues ?? [], gaps: handbackGaps(row), relay: row.relay ? relayView(row.relay) : null,
     // 有缺口通过（主循环第 62 条「就到这里」）：没过、等本人补的那次被本人推翻成通过。
-    passedWithGap: row.overruled_at && row.outcome !== "pass" && row.overrule_reason ? { reason: row.overrule_reason, at: row.overruled_at.toISOString() } : null };
+    passedWithGap: gap ? { reason: gap.reason, at: gap.at.toISOString() } : null };
 }
 
 /** 列和标记（第 3 节）：handbacks、runs 都是新的在前。 */

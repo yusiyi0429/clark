@@ -110,10 +110,10 @@ describe("Agent 验收：队列、推翻、退回记录", { timeout: 30_000 }, (
         handback: { outcome: "pass", overruled: true, returnText: "验收被推翻：录屏不是新人。改完再交回。" } } });
       expect(overruled.json().handbacks[0].overrule).toMatchObject({ by: { personId: TEST_MEMBER.personId }, reason: "录屏不是新人" });
       expect((await f.t.sql("SELECT acceptance FROM tasks WHERE id=$1", [passed]))[0].acceptance).toBeNull();
-      expect((await f.call("POST", `/api/me/cards/${passed}/handbacks/${pass}/overrule`, { reason: "再来" })).json()).toMatchObject({ code: "ALREADY_OVERRULED" });
 
       const stillPass = await f.call("POST", `/api/me/cards/${failed}/handbacks/${fail}/overrule`, { reason: "评审结论在群里" });
       expect(stillPass.json().task).toMatchObject({ status: "done", card: { stage: "done", deliverable: { state: "pending" } } });
+      expect((await f.call("POST", `/api/me/cards/${failed}/handbacks/${fail}/overrule`, { reason: "再来" })).json()).toMatchObject({ code: "ALREADY_OVERRULED" });
       expect((await f.t.sql("SELECT acceptance FROM tasks WHERE id=$1", [failed]))[0].acceptance).toMatchObject({ by: TEST_MEMBER.personId,
         verdict: "推翻 Agent 验收：评审结论在群里", agentHandbackId: fail });
       const pending = (await f.call("GET", "/api/plan-tasks/task-open/cards")).json().pending;
@@ -128,6 +128,36 @@ describe("Agent 验收：队列、推翻、退回记录", { timeout: 30_000 }, (
       await f.settle();
       await f.t.sql("UPDATE deliverable_pending_items SET version_id=$1", [version]);
       expect((await f.call("POST", `/api/me/cards/${passed}/handbacks/${again}/overrule`, { reason: "不对" })).json()).toMatchObject({ code: "ALREADY_INCLUDED" });
+    } finally { await f.close(); }
+  });
+
+  it("本人推翻过的通过造成受阻：「就到这里」照样记成有缺口通过，不再算一次推翻；之后再点 409", async () => {
+    const f = await acceptanceFixture();
+    try {
+      const id = await f.card();
+      f.plan.push(["met", "partial"], ["met", "met"]);
+      const first = await f.handBack(id);
+      await f.settle();
+      expect((await f.call("POST", `/api/me/cards/${id}/handbacks/${first}/returned`)).statusCode).toBe(200);
+      const second = await f.handBack(id);
+      await f.settle();
+      expect((await f.call("POST", `/api/me/cards/${id}/handbacks/${second}/overrule`, { reason: "录屏不是新人" })).statusCode).toBe(200);
+      expect((await f.view(id)).task.card).toMatchObject({ stage: "doing", wait: "blocked", handback: { attempt: 2, outcome: "pass", overruled: true, passedWithGap: null } });
+
+      const proposals = async () => (await f.t.sql("SELECT 1 FROM role_proposals WHERE task_id=$1", [id])).length;
+      const before = await proposals();
+      const closed = await f.call("POST", `/api/me/cards/${id}/handbacks/${second}/overrule`, { reason: "录屏下次再补" });
+      expect(closed.statusCode).toBe(200);
+      expect(closed.json().task).toMatchObject({ status: "done", card: { stage: "done", wait: null, deliverable: { state: "pending" },
+        handback: { attempt: 2, overruled: true, passedWithGap: { reason: "录屏下次再补" } } } });
+      expect((await f.t.sql("SELECT acceptance FROM tasks WHERE id=$1", [id]))[0].acceptance).toMatchObject({ by: TEST_MEMBER.personId,
+        verdict: "就到这里：录屏下次再补", agentHandbackId: second });
+      // 推翻的原因不被盖掉；不算一次推翻，不多记岗位修改。
+      expect((await f.t.sql("SELECT overrule_reason FROM card_handbacks WHERE id=$1", [second]))[0].overrule_reason).toBe("录屏不是新人");
+      expect(await proposals()).toBe(before);
+      expect((await f.t.sql("SELECT content FROM thread_messages WHERE object_type='task' AND object_id=$1 ORDER BY id DESC LIMIT 1", [id]))[0].content)
+        .toMatch(/就到这里，算通过：录屏下次再补$/);
+      expect((await f.call("POST", `/api/me/cards/${id}/handbacks/${second}/overrule`, { reason: "再来" })).json()).toMatchObject({ code: "ALREADY_OVERRULED" });
     } finally { await f.close(); }
   });
 

@@ -43,10 +43,11 @@ export async function readWorkCounts(q: Query, peopleDirectory: PeopleDirectory,
     WHERE kind='card' AND task_id IS NOT NULL GROUP BY 1,2) r WHERE first>=$1 AND first<$2 GROUP BY 1`);
   const handedBack = await counted(`SELECT owner_id AS person_id,count(*)::int AS n FROM card_handbacks WHERE created_at>=$1 AND created_at<$2 GROUP BY 1`);
   // 结论：按出结论的时间数；受阻是这一次没过让连续没过到 2（等你补的那次跳过，同卡的投影）。就到这里按推翻的时间。
-  const judged = (await q(`SELECT h.task_id::text,h.owner_id,h.attempt,h.status,h.outcome,h.overruled_at,h.finished_at FROM card_handbacks h
-    WHERE h.task_id IN (SELECT task_id FROM card_handbacks WHERE (finished_at>=$1 AND finished_at<$2) OR (overruled_at>=$1 AND overruled_at<$2))
+  const judged = (await q(`SELECT h.task_id::text,h.owner_id,h.attempt,h.status,h.outcome,h.overruled_at,h.gap_closed_at,h.finished_at FROM card_handbacks h
+    WHERE h.task_id IN (SELECT task_id FROM card_handbacks WHERE (finished_at>=$1 AND finished_at<$2) OR (overruled_at>=$1 AND overruled_at<$2)
+      OR (gap_closed_at>=$1 AND gap_closed_at<$2))
     ORDER BY h.task_id,h.attempt`, range)).rows as { task_id: string; owner_id: string; attempt: number; status: string; outcome: "pass" | "fail" | "needs_person" | null;
-    overruled_at: Date | null; finished_at: Date | null }[];
+    overruled_at: Date | null; gap_closed_at: Date | null; finished_at: Date | null }[];
   const passed: PersonCount = new Map(), failed: PersonCount = new Map(), blocked: PersonCount = new Map(), needsPerson: PersonCount = new Map(),
     closedWithGap: PersonCount = new Map();
   const within = (at: Date | null) => at !== null && at >= from && at < to;
@@ -60,7 +61,7 @@ export async function readWorkCounts(q: Query, peopleDirectory: PeopleDirectory,
       if (row.outcome === "fail") { bump(failed, row.owner_id); if (streak === 2) bump(blocked, row.owner_id); }
       if (row.outcome === "needs_person") bump(needsPerson, row.owner_id);
     }
-    if (row.outcome !== "pass" && within(row.overruled_at)) bump(closedWithGap, row.owner_id);
+    if ((row.outcome !== "pass" && within(row.overruled_at)) || within(row.gap_closed_at)) bump(closedWithGap, row.owner_id);
     // 推翻以后按本人的判断算，连续没过从头数。
     if (effectiveOutcome(row) === "pass") streak = 0;
   }
