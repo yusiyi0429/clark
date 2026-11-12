@@ -99,6 +99,7 @@ export async function recentOwnerWords(q: Query, history: ProjectHistory, ownerI
   const since = (await q(`SELECT max(created_at) AS at FROM card_split_requests WHERE owner_id=$1 AND ${target.taskId ? "plan_task_id=$2" : "project_id=$2 AND plan_task_id IS NULL"}`,
     [ownerId, target.taskId ?? target.projectId])).rows[0]?.at as Date | null;
   const messages = await history(projectId, ownerId, requestId).then((result) => result.messages).catch(() => []);
-  return messages.filter((message) => message.role === "user" && (!since || new Date(message.createdAt) > since) && message.content.trim())
+  // 还在跑的那一轮里本人那句也算（伙伴就是在这一轮里登记的），Chat 没给时间也取得到。
+  return messages.filter((message) => message.role === "user" && (!since || message.running || new Date(message.createdAt) > since) && message.content.trim())
     .map((message) => message.content.trim()).slice(-SOURCE_TURNS);
 }

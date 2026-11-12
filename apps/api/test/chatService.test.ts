@@ -959,6 +959,39 @@ describe("项目对话走 Chat（project:<projectId>，新首页第 16 节）", 
     }
   }, 40_000);
 
+  it("3700 小卡 U：接了 Chat 时伙伴登记拆卡取得到本人原话——Chat 读回的消息带上时间；项目之前登记过拆卡、本人新说一句、在正在跑的这一轮里登记，存的是这句", async () => {
+    const segments: Record<string, Record<string, Page>> = {};
+    const chat = await fakeChat({ conversations: ["main-segment"], segments });
+    const f = await pipelineFixture(chat);
+    try {
+      const projectId = await newProject(f);
+      const pipeline = (await open(f, projectId)).json().conversationId as string;
+      await f.call("PUT", "/api/me/buddy-authority", { authority: "full" });
+      // 这个项目之前登记过一次拆卡（开了规划员，登记去掉了）。
+      const earlier = (await f.call("POST", `/api/me/projects/${projectId}/card-splits`)).json().id as string;
+      expect((await f.call("DELETE", `/api/me/card-splits/${earlier}`)).statusCode).toBe(204);
+      const since = new Date((await f.t.sql("SELECT created_at FROM card_split_requests WHERE id=$1", [earlier]))[0].created_at as string).getTime();
+      const at = (minutes: number) => new Date(since + minutes * 60_000).toISOString();
+      const said = "开一张卡：在 验收1112\\ 里新建 目录.md，别的文件都不要动";
+      const [old, current] = [randomUUID(), randomUUID()];
+      // Chat 的历史原样：消息只带 turnAt；正在跑的这一轮里本人那句没带，只有这一轮的 turnAt。
+      const runs = [{ runId: old, status: "completed", turnAt: at(-60) }, { runId: current, status: "running", turnAt: at(1) }];
+      const messages = [{ role: "user" as const, text: "上次拆卡时说的", runId: old, turnAt: at(-60), attachments: [] },
+        { role: "assistant" as const, text: "好", runId: old, turnAt: at(-60), attachments: [] }, { role: "user" as const, text: said, runId: current, attachments: [] }];
+      segments[pipeline] = { "0": { messages, runs, nextCursor: null } };
+      expect(historyMessages(messages, runs).map((message) => message.createdAt)).toEqual([at(-60), at(-60), at(1)]);
+
+      const split = await f.t.app.inject({ method: "POST", url: "/internal/me/buddy-actions/split_cards",
+        headers: { authorization: `Bearer ${CHAT_TOKEN}`, "x-owner-id": TEST_MEMBER.personId },
+        payload: { args: { projectId, words: `本人原话：${said}\n\n交代：\n1. 只新建 目录.md，不许新建别的文件` }, conversationId: pipeline } });
+      expect(split.statusCode).toBe(200);
+      expect((await f.t.sql("SELECT source_words FROM card_split_requests WHERE id=$1", [split.json().result.requestId]))[0].source_words).toEqual([said]);
+    } finally {
+      await f.close();
+      await chat.close();
+    }
+  }, 40_000);
+
   it("17.2 第 36 条：项目对话选模型和思考程度转给 Chat——列表照 Chat 的；没选为 null；改选存在项目那段上（还没建先建），不合法照 Chat 的 400；别人的项目 404；老 Chat 没这几条接口时列表为空", async () => {
     const models = [{ source: "TokenHub · wangsu", modelId: "wangsu/claude", label: "claude", efforts: ["low", "medium", "high"], defaultEffort: "medium", isDefault: true },
       { source: "TokenHub · aliyun", modelId: "aliyun/qwen", label: "千问", efforts: ["off", "high"], defaultEffort: "off", isDefault: false }];
