@@ -85,7 +85,7 @@ case "$SOURCE_MODE" in
     SCHEMA_DESC="docker compose -f $COMPOSE_FILE --env-file $COMPOSE_ENV_FILE exec -T $COMPOSE_SERVICE psql -U $DB_USER -d $DB_NAME -Atc \"$SCHEMA_SQL\""
     STORAGE_DESC="docker compose -f $COMPOSE_FILE --env-file $COMPOSE_ENV_FILE exec -T $COMPOSE_SERVICE psql -U $DB_USER -d $DB_NAME -Atc \"$STORAGE_ROWS_SQL\""
     VOLUME_DESC="docker compose -f $COMPOSE_FILE --env-file $COMPOSE_ENV_FILE run --rm --no-deps -T --entrypoint tar $API_SERVICE czf - -C /var/lib/warmap/<volume> .（$VOLUME_WECHAT 经 $WECHAT_SERVICE 的 /app/data）"
-    FREEZE_DESC="docker compose ps -q $API_SERVICE → 若在运行：docker compose stop ${API_SERVICE}（EXIT trap 重启）"
+    FREEZE_DESC="docker compose ps -q $API_SERVICE → 若在运行：docker stop <容器id>（EXIT trap 按同一 id docker start）"
     run_dump() { compose exec -T "$COMPOSE_SERVICE" pg_dump -U "$DB_USER" -d "$DB_NAME" --format=custom --no-owner --no-privileges "$@" > "$plain"; }
     run_schema() { compose exec -T "$COMPOSE_SERVICE" psql -U "$DB_USER" -d "$DB_NAME" -Atc "$SCHEMA_SQL"; }
     run_storage_rows() { compose exec -T "$COMPOSE_SERVICE" psql -U "$DB_USER" -d "$DB_NAME" -Atc "$STORAGE_ROWS_SQL"; }
@@ -145,11 +145,12 @@ make_checksum() { ( cd "$(dirname "$1")" && sha256 "$(basename "$1")" > "$(basen
 
 mkdir -p "$BACKUP_LOCAL_DIR"
 tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/warmap.XXXXXX")
-API_WAS_RUNNING=0
+API_CONTAINERS=""
 on_exit() {
-  # 只重启备份前确实在运行的 API；恢复写冻结前的状态
-  if [ "$SOURCE_MODE" = compose ] && [ "$API_WAS_RUNNING" = 1 ]; then
-    compose start "$API_SERVICE" >/dev/null 2>&1 || echo "backup: 警告：API 重启失败，请手动 docker compose start $API_SERVICE" >&2
+  # 只重启备份前确实在运行的 API 容器；按 id 用 docker start，不走 compose start（它会连带检查依赖服务，生产上曾因此起不来）
+  if [ "$SOURCE_MODE" = compose ] && [ -n "$API_CONTAINERS" ]; then
+    # shellcheck disable=SC2086
+    docker start $API_CONTAINERS >/dev/null || echo "backup: 警告：API 重启失败，请手动 docker start $API_CONTAINERS" >&2
   fi
   rm -rf "$tmpdir"
 }
@@ -161,8 +162,9 @@ if [ "$SOURCE_MODE" = compose ]; then
   # 冻结写入口：只停止 API（唯一写方），PostgreSQL/edge/wechat 不动
   running_ids=$(compose ps -q "$API_SERVICE" || true)
   if [ -n "$running_ids" ]; then
-    API_WAS_RUNNING=1
-    compose stop "$API_SERVICE" >/dev/null
+    API_CONTAINERS=$(echo $running_ids)
+    # shellcheck disable=SC2086
+    docker stop $API_CONTAINERS >/dev/null
     echo "backup: 已停止 ${API_SERVICE}（写冻结）"
   else
     echo "backup: $API_SERVICE 未在运行，无需冻结"

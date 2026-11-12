@@ -353,15 +353,17 @@ describe("backup.sh source modes", () => {
     }));
     expect(result.status).toBe(0);
     const calls = readFileSync(dockerLog, "utf8").split("\n").filter(Boolean);
-    const stopIdx = calls.findIndex((c) => / stop api$/.test(c));
+    const stopIdx = calls.findIndex((c) => c === "stop container-running-1");
     const dumpIdx = calls.findIndex((c) => c.includes("pg_dump"));
-    const startIdx = calls.findIndex((c) => / start api$/.test(c));
+    const startIdx = calls.findIndex((c) => c === "start container-running-1");
     expect(stopIdx).toBeGreaterThan(-1);
     expect(stopIdx, "冻结必须先于 dump").toBeLessThan(dumpIdx);
     expect(startIdx).toBeGreaterThan(dumpIdx);
     // 只冻结 api：postgres/edge/wechat 不出现在 stop/start
     expect(calls.join("\n")).not.toMatch(/ stop (postgres|edge|wechat)$/);
-    expect(calls[calls.length - 1]).toMatch(/ start api$/);
+    // 按冻结前记下的容器 id 重启，不走 compose start（11/04 生产上它因依赖检查失败，API 停了 4 小时）
+    expect(calls.join("\n")).not.toMatch(/ start api$/);
+    expect(calls[calls.length - 1]).toBe("start container-running-1");
     // 四个卷都在同批次归档；公众号卷经 sidecar 自己的镜像
     expect(calls.filter((c) => c.includes("--entrypoint tar")).length).toBe(4);
     expect(calls.some((c) => c.includes("meeting_materials"))).toBe(true);
@@ -389,8 +391,7 @@ describe("backup.sh source modes", () => {
     }));
     expect(result.status).toBe(0);
     const calls = readFileSync(dockerLog, "utf8");
-    expect(calls).not.toMatch(/ stop api$/);
-    expect(calls).not.toMatch(/ start api$/);
+    expect(calls).not.toMatch(/^(stop|start) |\b(stop|start) api$/m);
   });
 
   it("target=local keeps encrypted artifacts on this host without SSH settings and passes the compose override", () => {
