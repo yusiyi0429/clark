@@ -337,6 +337,9 @@ describe("等你按设计 9.6（契约增补二）", () => {
   it("派活单拆好了还没开工：等你里一条「这样开工？」，就地答（走云端）", () => {
     const home = deriveWorkHome({ plan, workers: [], boards: { t1: { plan: null, drafts: [{}, {}] } }, proposals: [], merges: [], notices: null, deviceId: null });
     expect(home.waiting).toEqual([expect.objectContaining({ kind: "plan_start", title: "11/30 上线 V2：这样开工？", source: "2 步", answer: "inline", open: { kind: "project", id: "mission:m1" }, projectId: "mission:m1" })]);
+    // 派活单选了「不要了」、几件全撤掉：等你里那一行没了。
+    const dropped = deriveWorkHome({ plan, workers: [], boards: { t1: { plan: null, drafts: [] } }, proposals: [], merges: [], notices: null, deviceId: null });
+    expect(dropped.waiting.some((item) => item.kind === "plan_start")).toBe(false);
   });
 
   it("本人自己做的执行事项在 Task 所在的项目里（9.10），退回的不列；待归位的在其他里", () => {

@@ -25,7 +25,7 @@ import { InputBar } from "./InputBar";
 import type { Project } from "@/lib/home/projects";
 import type { FeedItem, ProjectFeedItem, SubSession } from "@/lib/home/types";
 import type { WorkHomeApi } from "@/lib/home/useWorkHome";
-import { PlanDecision, PlanningLine, StartedRecord } from "./PlanDecision";
+import { DroppedRecord, PlanDecision, PlanningLine, StartedRecord } from "./PlanDecision";
 import { GoalChangeDecision, SubSessionReport, feedBlocks, useProjectFeed } from "./TaskFeed";
 import { MonthRule } from "./ProjectParts";
 import { HandoverRule, HandoverSummary, ProjectPull, TransferHistory, useReceived } from "./Transfer";
@@ -279,6 +279,7 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
   // 专题行排在第一次看到它的时候（契约没有开出时间；updatedAt 会跟着动，用它排这一行会在对话里跳）。
   const seen = useRef(new Map<string, string>());
   const firstSeen = (id: string, at: string) => { if (!seen.current.has(id)) seen.current.set(id, at); return seen.current.get(id)!; };
+  const [dropped, setDropped] = useState<{ key: string; id: string; at: string; afterSequence: number | null }[]>([]);
   const blocks = useMemo<TimedBlock[]>(() => {
     const list: TimedBlock[] = [];
     // 挂上一件 Task：动态里的 goal_linked 按挂上的时间画分隔线；接口没上时本月那件排在对话最前面。
@@ -316,10 +317,15 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
           <p className={h.line} data-testid="plan-failed"><StateIcon state="failed" />拆卡失败<HeroButton variant="ghost" size="sm" onPress={() => onSplit(target)}>重试</HeroButton></p>
         ) });
       }
-      if (board?.drafts.length) {
+      // 选了「不要了」的派活单：收成一行留在原处（云端不记撤掉的单子，只在这个标签页里留着）。
+      const gone = dropped.filter((entry) => entry.key === key);
+      for (const entry of gone) list.push({ key: `plan-dropped:${entry.id}`, at: entry.at, afterSequence: entry.afterSequence, node: <DroppedRecord task={name} /> });
+      if (board?.drafts.length && !gone.some((entry) => entry.id === board.drafts[0]!.id)) {
         // 拆好的时候（规划员拆完同步上来那一刻）；没有记录时当作现在，放在最后。
-        list.push({ key: `plan:${board.drafts[0]!.id}`, at: board.plan?.finishedAt ?? board.plan?.createdAt ?? new Date().toISOString(), afterSequence: anchors.drafts, node: (
+        const first = { key, id: board.drafts[0]!.id, at: board.plan?.finishedAt ?? board.plan?.createdAt ?? new Date().toISOString(), afterSequence: anchors.drafts };
+        list.push({ key: `plan:${first.id}`, at: first.at, afterSequence: first.afterSequence, node: (
           <PlanDecision target={target} name={name} drafts={board.drafts} roles={work.roles?.roles ?? []} handheld={handheld} onChanged={() => void changed()} afterSequence={lastSequence}
+            onDropped={() => setDropped((current) => [...current, first])}
             folder={bound} onSetFolder={pickFolder} onPickFolder={onPickFolder} onCreateFolder={onCreateFolder}
             onSay={(text) => data.send(text, [])} />
         ) });
@@ -360,7 +366,7 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
     const checks = feed.filter((item): item is FeedItem => !PROJECT_ONLY.has(item.kind));
     list.push(...feedBlocks({ items: checks, workers: mine, go, onSay: (text) => data.send(text, []), onChanged: () => void changed(), remoteAsks, decisions, letters }));
     return list;
-  }, [mine, tasks, work.boards, work.roles, handheld, changed, data, subs, go, feed, onSplit, splitFailed, startFailed, onManualStart, waiting, own, api.live, project, summary, received.history, letters, lastSequence]);
+  }, [mine, tasks, work.boards, work.roles, handheld, changed, data, subs, go, feed, onSplit, splitFailed, startFailed, onManualStart, waiting, own, api.live, project, summary, received.history, letters, lastSequence, dropped]);
   return (
     <ProjectModeContext.Provider value={mode?.value ?? null}>
     <PendingBoxes>

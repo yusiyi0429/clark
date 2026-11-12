@@ -12,7 +12,7 @@ import { groupWorkers, isWaiting, plannerWorkers, toWorker, type Worker } from "
 import { commitText, mergeBlockedText, mergeCard, shortPlace } from "@/lib/work/merge";
 import { reply } from "@/lib/work/actions";
 import { EMPTY_VIEW, foldEvents } from "@/lib/local/sessionView";
-import { PlanDecision, PlanningLine, plannerText } from "@/components/home/PlanDecision";
+import { DroppedRecord, PlanDecision, PlanningLine, dropDrafts, plannerText } from "@/components/home/PlanDecision";
 import { splitBody, WORDS_MAX } from "@/lib/board/cloud";
 import { viewOf, scopeOf } from "@/components/home/view";
 import { placeBlocks } from "./WorkTimeline";
@@ -238,6 +238,30 @@ describe("开工（Task 管线里的选项框）", () => {
     expect(html).toContain("自己说…");
     expect(html).not.toContain(">开工<");
     expect(html).toContain('data-testid="plan-mode"');
+  });
+
+  it("「不要了」排在改一改后面、自己说前面，手机上也有；没有推荐标", () => {
+    for (const handheld of [false, true]) {
+      const html = renderToStaticMarkup(<LocalContext.Provider value={local}>
+        <PlanDecision target={{ taskId: task.taskId }} name={task.name} drafts={[draft("00000000-0000-4000-8000-0000000000d1", "派活单组件")]}
+          roles={[]} handheld={handheld} onSay={vi.fn()} onChanged={vi.fn()} />
+      </LocalContext.Provider>);
+      const at = ["就按这个开始", "改一改", "不要了", "自己说…"].map((label) => html.indexOf(label));
+      expect(at.every((index, i) => index > (at[i - 1] ?? -1))).toBe(true);
+      expect(html.match(/推荐/g)).toHaveLength(1);
+    }
+  });
+
+  it("点了「不要了」：每件都撤掉；没撤完重试时跳过撤过的；撤完收成一行「勾 · 这样开工？ · 不要了」", async () => {
+    const ids = ["d1", "d2", "d3"].map((id) => ({ id }));
+    const dismiss = vi.fn(async (id: string) => { if (id === "d2" && dismiss.mock.calls.length === 2) throw new Error("断网"); });
+    const done = new Set<string>();
+    await expect(dropDrafts(ids, done, dismiss)).rejects.toThrow("断网");
+    await dropDrafts(ids, done, dismiss);
+    expect(dismiss.mock.calls.map(([id]) => id)).toEqual(["d1", "d2", "d2", "d3"]);
+    const line = renderToStaticMarkup(<DroppedRecord task={task.name} />);
+    expect(line).toContain("<svg");
+    expect(line.replace(/<[^>]+>/g, "|").replace(/\|+/g, "|")).toBe("|派活单与 worker 链路：这样开工？|不要了|");
   });
 
   it("没挂 Task 的项目的派活单：框顶写项目名；没有预算那一栏（开工用本人的缺省预算）", () => {

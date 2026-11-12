@@ -2,7 +2,7 @@
 
 /**
  * Task 管线里的开工（新首页设计第 2 节，替换以前派活单的「开工」块）：规划员拆好的几步摆在选项框里，
- * 「就按这个开始（推荐）/ 改一改 / 自己说」。选了就开：卡放进看板，在这台电脑上一次交给本机（同时最多 3 个，多的排队），子会话出现在左边。
+ * 「就按这个开始（推荐）/ 改一改 / 不要了 / 自己说」。不要了：几件全撤掉，框收成一行。选了就开：卡放进看板，在这台电脑上一次交给本机（同时最多 3 个，多的排队），子会话出现在左边。
  * 改一改：就地改每步的标题、换岗位、去掉一步，模型在每步右边换。自己说：这句话发进 Task 管线。
  * 手机、本机没连时选「开始」，卡排成等开工，回到这台电脑上打开天枢时自己开（HomeShell）。
  * 另外两块：规划员在拆时的一行（拆卡中 · 第几步），开了以后选项框收成一行、计划的几步变成子会话行（和左栏同样式、带竖线，原地跟着状态变）。
@@ -67,6 +67,16 @@ export function draftPick(edit: Edit | undefined, words: { modelId: string | nul
   };
 }
 export const START_LABEL = "就按这个开始";
+export const DROP_LABEL = "不要了";
+
+/** 「不要了」：这份派活单里的几件逐条撤掉。撤成的记进 done，没撤完重试时跳过（云端对撤过的回 409）。 */
+export async function dropDrafts(drafts: Pick<TCardDraftView, "id">[], done: Set<string>, dismiss: (id: string) => Promise<unknown> = dismissDraft): Promise<void> {
+  for (const draft of drafts) {
+    if (done.has(draft.id)) continue;
+    await dismiss(draft.id);
+    done.add(draft.id);
+  }
+}
 
 /** 开工的模式（11.3）：自动（默认）· 设预算 · 无上限。 */
 export const MODES: { id: TBudgetMode; label: string }[] = [{ id: "auto", label: "自动" }, { id: "set", label: "设预算" }, { id: "unlimited", label: "无上限" }];
@@ -88,7 +98,7 @@ export const limitsOf = (budget: TBudget): Limits => ({ hours: budget.hours?.toS
 /**
  * target：拆的是一件 Task，还是一个没挂 Task 的项目（16.3）；name 是框顶上的名字。项目的没有预算那一栏：不挂 Task，开工用本人的缺省预算。
  */
-export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onChanged, afterSequence, folder = null, onSetFolder, onPickFolder, onCreateFolder }: {
+export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onChanged, onDropped, afterSequence, folder = null, onSetFolder, onPickFolder, onCreateFolder }: {
   target: PlanTarget;
   name: string;
   drafts: TCardDraftView[];
@@ -97,6 +107,8 @@ export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onC
   /** 「自己说」：发进 Task 管线。 */
   onSay: (text: string) => Promise<unknown>;
   onChanged: () => void;
+  /** 「不要了」撤完了：对话里这个框换成收起的一行（DroppedRecord）。 */
+  onDropped?: () => void;
   /** 项目对话里本人看到的最后一条（17.2 第 29 条）：开工时带上，「开了哪几个子会话」插在它后面。 */
   afterSequence?: number;
   /**
@@ -232,6 +244,13 @@ export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onC
     }
   };
 
+  const dismissed = useRef(new Set<string>());
+  const drop = async () => {
+    await dropDrafts(drafts, dismissed.current);
+    onDropped?.();
+    onChanged();
+  };
+
   const agents = kept.filter((draft) => roleOf(draft)).length;
   // 设预算只出这次计划用得到的那几项（11.3）：用订阅的出本周额度，用 TokenHub 的出金额；还不知道用哪个模型时只出本周额度。
   const sources = new Set(kept.flatMap((draft) => { const model = modelOf(draft); return model ? [model.source] : []; }));
@@ -301,8 +320,8 @@ export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onC
   return (
     <>
       <DecisionBox kind="plan" testId="plan-decision" title={`${name}：这样开工？`} body={steps} busy={busy} footer={footer}
-        options={editing ? [{ label: START_LABEL, recommended: true }, { label: "改好了" }] : [{ label: START_LABEL, recommended: true }, { label: "改一改" }]}
-        onPick={([picked]) => (picked === 0 ? start() : setEditing(!editing))}
+        options={[{ label: START_LABEL, recommended: true }, { label: editing ? "改好了" : "改一改" }, { label: DROP_LABEL }]}
+        onPick={([picked]) => (picked === 0 ? start() : picked === 1 ? setEditing(!editing) : drop())}
         // 管线正在回话时发不出去（send 回 false）：算失败，框里原处写「失败 · 重试」，打的字留着。
         other={{ onSubmit: async (text) => { if ((await onSay(text)) === false) throw new Error("没发出去"); } }} />
       {asking && ready && !folder ? (
@@ -395,6 +414,11 @@ export function PlanningLine({ planner }: { planner: Worker }) {
       ) : null}
     </>
   );
+}
+
+/** 派活单选了「不要了」：收成一行（勾 · 问题 · 不要了）。 */
+export function DroppedRecord({ task }: { task: string }) {
+  return <p className={h.resolvedLine} data-testid="plan-dropped"><Check {...ICON} /><span className={h.resolvedQ}>{task}：这样开工？</span><span className={h.resolvedA}>{DROP_LABEL}</span></p>;
 }
 
 const WAIT_TEXT: Record<string, string> = { approval: "等你批准", question: "等你回复", verdict: "受阻", merge: "等你合回" };
