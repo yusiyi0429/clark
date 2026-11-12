@@ -296,7 +296,7 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
       ...(row.status === "held" ? { processing: {
         since: (row.outcome.status === "running" ? row.outcome.startedAt : null) ?? row.outcome.pendingSince ?? null,
         failed: row.outcome.status === "failed" } } : {}),
-      hostName: displayNames.get(row.lead_dri_id) ?? row.lead_dri_id, href: `/me/meetings/${row.id}` })) };
+      hostName: displayNames.get(row.lead_dri_id) ?? row.lead_dri_id, href: `/me/work/meetings/${row.id}` })) };
   });
 
   app.get("/api/me/cards/issues/:id", { preHandler: requireMember, schema: { params: idParams, response: { 200: Card } } }, async (req, reply) => {

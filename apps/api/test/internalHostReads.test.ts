@@ -187,7 +187,7 @@ describe("给独立 Chat 的宿主只读接口", () => {
       await t.sql("UPDATE thread_members SET left_at = now() WHERE object_type = 'meeting' AND object_id = $1 AND person_id = $2", [upcoming, OWNER]);
       const ownerView = (await get(t, "/internal/scheduled-meetings", OWNER, "member")).json();
       expect(stages(ownerView)).toEqual({ [meetingId]: "awaiting_confirm", [inProgress]: "in_progress", [awaitingRecord]: "awaiting_record" });
-      expect(ownerView.meetings[0].href).toMatch(/^\/me\/meetings\//);
+      expect(ownerView.meetings[0].href).toMatch(/^\/me\/work\/meetings\//);
       expect(stages((await get(t, "/internal/scheduled-meetings", CEO, "ceo")).json())).toHaveProperty(upcoming);
 
       // 时间窗：只看明后天；不合法或超过 90 天 → 400。

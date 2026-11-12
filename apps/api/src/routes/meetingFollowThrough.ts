@@ -179,7 +179,7 @@ export function registerMeetingFollowThroughRoutes(app: AppInstance, ctx: RouteC
   }, async (req) => {
     const viewer = req.person!;
     const row = await meetingFromDraft(ctx.q, viewer.personId, req.params.draftId);
-    return { meeting: row ? { id: row.id, title: row.title, href: `${viewer.role === "ceo" ? "" : "/me"}/meetings/${row.id}` } : null };
+    return { meeting: row ? { id: row.id, title: row.title, href: `${viewer.role === "ceo" ? "" : "/me/work"}/meetings/${row.id}` } : null };
   });
 
   // 预约时的挂点选项（还没有会议）：登录的人都能取。

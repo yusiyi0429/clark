@@ -185,7 +185,7 @@ export function MeetingBookingSheet({ open, onClose, viewer, organize, initialPa
       window.dispatchEvent(new Event("meeting-changed"));
       refreshWorkspace();
       onClose();
-      navigate(result.card.navigation?.[0]?.href ?? `${viewer.role === "ceo" ? "" : "/me"}/meetings/${result.card.objectRef.id}`);
+      navigate(result.card.navigation?.[0]?.href ?? `${viewer.role === "ceo" ? "" : "/me/work"}/meetings/${result.card.objectRef.id}`);
     } catch {
       setError("没有约成");
     } finally {

@@ -51,7 +51,7 @@ export function anchorHref(anchor: MemoryItem["anchors"][number], role: "ceo" | 
   const type = anchor.target.slice(0, split), id = encodeURIComponent(anchor.target.slice(split + 1));
   const base = role === "ceo" ? "" : "/me";
   if (type === "issue") return `${base}/issues/${id}`;
-  if (type === "meeting") return `${base}/meetings/${id}`;
+  if (type === "meeting") return role === "ceo" ? `/meetings/${id}` : `/me/work/meetings/${id}`;
   if (type === "task" && role === "member") return `/me/tasks/${id}`;
   if (type === "mission" && role === "ceo") return `/missions/${id}`;
   return null;

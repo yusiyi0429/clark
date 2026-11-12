@@ -504,3 +504,7 @@
 .feishuAction:hover{border-color:#215ba1;background:#fff}
 .feishuAction:disabled{cursor:default;opacity:.6}
 .feishuLink:focus-visible,.feishuAction:focus-visible{outline:2px solid #96beff;outline-offset:2px}
+
+/* 新首页深色（会议页挪进新首页后）：「逐字稿」这类小标题和段数小字在深底上看不清，只换成新首页的字色变量；浅色不变。 */
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .reviewSection h3 { color: var(--ink); }
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .count { color: var(--ink-muted); }

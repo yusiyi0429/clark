@@ -105,7 +105,7 @@ describe("新首页的数据（B 的 work-home 没上时照契约的形状拼）
 
   it("等你：子会话的批准、会议记录待确认；群消息只是让你知道，不进（设计 9.6）；去哪儿看由 open 映射到路由；受阻去那张卡；第一次没过自动重做，不在这里", () => {
     expect(data.waiting.map((entry) => [entry.kind, waitingHref(entry)])).toEqual([
-      ["approval", "/me/work/projects/mission%3Am1"], ["meeting", "/me/meetings/mt1"],
+      ["approval", "/me/work/projects/mission%3Am1"], ["meeting", "/me/work/meetings/mt1"],
     ]);
     // 能不能就地答：批准要本机办；会后确认点开去答。
     expect(data.waiting.map((entry) => entry.answer)).toEqual(["inline_local", "open"]);
