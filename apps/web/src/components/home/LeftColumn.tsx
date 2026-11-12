@@ -18,8 +18,8 @@ import { HeroButton } from "@/components/HeroButton";
 import type { Account } from "@/components/AccountMenu";
 import { BuddyMark } from "@/components/buddy/BuddyMark";
 import type { Buddy } from "@/components/buddy/useBuddy";
-import { BUDDY_HREF, HOME_HREF, cardHref, topicHref } from "@/lib/home/derive";
-import { projectHref, projectInfoHref, projectLine, type Project } from "@/lib/home/projects";
+import { BUDDY_HREF, HOME_HREF, cardHref, subQueueText, topicHref } from "@/lib/home/derive";
+import { newSubHref, projectHref, projectInfoHref, projectLine, type Project } from "@/lib/home/projects";
 import type { THomeItem as HomeItem } from "@warmap/contracts";
 import type { SubSession, WorkHomeData } from "@/lib/home/types";
 import { PersonAvatar } from "@/components/avatar/PersonAvatar";
@@ -115,7 +115,7 @@ function useStageScale(off: boolean) {
   return { ref, scale };
 }
 
-export function LeftColumn({ data, view, buddy, speaking, go, phone, account, today, alert, trail, top, month, onRetryPlan, projects, archived, archivedSubs = [], actions = null, onCreate, folderLimit = LOCAL_PROJECT_FOLDER_LIMIT, cardAt, working, seen, onOpen }: {
+export function LeftColumn({ data, view, buddy, speaking, go, phone, account, today, machine = null, trail, top, month, onRetryPlan, projects, archived, archivedSubs = [], actions = null, onCreate, folderLimit = LOCAL_PROJECT_FOLDER_LIMIT, cardAt, working, seen, onOpen }: {
   data: WorkHomeData;
   view: View;
   buddy: Buddy | null;
@@ -126,8 +126,8 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, account, to
   account: Account;
   /** 「11 月 7 日 周六」。 */
   today: string;
-  /** 连接要处理：本人行的琥珀点。 */
-  alert: boolean;
+  /** 这台电脑（本人行尾的点，第 73 条）；手机上不给。 */
+  machine?: { alert: boolean; word: string } | null;
   /** 手机：「今天」行行尾的后台任务按钮。 */
   trail?: ReactNode;
   /** 手机首屏：「今天」行下面先放「等你」。 */
@@ -229,7 +229,7 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, account, to
           </section>
         ) : null}
       </div>
-      <PersonRow account={account} view={view} alert={alert} go={go} />
+      <PersonRow account={account} view={view} machine={machine} go={go} />
     </nav>
     </ActionsContext.Provider>
     </SeenContext.Provider>
@@ -323,6 +323,9 @@ function ProjectNode({ project, view, go, personId, cardAt, working = false }: {
   const summary = subs.length && !open ? subsSummary(subs, opened.seen) : null;
   const press = useLongPress(() => setMenu(true));
   const unseen = showUnseen(project.unseen, opened.seen, "project", project.id, project.lastActivity);
+  // 「+」在项目里开一个子会话（第 68 条）：归档的没有；这台电脑的本机程序太旧（收不了自由子会话）时不出。手机上、本机没连上时照出（由开着网页的那台电脑认领）。
+  const local = useContext(LocalContext);
+  const canAdd = !!actions && !project.archived && !(local?.phase === "ready" && !local.runner.freeSessions);
   // 行尾「…」（35 条）：重命名、标为已读、转交给…（进项目详情里那一处）、归档 / 恢复、删除（撤不回，删成了回首页）。
   const menuItems: RowMenuItem[] = actions ? [
     { id: "rename", label: "重命名", run: () => setRenaming(true) },
@@ -357,6 +360,8 @@ function ProjectNode({ project, view, go, personId, cardAt, working = false }: {
           : unseen ? <span className={`${h.subDot} ${h.projectDot}`} data-tone="stopped" role="img" aria-label="有新回复" data-testid="project-unseen"><i aria-hidden /></span> : null}
         {nameTip.tip}
         <span className={h.info} data-on={info ? "" : undefined} data-menu={actions ? "" : undefined}>
+          {canAdd ? <HeroButton variant="ghost" size="sm" isIconOnly title="新子会话" aria-label={`${project.name} 新子会话`}
+            onPress={() => go(newSubHref(project.id))} data-testid="project-new-sub"><Plus {...ICON} /></HeroButton> : null}
           <HeroButton variant="ghost" size="sm" isIconOnly title="详情" aria-label={`${project.name} 详情`} aria-pressed={info}
             onPress={() => go(info ? projectHref(project.id) : projectInfoHref(project.id))} data-testid="project-info"><Info {...ICON} /></HeroButton>
         </span>
@@ -409,9 +414,9 @@ export const SubLetter = ({ letter, inline = false }: { letter: string; inline?:
 
 /**
  * 子会话行最右边的状态点（18.10）：在跑灰点闪（同项目标题的呼吸点）；停了（一轮做完、被停下、做完了）、本人还没看过的蓝点（26 条，看过就不画）；
- * 要人介入（问题、批准、验收拿主意、合回）黄点；排队不出点（行尾写在等什么）。读屏按状态读。
+ * 要人介入（问题、批准、验收拿主意、等你补、合回）黄点；排队不出点（行尾写在等什么）。读屏按状态读。
  */
-const ASK: Record<NonNullable<SubSession["waiting"]>, string> = { approval: "等你批准", question: "在问你", verdict: "等你拿主意", merge: "等你合回" };
+const ASK: Record<NonNullable<SubSession["waiting"]>, string> = { approval: "等你批准", question: "在问你", verdict: "等你拿主意", needs_person: "等你补", merge: "等你合回" };
 export function subDot(sub: Pick<SubSession, "state" | "waiting" | "unseen">): { tone: "running" | "stopped" | "attention"; label: string } | null {
   const state = treeState(sub.state);
   if (state === "queued") return null;
@@ -462,7 +467,10 @@ function SubRow({ sub, letter, view, go }: { sub: SubSession; letter: string | n
   // 悬停全名的提示里带一行「来源 · 模型」（这台电脑上跑着、报了来源的才有；左栏行里不放，太挤）。
   const local = useContext(LocalContext);
   const run = sub.sessionId ? local?.sessions.find((entry) => entry.id === sub.sessionId)?.run : null;
-  const name = useNameTip(sub.title, runLabel(run));
+  // 排着的（第 68 条）：悬停写全「已排队 · 等 B 改登录页 这一轮做完」，行尾短写在等哪个字母。
+  const queued = subQueueText(sub);
+  const name = useNameTip(sub.title, queued ?? runLabel(run));
+  const heldBy = sub.state === "queued" && sub.queueReason === "folder_busy" ? sub.heldBy ?? null : null;
   const opened = useContext(SeenContext);
   const unseen = showUnseen(sub.unseen, opened.seen, "sub", sub.id, sub.updatedAt);
   const dot = subDot({ ...sub, unseen });
@@ -490,6 +498,7 @@ function SubRow({ sub, letter, view, go }: { sub: SubSession; letter: string | n
     <li className={h.subItem} {...press}>
       <button type="button" className={h.sub} data-state={sub.state} aria-current={current ? "page" : undefined} onClick={() => { opened.onOpen?.("sub", sub.id, sub.updatedAt); go(subHref(sub)); }} data-tree-row="" data-testid="tree-sub" {...name.rowProps}>
         {letter ? <SubLetter letter={letter} /> : null}<span ref={name.textRef} className={h.subName}>{sub.title}</span>
+        {heldBy ? <span className={h.subReason} data-testid="sub-held">等 {heldBy.letter ?? heldBy.title}</span> : null}
         {dot ? <span className={h.subDot} data-tone={dot.tone} role="img" aria-label={dot.label} data-testid="sub-dot"><i aria-hidden /></span> : null}
       </button>
       {name.tip}

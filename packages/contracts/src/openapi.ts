@@ -15,7 +15,7 @@ import { MeetingDecisionView, MeetingMinutesFetchResponse, MeetingMinutesLinkReq
 import { AttachFeishuMinuteRequest, FeishuMinuteInboxResponse, FeishuMinuteMeetingResponse, OrganizeFeishuMinuteRequest } from "./feishuMinuteInbox.js";
 import { NexusConfirmationDecisionRequest, NexusConfirmationDecisionResponse, NexusConfirmationItem, NexusConfirmationListResponse } from "./nexusDri.js";
 import { ImpactCardView, ImpactCardResponse, ImpactAskRequest, ImpactAskResponse, ImpactIrrelevantRequest } from "./impact.js";
-import { UsageResponse, OnboardingStepUsageRequest } from "./usage.js";
+import { UsageResponse, OnboardingStepUsageRequest, WorkCountsResponse } from "./usage.js";
 import { PersonalProfileView, UpdatePersonalProfileRequest } from "./personalProfile.js";
 import { Buddy, BuddyForm, BuddyPersonality } from "./buddy.js";
 import { RailBackground, RailBackgroundChoice, SaveRailBackgroundRequest } from "./railBackground.js";
@@ -2108,6 +2108,13 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           responses: { "200": { description: "可选的各周与所选那一周的周报", content: { "application/json": { schema: { $ref: "#/components/schemas/UsageResponse" } } } }, "400": errorResponse, "404": errorResponse },
         },
       },
+      "/api/admin/work-counts": {
+        get: {
+          operationId: "getAdminWorkCounts", summary: "使用计数（设计第 70 条）：每人每周的对话轮数、派活单、卡、全部放行的会话、活跃天数，只计数不记内容；week 不传为本周。非管理员 404",
+          parameters: [{ name: "week", in: "query", required: false, schema: { type: "string", format: "date" }, description: "周一（北京时间），如 2026-11-16" }],
+          responses: { "200": { description: "这一周每人的计数", content: { "application/json": { schema: { $ref: "#/components/schemas/WorkCountsResponse" } } } }, "400": errorResponse, "404": errorResponse },
+        },
+      },
       "/api/admin/usage/markdown": {
         get: {
           operationId: "getAdminUsageMarkdown", summary: "使用周报导出 Markdown（贴到飞书）；week 不传为本周（现算）。非管理员 404",
@@ -3435,6 +3442,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         AdminOverviewResponse: AdminOverviewResponse as JsonSchema,
         AdminActionRequest: AdminActionRequest as JsonSchema,
         UsageResponse: UsageResponse as JsonSchema,
+        WorkCountsResponse: WorkCountsResponse as JsonSchema,
         OnboardingStepUsageRequest: OnboardingStepUsageRequest as JsonSchema,
         CollectorStatusResponse: CollectorStatusResponse as JsonSchema,
         WorkBasisResponse: WorkBasisResponse as JsonSchema,

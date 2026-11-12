@@ -10,7 +10,7 @@ import type { LocalPhase } from "@/lib/local/connection";
 import type { BackgroundItem } from "@/lib/home/types";
 import type { Resources } from "@/lib/work/useWork";
 import { LocalInstall } from "@/components/local/PluginsPage";
-import { BackgroundPanel, BackgroundStrip } from "./BackgroundPanel";
+import { BackgroundPanel, useMachine } from "./BackgroundPanel";
 import { scopeOf } from "./view";
 
 const today = (hours: number, minutes = 0) => { const at = new Date(); at.setHours(hours, minutes, 0, 0); return at.toISOString(); };
@@ -100,8 +100,8 @@ describe("右栏（5.4.5）", () => {
   it("Mac 上离线算中性：不亮琥珀点、不给安装命令和「重试」，展开后只写「暂不支持 Mac」", () => {
     vi.stubGlobal("navigator", { userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)" });
     try {
-      // 收起条上没有点；「这台电脑」没有要处理的，默认收着（有一项不对才自动展开、给「重试」）。
-      expect(render(<BackgroundStrip running={0} quota={[]} onExpand={() => undefined} />, "offline")).not.toContain('role="img"');
+      // 不算没连上（本人行不亮琥珀、「等你」里没有那一行）；「这台电脑」没有要处理的，默认收着（有一项不对才自动展开、给「重试」）。
+      expect(render(<Machine />, "offline")).toBe("ok");
       const html = render(panel([], []), "offline", [], [tool("gh")]);
       expect(html).toMatch(/aria-expanded="false"[^>]*data-testid="machine-row"/);
       expect(text(html)).not.toContain("重试");
@@ -121,19 +121,14 @@ describe("右栏（5.4.5）", () => {
     expect(text(render(panel([], [cloud("ThinkPad", 83, 1)]), "ready", []))).toContain("Claude · ThinkPad");
   });
 
-  it("收起条的额度点看列出来的那几行：没就绪时云端报的用完是红点", () => {
-    const dot = render(<BackgroundStrip running={0} quota={[cloud("ThinkPad", 100, 1)]} onExpand={() => undefined} />, "checking");
-    expect(dot).toContain('aria-label="额度快用完了"');
-    expect(dot).toContain('data-tone="danger"');
-    expect(render(<BackgroundStrip running={0} quota={[cloud("ThinkPad", 100, 1)]} onExpand={() => undefined} />, "ready", [sub(70)])).not.toContain("额度快用完了");
-  });
-
-  it("这台电脑离线（本身要处理）时，云端报的额度用完照样是红点，不被琥珀点盖掉", () => {
-    const strip = render(<BackgroundStrip running={0} quota={[cloud("ThinkPad", 100, 1)]} onExpand={() => undefined} />, "offline");
-    expect(strip).toContain('data-tone="danger"');
-    expect(strip).toContain('aria-label="额度快用完了"');
-    const amber = render(<BackgroundStrip running={0} quota={[cloud("ThinkPad", 40, 1)]} onExpand={() => undefined} />, "offline");
-    expect(amber).not.toContain('data-tone="danger"');
-    expect(amber).toContain('aria-label="这台电脑要处理"');
+  it("没连上（第 73 条：本人行琥珀、「等你」里一行）：离线、没配对、浏览器拦着算；就绪、检查中不算", () => {
+    expect(render(<Machine />, "offline")).toBe("disconnected");
+    expect(render(<Machine />, "unpaired")).toBe("disconnected");
+    expect(render(<Machine />, "blocked")).toBe("disconnected");
+    expect(render(<Machine />, "ready")).toBe("ok");
+    expect(render(<Machine />, "checking")).toBe("ok");
   });
 });
+
+/** 只看 useMachine 的 disconnected。 */
+function Machine() { return <>{useMachine([]).disconnected ? "disconnected" : "ok"}</>; }

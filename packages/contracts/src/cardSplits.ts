@@ -30,8 +30,16 @@ export const SourceWords = Type.Array(Type.String({ minLength: 1, maxLength: 400
  * afterSequence（17.2 第 29 条）：本人在项目对话里看到的最后一条消息的 sequence（ConversationMessage.sequence），「拆卡中」「拆卡失败」「派活单」
  * 插在它后面。项目对话页带上来；不带时（首页、手机、伙伴登记的）云端读这件 Task 挂的项目（或这个项目）的对话现在最后一条，读不到为 null。
  */
+/**
+ * 本人原话里关于用什么来源、模型、思考的那一截（第 69 条），原样，不翻译成型号（如「这几件用本机的 Opus 5.5，思考开高」）。整张派活单一句。
+ * 云端只原样带到这次拆出来的派活单草稿上（CardDraftView.modelWords）；网页拿它和这台电脑连着的来源对，预选，对不上写「没找到「…」」并用自动。
+ */
+export const ModelWords = Type.String({ minLength: 1, maxLength: 300 });
+
 export const RegisterCardSplitRequest = Type.Object({ words: Type.Optional(Type.String({ maxLength: 4000 })),
-  afterSequence: Type.Optional(Type.Integer({ minimum: 1 })) }, strict);
+  afterSequence: Type.Optional(Type.Integer({ minimum: 1 })),
+  /** 本人对用什么模型有要求时那一截原话（见 ModelWords，第 69 条）；没有不带。 */
+  modelWords: Type.Optional(ModelWords) }, strict);
 
 /**
  * 一条「要拆」的登记：origin=buddy 是伙伴对话里说的（register_card_split），web 是页面上的「拆一下」。
@@ -51,6 +59,8 @@ export const CardSplitRequestView = Type.Object({
   createdAt: Instant,
   /** 登记时项目对话最后一条消息的 sequence（见 RegisterCardSplitRequest.afterSequence），「拆卡中」插在它后面；对话还没有消息、读不到、老记录为 null。 */
   afterSequence: Nullable(Type.Integer({ minimum: 1 })),
+  /** 登记时带的模型要求原话（见 ModelWords，第 69 条）；没带、老记录为 null 或不带。 */
+  modelWords: Type.Optional(Nullable(ModelWords)),
 }, strict);
 
 /** GET /api/me/card-splits：本人还没开工的登记，先登记的在前。 */
@@ -90,3 +100,4 @@ export type TPlanBriefRole = Static<typeof PlanBriefRole>;
 export type TCardPlanBriefResponse = Static<typeof CardPlanBriefResponse>;
 export type TSourceWords = Static<typeof SourceWords>;
 export type TRegisterCardSplitRequest = Static<typeof RegisterCardSplitRequest>;
+export type TModelWords = Static<typeof ModelWords>;

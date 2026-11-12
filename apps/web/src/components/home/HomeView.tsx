@@ -6,10 +6,11 @@
  *   答完这一行变成状态词（「已批准」）停 2 秒再收走，不弹 toast。行首不放强调色点（组头已经写了「等你」）。
  *   会后确认（Nexus 推来的会上待定事项，17.2 第 43 条）：第二行「会后确认 · 待确认的内容 · 截止 11/12 18:00」，行尾「确认」「修改」「拒绝」；
  *   点「修改」（或点这一行）就地展开：有会上原话的先写原话，下面输入框预填原内容，改完「提交」。
- * - 本月（16.4）：按 Mission 分组列这个月的 Task，行尾「11/20 验收」，再是项目名 chip（点了进项目）；没挂上的是「挂到…」（选现有项目或新建）。
+ * - 本月（16.4、主循环第 66 条）：按 Mission 分组列这个月的 Task，名字下面小字「11/20 验收」，行尾写现状（「1 件等你 · 2 个在跑」，monthStatus），
+ *   有等你的排最前，其次有新结果的、在跑的；本月的 Task 不止挂在一个项目上时最后是项目名 chip（点了进项目）；没挂上的是「挂到…」（选现有项目或新建）。
  * - 输入框：InputBar（14.5）；框下面「发给」默认自动（打字停下 300ms 后问一次分发接口，只认最后一次），也能选伙伴或某个项目；发出去以后跳进那条对话。
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Dropdown, Header } from "@heroui/react";
 import { Check, ChevronDown, Plus } from "lucide-react";
 import { PersonAvatar } from "@/components/avatar/PersonAvatar";
@@ -23,7 +24,7 @@ import { useLocalRunner, type LocalRunnerState } from "@/lib/local/LocalRunnerPr
 import { decideProposal } from "@/lib/team/roles";
 import { canCommandHere, decide } from "@/lib/work/actions";
 import { mergeCard } from "@/lib/work/merge";
-import { missionHref, taskGateLabel, taskHref, waitingHref } from "@/lib/home/derive";
+import { missionHref, monthStatus, monthTaskSubs, taskGateLabel, taskHref, waitingHref } from "@/lib/home/derive";
 import { projectHref, type Project } from "@/lib/home/projects";
 import type { ProjectsApi } from "./useProjects";
 import { monthDayTime, relativeDayTime } from "@/lib/companyTime";
@@ -31,12 +32,13 @@ import type { HomeMonthMission, RouteTarget, WaitingItem, WorkHomeData } from "@
 import type { WorkHomeApi } from "@/lib/home/useWorkHome";
 import { ICON } from "./StateIcon";
 import { usePhone } from "./usePhone";
+import { pageHref } from "./view";
 import h from "@/styles/home.module.css";
 import x from "@/styles/decision-box.module.css";
 
 export type SendTarget = "auto" | RouteTarget;
 
-export function HomeView({ data, api, buddy, today, go, route, onSend, projects }: {
+export function HomeView({ data, api, buddy, today, go, route, onSend, projects, trail, offline = false }: {
   data: WorkHomeData;
   api: WorkHomeApi;
   buddy: Buddy | null;
@@ -47,18 +49,32 @@ export function HomeView({ data, api, buddy, today, go, route, onSend, projects 
   route: (text: string) => Promise<RouteTarget>;
   onSend: (text: string, target: SendTarget, files: File[]) => void;
   projects: ProjectsApi;
+  /** 页头右上角（后台任务按钮）。 */
+  trail?: ReactNode;
+  /** 这台电脑没连上、没配对（第 73 条）：「等你」最前面一行，点了去连接页。 */
+  offline?: boolean;
 }) {
   // 「本月」（16.4）：这个月的 Task 按 Mission 分组；之前月份没了结的在各自的项目里，不在这里列。
   const missions = data.month.missions.filter((mission) => mission.tasks.length && mission.period === data.period);
+  const status = useMonthStatus(data, api);
+  // 项目名 chip 只在本月的 Task 不止挂在一个项目上时写（都在一个项目里，写了也是同一个名字）。
+  const manyProjects = new Set(missions.flatMap((mission) => mission.tasks.flatMap((task) => (task.project ? [task.project.projectId] : [])))).size > 1;
   return (
     <div className={h.homeView} data-testid="home-view">
-      <header className={h.viewHead}><h1 className={h.viewTitle} tabIndex={-1}>{today}</h1></header>
+      <header className={h.viewHead}><h1 className={h.viewTitle} tabIndex={-1}>{today}</h1>{trail}</header>
       <div className={h.homeScroll}>
         <div className={h.homeInner}>
-          {data.waiting.length ? (
+          {data.waiting.length || offline ? (
             <section aria-label="等你" className={h.section}>
-              <p className={h.sectionTitle}>等你 <span>{data.waiting.length}</span></p>
-              <WaitingList items={data.waiting} api={api} go={go} />
+              <p className={h.sectionTitle}>等你 <span>{data.waiting.length + (offline ? 1 : 0)}</span></p>
+              {offline ? (
+                <ul className={h.waiting}>
+                  <li className={h.wait} data-kind="machine">
+                    <button type="button" className={h.waitMain} onClick={() => go(pageHref("connections"))} data-testid="wait-machine"><span className={h.waitTitle}>这台电脑没连上</span></button>
+                  </li>
+                </ul>
+              ) : null}
+              {data.waiting.length ? <WaitingList items={data.waiting} api={api} go={go} /> : null}
             </section>
           ) : null}
           {api.planFailed ? (
@@ -73,7 +89,10 @@ export function HomeView({ data, api, buddy, today, go, route, onSend, projects 
                 <div key={mission.missionId} className={h.taskList}>
                   {/* Mission 名点了进只读的 Mission 详情（14.2）。 */}
                   <button type="button" className={h.missionTitle} onClick={() => go(missionHref(mission.missionId))} data-testid="month-mission" title={mission.title}><span className={h.ellipsis}>{mission.title}</span></button>
-                  {mission.tasks.map((task) => <MonthRow key={task.taskId} task={task} gate={taskGateLabel(projects.all, api.work.plan, { taskId: task.taskId, missionId: mission.missionId })} projects={projects} go={go} />)}
+                  {[...mission.tasks].sort((a, b) => (status(a)?.rank ?? 3) - (status(b)?.rank ?? 3)).map((task) => (
+                    <MonthRow key={task.taskId} task={task} gate={taskGateLabel(projects.all, api.work.plan, { taskId: task.taskId, missionId: mission.missionId })}
+                      status={status(task)} showProject={manyProjects} projects={projects} go={go} />
+                  ))}
                 </div>
               ))}
             </section>
@@ -85,11 +104,33 @@ export function HomeView({ data, api, buddy, today, go, route, onSend, projects 
   );
 }
 
+/** 「本月」每件 Task 的现状（monthStatus）：子会话从首页数据里取，按看板的卡和 worker 认是哪件 Task 的；做完了的为 null，不写。 */
+function useMonthStatus(data: WorkHomeData, api: WorkHomeApi) {
+  const { workers, boards } = api.work;
+  const subs = useMemo(() => [...data.projects.flatMap((project) => project.subSessions), ...data.other.subSessions], [data.projects, data.other.subSessions]);
+  return useMemo(() => {
+    const cache = new Map<string, ReturnType<typeof monthStatus> | null>();
+    return (task: HomeMonthMission["tasks"][number]) => {
+      if (!cache.has(task.taskId)) {
+        const board = boards[task.taskId];
+        const planning = workers.some((worker) => worker.kind === "plan" && worker.taskId === task.taskId && worker.state !== "done")
+          || board?.plan?.status === "queued" || board?.plan?.status === "running";
+        cache.set(task.taskId, task.completedAt ? null
+          : monthStatus(monthTaskSubs(task.taskId, subs, workers, board?.cards), data.waiting.filter((item) => item.taskId === task.taskId).length, planning));
+      }
+      return cache.get(task.taskId)!;
+    };
+  }, [subs, workers, boards, data.waiting]);
+}
+
 /**
- * 「本月」一行：Task 名（做完了小字「已完成」）、行尾验收截止（挂着的项目目标的截止日，没挂的退回这个 Mission 下一个验收时间点），再是项目名 chip；
+ * 「本月」一行：Task 名，下面小字验收截止（挂着的项目目标的截止日，没挂的退回这个 Mission 下一个验收时间点；做完了先写「已完成」）；
+ * 行尾现状（有等你的前面一个橙点），本月不止一个项目时再是项目名 chip；
  * 没挂上的「挂到…」：选现有项目（PUT 挂接）或用 Task 名新建一个挂上（POST 带 taskId）；没成在行尾写「失败 · 重试」。
  */
-function MonthRow({ task, gate, projects, go }: { task: HomeMonthMission["tasks"][number]; gate: string | null; projects: ProjectsApi; go: (href: string) => void }) {
+function MonthRow({ task, gate, status, showProject, projects, go }: {
+  task: HomeMonthMission["tasks"][number]; gate: string | null; status: ReturnType<typeof monthStatus> | null; showProject: boolean; projects: ProjectsApi; go: (href: string) => void;
+}) {
   const [failed, setFailed] = useState<Failure | null>(null);
   const attempt = (run: () => Promise<unknown>) => {
     const once = () => { setFailed(null); void run().catch((error) => setFailed(failureOf(error, once))); };
@@ -101,12 +142,12 @@ function MonthRow({ task, gate, projects, go }: { task: HomeMonthMission["tasks"
       <button type="button" className={h.taskLine} onClick={() => go(project ? projectHref(project.projectId) : taskHref(task.taskId))} data-testid="home-task">
         <span className={h.taskText}>
           <span className={h.taskName}>{task.name}</span>
-          {task.completedAt ? <span className={h.taskSub}>已完成</span> : null}
+          {task.completedAt || gate ? <span className={h.taskSub}>{[task.completedAt ? "已完成" : null, gate].filter(Boolean).join(" · ")}</span> : null}
         </span>
-        {gate ? <span className={h.taskGate}>{gate}</span> : null}
+        {status?.text ? <span className={h.taskGate} title={status.text} data-testid="task-status">{status.waiting ? <span className={h.count}><i aria-hidden /></span> : null}{status.text}</span> : null}
       </button>
       {failed ? <FailedLine inline {...failed} />
-        : project ? <button type="button" className={h.statusChip} onClick={() => go(projectHref(project.projectId))} data-testid="task-project" title={project.name}><span className={h.ellipsis}>{project.name}</span></button>
+        : project ? (showProject ? <button type="button" className={h.statusChip} onClick={() => go(projectHref(project.projectId))} data-testid="task-project" title={project.name}><span className={h.ellipsis}>{project.name}</span></button> : null)
         : <AttachMenu taskName={task.name} projects={projects.projects} onPick={(projectId) => attempt(() => projects.actions.attach(task.taskId, projectId))}
           onCreate={() => attempt(() => projects.actions.create(task.name, task.taskId))} />}
     </div>
@@ -246,7 +287,8 @@ function ConfirmEdit({ value, quote, busy, onSubmit, onCancel }: { value: string
 }
 
 /**
- * 等你的一行（5.4.4「等你行」）。第二行依次是对方（请你认可的：头像 16 和名字）、来源、截止；没有截止的不写时间，时间（5.6 相对时间）放在整行能点的那块的 title 里。
+ * 等你的一行（5.4.4「等你行」）。有摘要（契约 WaitingItem.summary，主循环第 66 条：批准是那句人话，等你补、受阻是验收员那一句，提问是问题原文）的第二行写它，
+ * 和第一行一样的不再写一遍；再下面一行（没摘要时是第二行）依次是对方（请你认可的：头像 16 和名字）、来源、截止；没有截止的不写时间，时间（5.6 相对时间）放在整行能点的那块的 title 里。
  * 额度那条的 dueAt 是恢复的时刻（原话里已经写了），不当截止写。
  * 答完先在原处写状态词，停 2 秒再刷新（收走）；失败在原处写「失败」加「重试」，不弹 toast。
  */
@@ -291,11 +333,13 @@ export function WaitingList({ items, api, go }: { items: WaitingItem[]; api: Wor
         const canOpen = !!detail && (detail.value !== null || !!detail.quote);
         const open = canOpen && editing === keyOf(item);
         const toggle = () => setEditing(open ? null : keyOf(item));
+        const summary = item.summary?.trim() && item.summary.trim() !== item.title.trim() ? item.summary.trim() : null;
         return (
           <li key={item.id} className={h.wait} data-kind={item.kind} data-done={row?.done ? "" : undefined} data-editing={open ? "" : undefined}>
             <button type="button" className={h.waitMain} aria-expanded={canOpen ? open : undefined} onClick={() => { if (!confirm) go(waitingHref(item)); else if (canOpen) toggle(); }}
               title={!due && item.at ? relativeDayTime(item.at, new Date(now)) : undefined}>
               <span className={h.waitTitle}>{item.title}</span>
+              {summary ? <span className={h.waitSummary} title={summary} data-testid="wait-summary">{summary}</span> : null}
               {from || due ? (
                 <span className={h.waitSource}>
                   {item.person ? <PersonAvatar personId={item.person.personId} className={h.waitAvatar}>{null}</PersonAvatar> : null}

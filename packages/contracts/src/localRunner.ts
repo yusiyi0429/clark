@@ -59,6 +59,8 @@ export const LocalRunnerErrorCode = Type.Union([
   Type.Literal("tokenhub_key_rejected"), Type.Literal("tokenhub_unreachable"), Type.Literal("tokenhub_no_models"),
   /** 添加来源（/v1/sources，设计 17.2 第 52 条）：厂商不认这把 Key（422）；连不上厂商、它回的认不出（502）；这把 Key 列不出能用的模型（422）。 */
   Type.Literal("source_key_rejected"), Type.Literal("source_unreachable"), Type.Literal("source_no_models"),
+  /** 恢复其中几处（POST /v1/sessions/:id/files/changes/restore，第 72 条）：文件在网页读了以后又变了（409），网页重读再来。 */
+  Type.Literal("file_changed"),
 ]);
 export const LocalRunnerError = Type.Object({
   error: Type.Object({ code: LocalRunnerErrorCode, message: Type.String() }, strict),
@@ -780,6 +782,8 @@ export const LocalRole = Type.Object({
  * - bypassPermissions「全部放行」（11/09 用户定，设计 17.2 第 33 条：选了全部放行就是不看，不该来问）：只有三类还问本人——
  *   推代码或开 PR（git push；gh 的写操作，如 pr create、pr merge、release create、issue create、api 发 POST 等）、
  *   给别人发消息（飞书命令行发消息、回复、转发、发邮件）、在天枢里替本人写入（天枢 MCP 里写的工具）。
+ *   还有第四类（11/11 过渡规矩）：没有兜底的地方（不在本机自己的目录、卡的工作树、整份留了一份的工作目录里），已有文件要被删、挪、覆盖——
+ *   改文件工具改已有文件、Write 覆盖已有文件，命令里有删、挪、写、重定向、sed -i、冲文件的 git 子命令（扔掉输出的 > $null 不算）。见 LocalUndo。
  *   别的都自己放行：联网下载、装东西、改系统设置、碰 .git 和 .claude、动允许的文件夹以外的文件、跑没装好的 npx 包、本人加的工具里写的操作等。
  * 其他几档还有天枢的硬规矩，照问本人（设计 9.5）：对外的动作（git 推送和拉取、gh（开 PR 等）、飞书命令行写的（发消息、改文档等））、
  * 危险命令表里的（装东西、联网下载、ssh、sudo、改注册表和系统设置、跑没装好的 npx 包）、碰 .git 和 .claude 的、碰允许的文件夹以外的路径、
@@ -906,6 +910,26 @@ export const LocalWorkspace = Type.Union([
   }, strict),
   Type.Object({ kind: Type.Literal("folder"), folder: Type.String() }, strict),
 ]);
+
+/**
+ * 改、删前留一份（11/11 本人定，ADR 0039）：不在 git 工作树里做的会话（普通文件夹、「此电脑」、专题、规划员），执行方改、删已有文件之前本机留一份，
+ * 本人能在「改动的文件」里一个个恢复，或全部恢复到开工前（POST /v1/sessions/:id/files/restore）。会话摘要的 undo：
+ * - preparing：在留开工前那一份（后台做，开工不等）。这时用改文件工具改的先拷一份再放行；命令最多等 10 秒，等不到就按 touched_only 的规矩办。
+ * - ready：整个工作目录都留了（每一轮开始前、结束后各留一份），用命令、脚本、子 agent 改的、删的也能恢复。
+ *   带 reason sync_folder 时（11/11）：文件夹在 OneDrive 等同步盘里，只给本地已有的文档类文件（Word、Excel、PPT、Markdown、文本、CSV 等，单个不超过 32MB）留了，只在云端的不碰、不下载。
+ *   带 reason too_large 时：文件夹太大（超过 3 万个文件或 3GB），只给里面的文档类文件留了。
+ * - touched_only：只给执行方用改文件工具（Claude Code 的 Write、Edit、MultiEdit、NotebookEdit，Codex 的改文件）改的已有文件留一份；
+ *   命令要删、挪、覆盖已有文件时，哪一档都照样问本人（包括「全部放行」）。reason 是为什么：too_large 文件夹太大（超过 3 万个文件或 3GB，
+ *   不算 32MB 以上的大文件和 node_modules 这类目录）、sync_folder 在 OneDrive 等同步盘里、连文档都留不成、disk_full 本机数据目录所在的盘不够、
+ *   failed 没留成（message 写原因）。本机自己的专用目录（专题、规划员、没绑文件夹的项目）不用整份留，也是 touched_only，不带 reason。
+ * 不管哪种：32MB 以上的大文件、工作目录以外的文件（项目另外绑的、允许范围以外的），只在用改文件工具改它时拷一份。
+ * 留的东西只在本机：会话最后一次活动后留 14 天；总量超过 20GB 或盘剩余空间的 10%（取小的）时，从最旧的已结束会话清起。
+ */
+export const LocalUndo = Type.Object({
+  state: Type.Union([Type.Literal("preparing"), Type.Literal("ready"), Type.Literal("touched_only")]),
+  reason: Type.Optional(Type.Union([Type.Literal("too_large"), Type.Literal("sync_folder"), Type.Literal("disk_full"), Type.Literal("failed")])),
+  message: Type.Optional(Type.String({ maxLength: 500 })),
+}, strict);
 
 /** Claude Code 的「问用户」（AskUserQuestion）里的一个问题，按它给的原样转给网页：标题、问题、选项（label + 说明），能不能多选。 */
 export const LocalQuestion = Type.Object({
@@ -1052,6 +1076,8 @@ export const LocalSessionSummary = Type.Object({
    * 自由子会话（第 68 条）：总带 kind=folder，git 仓库的主文件夹也是（它直接改主文件夹，没有自己的工作树；第 71 条「改之前留一份」照卡一样认它）。
    */
   workspace: Type.Optional(LocalWorkspace),
+  /** 改、删前留一份的情况（见 LocalUndo）；卡在工作树里做的不带（有 git）。 */
+  undo: Type.Optional(LocalUndo),
   /** 排着队、在等普通文件夹空出来时：占着它的是谁（LocalFolderHolder，第 68 条）；不在等就不带。 */
   heldBy: Type.Optional(LocalFolderHolder),
   /** 在等本人回答的提问（状态是 idle，界面「等你回复」）；没有就不带。 */
@@ -1147,18 +1173,131 @@ export const LocalSessionFileReadResponse = Type.Object({
  * path 是相对会话根的路径（正斜杠），absolutePath 是绝对路径（回答里两种写法都可能出现，网页拿它们去对）；exists 是现在还在不在（删掉的、挪走的为 false，不能点）；
  * size 是现在的字节数（不在了为 null）。按路径排，最多 500 个，多了 truncated 为 true。root 是会话根。删掉的文件只有 git 那一路知道。
  * 项目另外绑的文件夹里的也列（17.2 第 46 条）：只有 tool 这一路（那里是本人的文件夹，不开工作树），path 是绝对路径（正斜杠）。
+ * 不在工作树里做的会话有留一份时（见 LocalUndo，11/11）：
+ * - snapshot：整个工作目录留了的（undo.state ready）——每一轮开始前和结束后各留一份，两份之间变了的；用命令、脚本、子 agent 改的、删的、新建的都在。
+ *   本人在两轮之间自己改的不算。删掉的文件这一路也知道（exists 为 false）。
+ * - change：这个会话把它怎么了（added 新建、modified 改了、deleted 删了；挪走算原来的删了、新地方新建）。只有 snapshot 一路、或有留一份的才带。
+ * - restorable：能不能点「恢复」（有留一份，或是会话新建的）。restoredAt：最近一次恢复的时间；恢复以后又被会话改了就不带。
+ * 恢复了的文件还留在列表里（内容回到会话第一次动它之前；新建的恢复后不在了，exists false）。
  */
 export const LocalChangedFile = Type.Object({
   path: Type.String(),
   absolutePath: Type.String(),
-  sources: Type.Array(Type.Union([Type.Literal("tool"), Type.Literal("git")]), { minItems: 1, maxItems: 2 }),
+  sources: Type.Array(Type.Union([Type.Literal("tool"), Type.Literal("git"), Type.Literal("snapshot")]), { minItems: 1, maxItems: 3 }),
   exists: Type.Boolean(),
   size: NullableInteger({ minimum: 0 }),
+  change: Type.Optional(Type.Union([Type.Literal("added"), Type.Literal("modified"), Type.Literal("deleted")])),
+  restorable: Type.Optional(Type.Boolean()),
+  restoredAt: Type.Optional(Instant),
 }, strict);
 export const LocalSessionFilesResponse = Type.Object({
   root: Type.String(),
   files: Type.Array(LocalChangedFile, { maxItems: 500 }),
   truncated: Type.Boolean(),
+}, strict);
+
+/**
+ * POST /v1/sessions/:id/files/restore：把这个会话动过的文件恢复到它第一次动之前（11/11，见 LocalUndo）。paths 用 LocalChangedFile 的 path 或 absolutePath；
+ * 不给 paths 就是全部恢复到开工前。改了的、删了的写回原来的内容；会话新建的删掉。恢复前先给现在的样子也留一份（以后可以撤回这次恢复）。
+ * 一个个来，有的成了有的没成时照样回 200：restored 是恢复了的 path，failed 是没成的：in_use 文件正被别的程序打开（比如 Excel，关掉再点）、
+ * no_copy 没有留一份（不是这个会话动的、留的已过期清掉了）、error 别的（message 写原因）。
+ * 会话正在做一轮（starting、running、waiting_permission）时回 409（先停下）；没有这个会话 404；卡在工作树里做的回 409（用 git，合回前不需要）。
+ * 恢复完记一条事件 files_restored。
+ */
+export const LocalSessionRestoreRequest = Type.Object({
+  paths: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 2000 }), { minItems: 1, maxItems: 500 })),
+}, strict);
+export const LocalRestoreFailure = Type.Object({
+  path: Type.String(),
+  reason: Type.Union([Type.Literal("in_use"), Type.Literal("no_copy"), Type.Literal("error")]),
+  message: Type.String({ maxLength: 500 }),
+}, strict);
+export const LocalSessionRestoreResponse = Type.Object({
+  restored: Type.Array(Type.String(), { maxItems: 500 }),
+  failed: Type.Array(LocalRestoreFailure, { maxItems: 500 }),
+}, strict);
+
+/**
+ * 看得见改了什么、只动让动的那一块（设计第 72 条第一步，11/11 本人定进 11/18；数据形状主会话定）。
+ * 数据来自「改、删前留一份」（LocalUndo）：每一轮开始前、结束后各留的一份，和改前拷的那份。
+ *
+ * 「一处」由本机算，网页照给的区间画，显示的和能恢复的才对得上：先按行比，再在改过的行里按字比（中文按字），
+ * 挨得近的（中间只隔不超过 3 个没变的字、且不跨行）并成一处；同一行里隔得远的两处是两处，能分开恢复。新建、删掉的文件算一处（整份）。
+ *
+ * range：turn 这一轮（turn 给轮号，不给是最近做完的那一轮）；session 开工到现在（会话第一次动它之前 → 磁盘上现在）。
+ * 卡在 git 工作树里做的只有 session（从开工的提交比到现在的工作树），问 turn 回 400。
+ */
+export const LocalChangeRange = Type.Union([Type.Literal("turn"), Type.Literal("session")]);
+/**
+ * full：有明细（Markdown、纯文本、代码、CSV 这类文本，不超过 1MB）；
+ * converted：Word（.docx）、Excel（.xlsx）转成文字再比，before、after 是转出来的文字（Excel 大表只给改过的行和上下各两行，带表头，中间用一行省略隔开，区间按裁过的文字算），
+ *   changes 照常给，但不能按处恢复（只能整个文件恢复，POST /v1/sessions/:id/files/restore）；
+ * none：只知道改过（超过 1MB、二进制、转不了的老格式或带密码的、降级后拿不到改前那份、用命令改的工作目录以外的文件），不给 before、after、changes。
+ */
+export const LocalChangeDetail = Type.Union([Type.Literal("full"), Type.Literal("converted"), Type.Literal("none")]);
+/** 一段字符区间：JS 字符串下标（UTF-16），[start, end)；空区间 start = end。 */
+export const LocalTextSpan = Type.Object({ start: Type.Integer({ minimum: 0 }), end: Type.Integer({ minimum: 0 }) }, strict);
+/**
+ * 一处改动：before 是它在改前那份全文里的区间，after 是在改后那份里的区间（就按给出去的那两个字符串算，换行符原样不动、不做归一）。
+ * 纯新增 before 是空区间，纯删除 after 是空区间。id 在同一对 before / after 文字下不变（文件没再变，重读拿到的 id 一样）。
+ */
+export const LocalTextChange = Type.Object({ id: Type.String({ minLength: 1, maxLength: 80 }), before: LocalTextSpan, after: LocalTextSpan }, strict);
+
+/**
+ * POST /v1/sessions/:id/files/changes：读一个文件的改动。path 用改动的文件列表（LocalChangedFile）里的 path 或 absolutePath。
+ * 错误：404 not_found（没有这个会话、这个会话没动过这个文件、那一轮不存在）；400 validation（工作树里的会话问 turn）。一轮在跑时也能读（读的是已经留下的那几份）。
+ */
+export const LocalFileChangesRequest = Type.Object({
+  path: Type.String({ minLength: 1, maxLength: 2000 }),
+  range: Type.Optional(LocalChangeRange),
+  /** 第几轮（1 起，同 files_changed 事件的 turn）；range 是 turn 时用，不给是最近做完的那一轮。 */
+  turn: Type.Optional(Type.Integer({ minimum: 1 })),
+}, strict);
+/**
+ * - change：这一段时间里这个文件是新建、改了还是删了。新建的 before 为 null、删掉的 after 为 null（各算一处，整份）。
+ * - revision：读的这一刻磁盘上这个文件内容的指纹（不在了为 null）。恢复其中几处时带回来核对。
+ * - restorable：能不能按处恢复（detail 是 full、不是整份新建或删掉、而且磁盘上现在就是 after 那份——看更早的一轮、之后又改过的，不能按处恢复）。
+ * - turn：range 是 turn 时是第几轮，session 时为 null。
+ * detail 是 none 时不带 before、after、changes。
+ */
+export const LocalFileChangesResponse = Type.Object({
+  path: Type.String(),
+  absolutePath: Type.String(),
+  range: LocalChangeRange,
+  turn: NullableInteger({ minimum: 1 }),
+  change: Type.Union([Type.Literal("added"), Type.Literal("modified"), Type.Literal("deleted")]),
+  detail: LocalChangeDetail,
+  before: Type.Optional(Nullable(Type.String())),
+  after: Type.Optional(Nullable(Type.String())),
+  changes: Type.Optional(Type.Array(LocalTextChange, { maxItems: 2000 })),
+  revision: Nullable(Type.String({ maxLength: 80 })),
+  restorable: Type.Boolean(),
+}, strict);
+
+/**
+ * POST /v1/sessions/:id/files/changes/restore：把其中几处按改前那份写回，别的不动（网页不送文件内容）。path、range、turn 同读的时候，ids 是要恢复的那几处，
+ * revision 是读的时候拿到的。写回前照「留一份」的规矩先给现在的样子留一份；写回以后回新的读结果（同一个 range、turn），网页照它重画。
+ * 错误：409 file_changed（磁盘上的文件和 revision 对不上：读了以后又被改过，网页重读）；409 conflict（会话正在做一轮）；
+ * 400 validation（不能按处恢复：detail 不是 full、整份新建或删掉的、restorable 为 false；ids 里有不认识的）；404 同读。恢复完记一条 files_restored（all false）。
+ */
+export const LocalFileChangesRestoreRequest = Type.Object({
+  path: Type.String({ minLength: 1, maxLength: 2000 }),
+  range: Type.Optional(LocalChangeRange),
+  turn: Type.Optional(Type.Integer({ minimum: 1 })),
+  ids: Type.Array(Type.String({ minLength: 1, maxLength: 80 }), { minItems: 1, maxItems: 2000 }),
+  revision: Nullable(Type.String({ maxLength: 80 })),
+}, strict);
+export const LocalFileChangesRestoreResponse = Type.Object({
+  restored: Type.Array(Type.String(), { maxItems: 2000 }),
+  file: LocalFileChangesResponse,
+}, strict);
+/** 一轮结束的事件 files_changed 里的一个文件：count 是几处（detail 为 none 时为 null；Word、Excel 照转出来的文字算）。 */
+export const LocalTurnFileChange = Type.Object({
+  path: Type.String(),
+  absolutePath: Type.String(),
+  change: Type.Union([Type.Literal("added"), Type.Literal("modified"), Type.Literal("deleted")]),
+  detail: LocalChangeDetail,
+  count: NullableInteger({ minimum: 1 }),
 }, strict);
 
 /**
@@ -1609,8 +1748,16 @@ export const LocalSessionEvent = Type.Union([
    * workspace：卡开工时在哪做（工作树的分支、从哪个提交开始、主文件夹里没提交的改动没带进来）；merged：卡的分支已合回主文件夹；
    * context_compacted：执行方压缩了上下文（Claude Code 的 compact_boundary、Codex 的 contextCompaction；自动压的和本人让它压的都报），
    * text 是「压缩了上下文」，网页在对话里记这一行（设计 17.2 第 42 条）。
+   * undo：改、删前留一份变了（见 LocalUndo；留好了 info、只能给改文件工具改的留一份 warn、留的已清掉 warn），摘要的 undo 同时更新。
    */
   ev("notice", { level: Type.Union([Type.Literal("info"), Type.Literal("warn"), Type.Literal("error")]), code: Type.String(), text: Type.String() }),
+  /** 本人恢复了文件（POST /v1/sessions/:id/files/restore）：all 是不是「全部恢复」，restored、failed 同回执。只在本机，不同步给云端。 */
+  /**
+   * 一轮结束、这一轮改过文件时记一条（设计第 72 条）：turn 第几轮（1 起），files 是这一轮新建、改了、删了的文件（按路径排，最多 100 个，多了 more 写还有几个）。
+   * 有整份快照的（undo.state ready）命令、子 agent 改的也在；只改前拷一份的只有改文件工具改的。卡在工作树里的会话不记。只在本机，不同步给云端。
+   */
+  ev("files_changed", { turn: Type.Integer({ minimum: 1 }), files: Type.Array(LocalTurnFileChange, { minItems: 1, maxItems: 100 }), more: Type.Integer({ minimum: 0 }) }),
+  ev("files_restored", { all: Type.Boolean(), restored: Type.Array(Type.String(), { maxItems: 500 }), failed: Type.Array(LocalRestoreFailure, { maxItems: 500 }) }),
 ]);
 
 /**
@@ -1882,6 +2029,18 @@ export type TLocalSessionFileReadRequest = Static<typeof LocalSessionFileReadReq
 export type TLocalSessionFileReadResponse = Static<typeof LocalSessionFileReadResponse>;
 export type TLocalChangedFile = Static<typeof LocalChangedFile>;
 export type TLocalSessionFilesResponse = Static<typeof LocalSessionFilesResponse>;
+export type TLocalUndo = Static<typeof LocalUndo>;
+export type TLocalSessionRestoreRequest = Static<typeof LocalSessionRestoreRequest>;
+export type TLocalSessionRestoreResponse = Static<typeof LocalSessionRestoreResponse>;
+export type TLocalRestoreFailure = Static<typeof LocalRestoreFailure>;
+export type TLocalChangeRange = Static<typeof LocalChangeRange>;
+export type TLocalChangeDetail = Static<typeof LocalChangeDetail>;
+export type TLocalTextChange = Static<typeof LocalTextChange>;
+export type TLocalFileChangesRequest = Static<typeof LocalFileChangesRequest>;
+export type TLocalFileChangesResponse = Static<typeof LocalFileChangesResponse>;
+export type TLocalFileChangesRestoreRequest = Static<typeof LocalFileChangesRestoreRequest>;
+export type TLocalFileChangesRestoreResponse = Static<typeof LocalFileChangesRestoreResponse>;
+export type TLocalTurnFileChange = Static<typeof LocalTurnFileChange>;
 export type TLocalSessionModelResponse = Static<typeof LocalSessionModelResponse>;
 export type TLocalSessionStatus = Static<typeof LocalSessionStatus>;
 export type TLocalSessionSubject = Static<typeof LocalSessionSubject>;
@@ -2016,6 +2175,9 @@ export const LOCAL_RUNNER_ROUTES = {
   setSessionModel: { method: "PUT", path: "/v1/sessions/:id/model", auth: true },
   listSessionFiles: { method: "GET", path: "/v1/sessions/:id/files", auth: true },
   readSessionFile: { method: "POST", path: "/v1/sessions/:id/files/read", auth: true },
+  restoreSessionFiles: { method: "POST", path: "/v1/sessions/:id/files/restore", auth: true },
+  readFileChanges: { method: "POST", path: "/v1/sessions/:id/files/changes", auth: true },
+  restoreFileChanges: { method: "POST", path: "/v1/sessions/:id/files/changes/restore", auth: true },
   listProjects: { method: "GET", path: "/v1/projects", auth: true },
   putProjectFolder: { method: "PUT", path: "/v1/projects/:projectId/folder", auth: true },
   handoverCheck: { method: "POST", path: "/v1/projects/:projectId/handover-check", auth: true },

@@ -100,16 +100,19 @@ describe("拆卡：作业和草稿", { timeout: 30_000 }, () => {
     } finally { await f.close(); }
   });
 
-  it("校验：编号要在标准范围内，完成标准合起来不超过 500 字，不能重名，岗位和建议的预设只能是给的那几个", () => {
+  it("校验：编号要在标准范围内，完成标准合起来不超过 2000 字，不能重名，岗位和建议的预设只能是给的那几个", () => {
     const input = { task: { name: "x", doneDefinition: null, criteria: [{ index: 1, text: "甲" }, { index: 2, text: "乙" }] }, existing: [],
       roles: [{ id: "role-1", name: "开发", duties: "" }], presets: [{ key: "researcher", name: "调研员", duties: "" }] };
     const ok = cards("role-1");
     expect(cardPlanProblem({ cards: ok }, input)).toBeNull();
+    // 只有 1 张也收（一个 worker 一次能做完的只出一件）。
+    expect(cardPlanProblem({ cards: [ok[0]] }, input)).toBeNull();
+    expect(CARD_PLAN_PROMPT).toContain("1 到 8 张");
     expect(cardPlanProblem({ cards: ok }, { ...input, task: { ...input.task, criteria: [] } })).toBe("这个 Task 没有标准，第 1 张的 criterionIndex 写 null");
     expect(cardPlanProblem({ cards: [{ ...ok[0], criterionIndex: 3 }, ...ok.slice(1)] }, input)).toBe("第 1 张的 criterionIndex 只能是 1 到 2 或 null");
     expect(cardPlanProblem({ cards: ok }, { ...input, existing: [{ title: "录 新人上手", criterionIndex: null, status: "not_started" }] }))
       .toBe("第 2 张「录新人上手」和已有的卡或前面的草稿重名");
-    expect(cardPlanProblem({ cards: [ok[0], { ...ok[1], standards: Array(5).fill("长".repeat(110)) }, ok[2]] }, input)).toBe("第 2 张的完成标准合起来超过 500 字，写短一些");
+    expect(cardPlanProblem({ cards: [ok[0], { ...ok[1], standards: Array(7).fill("长".repeat(300)) }, ok[2]] }, input)).toBe("第 2 张的完成标准合起来超过 2000 字，写短一些");
     expect(cardPlanProblem({ cards: cards("role-2") }, input)).toBe("第 1 张的 roleId 只能是 roles 里的 id 或 null");
     expect(cardPlanProblem({ cards: [ok[0], ok[1], { ...ok[2], suggestPresetKey: "nope" }] }, input)).toBe("第 3 张的 suggestPresetKey 只能是 presets 里的 key 或 null");
     expect(cardPlanProblem({ cards: [{ ...ok[0], suggestPresetKey: "researcher" }, ok[1], ok[2]] }, input)).toBe("第 1 张已经配了技能，suggestPresetKey 写 null");

@@ -9,8 +9,7 @@
 import type { TLocalChangedFile } from "@warmap/contracts";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { Check, ChevronDown, ChevronLeft, ChevronRight, Info, X } from "lucide-react";
+import { Check, ChevronLeft, Info, X } from "lucide-react";
 import type { TCardHandbackView, TLocalQuestionAnswerRequest, TLocalRunView } from "@warmap/contracts";
 import { HeroButton } from "@/components/HeroButton";
 import { useHandheld } from "@/components/ui/useHandheld";
@@ -20,20 +19,22 @@ import { useSessionEvents } from "@/lib/local/useSessionEvents";
 import { contextUsage, localWait, planStep, running, type SessionView } from "@/lib/local/sessionView";
 import { startCard } from "@/lib/local/start";
 import { STAGES, WAIT_LABEL, boardCards, canCommand, circled, deliverableLabel, isAgentCard, waitTone, type CardStage, type CardWait } from "@/lib/board/cards";
-import { overrule, retryAcceptance } from "@/lib/board/cloud";
+import { CloudError, overrule, relayHandback, retryAcceptance } from "@/lib/board/cloud";
 import { cardRole } from "@/lib/team/roles";
 import { useAutoReturn } from "@/lib/board/useAutoReturn";
 import { showWorkspaceToast } from "@/lib/toast";
 import { SessionComposer, SessionTranscript, useSessionSend, useSessionModels, useModelChangedRefresh, sessionEnded, type DecideOptions } from "./SessionTranscript";
 import { useSessionMode } from "./PermissionMode";
-import { FilePreview, cloudOutputFile, localSessionFile, type PreviewFile } from "./FilePreview";
-import { filesSignal, matchChangedFile, useSessionFiles } from "@/lib/local/sessionFiles";
-import { HARNESS_NAME, defaultSourceLabel, runLabel, sessionModelText } from "@/lib/local/runModel";
+import { FilePreview, cloudOutputFile, localChangedFile, type PreviewFile } from "./FilePreview";
+import { filesRestored, filesSignal, matchChangedFile, useSessionFiles } from "@/lib/local/sessionFiles";
+import { ChangedFiles } from "./ChangedFiles";
+import { TurnFilesContext, latestFilesSeq } from "./TurnFiles";
+import { HARNESS_NAME, runLabel, sessionModelText } from "@/lib/local/runModel";
 import { useCardDetail, type CardDetail } from "./useCardDetail";
 import { SourceWordIssues, SourceWords } from "./SourceWords";
 import { MergeAction } from "@/components/work/MergeAction";
 import { ApprovalDecision, QuestionDecision, awayChip } from "@/components/work/decisions";
-import { MergeDecision, SessionBlocked, answeredOf } from "@/components/home/TaskDecisions";
+import { HandbackDecision, MergeDecision, useRelayNow } from "@/components/home/TaskDecisions";
 import { ATTENTION_LABEL, attentionOf, isMergeLater, viewAsk, type Attention } from "@/lib/home/attention";
 import { DecisionBox, FailedLine, PendingBoxes, PendingDock, failureOf, type Failure } from "@/components/work/DecisionBox";
 import { useViewChrome } from "@/components/home/view";
@@ -41,23 +42,26 @@ import { SideContent, useSideDetail } from "@/components/home/SideDetail";
 import { ICON } from "@/components/home/StateIcon";
 import { useConversationScroll } from "@/conversation/useConversationScroll";
 import { commitText, placeText, shortPlace } from "@/lib/work/merge";
-import type { TLocalSessionSummary } from "@/lib/local/runner";
+import type { LocalRunner, TLocalSessionSummary } from "@/lib/local/runner";
 import s from "@/styles/v2-session.module.css";
 import { PlanChecklist } from "./PlanChecklist";
+import { AgreementSection, ProposalDecision } from "./Agreement";
 
 /** 回到新首页，锚着这张卡的 Task（V2 设计第 20.4 节；没打开新首页的人会被带回老首页）。 */
 const workHref = (taskId: string | null) => (taskId ? `/me/work/tasks/${encodeURIComponent(taskId)}` : "/me/work");
 
-const VERDICT: Record<string, string> = { met: "达到", partial: "部分达到", unmet: "未达到" };
+const VERDICT: Record<string, string> = { met: "达到", partial: "部分达到", unmet: "未达到", needs_person: "要你补" };
 const money = (usd: number | null) => (usd === null ? null : `约 $${usd.toFixed(usd < 1 ? 3 : 2)}`);
 
 /**
  * 新首页页头的状态 chip（5.4.3「状态 chip」、5.6 状态词）：中性、警告、等你（中性底加强调色圆点）三档；新首页不用成功色。
  * 「等你」档只给等本人处理的框（attention，第 54 条，和左栏的点同一个来源）：等你批准、在问你、等你拿主意、等你合回；
- * 批准、提问不在这台电脑上时写「等你 · {电脑名}」（away）。别的照会话和阶段：已停止、已停下（一轮做完）、受阻（不是验收没过的）、重做中、已排队、进行中…。
+ * 批准、提问不在这台电脑上时写「等你 · {电脑名}」（away）。首页数据里它在排队时照写排队的状态词（queued，「已排队 · 等 B」，第 68 条）。
+ * 别的照会话和阶段：已停止、已停下（一轮做完）、受阻（不是验收没过的）、重做中、已排队、进行中…。
  */
-export function stateChip(attention: Attention | null, rest: CardWait | null, stage: CardStage, away: string | null): { text: string; tone: "neutral" | "warn" | "wait" } {
+export function stateChip(attention: Attention | null, rest: CardWait | null, stage: CardStage, away: string | null, queued: string | null = null): { text: string; tone: "neutral" | "warn" | "wait" } {
   if (attention) return { text: (attention === "approval" || attention === "question") && away ? away : ATTENTION_LABEL[attention], tone: "wait" };
+  if (queued) return { text: queued, tone: "neutral" };
   if (rest === "blocked") return { text: "受阻", tone: "warn" };
   if (rest === "paused") return { text: "已停止", tone: "neutral" };
   if (rest === "reply") return { text: "已停下", tone: "neutral" };
@@ -69,16 +73,21 @@ export function stateChip(attention: Attention | null, rest: CardWait | null, st
  * embedded：放在新首页的展示区里——没有返回键（左栏就是导航）。页头右边的信息图标：桌面上在右栏打开详情（交代、标准、验收、产出、改动的文件），对话留着；
  * 手机上没有右栏，照旧在「对话」和「结果」之间切。
  * waiting：首页数据里这个子会话在等什么（左栏的点用的那一份，已经照这台电脑上的会话改过）；页头标签和钉在输入框上方的框都从它和本机事件流算（第 54 条）。
+ * queued：首页数据里它在排队时的状态词（subQueueText），页头照写；不在排队为 null。
  */
-export function CardSession({ cardId, embedded = false, waiting }: { cardId: string; embedded?: boolean; waiting?: Attention | null }) {
+export function CardSession({ cardId, embedded = false, waiting, queued = null }: { cardId: string; embedded?: boolean; waiting?: Attention | null; queued?: string | null }) {
   const chrome = useViewChrome();
-  const router = useRouter();
   /** 看结果还是对话；没选过时，子会话不在这台电脑上（手机、别的电脑、还没开）先看摘要（5.4.3）。 */
   const [details, setDetails] = useState<boolean | null>(null);
   const side = useSideDetail();
-  // 右边看文件（41 条）：交出的产出点了在这一页右边看，不新开页；手持上整屏。
-  const [preview, setPreview] = useState<PreviewFile | null>(null);
-  const closePreview = useCallback(() => setPreview(null), []);
+  // 右边看文件（41 条）：交出的产出、改过的文件点了在右边看，不新开页；手持上整屏。
+  // 新首页电脑上放进右边的面板位（第 73 条）：和详情、后台任务互相替换，换成别的就不画；放大也由面板位管（对话收起）。
+  const [preview, setPreviewFile] = useState<PreviewFile | null>(null);
+  // 预览只在面板里放着文件时画，所以关掉时直接收起面板位（show 在首页里是稳定的）。
+  const showPanel = side?.show;
+  const setPreview = useCallback((file: PreviewFile) => { setPreviewFile(file); showPanel?.("file"); }, [showPanel]);
+  const shownPreview = side && side.shown !== "file" ? null : preview;
+  const closePreview = useCallback(() => { setPreviewFile(null); showPanel?.(null); }, [showPanel]);
   /** 页头点了「推翻」：打开结果、推翻的原因框直接展开。 */
   const [flipping, setFlipping] = useState(false);
   const { detail, missing, refresh } = useCardDetail(cardId);
@@ -96,14 +105,21 @@ export function CardSession({ cardId, embedded = false, waiting }: { cardId: str
   const fileSession = ready && !handheld ? session?.id ?? null : null;
   const files = useSessionFiles(local.runner, fileSession, filesSignal(view.status, view.entries));
   const outputs = detail?.outputs;
-  const openLocal = useCallback((path: string) => { if (fileSession) setPreview(localSessionFile(local.runner, fileSession, path)); }, [local.runner, fileSession]);
+  // 改过的文件先看改动（第 72 条）：右栏和回答里点的看开工到现在，对话里一轮末尾那一行点的看那一轮（带轮号）。
+  // 右栏清单里能恢复的（不在工作树里做的会话才有），点改动时可以出「恢复整个文件」。
+  const openChanges = useCallback((path: string, turn?: number) => {
+    if (!fileSession) return;
+    const wholeFile = session?.workspace?.kind !== "worktree" && !!files.find((file) => file.path === path)?.restorable;
+    setPreview(localChangedFile(local.runner, fileSession, path, { turn, wholeFile }));
+  }, [local.runner, fileSession, files, session?.workspace?.kind, setPreview]);
+  const openLocal = useCallback((path: string) => openChanges(path), [openChanges]);
   // 回答里提到的一处：先看是不是改过的文件（读这台电脑上现在的），再看是不是交出的产出（读云端那份）；都对不上不能点。
   const openFile = useCallback((mention: string) => {
     const changed = fileSession ? matchChangedFile(files, mention) : null;
     if (changed) return () => openLocal(changed.path);
     const output = outputs?.find((entry) => entry.kind === "artifact" && entry.fileName === mention);
     return output ? () => setPreview(cloudOutputFile(output)) : null;
-  }, [files, outputs, fileSession, openLocal]);
+  }, [files, outputs, fileSession, openLocal, setPreview]);
   const [tab, setTab] = useState<"result" | "chat">("result");
   const [starting, setStarting] = useState(false);
   useAutoReturn(local.runner, ready, detail ? [detail.task] : [], local.sessions, () => void refresh());
@@ -121,6 +137,20 @@ export function CardSession({ cardId, embedded = false, waiting }: { cardId: str
 
   // 说一句：一按就先画出来（useSessionSend）。
   const send = useSessionSend(local.runner, session?.id ?? null, view, { kind: "card", id: cardId });
+  // 等你补的「我来补」（第 61 条）：输入框填好、聚焦；这时发出的那一句走登记（…/relay），登记完马上在这台电脑上送出去。
+  const [supply, setSupply] = useState<{ handbackId: string; text: string; nonce: number } | null>(null);
+  const relayNow = useRelayNow();
+  // 改约定（第 60 条）：会话详情里的完成标准进编辑。等你补、受阻的「改完成标准」，项目对话带 #agreement 跳来都开它。
+  const [editing, setEditing] = useState(false);
+  useEffect(() => {
+    if (window.location.hash !== "#agreement") return;
+    setEditing(true);
+    if (side) side.toggle(true); else setDetails(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 只在打开这张卡时看一次
+  }, [cardId]);
+  // 执行方提议改约定（事件 agreement_proposal）：重读一次卡的详情，钉住的框照云端的 proposal 画。
+  const proposals = view.entries.filter((entry) => entry.kind === "notice" && entry.code === "agreement_proposal").length;
+  useEffect(() => { if (proposals) void refresh(); }, [proposals, refresh]);
 
   if (missing) return <div className={s.gone}><p>没有这件事项</p><Link href="/me/month">回到本月</Link></div>;
   if (!detail) return <div className={s.page} aria-busy />;
@@ -133,7 +163,7 @@ export function CardSession({ cardId, embedded = false, waiting }: { cardId: str
   const card = boardCards([item], session ? [session] : [])[0]!;
   const wait = session ? localWait(view) ?? card.wait : card.wait;
   // 等本人处理的框（第 54 条）：首页数据给的（左栏同一份），这台电脑上有会话时按事件流再对一遍。没给时照卡的标记。
-  const cloudWaiting = waiting !== undefined ? waiting : card.wait === "approval" ? "approval" : card.wait === "blocked" ? "verdict" : null;
+  const cloudWaiting = waiting !== undefined ? waiting : card.wait === "approval" ? "approval" : card.wait === "blocked" ? "verdict" : card.wait === "needs_person" ? "needs_person" : null;
   const attention = attentionOf(cloudWaiting, session ? viewAsk(view, session) : null);
   const stage = card.stage;
   const taskId = item.planTaskId;
@@ -159,17 +189,35 @@ export function CardSession({ cardId, embedded = false, waiting }: { cardId: str
     scroll.jumpToLatest();
   };
   const say = send.say;
+  const openPane = () => (side ? side.toggle(true) : setDetails(true));
+  // 约定改了、提议定了：云端登记了一句转话，这台电脑上跑着这张卡时马上说给执行方。
+  // 登记了的转话（我来补、再改一轮、约定改了）：这一页马上认领，说给执行方的那句像平时发话一样先画出来。
+  const via = canAct && session ? { sessionId: session.id, say: (text: string) => say(text) } : null;
+  const settle = async () => { if (canAct) await relayNow(via); await refresh(); };
+  const onSend = async (text: string, files: File[]) => {
+    if (!supply) return say(text, files);
+    try { await relayHandback(cardId, supply.handbackId, { kind: "supply", text }); }
+    catch (error) { if (error instanceof CloudError && error.status === 409) { setSupply(null); void refresh(); } throw error; }
+    await relayNow(via);
+    setSupply(null);
+    await refresh();
+    return true;
+  };
   const control = async (action: "interrupt" | "kill") => {
     if (!session) return;
     await local.runner[action](session.id);
     await local.refresh();
   };
 
+  // 放大只在新首页电脑上的面板位里有（手持本来就整屏，老页面不加）。
+  const previewNode = shownPreview ? <FilePreview file={shownPreview} onClose={closePreview} canRestore={!sessionRunning} wide={side?.wide} onWide={side?.setWide} /> : null;
   const pane = (
     <aside className={s.pane} aria-label="结果">
       <ResultPane detail={detail} session={session} view={session ? view : null} canAct={canAct} wait={wait} stage={stage} handheld={handheld} ready={ready} embedded={embedded}
-        flipping={flipping} onFlipDone={() => setFlipping(false)} onPreview={setPreview} previewing={preview?.key ?? null} files={files} onFile={openLocal}
-        onStart={embedded ? undefined : () => setStarting(true)} onControl={control} onResume={() => say("继续")} onChanged={() => void refresh()} />
+        flipping={flipping} onFlipDone={() => setFlipping(false)} onPreview={setPreview} previewing={shownPreview?.key ?? null} files={files} onFile={openLocal}
+        onRestoreFiles={(paths) => local.runner.restoreSessionFiles(session!.id, paths ? { paths } : {}).then((result) => { filesRestored(session!.id); return result; })}
+        onStart={embedded ? undefined : () => setStarting(true)} onControl={control} onResume={() => say("继续")} onChanged={() => void refresh()}
+        editing={editing} onEditing={setEditing} onSaved={settle} />
     </aside>
   );
   // 执行方在问本人：选项框（手机、别的电脑上只留问题和「等你 · {电脑名}」，会话停了收成「已失效」）。老页面放在对话最后，新首页钉在输入框上方。
@@ -179,29 +227,33 @@ export function CardSession({ cardId, embedded = false, waiting }: { cardId: str
   const away = canAct ? null : awayChip(device);
   const handback = detail.handbacks[0] ?? null;
   const placeholder = (kind: "approval" | "question") => <DecisionBox kind={kind} title={ATTENTION_LABEL[kind]} options={[]} onPick={() => undefined} blocked={away ?? awayChip(device)} />;
-  const pinned = !embedded || !attention ? null
+  const asked = !embedded || !attention ? null
     : attention === "approval" ? (view.lastSeq && view.pending.length
-      ? <ApprovalDecision requests={view.pending} blocked={away} onDecide={(request, decision, options) => decide(request.requestId, decision, options)} />
+      ? <ApprovalDecision requests={view.pending} blocked={away} inWorktree={session?.workspace?.kind === "worktree"} onDecide={(request, decision, options) => decide(request.requestId, decision, options)} />
       : placeholder("approval"))
     : attention === "question" ? asking ?? placeholder("question")
-    : attention === "verdict" ? <SessionBlocked key={handback?.id ?? "blocked"} cardId={item.id} handback={handback} blocker={item.blocker?.reason ?? null} canSay={canAct}
-      onSay={(text) => say(text)} onStop={async () => { if (canAct && session && running(status)) { await local.runner.kill(session.id); await local.refresh(); } }}
-      onChanged={() => void refresh()} onGone={() => router.push("/me/work")} />
+    : attention === "verdict" || attention === "needs_person" ? (handback ? <HandbackDecision key={handback.id} cardId={item.id} handback={handback} here={canAct} via={via}
+      onFill={canAct && session ? (text) => setSupply({ handbackId: handback.id, text, nonce: Date.now() }) : undefined}
+      onLook={openPane} onEdit={() => { openPane(); setEditing(true); }} onChanged={() => void refresh()} /> : null)
     : <MergeDecision session={session} title={item.title} onChanged={() => void refresh()} />;
-  // 答过的受阻、点了先不合的：对话最后收成一行。
-  const blockedAnswer = embedded && attention !== "verdict" && handback ? answeredOf(`blocked:${handback.id}`) : null;
+  // 执行方提议改约定（第 60 条）：也钉在输入框上方，手机上、别的电脑上一样能定。同时只钉一个框：批准、提问这些先答，答完再出它。
+  const proposal = embedded ? detail.agreement?.proposal ?? null : null;
+  const pinned = asked ?? (proposal ? <ProposalDecision key={proposal.id} cardId={item.id} proposal={proposal} current={{ brief: detail.brief, standards: detail.standards }} onDecided={settle} /> : null);
+  // 答过的等你补、受阻（就到这里、登记送到了），点了先不合的：对话最后收成一行。
+  const handled = embedded && attention !== "verdict" && attention !== "needs_person" && handback;
+  const blockedAnswer = !handled ? null : handback.passedWithGap ? "就到这里" : handback.relay?.state === "delivered" ? (handback.relay.kind === "return" ? "再改一轮" : "我来补") : null;
   const ws = session?.workspace;
   const mergeLater = embedded && attention !== "merge" && !!session && ws?.kind === "worktree" && !!ws.needsMerge && !ws.mergedCommit && isMergeLater(session.id);
   const settled = (title: string, answerText: string) => <DecisionBox kind="question" title={title} options={[]} onPick={() => undefined} resolved={answerText} />;
-  const tail = !embedded ? asking : blockedAnswer ? settled("受阻", blockedAnswer) : mergeLater ? settled(`「${item.title}」无法合回`, "先不合") : null;
+  const tail = !embedded ? asking : blockedAnswer && handback ? settled(handback.headline ?? "验收", blockedAnswer) : mergeLater ? settled(`「${item.title}」无法合回`, "先不合") : null;
   const dock = <PendingDock above latest={{ visible: !scroll.atBottom, jump: scroll.jumpToLatest }} />;
   // 新首页里输入框只在这台电脑上跑着这张卡时出（别处看摘要）；老页面照旧灰着。
   // 输入框下面一行的右边写「执行方 · 模型」（21 条），来源在悬停里：这台电脑上的会话报的（实际跑的优先），没有时退回「来源 · 模型」、再退回云端记的。文件夹在左边。
-  const model = (session ? sessionModelText(session, local.models.find((entry) => entry.id === session.modelProfileId)?.efforts, defaultSourceLabel(local.models)) : null) ?? ((label) => (label ? { label, title: null } : null))(runLabel(session?.run) ?? run?.modelLabel ?? item.card?.model?.label ?? null);
+  const model = (session ? sessionModelText(session, local.models.find((entry) => entry.id === session.modelProfileId)?.efforts) : null) ?? ((label) => (label ? { label, title: null } : null))(runLabel(session?.run) ?? run?.modelLabel ?? item.card?.model?.label ?? null);
   const place = session?.workspace ? { name: shortPlace(session.workspace), title: placeText(session.workspace) } : null;
   const composer = agent && (session || !embedded)
-    ? <SessionComposer label={`给${item.title}插话`} disabled={!canAct} onSend={say} mode={mode} dock={dock} context={contextUsage(view.context ?? session?.context)} subject={{ kind: "card", id: cardId }} place={place} model={model ? { label: model.label, title: model.title ?? undefined } : null}
-      models={models} pinned={pinned}
+    ? <SessionComposer label={`给${item.title}插话`} disabled={!canAct} onSend={onSend} mode={mode} dock={dock} context={contextUsage(view.context ?? session?.context)} subject={{ kind: "card", id: cardId }} place={place} model={model ? { label: model.label, title: model.title ?? undefined } : null}
+      models={models} pinned={pinned} fill={supply ? { text: supply.text, nonce: supply.nonce } : null}
       busy={sessionRunning} onStop={() => void control("interrupt").catch(() => showWorkspaceToast({ text: "没停下" }))} />
     : <div className={s.composerDock}>{pinned ? <div className={s.pinned} data-testid="pinned">{pinned}</div> : null}{dock}</div>;
   const chat = (
@@ -210,9 +262,13 @@ export function CardSession({ cardId, embedded = false, waiting }: { cardId: str
         <div className={s.scroll} ref={scroll.scrollRef}>
           <div ref={scroll.contentRef}>
             {session ? (
+              <TurnFilesContext.Provider value={{ open: fileSession ? openChanges : null, restored: (path) => !!files.find((file) => file.path === path)?.restoredAt, latest: latestFilesSeq(view.entries),
+                count: fileSession ? (path, turn) => local.runner.readFileChanges(fileSession, { path, range: "turn", turn }).then((data) => (data.detail === "none" ? null : data.changes?.length ?? 0)) : undefined, version: files }}>
               <SessionTranscript entries={send.entries} agentName={agentName} canAct={canAct} onResend={(entry) => void say(entry.text).catch(() => showWorkspaceToast({ text: "没发出去" }))} onRetry={send.retry} draft={draft} drafted={drafted} device={device} live={sessionRunning} starting={status === "starting"} ended={ended} pinned={embedded} lead={`交代：${item.title}${item.card?.criterion ? ` · 按「${item.card.criterion.text}」验收` : ""}`}
                 onFile={openFile}
-                onDecide={(request, decision, options) => decide(request.requestId, decision, options)} tail={tail} asking={question} />
+                onDecide={(request, decision, options) => decide(request.requestId, decision, options)} tail={tail} asking={question}
+                stopped={embedded ? view.stopped : null} onResume={canAct ? () => void say("接着做").catch(() => showWorkspaceToast({ text: "没发出去" })) : undefined} />
+              </TurnFilesContext.Provider>
             ) : <CloudTimeline run={run} title={item.title} />}
           </div>
           <div ref={scroll.reserveRef} aria-hidden />
@@ -234,7 +290,7 @@ export function CardSession({ cardId, embedded = false, waiting }: { cardId: str
     const inSide = !!side;
     const showPane = side ? side.open : details ?? !session;
     const openDetails = (open?: boolean) => (side ? side.toggle(open) : setDetails(open ?? !showPane));
-    const chipOf = stateChip(attention, session ? localWait(view) : card.wait, stage, !canAct && device ? awayChip(device) : null);
+    const chipOf = stateChip(attention, session ? localWait(view) : card.wait, stage, !canAct && device ? awayChip(device) : null, queued);
     const handback = detail.handbacks[0] ?? null;
     const canFlip = !handheld && !!handback && handback.status === "done" && !handback.overruled && handback.outcome === "pass" && !deliverableLabel(item)?.startsWith("已纳入");
     // 停止在输入框右边（27 条，在跑时没字是停止方块）；页头只留「推翻」。
@@ -250,12 +306,13 @@ export function CardSession({ cardId, embedded = false, waiting }: { cardId: str
           <HeroButton variant="ghost" size="sm" isIconOnly aria-label={inSide ? "详情" : "结果"} title={inSide ? "详情" : "结果"} data-pressed={showPane || undefined} onPress={() => openDetails()} data-testid="session-details"><Info {...ICON} aria-hidden /></HeroButton>
           {chrome.trail}
         </header>
-        <div className={s.body} data-solo={preview && !handheld ? undefined : ""}>
+        <div className={s.body} data-solo={shownPreview && !side && !handheld ? undefined : ""}>
           {showPane && !inSide ? <div className={s.paneScroll}>{pane}</div> : chat}
-          {preview ? <FilePreview file={preview} onClose={closePreview} /> : null}
+          {side ? null : previewNode}
         </div>
         {starter}
         {side ? <SideContent side={side}><div className={s.page} data-embedded="" data-side="">{pane}</div></SideContent> : null}
+        {side ? <SideContent side={side} kind="file">{previewNode}</SideContent> : null}
       </div>
     );
   }
@@ -284,8 +341,8 @@ export function CardSession({ cardId, embedded = false, waiting }: { cardId: str
       ) : null}
       <div className={s.body} data-tab={handheld ? tab : undefined}>
         {chat}
-        {preview && !handheld ? null : pane}
-        {preview ? <FilePreview file={preview} onClose={closePreview} /> : null}
+        {shownPreview && !handheld ? null : pane}
+        {previewNode}
       </div>
       {starter}
     </div>
@@ -304,7 +361,7 @@ function CloudTimeline({ run, title }: { run: TLocalRunView | null; title: strin
   );
 }
 
-function ResultPane({ detail, session, view, canAct, wait, stage, handheld, ready, embedded, flipping, onFlipDone, onPreview, previewing, files, onFile, onStart, onControl, onResume, onChanged }: {
+function ResultPane({ detail, session, view, canAct, wait, stage, handheld, ready, embedded, flipping, onFlipDone, onPreview, previewing, files, onFile, onRestoreFiles, onStart, onControl, onResume, onChanged, editing, onEditing, onSaved }: {
   detail: CardDetail; session: TLocalSessionSummary | null; view: SessionView | null; canAct: boolean; wait: string | null; stage: string; handheld: boolean; ready: boolean;
   /** 新首页里：停止、推翻在页头（5.4.3），这里只留「继续」；不写订阅按标价折算的花费（11.2）。 */
   embedded: boolean;
@@ -314,12 +371,14 @@ function ResultPane({ detail, session, view, canAct, wait, stage, handheld, read
   onPreview: (file: PreviewFile) => void; previewing: string | null;
   /** 本会话改过的文件（这台电脑上才有），点了在右边看；不在了的不能点。 */
   files: readonly TLocalChangedFile[]; onFile: (path: string) => void;
+  /** 恢复文件（第 71 条）：paths 不给是全部。 */
+  onRestoreFiles: (paths?: string[]) => ReturnType<LocalRunner["restoreSessionFiles"]>;
   /** 新首页里没有常驻的「开始」（设计 9.8）：自动开工失败时由 Task 管线那一行出「手动开始」。 */
   onStart?: () => void; onControl: (action: "interrupt" | "kill") => Promise<unknown>; onResume: () => Promise<unknown>; onChanged: () => void;
+  /** 约定（交代、完成标准）在改（第 60 条）；存好以后 onSaved。 */
+  editing: boolean; onEditing: (editing: boolean) => void; onSaved: () => Promise<unknown>;
 }) {
   const item = detail.task;
-  // 「改动的文件 N」默认收起。
-  const [filesOpen, setFilesOpen] = useState(false);
   // 停止、继续没成：那排按钮后面写「失败 · 重试」（原因在 title 里），不弹 toast。
   const [failed, setFailed] = useState<{ retry: () => void; reason: string } | null>(null);
   const act = (action: () => Promise<unknown>) => { setFailed(null); action().catch((error: unknown) => setFailed({ retry: () => act(action), reason: error instanceof Error ? error.message : "" })); };
@@ -333,17 +392,18 @@ function ResultPane({ detail, session, view, canAct, wait, stage, handheld, read
   const status = view?.status ?? null;
   const live = status === "running" || status === "starting" || status === "waiting_permission";
   const paused = wait === "paused" || status === "idle";
-  const model = view ? null : item.card?.model?.label;
+  // 这台电脑上有会话时照它的摘要写「来源 · 模型 · 思考」（第 67 条），别处只有云端记的原文。
+  const model = view ? runLabel(session?.run) : item.card?.model?.label;
   // 在哪做：本机开工时说的（分支、从哪个提交开始、主文件夹没提交的改动没带进来），没收到时照会话摘要。
   const git = item.card?.handback?.git ?? null;
   const place = view?.place ?? (session?.workspace ? placeText(session.workspace) : git ? `分支 ${git.branch}` : null);
   return (
     <>
       <div className={s.brief}>
-        <p className={s.lab}>交代</p>
+        {editing ? null : <p className={s.lab}>交代</p>}
         {item.planTaskId ? <Link href={workHref(item.planTaskId)} className={s.link}>{item.mission?.title ? `${item.mission.title} › ` : ""}Task</Link> : null}
         {item.card?.criterion ? <div className={s.meta}><span className={s.crit}>{circled(item.card.criterion.index)}</span><span>{item.card.criterion.text}</span></div> : null}
-        {detail.brief ? <p className={s.text}>{detail.brief}</p> : null}
+        {detail.brief && !editing ? <p className={s.text}>{detail.brief}</p> : null}
         {agent && (role || model || run?.modelLabel) ? <div className={s.meta}>{role ? <span className={s.ex}><i>&gt;_</i>{role.name}</span> : null}<span>{model ?? run?.modelLabel}</span></div> : null}
         {view?.queuedBecause ? <div className={s.meta}><span>{view.queuedBecause}</span></div> : null}
         {place ? <div className={s.meta}><span>{place}</span></div> : null}
@@ -364,12 +424,8 @@ function ResultPane({ detail, session, view, canAct, wait, stage, handheld, read
         </div>
       ) : null}
 
-      {detail.standards.length ? (
-        <div className={s.sec}>
-          <p className={s.lab}>完成标准</p>
-          <ol className={s.goal}>{detail.standards.map((line, index) => <li key={index}>{line}</li>)}</ol>
-        </div>
-      ) : null}
+      <AgreementSection cardId={item.id} version={item.version} brief={detail.brief} standards={detail.standards} agreement={detail.agreement ?? null}
+        canEdit={agent && !detail.fallback && stage !== "done"} editing={editing} onEditing={onEditing} onSaved={onSaved} />
 
       {handback ? <Acceptance cardId={item.id} handback={handback} canOverrule={!handheld} deliverable={deliverableLabel(item)} onChanged={onChanged} flipping={flipping} onFlipDone={onFlipDone} hideFlip={embedded} /> : null}
       <MergeAction session={session} title={item.title} accepted={stage === "done"} onChanged={onChanged} />
@@ -399,16 +455,8 @@ function ResultPane({ detail, session, view, canAct, wait, stage, handheld, read
       ) : null}
 
       {files.length && session ? (
-        <div className={s.sec}>
-          <button type="button" className={s.filesHead} aria-expanded={filesOpen} onClick={() => setFilesOpen(!filesOpen)} data-testid="changed-files">
-            {filesOpen ? <ChevronDown {...ICON} /> : <ChevronRight {...ICON} />}改动的文件 {files.length}
-          </button>
-          {filesOpen ? files.map((file) => (file.exists
-            ? <button key={file.path} type="button" className={s.output} title={file.path} data-current={previewing === `local:${session.id}:${file.path}` ? "" : undefined} onClick={() => onFile(file.path)} data-testid="changed-file">
-              <span className={s.outTitle}>{file.path}</span>
-            </button>
-            : <div key={file.path} className={s.output} title={file.path} data-gone="" data-testid="changed-file"><span className={s.outTitle}>{file.path}</span></div>)) : null}
-        </div>
+        <ChangedFiles files={files} undo={session.undo} canRestore={!handheld && session.workspace?.kind !== "worktree" && !live} onRestore={onRestoreFiles}
+          current={previewing?.startsWith(`local:${session.id}:`) ? previewing.slice(`local:${session.id}:`.length).replace(/:(turn|session)$/, "") : null} onOpen={handheld ? undefined : onFile} />
       ) : null}
 
       {usage && usage.tokens && !embedded ? <p className={s.cost}>{usage.tokens.toLocaleString("zh-CN")} tokens{money(usage.cost) ? ` · ${money(usage.cost)}` : ""}</p> : null}
@@ -456,7 +504,12 @@ export function Acceptance({ cardId, handback, canOverrule, deliverable, onChang
   const head = handback.status === "queued" || handback.status === "running" ? "验收中"
     : handback.status === "failed" ? "验收失败"
     : handback.outcome === "pass" ? `验收过了 · ${handback.met}/${handback.total}${deliverable ? ` · ${deliverable}` : ""}`
+    : handback.passedWithGap ? `就到这里 · ${handback.met}/${handback.total} 条达到`
+    : handback.outcome === "needs_person" ? `等你补 · ${handback.met}/${handback.total} 条达到`
     : `未通过 · ${handback.met}/${handback.total} 条达到`;
+  // 没过、等你补的推翻就是「就到这里」（主循环第 62 条）：没达到的几条上面逐条列着，原因空着提交不了。
+  const flipLabel = handback.outcome === "pass" ? "推翻" : "就到这里";
+  const canSubmit = !!reason?.trim();
   const canFlip = canOverrule && handback.status === "done" && !handback.overruled && !(handback.outcome === "pass" && deliverable?.startsWith("已纳入"));
   return (
     <div className={s.sec} data-testid="acceptance">
@@ -477,15 +530,15 @@ export function Acceptance({ cardId, handback, canOverrule, deliverable, onChang
       {handback.overrule ? <p className={s.faint}>{handback.overrule.by.name} 推翻：{handback.overrule.reason}</p> : null}
       {handback.error ? <p className={s.faint}>{handback.error}</p> : null}
       {reason !== null ? (
-        <form className={s.reason} onSubmit={(event) => { event.preventDefault(); if (reason.trim()) void run(() => overrule(cardId, handback.id, reason.trim())); }}>
+        <form className={s.reason} onSubmit={(event) => { event.preventDefault(); if (canSubmit) void run(() => overrule(cardId, handback.id, reason.trim())); }}>
           <input autoFocus value={reason} maxLength={200} placeholder="原因" aria-label="推翻的原因" onChange={(event) => setReason(event.target.value)} />
-          <HeroButton variant="primary" size="sm" type="submit" isDisabled={busy || !reason.trim()}>{handback.outcome === "pass" ? "推翻" : "仍然通过"}</HeroButton>
+          <HeroButton variant="primary" size="sm" type="submit" isDisabled={busy || !canSubmit}>{flipLabel}</HeroButton>
           <HeroButton variant="ghost" size="sm" onPress={close}>取消</HeroButton>
           {failed && !busy ? <FailedLine inline {...failed} /> : null}
         </form>
       ) : (
         <div className={s.actions}>
-          {canFlip && !(hideFlip && handback.outcome === "pass") ? <HeroButton variant="ghost" size="sm" onPress={() => setReason("")}>{handback.outcome === "pass" ? "推翻" : "仍然通过"}</HeroButton> : null}
+          {canFlip && !(hideFlip && handback.outcome === "pass") ? <HeroButton variant="ghost" size="sm" onPress={() => setReason("")}>{flipLabel}</HeroButton> : null}
           {canOverrule && handback.status === "failed" ? <HeroButton variant="ghost" size="sm" isDisabled={busy} onPress={() => void run(() => retryAcceptance(cardId, handback.id))}>重新验收</HeroButton> : null}
           {failed && !busy ? <FailedLine inline {...failed} /> : null}
         </div>

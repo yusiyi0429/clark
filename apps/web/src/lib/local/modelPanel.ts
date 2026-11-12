@@ -8,7 +8,7 @@
  */
 import type { TLocalAgentKind, TLocalAgentStatus, TLocalEffort, TLocalModelProfile } from "@warmap/contracts";
 import type { UsageCell } from "@/lib/home/quota";
-import { HARNESS_NAME, effortText, pillSource, profileModel, profileSourceName } from "./runModel";
+import { HARNESS_NAME, effortText, modelLine, profileModel, profileSourceName } from "./runModel";
 
 export type PanelOption = { id: string; label: string; /** 右边淡色的一小段：剩余用量，或置灰的原因（状态词）。 */ note?: string | null; disabled?: boolean };
 export type PanelRowKey = "agent" | "source" | "model" | "effort";
@@ -36,6 +36,20 @@ export function sourceIdOf(profile: Pick<TLocalModelProfile, "source" | "agent" 
   if (profile.sourceId) return `source:${profile.sourceId}`;
   if (profile.source === "subscription") return SUBSCRIPTION[profile.agent].source;
   return profile.origin ? `${profile.origin.provider}${profile.origin.via ? `:${profile.origin.via}` : ""}` : `gateway:${profileSourceName(profile)}`;
+}
+
+/** 用到八成以上（剩 ≤20%）：模型胶囊旁边出一颗琥珀色的小圆环（第 73 条）。 */
+export const QUOTA_RING_LEFT = 20;
+
+/**
+ * 现在这个模型的来源剩多少（来源那一行右边那个数，同一套对法）：订阅按执行方对用量那一格的 id，别的按来源名。
+ * 读不到、或是钱（没有百分比）为 null。
+ */
+export function sourceQuota(models: readonly TLocalModelProfile[], modelId: string | null, cells: readonly UsageCell[]): UsageCell | null {
+  const current = models.find((model) => model.id === modelId);
+  if (!current) return null;
+  const cell = cells.find((entry) => (current.source === "subscription" ? entry.id === SUBSCRIPTION[current.agent].quota : entry.name === profileSourceName(current)));
+  return cell && cell.percent !== null ? cell : null;
 }
 
 /** 这个来源的默认模型：标了默认的那个，没有就第一个。 */
@@ -134,14 +148,9 @@ export function pickLocal(models: readonly TLocalModelProfile[], current: { mode
 }
 
 /**
- * 胶囊上写的：「模型名 · 思考档」；思考是自动时只写模型名。订阅没写模型的（内置那条，模型由本机按档位挑）写来源名（同派活单的写法）。
- * 给了默认来源（defaultSourceLabel，52 条）而这个不是：模型名后面多写来源，「Opus 5.5 · API · 最高」。
+ * 胶囊上写的（67 条）：「来源 · 模型 · 思考」，同 modelLine；思考是自动时不写。订阅没写模型的（内置那条，模型由本机按档位挑）只写来源名（同派活单的写法）。
  */
-export function panelLabel(model: Pick<TLocalModelProfile, "model" | "label" | "catalog" | "source" | "agent" | "efforts" | "modelName" | "origin">, effort: TLocalEffort | null, defaultSource?: string | null): string {
+export function panelLabel(model: Pick<TLocalModelProfile, "model" | "label" | "catalog" | "source" | "agent" | "efforts" | "modelName" | "origin">, effort: TLocalEffort | null): string {
   const bare = !model.catalog && !model.model && model.source === "subscription";
-  const name = bare ? profileSourceName(model) : profileModel(model);
-  const source = profileSourceName(model);
-  const extra = defaultSource !== undefined && !bare && source !== defaultSource ? pillSource(source) : null;
-  const level = keptEffort(model, effort);
-  return [name, extra, level ? effortText(level) : null].filter(Boolean).join(" · ");
+  return modelLine({ source: profileSourceName(model), model: bare ? null : profileModel(model), effort: keptEffort(model, effort) }) ?? profileModel(model);
 }

@@ -89,15 +89,15 @@ describe("选模型的四行（17.2 第 40、52 条）", () => {
     expect(rows.map((row) => [row.value, rowOpens(row)])).toEqual([["Claude Code", true], ["TokenHub", true], ["deepseek-v4.1-flash", false], ["自动", false]]);
   });
 
-  it("胶囊写「模型名 · 思考档」，思考是自动时只写模型名；订阅默认那个读不到模型名，写来源名", async () => {
+  it("胶囊写「来源 · 模型 · 思考」（67 条），思考是自动时不写；订阅默认那个读不到模型名，只写来源名；没有思考档的网关模型不写思考", async () => {
     const { models } = await panel("logged_in", "subscription");
     const of = (id: string) => models.find((model) => model.id === id)!;
-    expect(panelLabel(of("sub-haiku"), "high")).toBe("Haiku 5.5 · 高");
-    expect(panelLabel(of("sub-haiku"), null)).toBe("Haiku 5.5");
-    expect(panelLabel(of("cc-claude-fable-5-2"), "xhigh")).toBe("Fable 5.2 · 超高");
+    expect(panelLabel(of("sub-haiku"), "high")).toBe("Claude 订阅 · Haiku 5.5 · 高");
+    expect(panelLabel(of("sub-haiku"), null)).toBe("Claude 订阅 · Haiku 5.5");
+    expect(panelLabel(of("cc-claude-fable-5-2"), "xhigh")).toBe("Claude 订阅 · Fable 5.2 · 超高");
     expect(panelLabel(of("subscription"), null)).toBe("Claude 订阅");
-    expect(panelLabel(of("codex-gpt-6_1-sol"), "ultra")).toBe("GPT-6.1-Sol · 极限");
-    expect(panelLabel(of("tokenhub-deepseek"), "high")).toBe("deepseek-v4.1-flash");
+    expect(panelLabel(of("codex-gpt-6_1-sol"), "ultra")).toBe("Codex 订阅 · GPT-6.1-Sol · 极限");
+    expect(panelLabel(of("tokenhub-deepseek"), "high")).toBe("TokenHub · deepseek-v4.1-flash");
   });
 
   it("入口是胶囊：写给它的字，悬停是全称；没点开不画三行", async () => {

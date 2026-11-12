@@ -11,12 +11,19 @@ import { TOOL_SERVER_PREFIX } from "../customTools.js";
 export interface PathScope {
   cwd: string;
   home: string;
-  /** 本会话允许的范围：本人允许的文件夹，加上本会话的工作目录（工作目录所在的文件夹被移除后就不算）。 */
+  /** 本会话允许的范围：本人允许的文件夹，加上本会话的工作目录（工作目录所在的文件夹被移除后就不算）。写、删、挪按它。 */
   allowedRoots(): string[];
+  /** 只读的步骤（读文件、列目录、搜索，不写不删不挪的命令）按它算范围（11/11：只收紧写，读照旧放）；不给就和 allowedRoots 一样。 */
+  readRoots?(): string[];
   /** 本人在连接页加的工具（mcp__tool-…）里哪些是读的（预设的读工具名单）；不给就是都不算读。 */
   toolReads?(tool: string): boolean;
   /** 项目另外绑的文件夹（设计 17.2 第 46 条），每次现查：卡在工作树里做时，这些地方照「不在工作树里」的规矩放行（modeAllows）。 */
   extraDirs?(): string[];
+  /**
+   * 改、删、覆盖不会丢本人东西的地方（卡的 git 工作树、本机自己的专用目录），每次现查。给了才有「全部放行」的兜底规矩（noLossAsks）：
+   * 别处的已有文件要被删、挪、覆盖时照样问。不给就没有这条（只在单测里不给）。
+   */
+  covered?(path: string): boolean;
 }
 /** 本人加的工具：读的照权限模式放行，写的、认不出的哪一档都问。 */
 const isCustomTool = (tool: string) => tool.startsWith(`mcp__${TOOL_SERVER_PREFIX}`);
@@ -131,9 +138,14 @@ function shellCandidates(cmd: string, bash: boolean, patterns?: Set<string>): st
   return words.flatMap(argPaths);
 }
 
+/** 命令里像路径的词（尽力认，认不全）：改前拷一份时用（undo/）。 */
+export function commandPaths(cmd: string, bash: boolean): string[] {
+  return shellCandidates(cmd, bash);
+}
+
 /** 这一步要碰的、允许范围外的路径（原样，给人看）。 */
 export function outsidePaths(tool: string, input: Record<string, unknown>, scope: PathScope, hint?: unknown): string[] {
-  return collect(tool, input, scope, insideAny(scope.allowedRoots()), hint);
+  return collect(tool, input, scope, insideAny(rootsFor(tool, input, scope)), hint);
 }
 
 function collect(tool: string, input: Record<string, unknown>, scope: PathScope, inside: Inside, hint?: unknown): string[] {
@@ -150,6 +162,16 @@ function collect(tool: string, input: Record<string, unknown>, scope: PathScope,
     if (out.length >= MAX_PATHS) break;
   }
   return out;
+}
+
+/** 只读的工具。 */
+const READ_TOOLS = new Set(["Read", "Glob", "Grep", "LS"]);
+/** 这一步按哪个范围算：只读的（读的工具；不写不删不挪、不装不联网的命令）按 readRoots，别的按 allowedRoots。 */
+function rootsFor(tool: string, input: Record<string, unknown>, s: PathScope): string[] {
+  if (!s.readRoots) return s.allowedRoots();
+  const cmd = String(input.command ?? "");
+  const readOnly = READ_TOOLS.has(tool) || (SHELL_TOOLS.has(tool) && !WRITES.test(cmd) && !REWRITES.test(cmd) && !RISKY_COMMAND.test(cmd));
+  return readOnly ? s.readRoots() : s.allowedRoots();
 }
 
 /** 卡在自己的工作树里做时不用问就放行的读写工具（路径都在工作树里才放行）。 */
@@ -234,7 +256,7 @@ function touchesProtected(cmd: string): boolean {
 export function autoAllowed(tool: string, input: Record<string, unknown>, scope: PathScope, hint?: unknown): boolean {
   if (tool.startsWith("mcp__tianshu__")) return /^mcp__tianshu__(get|list)_/.test(tool);
   if (isCustomTool(tool)) return Boolean(scope.toolReads?.(tool));
-  const inside = insideAny(scope.allowedRoots());
+  const inside = insideAny(rootsFor(tool, input, scope));
   if (SHELL_TOOLS.has(tool)) {
     const cmd = input.command;
     return typeof cmd === "string" && !RISKY_COMMAND.test(cmd) && !larkWrites(cmd) && binsInstalled(cmd, [scope.cwd, ...scope.allowedRoots()])
@@ -263,7 +285,7 @@ function mustAsk(tool: string, input: Record<string, unknown>, scope: PathScope,
   } else if ((FILE_FIELDS[tool] ?? []).some((f) => typeof input[f] === "string" && PROTECTED.test(input[f] as string))) {
     return true;
   }
-  return collect(tool, input, scope, insideAny(scope.allowedRoots()), hint).length > 0;
+  return collect(tool, input, scope, insideAny(rootsFor(tool, input, scope)), hint).length > 0;
 }
 
 /** gh 只读的：看、列、查状态、搜（gh api 只发 GET、不带字段）。别的（pr create、pr merge、release create、issue comment、api 发 POST…）都算写。 */
@@ -315,8 +337,35 @@ function bypassAsks(tool: string, input: Record<string, unknown>): boolean {
   return /\bgit\b[^;&|\n]*\bpush\b/i.test(cmd) || ghWrites(cmd) || larkMessages(cmd);
 }
 
+/** 会冲掉已有文件的 git 子命令（WRITES 认不出的）。 */
+const GIT_REWRITES = /\bgit\b[^;&|\n]*\b(checkout|reset|clean|restore|stash|rm|mv|apply|switch|merge|rebase|pull|am|cherry-pick|revert)\b/i;
+/** 扔掉输出的重定向（> $null、2> nul、>/dev/null）不算写文件。 */
+const DISCARD = /\d?>\s*(\$null|nul|\/dev\/null)(?=[\s;|&)]|$)/gi;
+
 /**
- * 这一档下这一步能不能不问本人就放行（契约 LocalPermissionMode）。「全部放行」只问 bypassAsks 那三类；别的档还有硬规矩（mustAsk）。worktree：卡在自己的工作树里做时是工作树的根，
+ * 「全部放行」也照样问的第四类（11/11 本人定，兜底到位前的过渡规矩）：没有兜底的地方（scope.covered 以外），已有文件要被删、挪、覆盖。
+ * - 改文件的工具：Edit、MultiEdit、NotebookEdit 改的文件不在兜底里；Write 写的是已有文件、而且不在兜底里（新建不问）。
+ * - 命令：有写、删、挪（WRITES）、就地改（sed -i、perl -pi）、冲文件的 git 子命令，而工作目录或认出的路径里有一处不在兜底里
+ *   （按词认，认不全；认不出的变量路径按不在兜底里算）。脚本自己改文件认不出，要等快照兜底。
+ */
+function noLossAsks(tool: string, input: Record<string, unknown>, s: PathScope): boolean {
+  const covered = s.covered;
+  if (!covered) return false;
+  const uncovered: Inside = (p) => !covered(p);
+  const field = (FILE_FIELDS[tool] ?? []).find((f) => typeof input[f] === "string");
+  if (EDIT_TOOLS.has(tool) && field) {
+    const abs = resolve(s.cwd, input[field] as string);
+    return tool === "Write" && !existsSync(abs) ? false : uncovered(abs);
+  }
+  if (!SHELL_TOOLS.has(tool)) return false;
+  const cmd = String(input.command ?? "").replace(DISCARD, " ");
+  if (!WRITES.test(cmd) && !/\b(sed|perl)\b[^;&|\n]*\s-\w*i/i.test(cmd) && !GIT_REWRITES.test(cmd)) return false;
+  if (uncovered(s.cwd)) return true;
+  return shellCandidates(cmd, tool === "Bash").some((w) => isOutside(w, s, covered));
+}
+
+/**
+ * 这一档下这一步能不能不问本人就放行（契约 LocalPermissionMode）。「全部放行」只问 bypassAsks 那三类，加上没有兜底的删、挪、覆盖（noLossAsks）；别的档还有硬规矩（mustAsk）。worktree：卡在自己的工作树里做时是工作树的根，
  * 「自动」「自动接受改文件」只在工作树里自己放行；别的会话为 null，在允许的文件夹里放行，「自动」不在工作树时删、挪文件的命令照样问（没有 git 兜底）。
  * 卡在工作树里、项目另外还绑着文件夹（scope.extraDirs）：那些文件夹是本人真的文件夹，照「不在工作树里」的规矩放行，
  * 再严一点：命令里有 git、就地改文件的（REWRITES）也问——卡原来出了工作树什么都问，不能因为多绑了文件夹就能不问本人把那里没提交的改动冲掉。
@@ -324,16 +373,18 @@ function bypassAsks(tool: string, input: Record<string, unknown>): boolean {
 export function modeAllows(
   mode: "auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions", tool: string, input: Record<string, unknown>, scope: PathScope, hint: unknown, worktree: string | null,
 ): boolean {
-  if (mode === "bypassPermissions") return !bypassAsks(tool, input);
+  if (mode === "bypassPermissions") return !bypassAsks(tool, input) && !noLossAsks(tool, input, scope);
   if (mode === "default" || mode === "plan" || mustAsk(tool, input, scope, hint)) return false;
   const pass = (area: PathScope, ownTree: boolean) => mode === "acceptEdits"
     ? EDIT_TOOLS.has(tool) && !collect(tool, input, area, insideAny(area.allowedRoots()), hint).length
-    : autoAllowed(tool, input, area, hint) && (ownTree || !(SHELL_TOOLS.has(tool) && WRITES.test(String(input.command ?? ""))));
+    : autoAllowed(tool, input, area, hint) && (ownTree || !(SHELL_TOOLS.has(tool) && WRITES.test(String(input.command ?? "")))
+      // 删、挪、写的命令：碰的地方都有兜底（留了一份的文件夹，11/11 ADR 0039）也放行
+      || (Boolean(area.covered) && !noLossAsks(tool, input, area)));
   if (!worktree) return pass(scope, false);
-  if (pass({ ...scope, allowedRoots: () => [worktree] }, true)) return true;
+  if (pass({ ...scope, allowedRoots: () => [worktree], readRoots: undefined }, true)) return true;
   const extras = scope.extraDirs?.() ?? [];
   if (!extras.length || (SHELL_TOOLS.has(tool) && REWRITES.test(String(input.command ?? "")))) return false;
-  return pass({ ...scope, allowedRoots: () => [worktree, ...extras] }, false);
+  return pass({ ...scope, allowedRoots: () => [worktree, ...extras], readRoots: undefined }, false);
 }
 
 /** Claude Code 放行规则里的路径：//c/x 是绝对路径（Windows 是 C:\x），~/ 是主目录，/x 是项目根下，其余相对工作目录。 */

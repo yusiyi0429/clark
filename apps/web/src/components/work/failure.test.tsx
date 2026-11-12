@@ -19,4 +19,12 @@ describe("动作没成（5.4.1 交互状态表）", () => {
     expect(html).not.toContain("重试");
     expect(html).not.toContain("失败");
   });
+
+  it("登记「再改一轮」「我来补」的三种 409（主循环第 62 条）：各写一句现状，不给「重试」", () => {
+    const say = (code: string) => renderToStaticMarkup(<FailedLine {...failureOf(new CloudError(409, "x", code), vi.fn())} />);
+    expect(say("RELAY_PENDING")).toContain("已登记，等电脑在线");
+    expect(say("NOTHING_TO_RELAY")).toContain("这次交回已经处理过了");
+    expect(say("NOT_STARTED")).toContain("这张卡还没开过工");
+    expect(say("NOT_STARTED")).not.toContain("重试");
+  });
 });

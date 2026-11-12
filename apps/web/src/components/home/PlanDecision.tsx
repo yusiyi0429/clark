@@ -24,7 +24,8 @@ import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { planStep } from "@/lib/local/sessionView";
 import { useSessionEvents } from "@/lib/local/useSessionEvents";
 import type { TLocalModelProfile } from "@/lib/local/runner";
-import { HARNESS_NAME, effortText, pickLabel, profileModel, profileSource } from "@/lib/local/runModel";
+import { HARNESS_NAME, effortText, pickLabel, profileModel, profileSource, sourceName } from "@/lib/local/runModel";
+import { matchModelWords } from "@/lib/local/modelWords";
 import { acceptDrafts, acceptProjectDrafts, dismissDraft, readTaskBudget, type PlanTarget } from "@/lib/board/cloud";
 import { TIER_LABEL, draftRole, modelForTier, type CardRole, type RoleView } from "@/lib/team/roles";
 import { SLOT_CAP, startBatch, type StartPlan } from "@/lib/work/queue";
@@ -32,7 +33,7 @@ import { QUEUE_LABEL, liveSessions, type Worker } from "@/lib/work/workers";
 import type { SubSession } from "@/lib/home/types";
 import { ICON as STATE_ICON, StateIcon } from "./StateIcon";
 import { subIcon } from "./LeftColumn";
-import { queueText } from "@/lib/home/derive";
+import { subQueueText } from "@/lib/home/derive";
 import h from "@/styles/home.module.css";
 import x from "@/styles/decision-box.module.css";
 import { SourceWords } from "@/components/cards/SourceWords";
@@ -46,9 +47,25 @@ export function draftWorkerRole(draft: TCardDraftView): CardRole | null {
   return draftRole(draft) ?? (draft.executor === "self" ? null : { id: "", name: "Claude Code", kind: "worker" });
 }
 
-type Edit = { title?: string; role?: CardRole | null; modelId?: string; effort?: TLocalEffort; dropped?: boolean };
+export type Edit = { title?: string; role?: CardRole | null; modelId?: string; effort?: TLocalEffort; dropped?: boolean };
 /** 模型下拉里的「自动」：不单独选，按岗位的档位配（modelForTier）。 */
-const AUTO_MODEL = "auto";
+export const AUTO_MODEL = "auto";
+
+/** 本人改了一步（改名、换技能、换模型、换思考、去掉）：在这一步原来改过的上面叠。 */
+export const applyEdit = (edits: Record<string, Edit>, id: string, patch: Edit): Record<string, Edit> => ({ ...edits, [id]: { ...edits[id], ...patch } });
+/** 在模型下拉里选了一项：选「自动」记成没有模型（仍算本人改过）；原来的思考档新模型不支持就回到自动。 */
+export const modelPickPatch = (id: string, next: Pick<TLocalModelProfile, "efforts"> | null | undefined, kept: TLocalEffort | undefined): Edit =>
+  ({ modelId: id === AUTO_MODEL ? undefined : id, effort: kept && next?.efforts?.includes(kept) ? kept : undefined });
+/**
+ * 这一步用的模型、思考（第 69 条）：本人改过的以本人的为准（选回自动也算改过，不再被原话盖回去）；没改过照原话对上的；都没有是 undefined（自动）。
+ * 按草稿 id 记，派活单刷新（草稿是新对象）也不变。
+ */
+export function draftPick(edit: Edit | undefined, words: { modelId: string | null; effort: TLocalEffort | null } | null): { modelId: string | undefined; effort: TLocalEffort | undefined } {
+  return {
+    modelId: edit && "modelId" in edit ? edit.modelId : words?.modelId ?? undefined,
+    effort: edit && "effort" in edit ? edit.effort : words?.effort ?? undefined,
+  };
+}
 export const START_LABEL = "就按这个开始";
 
 /** 开工的模式（11.3）：自动（默认）· 设预算 · 无上限。 */
@@ -120,19 +137,28 @@ export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onC
   const workerRoles = useMemo(() => roles.filter((role) => role.kind === "worker"), [roles]);
   const kept = drafts.filter((draft) => !edits[draft.id]?.dropped);
   const used = liveSessions(local.sessions).length;
+  // 对话里说的模型要求（第 69 条）：每张卡带着它那一批的原话（再拆一次时同一张单里会有两批），各自和这台电脑连着的来源对；
+  // 对上了那一批的卡照它预选，对不上的在单子顶上按原话各写一行「没找到」、那一批用自动。
+  const saidKey = JSON.stringify([...new Set(drafts.map((draft) => draft.modelWords).filter((words): words is string => !!words))]);
+  const said = useMemo(() => new Map(local.models.length ? (JSON.parse(saidKey) as string[]).map((words) => [words, matchModelWords(words, local.models)] as const) : []),
+    [saidKey, local.models]);
+  const wordsOf = (draft: TCardDraftView) => { const found = draft.modelWords ? said.get(draft.modelWords) : undefined; return found?.matched ? found : null; };
+  /** 这一步的模型、思考（draftPick）。 */
+  const pickedModel = (draft: TCardDraftView) => draftPick(edits[draft.id], wordsOf(draft)).modelId;
+  const pickedEffort = (draft: TCardDraftView) => draftPick(edits[draft.id], wordsOf(draft)).effort;
   const roleOf = (draft: TCardDraftView) => { const edit = edits[draft.id]; return edit && "role" in edit ? edit.role ?? null : draftWorkerRole(draft); };
   const tierOf = (draft: TCardDraftView, role: CardRole | null) => roles.find((entry) => entry.id === role?.id)?.modelTier ?? draft.modelTier;
   const modelOf = (draft: TCardDraftView): TLocalModelProfile | null => {
     const role = roleOf(draft);
     if (!role) return null;
-    return local.models.find((model) => model.id === edits[draft.id]?.modelId) ?? modelForTier(local.models, tierOf(draft, role));
+    return local.models.find((model) => model.id === pickedModel(draft)) ?? modelForTier(local.models, tierOf(draft, role));
   };
   /** 这一步选的思考程度（36 条）：要在它的模型支持的几档里，不然算自动（null）。 */
   const effortOf = (draft: TCardDraftView, model: TLocalModelProfile | null): TLocalEffort | null => {
-    const picked = edits[draft.id]?.effort;
+    const picked = pickedEffort(draft);
     return picked && model?.efforts?.includes(picked) ? picked : null;
   };
-  const edit = (id: string, patch: Edit) => setEdits((current) => ({ ...current, [id]: { ...current[id], ...patch } }));
+  const edit = (id: string, patch: Edit) => setEdits((current) => applyEdit(current, id, patch));
   // 每一步会落到哪个来源的哪个模型（开工前问本机 previewRun）：按「模型配置 · 档位」记，同样的只问一次。
   const [previews, setPreviews] = useState<Record<string, { model: string | null; source: string | null; harness: TLocalAgentKind }>>({});
   const asked = useRef(new Set<string>());
@@ -158,7 +184,7 @@ export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onC
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 草稿、改过的岗位和模型变了才再问
   }, [ready, local.runner, local.models, drafts, edits, roles]);
   /**
-   * 胶囊上写的（用户定 A+B）：只写模型，自动时「自动 · 模型」，订阅读不到模型名写「Claude 订阅」；执行方和来源在悬停的全称里（见 pickLabel）。
+   * 胶囊上写的（67 条）：「来源 · 模型」，思考在旁边的胶囊；自动时前面加「自动 · 」，订阅读不到模型名只写来源；执行方在悬停里（见 pickLabel）。
    * 本机开工前算出来的（previewRun）优先；还没回（或老版本不报）时照模型配置写。
    */
   const modelText = (draft: TCardDraftView, model: TLocalModelProfile, role: CardRole, auto: boolean) => {
@@ -213,6 +239,9 @@ export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onC
   const gateway = sources.has("gateway");
   const steps = (
     <>
+    {[...said].filter(([, found]) => !found.matched).map(([words]) => (
+      <p key={words} className={h.stepSum} title={words} data-testid="model-words-missing">没找到「{words.length > 24 ? `${words.slice(0, 23)}…` : words}」</p>
+    ))}
     <ol className={h.steps}>
       {kept.map((draft, index) => {
         const role = roleOf(draft);
@@ -232,14 +261,13 @@ export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onC
                   options={[...workerRoles.map((entry) => ({ id: entry.id, label: entry.name })), { id: "self", label: "我自己" }]}
                   onPick={(id) => edit(draft.id, { role: id === "self" ? null : { id, name: workerRoles.find((entry) => entry.id === id)!.name, kind: "worker" }, modelId: undefined })} />
                 <button type="button" className={h.icon} aria-label={`去掉「${draft.title}」`} title="删除" onClick={() => edit(draft.id, { dropped: true })}><X {...ICON} /></button>
-              </> : role ? (local.models.length && model ? <ModelPick models={local.models} value={edits[draft.id]?.modelId ?? AUTO_MODEL}
-                  shown={modelText(draft, model, role, !edits[draft.id]?.modelId)}
+              </> : role ? (local.models.length && model ? <ModelPick models={local.models} value={pickedModel(draft) ?? AUTO_MODEL}
+                  shown={modelText(draft, model, role, !pickedModel(draft))}
                   auto={(() => { const fallback = modelForTier(local.models, tierOf(draft, role)); return fallback ? modelText(draft, fallback, role, false).label : null; })()}
                   onPick={(id) => {
                     // 换了模型：原来选的思考程度新模型不支持就回到自动。
                     const next = id === AUTO_MODEL ? modelForTier(local.models, tierOf(draft, role)) : local.models.find((entry) => entry.id === id);
-                    const kept = edits[draft.id]?.effort;
-                    edit(draft.id, { modelId: id === AUTO_MODEL ? undefined : id, effort: kept && next?.efforts?.includes(kept) ? kept : undefined });
+                    edit(draft.id, modelPickPatch(id, next, pickedEffort(draft)));
                   }} />
                 : <span className={h.chip}>{TIER_LABEL[tierOf(draft, role)]}</span>) : null}
               {role && model?.efforts?.length && !editing ? <Pick label={effortText(effortOf(draft, model))} value={effortOf(draft, model) ?? ""}
@@ -308,8 +336,8 @@ function ModelPick({ models, value, shown, auto, onPick }: {
             <Dropdown.Section key={group.agent} className={h.menuSection}>
               <Header className={h.menuHeader}>{HARNESS_NAME[group.agent]}</Header>
               {group.list.map((model) => (
-                <Dropdown.Item key={model.id} id={model.id} textValue={`${profileModel(model)} ${profileSource(model)}`} className={h.menuItem} data-testid="model-option">
-                  <span className={h.grow}>{profileModel(model)}<span className={h.menuFaint}> · {profileSource(model)}</span></span>{mark(model.id)}
+                <Dropdown.Item key={model.id} id={model.id} textValue={`${profileSource(model)} ${profileModel(model)}`} className={h.menuItem} data-testid="model-option">
+                  <span className={h.grow}><span className={h.menuFaint}>{sourceName(profileSource(model))} · </span>{profileModel(model)}</span>{mark(model.id)}
                 </Dropdown.Item>
               ))}
             </Dropdown.Section>
@@ -373,7 +401,7 @@ const WAIT_TEXT: Record<string, string> = { approval: "等你批准", question: 
 /** 事件行的阶段（5.6 状态词）。 */
 export function subStage(sub: SubSession): string {
   switch (sub.state) {
-    case "queued": return `已排队${sub.queueReason ? ` · ${queueText(sub.queueReason, sub.holdUntil)}` : ""}`;
+    case "queued": return subQueueText(sub)!;
     // 停下了、没在问你：「已停下」（契约 aa6aba9e）；第一次验收没过是进行中的「重做中」（5.4.2），不是失败。
     case "waiting": return sub.waiting ? WAIT_TEXT[sub.waiting] ?? "等你" : "已停下";
     case "done": return "已完成";

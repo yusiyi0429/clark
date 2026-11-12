@@ -8,7 +8,7 @@ import type {
   TLocalPermissionDecisionRequest, TLocalQuestionAnswerRequest, TLocalRunnerErrorCode, TLocalSendMessageRequest, TLocalSendMessageResponse, TLocalSessionDetailResponse,
   TLocalSessionEvent, TLocalSessionDraft, TLocalSessionSummary, TLocalSettings, TLocalSettingsPatch, TLocalStatusResponse, TLocalBudgetUpdateRequest, TLocalTaskBudgetView, TLocalAttachmentRef,
   TLocalFolderCreateRequest, TLocalFolderCreateResponse, TLocalFolderPickRequest, TLocalFolderPickResponse, TLocalSessionModelRequest, TLocalSessionModelResponse,
-  TLocalSessionFileReadRequest, TLocalSessionFileReadResponse, TLocalSessionFilesResponse,
+  TLocalSessionFileReadRequest, TLocalSessionFileReadResponse, TLocalSessionFilesResponse, TLocalSessionRestoreRequest, TLocalSessionRestoreResponse, TLocalFileChangesRequest, TLocalFileChangesResponse, TLocalFileChangesRestoreRequest, TLocalFileChangesRestoreResponse,
   TLocalHandoverCheck, TLocalProjectCloneRequest, TLocalProjectCloneResponse, TLocalProjectFolder, TLocalProjectFolderRequest, TLocalPermissionMode, TLocalRun, TLocalRunPreviewRequest,
   TLocalSourceListResponse, TLocalSourceCheckRequest, TLocalSourceCheckResponse, TLocalSourceAddRequest, TLocalSourceAddResponse,
 } from "@warmap/contracts";
@@ -23,6 +23,9 @@ export type {
 export class LocalRunnerError extends Error {
   constructor(readonly code: TLocalRunnerErrorCode | "network", message: string, readonly status = 0) { super(message); }
 }
+
+/** 恢复一处时文件又变了（revision 对不上，第 72 条）。 */
+export const fileChanged = (error: unknown) => error instanceof LocalRunnerError && error.code === "file_changed";
 
 export type EventWatch = {
   /** 从这个序号之后补发（断线重连时带上收到的最后一个）。 */
@@ -43,11 +46,17 @@ export type EventWatch = {
  * 老版本（protocol 1）的发话请求是 strict，带了整个请求回 400：不带、不先画，和原来一样。
  */
 export const acceptsClientMessageId = (health: Pick<TLocalHealthResponse, "protocol">): boolean => health.protocol >= 2;
+/** 本机程序收不收自由子会话（第 68 条，开工请求带 free）：protocol ≥ 4。老版本开工请求是 strict，带了整个 400。 */
+export const acceptsFreeSession = (health: Pick<TLocalHealthResponse, "protocol">): boolean => health.protocol >= 4;
+/** 本机程序收不收转话带的 agreementRevision（主循环第 60 条，卡的约定改了）：protocol ≥ 3；老版本带了整句 400，不带。 */
+export const acceptsAgreementRevision = (health: Pick<TLocalHealthResponse, "protocol">): boolean => health.protocol >= 3;
 
 export interface LocalRunner {
   readonly kind: "http" | "mock";
   /** 见 acceptsClientMessageId：读过 health 以后才知道；没读过当不收。 */
   readonly clientMessageIds?: boolean;
+  /** 见 acceptsFreeSession：读过 health 以后才知道；没读过当不收。 */
+  readonly freeSessions?: boolean;
   health(): Promise<TLocalHealthResponse>;
   startPairing(clientLabel: string): Promise<TLocalPairingStartResponse>;
   pairingStatus(pairingId: string): Promise<TLocalPairingStatusResponse>;
@@ -90,7 +99,8 @@ export interface LocalRunner {
   /** 说一句；kind=review 是专题开评审会（text 可不填）。 */
   /** attachments：云端存好的子会话附件（14.5），本机按 id 取回；只带附件时 text 可以是空的。 */
   /** messageId：网页给的这句话的编号（只在 clientMessageIds 时带）；没发成用同一个编号重发，本机按它去重。 */
-  sendMessage(id: string, text: string, kind?: TLocalSendMessageRequest["kind"], attachments?: TLocalAttachmentRef[], messageId?: string): Promise<TLocalSendMessageResponse>;
+  /** agreementRevision：云端登记的「约定改了」那句转话带的版本号，本机 protocol ≥ 3 才放进请求（见 acceptsAgreementRevision）。 */
+  sendMessage(id: string, text: string, kind?: TLocalSendMessageRequest["kind"], attachments?: TLocalAttachmentRef[], messageId?: string, agreementRevision?: number): Promise<TLocalSendMessageResponse>;
   interrupt(id: string): Promise<TLocalSessionSummary>;
   /** 换这个子会话的权限模式（跑着也能换，下一步就按新的来）；执行方没有这一档 400、会话已结束 409。 */
   setPermissionMode(id: string, mode: TLocalPermissionMode): Promise<TLocalSessionSummary>;
@@ -100,6 +110,12 @@ export interface LocalRunner {
   listSessionFiles(id: string): Promise<TLocalSessionFilesResponse>;
   /** 读本会话文件夹或工作树里的一个文件，在右边预览；在外面的 403，没有的 404。 */
   readSessionFile(id: string, body: TLocalSessionFileReadRequest): Promise<TLocalSessionFileReadResponse>;
+  /** 把本会话动过的文件恢复到它第一次动之前（第 71 条）；paths 不给是全部。一轮正在跑、卡在工作树里做的 409。 */
+  restoreSessionFiles(id: string, body: TLocalSessionRestoreRequest): Promise<TLocalSessionRestoreResponse>;
+  /** 读一个文件的改动（第 72 条）：某一轮（turn，不给轮号是最近做完的一轮）或开工到现在（session）；工作树里的会话只有 session。 */
+  readFileChanges(id: string, body: TLocalFileChangesRequest): Promise<TLocalFileChangesResponse>;
+  /** 恢复其中几处（第 72 条），回新的读结果：一轮正在跑 409 conflict；revision 对不上见 fileChanged。 */
+  restoreFileChanges(id: string, body: TLocalFileChangesRestoreRequest): Promise<TLocalFileChangesRestoreResponse>;
   kill(id: string): Promise<TLocalSessionSummary>;
   decidePermission(id: string, requestId: string, body: TLocalPermissionDecisionRequest): Promise<TLocalSessionSummary>;
   /** 把卡的分支合回主文件夹（本人点了才合）；合不了回原因和文件，卡不在工作树、还在跑、交回后又改过、已合过是 409。 */

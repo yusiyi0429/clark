@@ -122,14 +122,17 @@ function startTurn(text) {
   askWrite();
 }
 function askWrite() {
-  const file = cfg.writePath ?? "hello.txt";
-  out({ type: "assistant", message: { content: [{ type: "tool_use", id: `toolu_w${turns}`, name: "Write", input: { file_path: file, content: "你好" } }] }, parent_tool_use_id: null });
+  // readPath：要读这个文件（测只读的步骤按哪个范围算）
+  const file = cfg.readPath ?? cfg.writePath ?? "hello.txt";
+  const tool = cfg.readPath ? "Read" : "Write";
+  const input = cfg.readPath ? { file_path: file } : { file_path: file, content: "你好" };
+  out({ type: "assistant", message: { content: [{ type: "tool_use", id: `toolu_w${turns}`, name: tool, input }] }, parent_tool_use_id: null });
   const permId = `perm-${turns}`;
   turn = { permId };
   const suggestions = cfg.suggestions ?? [{ type: "setMode", mode: "acceptEdits", destination: "session" }];
   // cfg.bash（{ command, description }）：要的是跑一条命令的权限，入参带执行方写的那句 description（批准说人话，主循环第 64 条）
-  const [tool, input] = cfg.bash ? ["Bash", cfg.bash] : ["Write", { file_path: file, content: "你好" }];
-  out({ type: "control_request", request_id: permId, request: { subtype: "can_use_tool", tool_name: tool, input, permission_suggestions: suggestions, tool_use_id: `toolu_w${turns}` } });
+  const [askTool, askInput] = cfg.bash ? ["Bash", cfg.bash] : [tool, input];
+  out({ type: "control_request", request_id: permId, request: { subtype: "can_use_tool", tool_name: askTool, input: askInput, permission_suggestions: suggestions, tool_use_id: `toolu_w${turns}` } });
 }
 
 // 只读会话（规划员、验收员）：和真 Claude Code 一样，--disallowedTools 里的 Write 根本不在工具里，不会来要写文件的权限。
@@ -365,7 +368,7 @@ rl.on("line", (line) => {
       // 批了以后这一轮里才报额度变化（跑着的卡途中碰到）：现读配置
       const late = readCfg().rateInfoOnAllow;
       if (late) out({ type: "rate_limit_event", rate_limit_info: late });
-      if (!cfg.writePath) writeFileSync("hello.txt", "你好");
+      if (!cfg.writePath && !cfg.readPath) writeFileSync("hello.txt", "你好");
       out({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: `toolu_w${turns}`, content: "File created successfully" }] }, parent_tool_use_id: null });
       out({ type: "assistant", message: { content: [{ type: "text", text: r.updatedPermissions ? "写好了（本会话都允许）" : "写好了" }] }, parent_tool_use_id: null });
       finish(true, "写好了");

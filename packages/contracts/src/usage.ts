@@ -94,6 +94,39 @@ export const UsageResponse = Type.Object({
 }, { additionalProperties: false });
 export const UsageQuery = Type.Object({ week: Type.Optional(Day) }, { additionalProperties: false });
 
+/**
+ * 使用计数（设计第 70 条）：每人每周只计数，不记内容，都从现有的表现算（不另存）。一周是周一到周日（北京时间）。
+ * - buddyTurns / projectTurns：伙伴对话、项目对话的轮数（走 Chat 的按 Chat 报来源和模型的那一轮记，项目对话在本机跑的按本机报的那一轮）。
+ * - plans：派活单。started 开工（这一周有草稿放进看板的派活单数）、revised 改过（规划员按本人的话又出了一次，这一周出的、出了不止一次的派活单数）、
+ *   dropped 不做（这一周有草稿被点了「不要」的派活单数）。
+ * - cards：卡。started 开工（这一周第一次在本机开起来的卡）、handedBack 交回、passed 过、failed 没过、blocked 受阻（这一次没过让连续没过到 2）、
+ *   needsPerson 等你补、closedWithGap 就到这里——后五样按这一周出结论（就到这里按推翻）的交回次数。
+ * - bypassSessions：这一周有动静、权限模式是「全部放行」的本机会话数（只看本机最后报的模式）。
+ * - activeDays：这一周有几天用过天枢（登录后的任何请求，一人一天记一次）。
+ * 批准（批准 / 换个做法 / 作废）和恢复文件的次数只在本机，云端没有记录，不列（见 notCounted）。
+ */
+export const WorkCountRow = Type.Object({
+  personId: Type.String({ minLength: 1 }),
+  name: Type.String(),
+  buddyTurns: Count,
+  projectTurns: Count,
+  plans: Type.Object({ started: Count, revised: Count, dropped: Count }, { additionalProperties: false }),
+  cards: Type.Object({ started: Count, handedBack: Count, passed: Count, failed: Count, blocked: Count, needsPerson: Count, closedWithGap: Count },
+    { additionalProperties: false }),
+  bypassSessions: Count,
+  activeDays: Type.Integer({ minimum: 0, maximum: 7 }),
+}, { additionalProperties: false });
+/**
+ * GET /api/admin/work-counts?week=YYYY-MM-DD（只有管理员，别人 404）：week 是周一（北京时间），不带是本周（到现在为止）；不是周一 400 INVALID_WEEK。
+ * rows 是管理员视图里的人（同使用周报），按名字排，一个都没用过的也列（全是 0）。notCounted 是云端数不出来的几样，给人看的一句一样。
+ */
+export const WorkCountsResponse = Type.Object({
+  weekStart: Day,
+  weekEnd: Day,
+  rows: Type.Array(WorkCountRow),
+  notCounted: Type.Array(Type.String()),
+}, { additionalProperties: false });
+
 /** 上手走到的一步（界面打开这一步时报一次）；步骤名与上手流程一致。 */
 export const OnboardingStepName = Type.Union([
   Type.Literal("buddy"), Type.Literal("hello"), Type.Literal("tour-notifications"), Type.Literal("tour-board"), Type.Literal("mission-flow"), Type.Literal("work"),
@@ -103,6 +136,8 @@ export const OnboardingStepName = Type.Union([
 export const OnboardingStepUsageRequest = Type.Object({ step: OnboardingStepName }, { additionalProperties: false });
 
 export type TUsageSummary = Static<typeof UsageSummary>;
+export type TWorkCountRow = Static<typeof WorkCountRow>;
+export type TWorkCountsResponse = Static<typeof WorkCountsResponse>;
 export type TUsagePersonRow = Static<typeof UsagePersonRow>;
 export type TUsageBreak = Static<typeof UsageBreak>;
 export type TUsageStep = Static<typeof UsageStep>;

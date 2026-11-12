@@ -19,19 +19,33 @@ export function matchChangedFile(files: readonly TLocalChangedFile[], mention: s
 }
 
 const WRITE_STEP = /^(改文件|写文件|改|写) /;
-/** 什么时候重读一次清单：会话的状态变了，或又做完一步改文件、写文件（不跟着每个事件读，本机那边要跑 git）。 */
+/**
+ * 什么时候重读一次清单：会话的状态变了，或又做完一步改文件、写文件（不跟着每个事件读，本机那边要跑 git），
+ * 或来了一轮末尾的 files_changed（第 72 条：它比 turn_end 晚到一两秒，要等那一轮的快照留完，变空闲时读的清单还没有这一轮）。
+ */
 export function filesSignal(status: string | null, entries: readonly SessionEntry[]): string {
-  return `${status ?? ""}|${entries.filter((entry) => entry.kind === "step" && entry.done && WRITE_STEP.test(entry.title)).length}`;
+  return `${status ?? ""}|${entries.filter((entry) => entry.kind === "step" && entry.done && WRITE_STEP.test(entry.title)).length}|${entries.filter((entry) => entry.kind === "files").length}`;
 }
+
+/** 恢复了文件（第 71、72 条）以后叫一声：在看这个会话的清单都重读一次（右栏「改动的文件」、对话里那一行的「已恢复」）。 */
+const restoredBus = typeof EventTarget === "undefined" ? null : new EventTarget();
+export const filesRestored = (sessionId: string) => { restoredBus?.dispatchEvent(new Event(sessionId)); };
 
 export function useSessionFiles(runner: Pick<LocalRunner, "listSessionFiles">, sessionId: string | null, signal: string): TLocalChangedFile[] {
   const [files, setFiles] = useState<TLocalChangedFile[]>([]);
+  const [restored, setRestored] = useState(0);
+  useEffect(() => {
+    if (!sessionId || !restoredBus) return;
+    const bump = () => setRestored((n) => n + 1);
+    restoredBus.addEventListener(sessionId, bump);
+    return () => restoredBus.removeEventListener(sessionId, bump);
+  }, [sessionId]);
   useEffect(() => {
     if (!sessionId) { setFiles([]); return; }
     let alive = true;
     // 读不到（老版本、还没实现、断线）留着上一次的；第一次就读不到就是空的。
     void runner.listSessionFiles(sessionId).then((data) => { if (alive) setFiles(data.files); }, () => undefined);
     return () => { alive = false; };
-  }, [runner, sessionId, signal]);
+  }, [runner, sessionId, signal, restored]);
   return files;
 }

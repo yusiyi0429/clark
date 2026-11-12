@@ -2,7 +2,7 @@
 
 /**
  * 左栏最底下的本人一行和个人菜单（新首页设计 9.4、5.4.2「本人行」、5.4.6「个人菜单」）：
- * - 这一行：头像 24 + 名字；连接要处理时（本机离线、额度用完、飞书授权失效）名字后面一个 6px 琥珀点。整行就是菜单的开关。
+ * - 这一行：头像 24 + 名字，整行就是菜单的开关；行尾一个 6px 的点只管这台电脑（第 73 条）：就绪时淡，有一项不对时琥珀色，点了去连接页。手机上不画。
  * - 菜单从这一行向上弹出：头像和资料 · 伙伴 · 连接和技能 · 我的记忆 · 偏好 ·
  *   管理模式 / 工作模式（CEO，17.2 第 45 条：一组两项，现在这个打勾，点另一个切过去）· 管理员（管理员）· 锁屏 · 退出登录；
  *   最后一行淡色版本号。菜单项不放图标；键盘交给 HeroUI 的菜单。
@@ -29,11 +29,11 @@ type Extra = { switchView: boolean; admin: boolean };
 export const isLockKey = (event: Pick<KeyboardEvent, "code" | "ctrlKey" | "metaKey" | "shiftKey" | "altKey" | "isComposing">) =>
   !event.isComposing && event.shiftKey && !event.altKey && (event.ctrlKey !== event.metaKey) && event.code === "KeyL";
 
-export function PersonRow({ account, view, alert, go }: {
+export function PersonRow({ account, view, machine = null, go }: {
   account: Account;
   view: View;
-  /** 连接要处理（本机离线、额度用完、飞书授权失效）。 */
-  alert: boolean;
+  /** 这台电脑：alert 有一项不对，word 是状态词（「就绪」「离线」…，悬停写）；手机上不给。 */
+  machine?: { alert: boolean; word: string } | null;
   go: (href: string) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -83,7 +83,6 @@ export function PersonRow({ account, view, alert, go }: {
         <Dropdown.Trigger className={h.meRow} aria-label={`${account.displayName}，打开个人菜单`} data-current={open || current ? "" : undefined} data-testid="person-row">
           <PersonAvatar personId={account.personId} className={h.meAvatar}>{avatarInitial(account.displayName)}</PersonAvatar>
           <span className={h.meName}>{account.displayName}</span>
-          {alert ? <i className={h.warnDot} aria-label="连接要处理" role="img" /> : null}
         </Dropdown.Trigger>
         <Dropdown.Popover placement="top start" offset={8} className={h.pop}>
           <Dropdown.Menu aria-label="个人菜单" className={h.menuList} onAction={(key) => act(String(key))}>
@@ -112,6 +111,10 @@ export function PersonRow({ account, view, alert, go }: {
           {version ? <p className={h.menuVersion}>{version}</p> : null}
         </Dropdown.Popover>
       </Dropdown>
+      {machine ? (
+        <button type="button" className={h.meDot} data-alert={machine.alert ? "" : undefined} aria-label={`这台电脑 · ${machine.word}`} title={`这台电脑 · ${machine.word}`}
+          onClick={() => go(pageHref("connections"))} data-testid="machine-dot"><i aria-hidden /></button>
+      ) : null}
     </div>
   );
 }

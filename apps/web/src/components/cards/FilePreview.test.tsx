@@ -132,9 +132,11 @@ describe("右边看文件（41 条）", () => {
     expect(matchChangedFile(files, "pnpm test")).toBeNull();
     // 什么时候重读清单：状态变了，或又做完一步改文件、写文件；读文件、跑命令不算。
     const step = (seq: number, title: string, done = true): SessionEntry => ({ kind: "step", seq, at, toolUseId: `t${seq}`, title, done, isError: false });
-    expect(filesSignal("running", [step(1, "读文件 a.ts"), step(2, "运行 pnpm test")])).toBe("running|0");
-    expect(filesSignal("running", [step(1, "改文件 a.ts"), step(2, "写 交回说明.md"), step(3, "写文件 b.ts", false)])).toBe("running|2");
-    expect(filesSignal("idle", [])).toBe("idle|0");
+    expect(filesSignal("running", [step(1, "读文件 a.ts"), step(2, "运行 pnpm test")])).toBe("running|0|0");
+    expect(filesSignal("running", [step(1, "改文件 a.ts"), step(2, "写 交回说明.md"), step(3, "写文件 b.ts", false)])).toBe("running|2|0");
+    expect(filesSignal("idle", [])).toBe("idle|0|0");
+    // 一轮末尾的 files_changed 比变空闲晚到（第 72 条）：来了再读一次。
+    expect(filesSignal("idle", [{ kind: "files", seq: 9, at, turn: 1, files: [], more: 0 }])).toBe("idle|0|1");
   });
 
   it("顶上文件名、大小和关闭；不用读的直接是「打开」；要读的读到之前不出「打开」", () => {

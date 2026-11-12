@@ -4,7 +4,8 @@
  * 新首页 /me/work（新首页_伙伴总管线与Task管线_2026-11-07，替换 V2 设计第 20.4 节的三栏首页），按人打开：
  * - 左：四个锚点——伙伴台（总管线）、「今天」行（首页）、Mission → Task → 子会话、本人行（个人菜单），见 LeftColumn。
  * - 中：展示区——首页、总管线、Task 管线、Task 详情、子会话、二级页、月份页（地址决定，见 view.ts）。
- * - 右：资源和后台任务，跟着展示区走，可以收成细条；左边缘能拖宽。子会话、议题会话、项目对话页头的信息按钮在这里打开会话详情（SideDetail），不换掉对话。
+ * - 右：平时没有（第 73 条）。要看时出一个面板，同一时间只放一样：会话详情（页头的信息按钮）、文件预览（含「改动」）、后台任务（页头右上角的按钮）；
+ *   再开一样就替掉前一样，关掉就完全没有；左边缘能拖宽。放大时面板占满中间和右边。
  * 手机：首屏兼首页（伙伴台、今天、等你、树、本人），点进去全屏；后台任务从「今天」行和页头的按钮打开，是底部抽屉。
  * 深色按「偏好 · 外观」（跟随系统 / 浅色 / 深色，17.2）：外壳带 data-scheme="auto"，深色变量挂在根上（app/scheme-dark.css）；
  * 外观存在服务端，进首页、切回这个标签页时读一次（useAppearance）。伙伴不飞走，一直在台上（设计 9.2）。
@@ -27,18 +28,19 @@ import { WorkspaceContext, type WorkspaceApi } from "@/components/shell/Workspac
 import { LocalRunnerProvider, useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { planStartRequest, readLast, startTopic } from "@/lib/local/start";
 import { useAutoReturn } from "@/lib/board/useAutoReturn";
-import { cancelStart, claimStarts, listSplits, markWorkSeen, planKey, registerPlan, releaseStart, removeSplit, routeMessage, type PlanTarget } from "@/lib/board/cloud";
+import { cancelStart, claimStarts, createTopic, listSplits, markWorkSeen, planKey, registerPlan, releaseStart, removeSplit, routeMessage, type PlanTarget } from "@/lib/board/cloud";
 import { dateGate, gateOf, gateText } from "@/components/board/MonthLanes";
 import { showWorkspaceToast } from "@/lib/toast";
 import { modelForTier } from "@/lib/team/roles";
 import { startBatch, type StartPlan } from "@/lib/work/queue";
 import type { Worker } from "@/lib/work/workers";
-import { HOME_HREF, buddyTargetHref, emptyMonth, goalDueDate, monthLabel, routeText, todayLabel } from "@/lib/home/derive";
+import { HOME_HREF, buddyTargetHref, emptyMonth, goalDueDate, monthLabel, routeText, subQueueText, todayLabel, topicHref } from "@/lib/home/derive";
+import { NewSubView } from "./NewSub";
 import { HeroButton } from "@/components/HeroButton";
 import type { BackgroundItem, RouteTarget } from "@/lib/home/types";
 import { useBackground } from "@/lib/home/useBackground";
 import { useWorkHome } from "@/lib/home/useWorkHome";
-import { BackgroundPanel, BackgroundStrip, BackgroundTasks, useMachine } from "./BackgroundPanel";
+import { BackgroundPanel, BackgroundTasks, useMachine } from "./BackgroundPanel";
 import { BuddyView, PipelineView, type Outbox, type OutboxEntry } from "./Conversations";
 import { HomeComposer, HomeView, WaitingList, type SendTarget } from "./HomeView";
 import { LeftColumn, SubLetter, subKey, subLetters, type RowActions } from "./LeftColumn";
@@ -46,11 +48,11 @@ import { ForeignTaskInfo, TaskInfo } from "./TaskInfo";
 import { MissionInfo } from "./MissionInfo";
 import { ProjectInfo } from "./ProjectInfo";
 import { ProjectTrail } from "./ProjectParts";
-import { LeftResize, RightResize, useLeftWidth, useRightWidth } from "./LeftResize";
-import { SideDetailContext, type SideDetail } from "./SideDetail";
+import { LeftResize, RightResize, useFileWidth, useLeftWidth, useRightWidth } from "./LeftResize";
+import { SideDetailContext, type PanelKind, type SideDetail } from "./SideDetail";
 import { seenKey, withSeen, type SeenKind, type SeenMarks } from "@/lib/home/seen";
 import { seenSequence } from "@/lib/home/transfer";
-import { projectIdOf, startFolder } from "@/lib/home/startFolder";
+import { claimTopic, projectIdOf, startFolder } from "@/lib/home/startFolder";
 import { FolderAsk } from "./FolderAsk";
 import { TransferFlow, TransferView } from "./Transfer";
 import type { TimedBlock } from "@/components/work/WorkTimeline";
@@ -72,7 +74,6 @@ import { useSessionCommands } from "@/lib/buddy/sessionCommands";
 /** 要开的规划员：拆哪个，登记的 id 和存下的原话（登记回去时用）。 */
 type PlanJob = PlanTarget & { splitId?: string; sourceWords?: string[] };
 
-const PANEL_KEY = "tianshu-home-panel-v1";
 /** 伙伴这一轮调了「登记拆卡」（useConversation 发出）。 */
 const SPLIT_EVENT = "card-split-registered";
 /** 认领到了开不起来、放回去以后，隔一会再认领；树上一直挂着要开工的，也隔一会再看一次（别处认领了又没开、过期了）。 */
@@ -102,7 +103,6 @@ function HomeFrame({ account }: { account: Account }) {
   // 进门的那一下（19.4）：从登录页进来（?_entry=unlock）整页淡入；平时直接打开不淡入。
   const entering = useHomeArrival();
   const { data, work } = api;
-  const [panelOpen, setPanelOpen] = useState(true);
   const [sheet, setSheet] = useState(false);
   // 抽屉收起有 160ms 的出场（5.7），放完再拿掉。
   const [sheetClosing, setSheetClosing] = useState(false);
@@ -118,19 +118,19 @@ function HomeFrame({ account }: { account: Account }) {
   const [monthHead, setMonthHead] = useState<MonthHead | null>(null);
   const outboxId = useRef(0);
 
-  // 右栏：记住本人上次开没开；没记过时 1280 以下默认收起。
-  useEffect(() => {
-    try { const saved = localStorage.getItem(PANEL_KEY); setPanelOpen(saved ? saved === "open" : window.innerWidth >= 1280); } catch { setPanelOpen(window.innerWidth >= 1280); }
-  }, []);
-  const togglePanel = (open: boolean) => { setPanelOpen(open); try { localStorage.setItem(PANEL_KEY, open ? "open" : "closed"); } catch { /* 下次按宽度 */ } };
-  // 右栏里的会话详情（SideDetail）：开着时换着看别的子会话、项目也接着看那一个的详情；到了没有详情的页面右栏照旧。
-  // 收成细条时打开详情也展开右栏，关掉详情回到原来的样子。
-  const [sideWanted, setSideWanted] = useState(false);
+  // 右边的面板位（第 73 条）：平时没有；详情、文件、后台任务同一时间只放一样，再开一样就替掉前一样，关掉就完全没有。
+  // 详情跟着展示区走（换着看别的子会话、项目接着看那一个的详情，到了没有详情的页面就收起）；文件是那一页自己的，换页就关；后台任务一直跟着。
+  const [shown, setShown] = useState<PanelKind | null>(null);
+  const [wide, setWide] = useState(false);
   const [sideNode, setSideNode] = useState<HTMLElement | null>(null);
-  const sideView = !handheld && (view.kind === "card" || view.kind === "topic" || view.kind === "project");
-  const sideOpen = sideWanted && sideView;
-  const side = useMemo<SideDetail | null>(() => (sideView ? { open: sideOpen, node: sideOpen ? sideNode : null, toggle: (open) => setSideWanted((current) => open ?? !current) } : null),
-    [sideView, sideOpen, sideNode]);
+  const sideView = view.kind === "card" || view.kind === "topic" || view.kind === "project";
+  const slot = handheld || (shown === "detail" && !sideView) ? null : shown;
+  const show = useCallback((kind: PanelKind | null) => { setShown(kind); setWide(false); }, []);
+  useEffect(() => { setShown((current) => (current === "file" ? null : current)); setWide(false); }, [pathname]);
+  const side = useMemo<SideDetail | null>(() => (handheld ? null : {
+    open: slot === "detail", node: slot === "detail" || slot === "file" ? sideNode : null, shown: slot, show, wide: slot === "file" && wide, setWide,
+    toggle: (open) => { const next = open ?? slot !== "detail"; if (next) show("detail"); else if (slot === "detail") show(null); },
+  }), [handheld, slot, sideNode, show, wide]);
   useEffect(() => { setSheet(false); }, [pathname]);
   // 换了展示区的内容：焦点落到页头上（5.2 交互状态）。新内容自己抢了焦点（选项框、输入框）就不动；第一次打开页面不动。
   const firstPath = useRef(true);
@@ -203,9 +203,10 @@ function HomeFrame({ account }: { account: Account }) {
   });
   useSessionStops(local, here);
   useSessionCommands(local, here);
-  // 左栏宽度（24 条）：本人拖过的写在根上的 --home-left，没拖过照 CSS 的 clamp。右栏同理（--home-right）。
+  // 左栏宽度（24 条）：本人拖过的写在根上的 --home-left，没拖过照 CSS 的 clamp。右边的面板同理（--home-right），放文件时另记一个宽（--home-file）。
   const leftWidth = useLeftWidth();
   const rightWidth = useRightWidth();
+  const fileWidth = useFileWidth();
   // 蓝点「点了就藏」（25 条）：打开子会话、项目对话的那一刻记成「刚看过」（带那一刻的停下时间），左栏马上不画；work-seen 在后台发，失败不提示。
   // 左栏点行时在跳页之前记；别处打开的（等你、链接、改地址）在换页后、画出来之前记（layout effect），效果一样。开着时又来了更新的停下，也再记一次。
   const [seenMarks, setSeenMarks] = useState<SeenMarks>(() => new Map());
@@ -314,6 +315,11 @@ function HomeFrame({ account }: { account: Account }) {
   // 接口没上（404）时照旧：没登记、等开工的卡也在这里开。
   const subs = useMemo(() => [...data.projects.flatMap((project) => project.subSessions), ...data.other.subSessions], [data]);
   const autoStartKey = subs.filter((sub) => sub.autoStart).map((sub) => sub.id).sort().join(",");
+  /** 认领到的专题怎么开（claimTopic，第 68 条）：开工、先问文件夹，或不开。 */
+  const topicClaim = useCallback((topicId: string, busy: ReadonlySet<string>) =>
+    claimTopic(topicId, { subs, projects: projects.all, bound: projects.bound, freeSessions: !!local.runner.freeSessions, busy }), [subs, projects.all, projects.bound, local.runner]);
+  /** 自由子会话等着项目绑文件夹：同卡，记进 needFolder，项目对话和这个子会话页都出「在哪个文件夹开工？」。 */
+  const askFolderFor = useCallback((projectId: string) => setNeedFolder((current) => (current.has(projectId) ? current : new Set([...current, projectId]))), []);
   const tried = useRef(new Set<string>());
   useEffect(() => {
     if (!here || !api.known) return;
@@ -338,8 +344,8 @@ function HomeFrame({ account }: { account: Account }) {
   // 认领到的卡在看板、worker 里还没刷新到（首页接口比看板先报）：放回去，3 秒后再认领，不等一分钟。
   // 只在要开工的那几个变了、或隔一会时再看（不跟着每次刷新）；认领进行中要开工的又变了，认领完马上再看一次。
   const claiming = useRef(false);
-  const latest = useRef({ workers: work.workers, subs, start, local, changed, autoStartKey, reload: api.refresh });
-  useEffect(() => { latest.current = { workers: work.workers, subs, start, local, changed, autoStartKey, reload: api.refresh }; });
+  const latest = useRef({ workers: work.workers, subs, start, local, changed, autoStartKey, reload: api.refresh, topicClaim });
+  useEffect(() => { latest.current = { workers: work.workers, subs, start, local, changed, autoStartKey, reload: api.refresh, topicClaim }; });
   const [claimTick, setClaimTick] = useState(0);
   const canOpen = local.models.length > 0;
   useEffect(() => {
@@ -359,7 +365,7 @@ function HomeFrame({ account }: { account: Account }) {
         await latest.current.reload();
         await new Promise((resolve) => window.setTimeout(resolve, 50));
       }
-      const { subs, start, local, changed } = latest.current;
+      const { start, local, changed, topicClaim } = latest.current;
       const cards = wanted.flatMap((cardId) => {
         const worker = find(cardId);
         if (!worker) soon = true;
@@ -370,9 +376,11 @@ function HomeFrame({ account }: { account: Account }) {
       const opened = cards.length ? await start(cards, [], undefined, modes) : new Set<string>();
       const model = local.models.find((entry) => entry.isDefault) ?? local.models[0];
       for (const entry of claimed) {
-        if (entry.kind !== "topic" || !entry.topicId || busy.has(entry.topicId) || !model) continue;
-        const title = subs.find((sub) => sub.id === entry.topicId)?.title ?? "";
-        try { await startTopic(local.runner, { id: entry.topicId, title }, model, undefined, entry.permissionMode); opened.add(entry.topicId); markStart([entry.topicId], false); }
+        if (entry.kind !== "topic" || !entry.topicId || !model) continue;
+        const claim = topicClaim(entry.topicId, busy);
+        if (claim.kind === "skip") { if (claim.failed) markStart([entry.topicId], true); continue; }
+        if (claim.kind === "ask") { askFolderFor(claim.projectId); continue; }
+        try { await startTopic(local.runner, claim.topic, model, undefined, entry.permissionMode); opened.add(entry.topicId); markStart([entry.topicId], false); }
         catch { markStart([entry.topicId], true); }
       }
       const done = (id: string | null) => !!id && (opened.has(id) || busy.has(id));
@@ -389,7 +397,7 @@ function HomeFrame({ account }: { account: Account }) {
         retry = window.setTimeout(() => setClaimTick((n) => n + 1), delay);
       });
     return () => window.clearTimeout(retry);
-  }, [here, api.live, api.deviceId, canOpen, autoStartKey, claimTick, markStart]);
+  }, [here, api.live, api.deviceId, canOpen, autoStartKey, claimTick, markStart, askFolderFor]);
   // 换了文件夹或模型（比如没开成以后去连接页加了文件夹）：没开成的再自动试一次。
   // 项目绑了文件夹（「在哪个文件夹开工？」选完）也算：等文件夹的卡马上再认领。
   const setupKey = `${local.folders.map((folder) => folder.id).join(",")}|${local.models.map((entry) => entry.id).join(",")}|${[...projects.bound].map(([projectId, folder]) => `${projectId}:${folder.id}`).join(",")}`;
@@ -408,10 +416,19 @@ function HomeFrame({ account }: { account: Account }) {
     if (worker) { await start([worker], []); return; }
     const sub = subs.find((entry) => entry.id === subId && entry.kind === "topic");
     const model = local.models.find((entry) => entry.isDefault) ?? local.models[0];
-    if (!sub || !model) { markStart([subId], true); return; }
-    try { await startTopic(local.runner, { id: sub.id, title: sub.title }, model); markStart([subId], false); await local.refresh(); changed(); }
+    const claim = topicClaim(subId, new Set());
+    if (!sub || !model || claim.kind === "skip") { markStart([subId], true); return; }
+    if (claim.kind === "ask") { askFolderFor(claim.projectId); return; }
+    try { await startTopic(local.runner, claim.topic, model); markStart([subId], false); await local.refresh(); changed(); }
     catch { markStart([subId], true); }
-  }, [start, markStart, changed, local]);
+  }, [start, markStart, changed, local, topicClaim, askFolderFor]);
+  /** 项目下的「+」（第 68 条）：建自由子会话（云端同时登记开工），读回首页数据、马上认领一次，换到这个子会话。 */
+  const createFree = useCallback(async (projectId: string, firstMessage: string) => {
+    const topic = await createTopic({ free: true, projectId, firstMessage });
+    await api.refresh();
+    setClaimTick((n) => n + 1);
+    go(topicHref(topic.id));
+  }, [api, go]);
 
   // 伙伴在这个标签页的回复里登记了拆卡：这一轮之前没见过的登记，本机连着就直接开规划员。
   const knownSplits = useRef(new Set<string>());
@@ -448,9 +465,6 @@ function HomeFrame({ account }: { account: Account }) {
     await local.refresh();
     changed();
   };
-  const panel = (extra: { onCollapse?: () => void; onClose?: () => void }) => (
-    <BackgroundPanel items={items} resources={work.resources} onStop={stop} handheld={handheld} {...extra} />
-  );
 
   const workspace: WorkspaceApi = useMemo(() => ({
     navigate: (href: string) => go(href), close: () => undefined, detailOpen: false, closing: false, registerDetail: () => undefined,
@@ -478,14 +492,16 @@ function HomeFrame({ account }: { account: Account }) {
     const goal = data.projects.flatMap((project) => project.goals).find((entry) => entry.taskId === taskId);
     return goal ? { taskId, missionId: goal.missionId, name: goal.name, doneDefinition: null, criteria: goal.criteria } : null;
   };
-  // 手机的后台任务按钮（5.7）：没有在跑的是 ListChecks；有在跑的是转圈加数字。
+  // 后台任务按钮（5.7、第 73 条）：没有在跑的是 ListChecks；有在跑的是转圈加数字。手机上点了出底部抽屉；电脑上在右边的面板位开关「后台任务」。
+  const tasksOpen = slot === "tasks";
   const backgroundButton = useMemo(() => (
-    <button type="button" className={h.icon} aria-label="后台任务" title="后台任务" onClick={() => setSheet(true)} data-testid="phone-background">
+    <button type="button" className={h.icon} aria-label="后台任务" title="后台任务" aria-pressed={handheld ? undefined : tasksOpen}
+      onClick={() => (handheld ? setSheet(true) : show(tasksOpen ? null : "tasks"))} data-testid={handheld ? "phone-background" : "background-button"}>
       {running ? <span className={h.runningCount}><LoaderCircle {...ICON} />{running}</span> : <ListChecks {...ICON} />}
-      {/* 这个按钮只在手机上：这台电脑没连上不亮点，额度（云端各设备报的）快用完照样亮（11.2）。 */}
-      {machine.quotaAlert ? <i className={h.cornerDot} data-tone={machine.quotaAlert === "danger" ? "danger" : undefined} aria-hidden /> : null}
+      {/* 手机上：这台电脑没连上不亮点，额度（云端各设备报的）快用完照样亮（11.2）。电脑上额度看模型旁边的圆环，这里不亮。 */}
+      {handheld && machine.quotaAlert ? <i className={h.cornerDot} data-tone={machine.quotaAlert === "danger" ? "danger" : undefined} aria-hidden /> : null}
     </button>
-  ), [running, machine.quotaAlert]);
+  ), [running, machine.quotaAlert, handheld, tasksOpen, show]);
   // 子会话页头的上一级：它在哪个项目里，点了回到项目对话。
   const subId = view.kind === "card" || view.kind === "topic" ? view.id : null;
   const owner = subId ? projects.all.find((project) => project.subSessions.some((sub) => sub.id === subId)) ?? null : null;
@@ -500,7 +516,7 @@ function HomeFrame({ account }: { account: Account }) {
     lead: <button type="button" className={h.icon} aria-label="返回" title="返回" onClick={() => go(HOME_HREF)} data-testid="phone-back"><ArrowLeft {...ICON} /></button>,
     // 手机上页头不写上一级（左边已经有返回），只留字母和子会话标题（排查清单第 3 条）。
     trail: backgroundButton, parent: null, letter,
-  } : { lead: null, trail: null, parent, letter }), [handheld, go, backgroundButton, parent, letter]);
+  } : { lead: null, trail: backgroundButton, parent, letter }), [handheld, go, backgroundButton, parent, letter]);
   useTabTitle(data.waiting.length);
   /** 转交时选了「停掉」：这台电脑上在跑的经本机程序停，云端还排着、没有电脑接下的撤掉登记（别的电脑上在跑的只能在那台电脑上停）。 */
   const stopForTransfer = async (subs: Project["subSessions"]) => {
@@ -512,16 +528,16 @@ function HomeFrame({ account }: { account: Account }) {
     await local.refresh();
   };
   /** 项目对话里项目自己的几块：转交（16.7）从「准备交接」那一刻起，到发出、等接手。 */
+  /** 「在哪个文件夹开工？」（17.2 第 32 条）：卡或自由子会话等着这个项目在这台电脑上绑文件夹时才有，选完绑上就收起、接着开。 */
+  const folderAsk = (project: Project) => (here && needFolder.has(project.id) && !projects.bound.has(project.id)
+    ? <FolderAsk folders={local.folders} onBind={(folder) => projects.actions.setFolder(project.id, folder.id, project.name)} onPickOther={() => local.pickFolder()} /> : null);
   const projectBlocks = (project: Project): TimedBlock[] => [
     ...(project.transfer && (project.transfer.status === "preparing" || project.transfer.status === "sent") ? [{
       key: `transfer:${project.transfer.id}`, at: project.transfer.startedAt, afterSequence: project.transfer.afterSequence,
       node: <TransferFlow project={project} transfer={project.transfer} onChanged={api.refresh} onStop={stopForTransfer} />,
     }] : []),
     // 卡等着项目绑文件夹（17.2 第 32 条）：放在最后，选完绑上就收起，卡接着开。
-    ...(here && needFolder.has(project.id) && !projects.bound.has(project.id) ? [{
-      key: `folder-ask:${project.id}`, at: new Date().toISOString(), afterSequence: null,
-      node: <FolderAsk folders={local.folders} onBind={(folder) => projects.actions.setFolder(project.id, folder.id, project.name)} onPickOther={() => local.pickFolder()} />,
-    }] : []),
+    ...(folderAsk(project) ? [{ key: `folder-ask:${project.id}`, at: new Date().toISOString(), afterSequence: null, node: folderAsk(project) }] : []),
   ];
   /** 项目对话（16.3）：页头只有项目名和「详情」（文件夹在输入框下面）。没挂 Task 的项目也在自己的对话里拆卡、开工。 */
   const projectView = (project: Project) => {
@@ -539,7 +555,7 @@ function HomeFrame({ account }: { account: Account }) {
   );
   const display = (current: View) => {
     switch (current.kind) {
-      case "home": return <HomeView data={data} api={api} buddy={buddy} today={todayLabel(work.plan?.today ?? null)} go={go} route={route} onSend={send} projects={projects} />;
+      case "home": return <HomeView data={data} api={api} buddy={buddy} today={todayLabel(work.plan?.today ?? null)} go={go} route={route} onSend={send} projects={projects} trail={backgroundButton} offline={machine.disconnected} />;
       case "project": {
         const project = projects.all.find((entry) => entry.id === current.id);
         if (!project) return <Missing loading={!api.ready} onRetry={api.planFailed ? () => void api.retryPlan() : undefined} />;
@@ -549,6 +565,11 @@ function HomeFrame({ account }: { account: Account }) {
         const project = projects.all.find((entry) => entry.id === current.id);
         if (!project) return <Missing loading={!api.ready} onRetry={api.planFailed ? () => void api.retryPlan() : undefined} />;
         return projectInfo(project);
+      }
+      case "newSub": {
+        const project = projects.all.find((entry) => entry.id === current.projectId);
+        if (!project) return <Missing loading={!api.ready} onRetry={api.planFailed ? () => void api.retryPlan() : undefined} />;
+        return <NewSubView key={project.id} project={project} onCreate={(text) => createFree(project.id, text)} />;
       }
       case "transfer": return <TransferView key={current.id} id={current.id} go={go} onChanged={api.refresh} />;
       case "buddy": return <BuddyView buddy={buddy} outbox={outbox} consume={consume} onSpeaking={setSpeaking} context={buddyContext} onClearContext={() => setBuddyContext(null)} />;
@@ -576,8 +597,16 @@ function HomeFrame({ account }: { account: Account }) {
         return <TaskInfo task={task} mission={mission} gate={taskGate(task)} go={go} />;
       }
       // 等本人处理的框和左栏的点同一个来源（第 54 条）：首页数据里这个子会话在等什么。
-      case "card": return <CardSession key={current.id} cardId={current.id} embedded waiting={subs.find((sub) => sub.id === current.id)?.waiting} />;
-      case "topic": return <TopicSession key={current.id} topicId={current.id} embedded waiting={subs.find((sub) => sub.id === current.id)?.waiting ?? null} />;
+      case "card": {
+        const sub = subs.find((entry) => entry.id === current.id);
+        return <CardSession key={current.id} cardId={current.id} embedded waiting={sub?.waiting} queued={sub ? subQueueText(sub, handheld) : null} />;
+      }
+      case "topic": {
+        const sub = subs.find((entry) => entry.id === current.id);
+        // 自由子会话等着项目绑文件夹：问的框钉在这个子会话的输入框上方（和项目对话里那份是同一个）。
+        const owner = sub?.free ? projects.all.find((project) => project.subSessions.some((entry) => entry.id === current.id)) : undefined;
+        return <TopicSession key={current.id} topicId={current.id} embedded waiting={sub?.waiting ?? null} queued={sub ? subQueueText(sub, handheld) : null} ask={owner ? folderAsk(owner) : null} />;
+      }
       case "page": {
         // 二级页：组件挂在 components/home/pages。
         const Page = SECONDARY_PAGES[current.page];
@@ -589,8 +618,8 @@ function HomeFrame({ account }: { account: Account }) {
       }
     }
   };
-  // 连接要处理（本人行的琥珀点，设计 9.4）：这台电脑没就绪，或额度用完（≤10%）。飞书授权失效等 B 的字段到了再加。
-  const alert = (!handheld && machine.alert) || machine.quotaAlert === "danger";
+  // 本人行的点（第 73 条）：只管这台电脑就不就绪，就绪时不显眼，不对时琥珀色；额度看模型旁边的圆环。手机上不画。
+  const machineDot = handheld ? null : { alert: machine.alert, word: machine.word };
   // 正在后台干活的项目（左栏标题右边闪的灰点）：子会话在跑、规划员或验收员在做，或正开着的这个项目对话在回复。
   const working = useMemo(() => new Set(projects.projects
     .filter((project) => projectWorking(project, work.workers, speaking && view.kind === "project" && view.id === project.id))
@@ -605,7 +634,7 @@ function HomeFrame({ account }: { account: Account }) {
         if (folderIds.length) await projects.actions.setFolders(id, folderIds, name).catch(() => showWorkspaceToast({ text: "文件夹没绑上" }));
         return id;
       }} cardAt={cardAt} working={working} seen={seenMarks} onOpen={markSeen}
-      today={todayLabel(work.plan?.today ?? null)} alert={alert} trail={handheld ? backgroundButton : null}
+      today={todayLabel(work.plan?.today ?? null)} machine={machineDot} trail={handheld ? backgroundButton : null}
       top={handheld && data.waiting.length ? (
         <section aria-label="等你" className={h.phoneWaiting}>
           <p className={h.sectionTitle}>等你 <span>{data.waiting.length}</span></p>
@@ -628,7 +657,7 @@ function HomeFrame({ account }: { account: Account }) {
               <div className={h.sheetBackdrop} data-closing={sheetClosing ? "" : undefined} onClick={closeSheet}>
                 <div className={h.sheet} role="dialog" aria-modal="true" aria-label="后台任务" onClick={(event) => event.stopPropagation()}>
                   <span className={h.grabber} aria-hidden />
-                  {panel({})}
+                  <BackgroundPanel items={items} resources={work.resources} onStop={stop} handheld />
                 </div>
               </div>
             ) : null}
@@ -641,35 +670,41 @@ function HomeFrame({ account }: { account: Account }) {
     <WorkspaceContext.Provider value={workspace}>
       <ViewChrome.Provider value={chrome}>
         <SideDetailContext.Provider value={side}>
-          <div className={h.app} data-panel={panelOpen || sideOpen ? "open" : "closed"} data-view={view.kind} data-scheme="auto" data-entering={entering ? "" : undefined} data-testid="work-home"
-            data-resizing={leftWidth.dragging || rightWidth.dragging ? "" : undefined} style={{
+          <div className={h.app} data-panel={slot === "file" ? "file" : slot ? "open" : "closed"} data-wide={slot === "file" && wide ? "" : undefined} data-view={view.kind} data-scheme="auto" data-entering={entering ? "" : undefined} data-testid="work-home"
+            data-resizing={leftWidth.dragging || rightWidth.dragging || fileWidth.dragging ? "" : undefined} style={{
               ...(leftWidth.width ? { "--home-left": `${leftWidth.width}px` } : {}),
               ...(rightWidth.width ? { "--home-right": `${rightWidth.width}px` } : {}),
+              ...(fileWidth.width ? { "--home-file": `${fileWidth.width}px` } : {}),
             } as CSSProperties}>
             <aside className={h.left}>{left}<LeftResize control={leftWidth} /></aside>
             <main className={h.display}>{display(view)}</main>
-            <aside className={h.right} aria-label={sideOpen ? "详情" : "后台任务"}>
-              {sideOpen ? (
-                <div className={h.side} data-testid="side-detail">
-                  <div className={h.sideHead}>
-                    <span className={h.resName}>详情</span><span className={h.grow} />
-                    <HeroButton variant="ghost" size="sm" isIconOnly title="关闭" aria-label="关闭详情" onPress={() => setSideWanted(false)} data-testid="side-close"><X {...ICON} /></HeroButton>
+            {slot ? (
+              <aside className={h.right} aria-label={PANEL_LABEL[slot]} data-testid="side-panel">
+                {/* 文件预览自己有页头（名字、改动、放大、关闭），这里只给它一块地方。 */}
+                {slot === "file" ? <div ref={setSideNode} className={h.sideFile} /> : (
+                  <div className={h.side} data-testid={slot === "detail" ? "side-detail" : "side-tasks"}>
+                    <div className={h.sideHead}>
+                      <span className={h.resName}>{PANEL_LABEL[slot]}</span><span className={h.grow} />
+                      <HeroButton variant="ghost" size="sm" isIconOnly title="关闭" aria-label={`关闭${PANEL_LABEL[slot]}`} onPress={() => show(null)} data-testid="side-close"><X {...ICON} /></HeroButton>
+                    </div>
+                    <div className={h.sideScroll}>
+                      {slot === "tasks" ? <div className={h.bgBody}>{items.length ? <BackgroundTasks items={items} onStop={stop} /> : <p className={h.sideEmpty}>没有后台任务</p>}</div>
+                        : view.kind === "project" ? (() => { const project = projects.all.find((entry) => entry.id === view.id); return project ? projectInfo(project, true) : null; })()
+                        : <div ref={setSideNode} />}
+                    </div>
                   </div>
-                  <div className={h.sideScroll}>
-                    {view.kind === "project" ? (() => { const project = projects.all.find((entry) => entry.id === view.id); return project ? projectInfo(project, true) : null; })()
-                      : <div ref={setSideNode} />}
-                    {items.length ? <div className={h.sideTasks}><BackgroundTasks items={items} onStop={stop} /></div> : null}
-                  </div>
-                </div>
-              ) : panelOpen ? panel({ onCollapse: () => togglePanel(false) }) : <BackgroundStrip running={running} quota={work.resources.quota} onExpand={() => togglePanel(true)} />}
-              {panelOpen || sideOpen ? <RightResize control={rightWidth} /> : null}
-            </aside>
+                )}
+                {slot === "file" && wide ? null : <RightResize control={slot === "file" ? fileWidth : rightWidth} />}
+              </aside>
+            ) : null}
           </div>
         </SideDetailContext.Provider>
       </ViewChrome.Provider>
     </WorkspaceContext.Provider>
   );
 }
+
+const PANEL_LABEL: Record<PanelKind, string> = { detail: "详情", file: "文件", tasks: "后台任务" };
 
 /** 二级页、月份页的壳（5.4.7）：页头（返回、标题）+ 文档类阅读尺，内容是挂进来的组件。 */
 function SecondaryFrame({ title, trail, go, children }: { title: string; trail?: React.ReactNode; go: (href: string) => void; children: React.ReactNode }) {

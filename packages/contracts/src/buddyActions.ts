@@ -1,5 +1,6 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
 import { Budget } from "./budget.js";
+import { ModelWords } from "./cardSplits.js";
 import { LocalPermissionDecisionRequest, LocalPlanEntry, LocalQuestionAnswerRequest } from "./localRunner.js";
 import { PersonRef } from "./projectTransfers.js";
 import { AppearanceSettings, SubSessionLetter, WaitingTarget } from "./workHome.js";
@@ -74,6 +75,7 @@ export const BuddyAskQuestion = Type.Object({
  * - link_task_to_project（write）：把本人负责的一件 Task 挂到项目上（同 PUT /api/me/projects/:id/goals/:taskId）。可撤（挂回原来的或取下来）。
  * - transfer_project（write）：发起转交并直接发出（同 16.7 的发起 + 发出；交接说明照常由云端写，写完才发出）。可撤（撤回转交）。
  * - split_cards（write）：登记拆卡（Task 或没挂 Task 的项目，带本人原话）。可撤（去掉登记）。
+ *   本人对用什么来源、模型、思考有要求时，把那一截原话放进 modelWords（第 69 条），原样带，不要自己翻译成型号；派活单上照它预选。
  * - set_budget（write）：改一件 Task 的预算或本人的缺省预算（taskId 不带是缺省）。可撤。
  * - set_task_due_date（write）：给挂在项目上的一件 Task 存验收截止日（同 PUT /api/me/projects/:projectId/goals/:taskId/due-date，null 不存了）。可撤（改回原来的）。
  * - message_project（write）：把本人在伙伴台说的、关于某个项目的话转给这个项目的对话（设计 18 节第 8 条：伙伴台 → 项目对话 → 子会话，一层管一层，
@@ -105,6 +107,16 @@ export const BuddyAskQuestion = Type.Object({
  *   硬规矩：只有本人在这次对话里明说了（「批准 B」「B 可以」「同意它删」）才 allow，本人没说就不批，转述、猜测都不算。没在等批准 409 NOT_WAITING_PERMISSION。
  * 回 { letter, kind, id, title }，加登记了什么（commandId、stopId 或 start）。
  */
+/** update_card 的参数（主循环第 60 条，说明见上面）。 */
+export const UpdateCardActionParams = Type.Object({
+  letter: Type.Optional(SubSessionLetter),
+  cardId: Type.Optional(Uuid),
+  brief: Type.Optional(Type.String({ minLength: 1, maxLength: 4000 })),
+  standards: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 300 }), { minItems: 1, maxItems: 20 })),
+  reason: Type.String({ minLength: 1, maxLength: 200 }),
+}, strict);
+export type TUpdateCardActionParams = Static<typeof UpdateCardActionParams>;
+
 export const BuddyActionParams = {
   read_work_home: Type.Object({}, strict),
   read_project: Type.Object({ projectId: Uuid }, strict),
@@ -122,7 +134,9 @@ export const BuddyActionParams = {
   link_task_to_project: Type.Object({ projectId: Uuid, taskId: Type.String({ minLength: 1 }) }, strict),
   transfer_project: Type.Object({ projectId: Uuid, toPersonId: Type.String({ minLength: 1 }) }, strict),
   split_cards: Type.Object({ taskId: Type.Optional(Type.String({ minLength: 1 })), projectId: Type.Optional(Uuid),
-    words: Type.Optional(Type.String({ maxLength: 4000 })) }, strict),
+    words: Type.Optional(Type.String({ maxLength: 4000 })),
+    /** 第 69 条：本人对用什么来源、模型、思考有要求时那一截原话，原样带，不要自己翻译成型号（见 cardSplits.ts 的 ModelWords）。 */
+    modelWords: Type.Optional(ModelWords) }, strict),
   set_budget: Type.Object({ taskId: Type.Optional(Type.String({ minLength: 1 })), budget: Budget }, strict),
   set_task_due_date: Type.Object({ projectId: Uuid, taskId: Type.String({ minLength: 1 }),
     dueDate: Type.Union([Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" }), Type.Null()]) }, strict),
@@ -138,22 +152,11 @@ export const BuddyActionParams = {
   sub_session_restart: Type.Object({ letter: SubSessionLetter, text: Type.Optional(Type.String({ minLength: 1, maxLength: 4000 })) }, strict),
   sub_session_answer: Type.Object({ letter: SubSessionLetter, ...LocalQuestionAnswerRequest.properties }, strict),
   sub_session_approve: Type.Object({ letter: SubSessionLetter, ...LocalPermissionDecisionRequest.properties }, strict),
+  update_card: UpdateCardActionParams,
 } as const;
-/** 只在项目对话里能用的动作（18 节第 10 条）。 */
-export const PROJECT_ONLY_ACTIONS = ["sub_session_tell", "sub_session_stop", "sub_session_restart", "sub_session_answer", "sub_session_approve"] as const;
+/** 只在项目对话里能用的动作（18 节第 10 条；update_card 是主循环第 60 条）。 */
+export const PROJECT_ONLY_ACTIONS = ["sub_session_tell", "sub_session_stop", "sub_session_restart", "sub_session_answer", "sub_session_approve", "update_card"] as const;
 
-/**
- * update_card 的参数（主循环第 60 条，说明见上面）。云端实现的那一笔把它放进 BuddyActionParams（键 update_card）和 PROJECT_ONLY_ACTIONS，
- * 和处理函数一起上，免得动作清单里先列出一个还不能用的。
- */
-export const UpdateCardActionParams = Type.Object({
-  letter: Type.Optional(SubSessionLetter),
-  cardId: Type.Optional(Uuid),
-  brief: Type.Optional(Type.String({ minLength: 1, maxLength: 4000 })),
-  standards: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 300 }), { minItems: 1, maxItems: 20 })),
-  reason: Type.String({ minLength: 1, maxLength: 200 }),
-}, strict);
-export type TUpdateCardActionParams = Static<typeof UpdateCardActionParams>;
 export type BuddyActionName = keyof typeof BuddyActionParams;
 export type TBuddyAskQuestion = Static<typeof BuddyAskQuestion>;
 export const BUDDY_ACTION_NAMES = Object.keys(BuddyActionParams) as BuddyActionName[];

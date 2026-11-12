@@ -4,7 +4,7 @@
  */
 import type { TLocalCreateSessionBatchResponse, TLocalHealthResponse, TLocalModelProfile, TLocalSessionDraft, TLocalSessionEvent, TLocalSourceAddResponse, TLocalSourceCheckResponse, TLocalSourceListResponse } from "@warmap/contracts";
 import { LOCAL_RUNNER_DEFAULT_PORT, LOCAL_RUNNER_ROUTES, LOCAL_RUNNER_TOKEN_HEADER } from "./routes";
-import { LocalRunnerError, acceptsClientMessageId, type EventWatch, type LocalRunner } from "./runner";
+import { LocalRunnerError, acceptsAgreementRevision, acceptsClientMessageId, acceptsFreeSession, type EventWatch, type LocalRunner } from "./runner";
 
 type RouteName = keyof typeof LOCAL_RUNNER_ROUTES;
 
@@ -110,10 +110,13 @@ export function createHttpRunner(base = localRunnerBase(), token: () => string =
   }
 
   let messageIds = false;
+  let free = false;
+  let revisions = false;
   return {
     kind: "http",
     get clientMessageIds() { return messageIds; },
-    health: async () => { const health = await call<TLocalHealthResponse>("health"); messageIds = acceptsClientMessageId(health); return health; },
+    get freeSessions() { return free; },
+    health: async () => { const health = await call<TLocalHealthResponse>("health"); messageIds = acceptsClientMessageId(health); free = acceptsFreeSession(health); revisions = acceptsAgreementRevision(health); return health; },
     startPairing: (clientLabel) => call("startPairing", {}, { clientLabel }),
     pairingStatus: (pairingId) => call("pairingStatus", { pairingId }),
     unpair: async () => { await call("unpair"); },
@@ -141,13 +144,16 @@ export function createHttpRunner(base = localRunnerBase(), token: () => string =
     createSession: (body) => call("createSession", {}, body),
     createSessionBatch: async (items) => (await call<TLocalCreateSessionBatchResponse>("createSessionBatch", {}, { items })).results,
     getSession: (id) => call("getSession", { id }),
-    sendMessage: (id, text, kind, attachments, messageId) => call("sendMessage", { id }, kind === "review" ? { kind, ...(text ? { text } : {}) }
-      : { ...(text ? { text } : {}), ...(attachments?.length ? { attachments } : {}), ...(messageId ? { messageId } : {}) }),
+    sendMessage: (id, text, kind, attachments, messageId, agreementRevision) => call("sendMessage", { id }, kind === "review" ? { kind, ...(text ? { text } : {}) }
+      : { ...(text ? { text } : {}), ...(attachments?.length ? { attachments } : {}), ...(messageId ? { messageId } : {}), ...(agreementRevision && revisions ? { agreementRevision } : {}) }),
     interrupt: async (id) => (await call<{ session: Awaited<ReturnType<LocalRunner["interrupt"]>> }>("interrupt", { id }, {})).session,
     setPermissionMode: async (id, mode) => (await call<{ session: Awaited<ReturnType<LocalRunner["setPermissionMode"]>> }>("setPermissionMode", { id }, { mode })).session,
     setSessionModel: (id, body) => call("setSessionModel", { id }, body),
     listSessionFiles: (id) => call("listSessionFiles", { id }),
     readSessionFile: (id, body) => call("readSessionFile", { id }, body),
+    restoreSessionFiles: (id, body) => call("restoreSessionFiles", { id }, body),
+    readFileChanges: (id, body) => call("readFileChanges", { id }, body),
+    restoreFileChanges: (id, body) => call("restoreFileChanges", { id }, body),
     kill: async (id) => (await call<{ session: Awaited<ReturnType<LocalRunner["kill"]>> }>("kill", { id }, {})).session,
     decidePermission: async (id, requestId, body) => (await call<{ session: Awaited<ReturnType<LocalRunner["kill"]>> }>("decidePermission", { id, requestId }, body)).session,
     mergeSession: async (id) => call<Awaited<ReturnType<LocalRunner["mergeSession"]>>>("mergeSession", { id }, {}),

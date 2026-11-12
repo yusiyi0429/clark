@@ -40,6 +40,22 @@ const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " "
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(NOW); });
 afterEach(() => { vi.useRealTimers(); vi.mocked(acceptDrafts).mockClear(); });
 
+describe("等你行的摘要（主循环第 66 条，契约 WaitingItem.summary）", () => {
+  it("有摘要的第二行写它，来源和截止挪到下一行；和第一行一样的（提问）不写两遍；没有摘要照原来两行；批准照旧就地答", () => {
+    const html = render([
+      wait({ id: "n1", kind: "needs_person", title: "等你补", source: "商标初查 · 品牌建设", summary: "候选名和含义都齐了，申请号要你查", open: { kind: "card", id: "c1" } }),
+      wait({ id: "q1", kind: "question", title: "先做哪个名字？", summary: "先做哪个名字？" }),
+      wait({ id: "v1", summary: null }),
+    ]);
+    expect(text(html)).toContain("等你补 候选名和含义都齐了，申请号要你查 商标初查 · 品牌建设");
+    expect(html.match(/data-testid="wait-summary"/g)).toHaveLength(1);
+    expect(text(html)).toContain("greet 连续两次没过 首页改版 · greet");
+    const approved = renderToStaticMarkup(<LocalContext.Provider value={local()}><WaitingList items={[approval({ summary: "删掉旧的构建产物再重新打包" })]} api={api({ workers: [approvalWorker] })} go={() => undefined} /></LocalContext.Provider>);
+    expect(text(approved)).toContain("要运行命令 删掉旧的构建产物再重新打包");
+    expect(approved).toContain(">批准<");
+  });
+});
+
 describe("等你行的截止（5.4.4「时间只写截止」）", () => {
   it("一天以上写天，不到 24 小时写小时，不到 1 小时写分钟，过了写「已过截止」；后三档是警告色", () => {
     expect(dueText(at(49 * HOUR), NOW)).toEqual({ text: "剩 2 天", warn: false });

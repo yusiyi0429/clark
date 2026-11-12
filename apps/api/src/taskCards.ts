@@ -9,7 +9,7 @@ import { planTaskViewer, type PlanTaskAccess } from "./planTaskAccess.js";
 import type { PeopleDirectory } from "./peopleDirectory.js";
 import { personDisplayNames } from "./people.js";
 import { openPlanTask } from "./taskAgreements.js";
-import { CARD_COLUMNS, cardGit, cardsOf, effectiveOutcome, handbackBrief, nextVersions, type CardRow, type HandbackRow, type StoredAcceptance } from "./cardProjection.js";
+import { CARD_COLUMNS, HANDBACKS_WITH_RELAY, cardGit, cardsOf, effectiveOutcome, handbackBrief, nextVersions, type CardRow, type HandbackRow, type StoredAcceptance } from "./cardProjection.js";
 import { outputView, recentRuns, runViews, type OutputRow } from "./localDevices.js";
 import type { Query } from "./meetingStore.js";
 import { UUID_PATTERN } from "./meetingStore.js";
@@ -23,6 +23,7 @@ import { wordsLines } from "./sourceWords.js";
 /** 没配岗位的卡兜底用的预设（roles/presets/general/executor.md）。 */
 const DEFAULT_WORKER_PRESET = "executor";
 import { createInTransaction, getTaskViews, taskStandards } from "./tasks.js";
+import { agreementRow, agreementView, writeAgreement } from "./cardAgreements.js";
 
 /**
  * 执行看板（V2 设计第 3–5、8.3 节）：卡就是执行事项，card 是 api 算好的列、标记、最近一次执行和交回、进交付物到哪了。
@@ -144,12 +145,12 @@ export async function readProjectBoard(q: Query, ownerId: string, projectId: str
 
 export type DraftRow = { id: string; plan_id: string; position: number; title: string; brief: string; done_definition: string; criterion_index: number | null;
   role_id: string | null; suggest_preset_key: string | null;
-  executor: "claude_code" | "self"; model_tier: "strong" | "normal" | "light"; why: string | null; source_words: string[] };
+  executor: "claude_code" | "self"; model_tier: "strong" | "normal" | "light"; why: string | null; source_words: string[]; model_words?: string | null };
 const draftView = (roles: Map<string, RoleRow>) => (row: DraftRow) => {
   const role = row.role_id ? roles.get(row.role_id) : undefined;
   return { id: row.id, planId: row.plan_id, position: row.position, title: row.title, brief: row.brief, doneDefinition: row.done_definition,
     criterionIndex: row.criterion_index, role: role ? roleRef(role) : null, suggestPresetKey: row.suggest_preset_key, executor: row.executor, modelTier: row.model_tier, why: row.why,
-    sourceWords: row.source_words };
+    sourceWords: row.source_words, modelWords: row.model_words ?? null };
 };
 
 /** 推进人自己的卡（锁住改用 forUpdate）；不是推进人的当找不到。 */
@@ -180,21 +181,22 @@ export async function acceptanceExpectedSeconds(q: Query): Promise<number> {
 export async function readCardDetail(q: Query, ownerId: string, id: string, names: Map<string, string>): Promise<TCardDetailResponse> {
   const card = await ownCard(q, ownerId, id);
   const [task] = await cardTaskViews(q, [id], names);
-  const handbacks = (await q("SELECT * FROM card_handbacks WHERE task_id=$1 ORDER BY attempt DESC", [id])).rows as HandbackRow[];
+  const handbacks = (await q(`${HANDBACKS_WITH_RELAY} WHERE h.task_id=$1 ORDER BY h.attempt DESC`, [id])).rows as HandbackRow[];
   const outputs = (await q("SELECT * FROM local_outputs WHERE task_id=$1 ORDER BY created_at DESC,id", [id])).rows as OutputRow[];
   const expected = await acceptanceExpectedSeconds(q);
   return { task, letter: (await letterOfSub(q, "card", id))?.letter ?? null, brief: card.brief, standards: taskStandards(card.done_definition), runs: await runViews(q, await recentRuns(q, { taskId: id }, 5)),
-    handbacks: handbacks.map((row) => handbackView(row, names, expected)), outputs: outputs.map(outputView) };
+    handbacks: handbacks.map((row) => handbackView(row, names, expected)), outputs: outputs.map(outputView), agreement: await agreementView(q, id) };
 }
 
 /**
  * PATCH /api/me/cards/:id：执行方、岗位、模型、交代、对哪条标准。岗位要是本人没归档的；换了岗位，开工时的版本快照清掉。
  * 对哪条标准要这张卡挂着本人 Mission 下的 Task，存那一条当时的原文。
  * planTask 是读 Task 标准用的（只在改 criterionIndex 时调）。
+ * 交代、完成标准是卡的约定（主循环第 60 条）：走 writeAgreement，真变了才加约定的版本号、记修改记录（by person）、在跑时转告执行方。
  */
 export async function patchCard(pool: Pool, ownerId: string, id: string, input: TPatchCardRequest, names: Map<string, string>,
-  planTask: (planTaskId: string) => Promise<OwnTask | null>): Promise<TCardTaskView> {
-  const { version, ...fields } = input;
+  planTask: (planTaskId: string) => Promise<OwnTask | null>, now: Date): Promise<TCardTaskView> {
+  const { version, reason, ...fields } = input;
   if (!Object.keys(fields).length) throw new CardError(400, "INVALID_INPUT", "至少改一样");
   let criterion: { index: number; text: string } | null | undefined;
   if (input.criterionIndex !== undefined && input.criterionIndex !== null) {
@@ -216,9 +218,12 @@ export async function patchCard(pool: Pool, ownerId: string, id: string, input: 
       throw new CardError(409, "VERSION_CONFLICT", "执行事项已被修改，请基于最新内容重试", latest);
     }
     const roleId = fields.roleId === undefined ? card.role_id : fields.roleId;
-    await client.query(`UPDATE tasks SET executor=$2,model=$3::jsonb,brief=$4,criterion_index=$5,criterion_text=$6,role_id=$7,
-      role_version=CASE WHEN role_id IS DISTINCT FROM $7 THEN NULL ELSE role_version END,version=version+1,updated_at=now() WHERE id=$1`, [id,
-      fields.executor ?? card.executor, JSON.stringify(fields.model === undefined ? card.model : fields.model), fields.brief === undefined ? card.brief : fields.brief?.trim() || null,
+    const q: Query = client.query.bind(client);
+    await writeAgreement(q, await agreementRow(q, ownerId, id), { brief: fields.brief, standards: fields.standards },
+      { kind: "person", name: names.get(ownerId) ?? null }, reason?.trim() || null, now);
+    await client.query(`UPDATE tasks SET executor=$2,model=$3::jsonb,criterion_index=$4,criterion_text=$5,role_id=$6,
+      role_version=CASE WHEN role_id IS DISTINCT FROM $6 THEN NULL ELSE role_version END,version=version+1,updated_at=now() WHERE id=$1`, [id,
+      fields.executor ?? card.executor, JSON.stringify(fields.model === undefined ? card.model : fields.model),
       criterion === undefined ? card.criterion_index : criterion?.index ?? null, criterion === undefined ? card.criterion_text : criterion?.text ?? null, roleId]);
     await client.query("COMMIT");
   } catch (cause) { await client.query("ROLLBACK").catch(() => undefined); throw cause; }

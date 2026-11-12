@@ -168,7 +168,8 @@ export function registerProjectRoutes(app: AppInstance, ctx: RouteContext): void
     body: RegisterCardSplitRequest, response: { 200: CardSplitRequestView, 201: CardSplitRequestView } } }, async (req, reply) => handle(reply, async () => {
     const project = await activeProject(req.person!.personId, req.params.projectId);
     const { request, created } = await registerProjectCardSplit(q, req.person!.personId, project.id, "web", ctx.now(), typedWords(req.body.words),
-      req.body.afterSequence ?? await lastSequenceReader(ctx)(req.person!.personId, { taskId: null, projectId: project.id }, String(req.id)));
+      req.body.afterSequence ?? await lastSequenceReader(ctx)(req.person!.personId, { taskId: null, projectId: project.id }, String(req.id)),
+      req.body.modelWords?.trim() || undefined);
     return reply.status(created ? 201 : 200).send(request);
   }));
 

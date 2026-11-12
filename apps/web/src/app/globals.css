@@ -39,6 +39,9 @@
   --counter-wash: color-mix(in oklab, var(--counter) 6%, var(--surface));
   --factual-wash: color-mix(in oklab, var(--factual) 7%, var(--surface));
   --neutral-wash: color-mix(in oklab, var(--ink) 4%, var(--surface));
+  /* 改过的地方（设计第 72 条）：只有这一种底色；strong 是指着、点开时的。 */
+  --mark: color-mix(in oklab, var(--judgment) 15%, var(--surface));
+  --mark-strong: color-mix(in oklab, var(--judgment) 24%, var(--surface));
   --wash-hover: color-mix(in oklab, var(--ink) 5%, transparent);
 
   /* 发丝线 */

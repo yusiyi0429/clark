@@ -28,6 +28,8 @@
   --judgment-wash: #3e3019;
   --counter-wash: #462332;
   --confirmed-wash: #163b36;
+  --mark: color-mix(in oklab, var(--judgment) 24%, var(--surface));
+  --mark-strong: color-mix(in oklab, var(--judgment) 38%, var(--surface));
   --accent-soft: color-mix(in oklab, var(--accent) 12%, transparent);
   --tianshu-blue-secondary: #80adff;
   --field-caret: #80adff;

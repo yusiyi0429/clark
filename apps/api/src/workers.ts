@@ -1,4 +1,4 @@
-import type { TLocalQuotaSync, TLocalRunPlanProgress, TLocalSlots, TWorkerCost, TWorkerItem, TWorkerMark, TWorkerResources, TWorkersResponse } from "@warmap/contracts";
+import type { TLocalFolderHolder, TLocalQuotaSync, TLocalRunPlanProgress, TLocalSlots, TWorkerCost, TWorkerItem, TWorkerMark, TWorkerResources, TWorkersResponse } from "@warmap/contracts";
 import { ownMissions, planTaskMissions } from "./homePlan.js";
 import { HOLD_STATES } from "./cardProjection.js";
 import { askingQuestion, latestRuns, RUN_SELECT, runBrief, type RunRow } from "./localDevices.js";
@@ -25,7 +25,7 @@ import { cardTaskViews } from "./taskCards.js";
 export const ONLINE_WINDOW_MS = 10 * 60_000;
 /** 本机的会话还在（没退出、没失败）。 */
 export const ACTIVE = new Set<string>(["queued", "starting", "running", "waiting_permission", "idle"]);
-const NEEDS_YOU = new Set<TWorkerMark>(["approval", "reply", "review_failed", "blocked"]);
+const NEEDS_YOU = new Set<TWorkerMark>(["approval", "reply", "review_failed", "blocked", "needs_person"]);
 const ZERO: TWorkerCost = { inputTokens: 0, outputTokens: 0, costUsd: null, costCny: null };
 const COST_SUM = `sum((tokens->>'input')::bigint) AS input,sum((tokens->>'output')::bigint) AS output,
   sum((money->>'USD')::numeric) AS usd,sum((money->>'CNY')::numeric) AS cny`;
@@ -63,7 +63,7 @@ export async function listWorkers(deps: { q: Query; planTasks: PlanTaskSource; n
   const online = new Set(resources.devices.filter((device) => device.online).map((device) => device.id));
   // 等空位的排第几（在等前面的卡的、停着等额度恢复的不占位置，不算）；在等前面的卡的，等的是哪几张（本机报的 waitingFor，标题按本人的卡读）。
   const positions = new Map(((await q(`SELECT id::text,row_number() OVER (PARTITION BY device_id ORDER BY started_at,id)::int AS position FROM local_runs
-    WHERE owner_id=$1 AND state='queued' AND waiting_for IS NULL AND hold IS NULL`, [ownerId])).rows as { id: string; position: number }[]).map((row) => [row.id, row.position]));
+    WHERE owner_id=$1 AND state='queued' AND waiting_for IS NULL AND hold IS NULL AND held_by IS NULL`, [ownerId])).rows as { id: string; position: number }[]).map((row) => [row.id, row.position]));
   const waits = (await q("SELECT id::text,waiting_for FROM local_runs WHERE owner_id=$1 AND state='queued' AND waiting_for IS NOT NULL", [ownerId])).rows as
     { id: string; waiting_for: string[] }[];
   const waitedIds = [...new Set(waits.flatMap((row) => row.waiting_for))];
@@ -72,6 +72,10 @@ export async function listWorkers(deps: { q: Query; planTasks: PlanTaskSource; n
   const waitingOf = (runId: string) => waits.find((row) => row.id === runId)?.waiting_for.map((cardId) => ({ cardId, title: waitedTitles.get(cardId) ?? "" })) ?? [];
   const elapsed = (start: string | null, end: Date = now) => start ? Math.max(0, Math.round((end.getTime() - Date.parse(start)) / 1000)) : null;
   const held = await heldRuns(q, ownerId);
+  // 在等文件夹空出来的（第 68 条，本机报的 heldBy）：占着它的是谁。
+  const folderHolders = new Map(((await q("SELECT id::text,held_by FROM local_runs WHERE owner_id=$1 AND state='queued' AND held_by IS NOT NULL", [ownerId])).rows as
+    { id: string; held_by: TLocalFolderHolder }[]).map((row) => [row.id, row.held_by]));
+  const heldBy = (runId: string, queueReason: string | null) => queueReason === "folder_busy" ? { heldBy: folderHolders.get(runId)! } : {};
 
   // 卡：带岗位的、没退回的；完成的只要今天（公司时区）完成的。
   const cardRows = (await q(`SELECT id::text,mission_id,plan_task_id,(acceptance->>'at')::timestamptz AS finished_at FROM tasks
@@ -118,7 +122,7 @@ export async function listWorkers(deps: { q: Query; planTasks: PlanTaskSource; n
     const hold = holdOf(run);
     const holdUntil = hold !== undefined && awaitsQuota(hold, run.device_id, online, now) ? hold : undefined;
     const queueReason = holdUntil !== undefined ? "quota" as const : (ACTIVE.has(run.state) || hold !== undefined) && !online.has(run.device_id) ? "device_offline" as const
-      : isQueued(run.state) ? "slot" as const : null;
+      : isQueued(run.state) ? folderHolders.has(run.id) ? "folder_busy" as const : "slot" as const : null;
     const wait: TWorkerMark | null = queueReason || hold !== undefined ? null
       : run.state === "waiting_permission" ? "approval" : run.state === "idle" ? askingQuestion(run) ? "reply" : "paused" : ACTIVE.has(run.state) ? null : "paused";
     return { group: queueReason ? "queued" as const : "running" as const, step: step(brief.plan),
@@ -126,7 +130,7 @@ export async function listWorkers(deps: { q: Query; planTasks: PlanTaskSource; n
       startedAt: brief.startedAt, elapsedSeconds: elapsed(brief.startedAt), finishedAt: null,
       cost: { inputTokens: brief.cost.inputTokens, outputTokens: brief.cost.outputTokens, costUsd: run.money.USD ?? null, costCny: run.money.CNY ?? null },
       wait, needsYou: wait !== null && NEEDS_YOU.has(wait), queueReason, queuePosition: queueReason === "slot" ? positions.get(run.id) ?? null : null,
-      holdUntil: holdUntil ?? null };
+      holdUntil: holdUntil ?? null, ...heldBy(run.id, queueReason) };
   };
 
   const drafts: Draft[] = [];
@@ -145,10 +149,10 @@ export async function listWorkers(deps: { q: Query; planTasks: PlanTaskSource; n
       // 本机收下了、在等空位或等前面的卡（还没开工，卡在待开始）；那台电脑不在线时算等本机上线。
       const waitingFor = waitingOf(run.id);
       const queueReason = holdUntil !== undefined ? "quota" as const : !online.has(run.deviceId) ? "device_offline" as const
-        : waitingFor.length ? "prior_cards" as const : "slot" as const;
+        : folderHolders.has(run.id) ? "folder_busy" as const : waitingFor.length ? "prior_cards" as const : "slot" as const;
       drafts.push({ ...base, group: "queued", role, step: null, resource: local, startedAt: null, elapsedSeconds: null, finishedAt: null,
         wait: null, needsYou: false, queueReason, queuePosition: queueReason === "slot" ? positions.get(run.id) ?? null : null,
-        waitingFor: queueReason === "prior_cards" ? waitingFor : [], holdUntil: holdUntil ?? null });
+        waitingFor: queueReason === "prior_cards" ? waitingFor : [], holdUntil: holdUntil ?? null, ...heldBy(run.id, queueReason) });
     } else if (card.card.stage === "todo") {
       drafts.push({ ...base, group: "queued", role, step: null, resource: null, startedAt: null, elapsedSeconds: null, finishedAt: null,
         wait: null, needsYou: false, queueReason: "not_dispatched", queuePosition: null });
