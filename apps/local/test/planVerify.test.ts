@@ -651,7 +651,8 @@ describe("规矩和交代（不起进程）", () => {
     for (const kind of ["plan", "verify"] as const) expect(systemPrompt(kind, null, [], null)).not.toContain(EDIT_SCOPE_RULE);
   });
 
-  it("给本人看的话用中文（3700 卡 R、S）：卡、专题、自由子会话、规划员、验收员的规矩里都有；点名 description 和「其他」", () => {
+  it("给本人看的话用中文（3700 卡 R、S、U）：卡、专题、自由子会话、规划员、验收员的规矩里都有；点名过程中的旁白、description 和「其他」", () => {
+    expect(CHINESE_RULE).toContain("做事过程中写给本人看的每一句（工具之间的旁白、进度说明）");
     expect(CHINESE_RULE).toContain("description");
     expect(CHINESE_RULE).toContain("写「其他」，不写 Other");
     for (const kind of ["card", "topic", "plan", "verify"] as const) expect(systemPrompt(kind, null, [], null)).toContain(CHINESE_RULE);
