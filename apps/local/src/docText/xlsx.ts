@@ -1,4 +1,4 @@
-// Excel（.xlsx / .xlsm）→ Markdown：每张表一个二级标题，下面一张表格（表头是列字母 A B C…，空行不写）。
+// Excel（.xlsx / .xlsm）→ Markdown：每张表一个二级标题，下面一张表格（表头是列字母 A B C…，最左一列是 Excel 的行号，空行不写）。
 // 有公式的格子写公式本身（=SUM(B2:B9)），不写缓存的值；没公式的写值：数字原样、日期写成 YYYY-MM-DD[ HH:MM:SS]。
 // 合并的格子只在左上角写；隐藏的表、行、列照样带。格子上的批注写在这张表的表格后面（「### 批注」，一条一行「C7：…」）。
 // 同时给出结构化结果：每张表、每一行在 Markdown 里的位置和格子里的字。
@@ -33,7 +33,7 @@ export interface DocTextNote {
 export interface DocTextRow {
   /** 行号，从 1 起，和 Excel 里一样。 */
   row: number;
-  /** 这一行在 markdown 里的字符区间 [start, end)，不含行末的换行。 */
+  /** 这一行在 markdown 里的字符区间 [start, end)：从行首（行号那一格）起，不含行末的换行。 */
   start: number;
   end: number;
   /** 有内容的格子，按列从左到右。 */
@@ -102,7 +102,7 @@ function writeSheet(out: Out, sheet: DocTextSheet, grid: Map<number, Map<number,
   let width = 0;
   for (const cells of grid.values()) for (const c of cells.keys()) width = Math.max(width, c);
   if (!width) return;
-  const header = Array.from({ length: width }, (_, i) => colName(i + 1));
+  const header = ["", ...Array.from({ length: width }, (_, i) => colName(i + 1))];
   out.add("\n\n" + tableMd(header, []));
   for (const r of [...grid.keys()].sort((a, b) => a - b)) {
     const cells = grid.get(r)!;
@@ -115,7 +115,7 @@ function writeSheet(out: Out, sheet: DocTextSheet, grid: Map<number, Map<number,
     }
     out.add("\n");
     const start = out.length;
-    out.add(`| ${row.join(" | ")} |`);
+    out.add(`| ${r} | ${row.join(" | ")} |`);
     sheet.rows.push({ row: r, start, end: out.length, cells: list });
   }
 }
