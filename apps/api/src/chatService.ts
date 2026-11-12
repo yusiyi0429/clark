@@ -124,8 +124,11 @@ export function joinSegments(segments: { messages: ChatMessage[]; runs: ChatRun[
 function segmentMessages(messages: ChatMessage[], runs: ChatRun[]) {
   const status = new Map(runs.map((run) => [run.runId, run.status]));
   const answered = new Set(messages.filter((message) => message.role === "assistant").map((message) => message.runId));
+  // 每条带上时间（契约 ConversationMessage.createdAt）：消息自己的 turnAt，没有用这一轮的（本人那句和这一轮同时写进去）；都没有不写。
+  const turnAt = new Map(runs.map((run) => [run.runId, run.turnAt]));
+  const timeOf = (message: ChatMessage) => { const at = message.turnAt ?? turnAt.get(message.runId); return at ? { createdAt: at } : {}; };
   const ordered: { role: "user" | "assistant"; content: string; runId: string; via?: HomeTurnVia | "buddy" | "report"; running?: true; attachments?: ReturnType<typeof attachmentInfo>[];
-    cards?: TConversationCard[]; answers?: TAskAnswerRecord }[] = [];
+    cards?: TConversationCard[]; answers?: TAskAnswerRecord; createdAt?: string }[] = [];
   for (const message of messages) {
     const state = status.get(message.runId);
     const via = message.channel ? { via: message.channel } : {};
@@ -134,7 +137,7 @@ function segmentMessages(messages: ChatMessage[], runs: ChatRun[]) {
       // 提问卡照契约校验，不合格的丢掉，最多 4 张（界面只认这几种卡）。
       const cards = Array.isArray(message.cards) ? message.cards.filter((card): card is TConversationCard => Value.Check(ConversationCard, card)).slice(0, 4) : [];
       ordered.push({ role: "assistant", content: note ? `${message.text.trimEnd()}\n\n${note}` : message.text, runId: message.runId, ...via,
-        ...(cards.length ? { cards } : {}) });
+        ...(cards.length ? { cards } : {}), ...timeOf(message) });
       continue;
     }
     // 还在回答的那一句标上 running：界面切走、刷新回来据此接上这一轮。伙伴转来的那句去掉开头、标 buddy；子会话报告替本人发的那句去掉开头、标 report。
@@ -143,8 +146,8 @@ function segmentMessages(messages: ChatMessage[], runs: ChatRun[]) {
     ordered.push({ role: "user", content: forwarded ? message.text.slice(forwarded.prefix.length) : message.text, runId: message.runId,
       ...(forwarded ? { via: forwarded.via } : via), ...(state === "running" ? { running: true as const } : {}),
       attachments: (message.attachments ?? []).map(attachmentInfo),
-      ...(Value.Check(AskAnswerRecord, message.answers) ? { answers: message.answers } : {}) });
-    if (state === "failed" && !answered.has(message.runId)) ordered.push({ role: "assistant", content: EMPTY_NOTE, runId: message.runId, ...via });
+      ...(Value.Check(AskAnswerRecord, message.answers) ? { answers: message.answers } : {}), ...timeOf(message) });
+    if (state === "failed" && !answered.has(message.runId)) ordered.push({ role: "assistant", content: EMPTY_NOTE, runId: message.runId, ...via, ...timeOf(message) });
   }
   return ordered;
 }
