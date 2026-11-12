@@ -1,5 +1,5 @@
 import type { TCardMerge, TProjectFeedItem, TProjectFeedResponse, TProjectTransfer, TTaskFeedItem } from "@warmap/contracts";
-import { HANDBACKS_WITH_RELAY, effectiveOutcome, failStreak, handbackBrief, type HandbackRow } from "./cardProjection.js";
+import { HANDBACKS_WITH_RELAY, effectiveOutcome, failStreak, gapPass, handbackBrief, type HandbackRow } from "./cardProjection.js";
 import type { Query } from "./meetingStore.js";
 import type { GoalRow } from "./projects.js";
 
@@ -17,8 +17,8 @@ export const cardMerge = (stored: StoredMerge | null): TCardMerge | null => stor
   state: stored.merged ? "merged" : "needs_merge", commit: stored.commit ?? null, baseBranch: stored.baseBranch ?? null,
   reason: stored.reason ?? null, message: stored.message ?? null, at: new Date(stored.at).toISOString() } : null;
 
-/** 一次交回有结论的时间：推翻过的按推翻的时间，没推翻的按验完的时间。 */
-const judgedAt = (row: FeedHandback) => (row.overruled_at ?? row.finished_at ?? row.created_at).toISOString();
+/** 一次交回有结论的时间：「就到这里」过的按那个时间，推翻过的按推翻的时间，没推翻的按验完的时间。 */
+const judgedAt = (row: FeedHandback) => (row.gap_closed_at ?? row.overruled_at ?? row.finished_at ?? row.created_at).toISOString();
 
 /** 最近一次有结论的交回（排队、在验的不算）；handbacks 是新的在前。 */
 const latestJudged = (handbacks: FeedHandback[]) => handbacks.find((row) => row.status === "done" && effectiveOutcome(row) !== null);
@@ -49,7 +49,7 @@ function cardItems(cards: FeedCard[], byCard: Map<string, FeedHandback[]>): TTas
       const total = row.result ? verdicts.length : row.criteria.length;
       items.push({ kind: "card_passed", id: `passed:${row.id}`, at: judgedAt(row), cardId: card.id, title: card.title,
         met: row.overruled_at ? total : verdicts.filter((item) => item.verdict === "met").length, total, merge: cardMerge(row.merge),
-        gap: row.overruled_at && row.outcome !== "pass" ? row.overrule_reason : null });
+        gap: gapPass(row)?.reason ?? null });
     }
     // 等你补（主循环第 61 条）：每次结论是等本人补的交回一行（在验完的时间），项目对话里照第 54 条只指过去；handback 带一句人话、逐条、送到没有。
     for (const row of mine) if (row.status === "done" && row.outcome === "needs_person")

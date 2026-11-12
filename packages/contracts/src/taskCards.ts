@@ -306,6 +306,7 @@ export const CardBriefResponse = Type.Object({
  * 推翻 Agent 验收（只有推进人）：通过的推翻后卡回进行中、从准备中拿掉（已经进了某一版的不能推翻，409）；
  * 没过的、等本人补的推翻就是「就到这里」（主循环第 62 条，替换原来的「仍然通过」，所有设备一样）：reason 是本人写的一句原因
  * （网页预填没达到那几条的短标题 CardGapItem.short），卡完成、进准备中，记成有缺口通过（CardHandbackBrief.passedWithGap），验收记录写本人和原因。
+ * 已经推翻过的通过（算没过，连着前一次没过就受阻）、卡还没完成：再推翻一次就是「就到这里」，同上记成有缺口通过，不再算一次推翻；别的推翻过的 409 ALREADY_OVERRULED。
  */
 export const OverruleCardHandbackRequest = Type.Object({ reason: Type.String({ minLength: 1, maxLength: 200 }) }, strict);
 

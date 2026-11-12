@@ -48,6 +48,12 @@ export async function recordSubSessionStatus(q: Query, ownerId: string, run: Syn
   return row?.inserted ? { decision: row.id } : {};
 }
 
+/**
+ * 本机截摘要时把没标点结尾的行补「；」再接起来，冒号、逗号、顿号结尾的行也补了，拼成「三件事都做完了：；已删除…」。
+ * 存和读的时候都去掉标点后面多出来的那个「；」（读的时候顺带修好已经存下的）。
+ */
+const tidySummary = (text: string | null) => text?.replace(/([：:，,、])\s*[；;]/g, "$1") ?? null;
+
 /** stopped 条目落下以后：卡或专题在项目里的，记一条报告。报告 id（没记为 undefined）。 */
 export async function recordStopReport(q: Query, ownerId: string, run: SyncRun, report: TLocalStopReport, at: Date): Promise<{ report?: string }> {
   const sub = await subject(q, run);
@@ -55,7 +61,7 @@ export async function recordStopReport(q: Query, ownerId: string, run: SyncRun, 
   const id = randomUUID();
   await q(`INSERT INTO sub_session_reports(id,owner_id,project_id,kind,subject_id,letter,title,run_id,why,summary,blocker,outputs,created_at)
     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13)`,
-  [id, ownerId, sub.projectId, sub.kind, sub.id, sub.letter, sub.title, run.id, report.why, report.summary, report.blocker, JSON.stringify(report.outputs), at]);
+  [id, ownerId, sub.projectId, sub.kind, sub.id, sub.letter, sub.title, run.id, report.why, tidySummary(report.summary), report.blocker, JSON.stringify(report.outputs), at]);
   return { report: id };
 }
 
@@ -84,7 +90,7 @@ export async function projectNotices(q: Query, projectId: string): Promise<(TPro
     [projectId])).rows as DecisionRow[];
   return [
     ...reports.map((row): TProjectSubSessionReportItem => ({ kind: "sub_session_report", id: row.id, at: row.created_at.toISOString(), afterSequence: row.after_sequence,
-      sub: { kind: row.kind, id: row.subject_id, letter: row.letter, title: row.title }, why: row.why, summary: row.summary, blocker: row.blocker,
+      sub: { kind: row.kind, id: row.subject_id, letter: row.letter, title: row.title }, why: row.why, summary: tidySummary(row.summary), blocker: row.blocker,
       outputs: row.outputs.map((output) => ({ outputId: outputIds.get(output.key) ?? null, title: output.title, fileName: output.fileName })) })),
     ...decisions.map((row): TProjectSubSessionDecisionItem => ({ kind: "sub_session_decision", id: row.id, at: row.created_at.toISOString(), afterSequence: row.after_sequence,
       sub: { kind: row.kind, id: row.subject_id, letter: row.letter, title: row.title }, sessionId: row.run_id, deviceId: row.device_id,

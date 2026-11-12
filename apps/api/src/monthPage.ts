@@ -40,8 +40,8 @@ type CardTally = { met: Map<string, Set<number>>; blocked: Map<string, number> }
 async function tallyCards(q: Query, personId: string, taskIds: string[]): Promise<CardTally> {
   const cards = (await q(`SELECT id::text,plan_task_id,status,criterion_index FROM tasks WHERE plan_task_id=ANY($1::text[]) AND owner_id=$2 AND status<>'returned'`,
     [taskIds, personId])).rows as { id: string; plan_task_id: string; status: string; criterion_index: number | null }[];
-  const handbacks = cards.length ? (await q(`SELECT task_id::text,status,outcome,overruled_at FROM card_handbacks WHERE task_id=ANY($1::uuid[]) ORDER BY attempt DESC`,
-    [cards.map((card) => card.id)])).rows as Pick<HandbackRow, "task_id" | "status" | "outcome" | "overruled_at">[] : [];
+  const handbacks = cards.length ? (await q(`SELECT task_id::text,status,outcome,overruled_at,gap_closed_at FROM card_handbacks WHERE task_id=ANY($1::uuid[]) ORDER BY attempt DESC`,
+    [cards.map((card) => card.id)])).rows as Pick<HandbackRow, "task_id" | "status" | "outcome" | "overruled_at" | "gap_closed_at">[] : [];
   const tally: CardTally = { met: new Map(), blocked: new Map() };
   for (const card of cards) {
     const mine = handbacks.filter((row) => row.task_id === card.id);
