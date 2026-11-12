@@ -8,14 +8,15 @@
  * - 开完：停录、传完最后一片、通知服务端录完、记开完（meeting.end）；胶囊写「整理中 0:42」，录音转出会议记录候选后变「记录待确认」。
  * - 录音挂在首页外壳上（useHomeMeeting 在 HomeFrame 里），新首页里切页不断；开着的会记在本机（localStorage），刷新后回来是「录音断了」，
  *   服务端那份录音还停在一半就能接着录，否则只给开完。离开新首页去旧页面时外壳卸下，录音照老规矩停下并交给服务端（不丢已录的）。
- * - 「记录待确认」点了去的地方和「等你」里会议那一行一样（服务端的等你要等说话人确认、出会议卡以后才有这一行）。
+ * - 弹层里的会议标题、已约那几场行尾的箭头、「记录待确认」都去这场会的会议页（/me/work/meetings/:id）；
+ *   服务端的「等你」要等说话人确认、出会议卡以后才有会议那一行，所以录音转完先在胶囊上提醒。
  * 服务端的录音、转写、会后抽取这条链一点不动，只接已有接口：POST /api/meetings、/api/meetings/:id/recordings…、GET /api/me/meetings、
  * GET /api/world-anchor-options、/api/actions/execute 的 meeting.end。
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
 import { Popover } from "@heroui/react";
 import { Button as Pressable } from "react-aria-components";
-import { AudioLines } from "lucide-react";
+import { ArrowUpRight, AudioLines } from "lucide-react";
 import type { TMeetingBookingRequest, TPickedWorldAnchor, TWorldAnchor, TWorldAnchorOption } from "@warmap/contracts";
 import { browserApi, type Card } from "@/lib/api/client";
 import type { Account } from "@/components/AccountMenu";
@@ -27,8 +28,7 @@ import { BOOK_ERROR } from "@/components/meeting/MeetingBookingSheet";
 import { bookMeeting, listPeople, listPersonDirectory, listWorldAnchorOptions, type DirectoryPerson } from "@/components/meeting/meetingDecisionApi";
 import { WorldAnchorPicker } from "@/components/meeting/WorldAnchorPicker";
 import { companyMonth } from "@/lib/companyTime";
-import { waitingHref } from "@/lib/home/derive";
-import { SLOT_MS, defaultAnchor, defaultMeetingTitle, elapsed, meetingSpan, startableMeetings, type BookedMeeting } from "@/lib/home/meeting";
+import { SLOT_MS, defaultAnchor, defaultMeetingTitle, elapsed, meetingHref, meetingSpan, startableMeetings, type BookedMeeting } from "@/lib/home/meeting";
 import { ICON } from "./StateIcon";
 import h from "@/styles/home.module.css";
 
@@ -227,15 +227,15 @@ export function useHomeMeeting({ account, go }: { account: Account; go: (href: s
   }, [organizing, setPhase]);
 
   const dismiss = useCallback(() => setPhase({ kind: "idle" }), [setPhase]);
-  /** 打开这场会（和「等你」里会议那一行去同一个地方）。 */
+  /** 打开这场会的会议页（新首页里的 /me/work/meetings/:id），伙伴台上的胶囊收起。 */
   const open = useCallback(() => {
     if (!meeting) return;
-    go(waitingHref({ open: { kind: "meeting", id: meeting.id } }));
+    go(meetingHref(meeting.id));
     setPhase({ kind: "idle" });
   }, [meeting, go, setPhase]);
 
   return {
-    phase, start, resume, end, dismiss, open, account,
+    phase, start, resume, end, dismiss, open, account, navigate: go,
     /** 伙伴台上伙伴在听、光跟着响度动。 */
     listening: phase.kind === "live" && status === "recording",
     /** 开着会（标签页标题前加「● 」）。 */
@@ -280,7 +280,7 @@ export function MeetingControl({ meeting, missionId }: { meeting: HomeMeeting; m
     );
     body = (
       <>
-        <p className={h.meetTitle}>{phase.meeting.title}</p>
+        <MeetingLink id={phase.meeting.id} title={phase.meeting.title} go={(href) => { setOpen(false); meeting.navigate(href); }} />
         <p className={h.meetMeta}>已开 {elapsed(now - phase.meeting.startedAt)}</p>
         <div className={h.dialogActions}>
           {phase.broken ? phase.resumable ? <>
@@ -299,7 +299,7 @@ export function MeetingControl({ meeting, missionId }: { meeting: HomeMeeting; m
     trigger = <Pressable className={h.meetPill} data-state="failed" data-testid="meeting-pill">{phase.retry === "end" ? "没开完" : "没整理出来"}</Pressable>;
     body = (
       <>
-        <p className={h.meetTitle}>{phase.meeting.title}</p>
+        <MeetingLink id={phase.meeting.id} title={phase.meeting.title} go={(href) => { setOpen(false); meeting.navigate(href); }} />
         <p className={h.meetMeta}>{phase.error}</p>
         <div className={h.dialogActions}>
           {phase.retry ? <>
@@ -332,6 +332,17 @@ export function MeetingControl({ meeting, missionId }: { meeting: HomeMeeting; m
         </Popover.Content>
       </Popover>
     </span>
+  );
+}
+
+/** 没按住修饰键的左键：站内跳转；按着 Ctrl/⌘/Shift 的照浏览器自己的（新标签页、新窗口）。 */
+const plainClick = (event: MouseEvent) => event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
+
+/** 弹出那一小块里的会议标题：点了去这场会的会议页。 */
+function MeetingLink({ id, title, go }: { id: string; title: string; go: (href: string) => void }) {
+  return (
+    <a className={h.meetTitle} href={meetingHref(id)} data-testid="meeting-title-link"
+      onClick={(event) => { if (plainClick(event)) { event.preventDefault(); go(meetingHref(id)); } }}>{title}</a>
   );
 }
 
@@ -406,6 +417,10 @@ function StartForm({ meeting, missionId, onStarted }: { meeting: HomeMeeting; mi
               <button type="button" className={h.menuItem} disabled={busy} onClick={() => void go({ meetingId: entry.meetingId, title: entry.title })} data-testid="meeting-booked">
                 <span className={h.meetRowTitle}>{entry.title}</span><span className={h.menuFaint}>{meetingSpan(entry.startsAt, entry.endsAt)}</span>
               </button>
+              <a className={h.icon} href={meetingHref(entry.meetingId)} aria-label={`打开「${entry.title}」`} data-testid="meeting-booked-open"
+                onClick={(event) => { if (plainClick(event)) { event.preventDefault(); onStarted(); meeting.navigate(meetingHref(entry.meetingId)); } }}>
+                <ArrowUpRight {...ICON} />
+              </a>
             </li>
           ))}
         </ul>

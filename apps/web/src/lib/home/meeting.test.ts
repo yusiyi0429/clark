@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { TWorldAnchorOption } from "@warmap/contracts";
-import { defaultAnchor, defaultMeetingTitle, elapsed, meetingSpan, startableMeetings } from "./meeting";
+import { defaultAnchor, defaultMeetingTitle, elapsed, meetingHref, meetingSpan, startableMeetings } from "./meeting";
 
 const option = (kind: TWorldAnchorOption["kind"], id: string, ownerId: string | null = null): TWorldAnchorOption =>
   ({ kind, id, title: `${kind}-${id}`, brief: null, lifecycle: null, ownerId, parentId: null });
@@ -35,6 +35,10 @@ describe("伙伴台开会的默认值（设计 2026-11-12 第二节）", () => {
     expect(defaultAnchor(options, { last: { kind: "mission", id: "gone" }, me: "me" })?.id).toBe("m-mine");
     expect(defaultAnchor(options, { me: "nobody" })?.id).toBe("m-other");
     expect(defaultAnchor([option("unit", "u1")], { me: "me" })).toBeNull();
+  });
+
+  it("会议页在新首页里", () => {
+    expect(meetingHref("6a566198-f1fa")).toBe("/me/work/meetings/6a566198-f1fa");
   });
 
   it("走秒：一小时内 m:ss，过了 h:mm:ss", () => {

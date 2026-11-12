@@ -5,6 +5,9 @@
 import type { TWorldAnchor, TWorldAnchorOption } from "@warmap/contracts";
 import { COMPANY_TIMEZONE } from "@/lib/companyTime";
 
+/** 这场会的会议页（新首页里，旧的 /me/meetings/:id 会跳过来）。 */
+export const meetingHref = (id: string) => `/me/work/meetings/${encodeURIComponent(id)}`;
+
 /** 已约的会提前多久就能开。 */
 export const EARLY_MS = 15 * 60_000;
 /** 新的一场先占一小时（实际以按下「开完了」为准）。 */
