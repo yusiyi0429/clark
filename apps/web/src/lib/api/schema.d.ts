@@ -19259,6 +19259,7 @@ export interface components {
                 letter: string | null;
                 title: string;
             };
+            stopWhy?: "turn_done" | "interrupted" | "held" | "error" | "killed" | "runner_restart";
         };
         HomeTaskSummary: {
             running: number;
@@ -19362,6 +19363,7 @@ export interface components {
                     letter: string | null;
                     title: string;
                 };
+                stopWhy?: "turn_done" | "interrupted" | "held" | "error" | "killed" | "runner_restart";
             }[];
             items: {
                 /** Format: uuid */
@@ -19613,6 +19615,7 @@ export interface components {
                         letter: string | null;
                         title: string;
                     };
+                    stopWhy?: "turn_done" | "interrupted" | "held" | "error" | "killed" | "runner_restart";
                 }[];
                 items: {
                     /** Format: uuid */
@@ -19743,6 +19746,7 @@ export interface components {
                         letter: string | null;
                         title: string;
                     };
+                    stopWhy?: "turn_done" | "interrupted" | "held" | "error" | "killed" | "runner_restart";
                 }[];
                 items: {
                     /** Format: uuid */

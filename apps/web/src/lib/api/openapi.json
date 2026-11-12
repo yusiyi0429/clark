@@ -117016,6 +117016,34 @@
                 "type": "string"
               }
             }
+          },
+          "stopWhy": {
+            "anyOf": [
+              {
+                "const": "turn_done",
+                "type": "string"
+              },
+              {
+                "const": "interrupted",
+                "type": "string"
+              },
+              {
+                "const": "held",
+                "type": "string"
+              },
+              {
+                "const": "error",
+                "type": "string"
+              },
+              {
+                "const": "killed",
+                "type": "string"
+              },
+              {
+                "const": "runner_restart",
+                "type": "string"
+              }
+            ]
           }
         }
       },
@@ -117762,6 +117790,34 @@
                       "type": "string"
                     }
                   }
+                },
+                "stopWhy": {
+                  "anyOf": [
+                    {
+                      "const": "turn_done",
+                      "type": "string"
+                    },
+                    {
+                      "const": "interrupted",
+                      "type": "string"
+                    },
+                    {
+                      "const": "held",
+                      "type": "string"
+                    },
+                    {
+                      "const": "error",
+                      "type": "string"
+                    },
+                    {
+                      "const": "killed",
+                      "type": "string"
+                    },
+                    {
+                      "const": "runner_restart",
+                      "type": "string"
+                    }
+                  ]
                 }
               }
             }
@@ -119642,6 +119698,34 @@
                             "type": "string"
                           }
                         }
+                      },
+                      "stopWhy": {
+                        "anyOf": [
+                          {
+                            "const": "turn_done",
+                            "type": "string"
+                          },
+                          {
+                            "const": "interrupted",
+                            "type": "string"
+                          },
+                          {
+                            "const": "held",
+                            "type": "string"
+                          },
+                          {
+                            "const": "error",
+                            "type": "string"
+                          },
+                          {
+                            "const": "killed",
+                            "type": "string"
+                          },
+                          {
+                            "const": "runner_restart",
+                            "type": "string"
+                          }
+                        ]
                       }
                     }
                   }
@@ -120600,6 +120684,34 @@
                           "type": "string"
                         }
                       }
+                    },
+                    "stopWhy": {
+                      "anyOf": [
+                        {
+                          "const": "turn_done",
+                          "type": "string"
+                        },
+                        {
+                          "const": "interrupted",
+                          "type": "string"
+                        },
+                        {
+                          "const": "held",
+                          "type": "string"
+                        },
+                        {
+                          "const": "error",
+                          "type": "string"
+                        },
+                        {
+                          "const": "killed",
+                          "type": "string"
+                        },
+                        {
+                          "const": "runner_restart",
+                          "type": "string"
+                        }
+                      ]
                     }
                   }
                 }
