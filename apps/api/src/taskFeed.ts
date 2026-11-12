@@ -54,12 +54,12 @@ function cardItems(cards: FeedCard[], byCard: Map<string, FeedHandback[]>): TTas
     // 等你补（主循环第 61 条）：每次结论是等本人补的交回一行（在验完的时间），项目对话里照第 54 条只指过去；handback 带一句人话、逐条、送到没有。
     for (const row of mine) if (row.status === "done" && row.outcome === "needs_person")
       items.push({ kind: "card_needs_person", id: `needs_person:${row.id}`, at: (row.finished_at ?? row.created_at).toISOString(), cardId: card.id, title: card.title,
-        handbackId: row.id, fix: row.return_text, sourceWordIssues: row.result?.sourceWordIssues ?? [], handback: handbackBrief(row) });
+        handbackId: row.id, fix: row.return_text, sourceWordIssues: row.result?.sourceWordIssues ?? [], handback: handbackBrief(row, mine) });
     // 受阻（连续两次没过，同卡的投影；完成了的卡不算）：最近那次没过的交回一行，改法是它的 return_text。
     if (card.status !== "done" && failStreak(mine) >= 2) {
       const failed = mine.find((row) => row.status === "done" && effectiveOutcome(row) === "fail")!;
       items.push({ kind: "card_blocked", id: `blocked:${failed.id}`, at: judgedAt(failed), cardId: card.id, title: card.title, handbackId: failed.id, fix: failed.return_text,
-        sourceWordIssues: failed.result?.sourceWordIssues ?? [], handback: handbackBrief(failed) });
+        sourceWordIssues: failed.result?.sourceWordIssues ?? [], handback: handbackBrief(failed, mine) });
     }
     // 合回后推翻开的返工卡：理由在原卡被推翻的那次（本来通过的）交回上，取最近一次。
     if (card.rework_of_card_id) {

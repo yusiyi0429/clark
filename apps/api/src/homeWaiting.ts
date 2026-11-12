@@ -60,6 +60,15 @@ export function reviewWindow(now: Date): { period: string; closesAt: string } | 
 /** 管线里那个框是哪一次提问或批准（老版本本机程序没报时为 null）。 */
 const askRequestId = (ask: RunAsk | null) => ask?.request.requestId ?? null;
 
+const TIMES = ["", "一", "两", "三", "四", "五", "六", "七", "八", "九"];
+/** 受阻框和「等你」那一行的第一句：受阻是本人推翻造成的（最近一次交回是通过被推翻成没过）写推翻了几次、最后一次的原因，别的写验收员那句人话。 */
+function blockedLine(handback: TCardTaskView["card"]["handback"]): string | null {
+  if (!handback) return null;
+  if (handback.outcome === "pass" && handback.overruled && handback.overrules)
+    return `你推翻了${TIMES[handback.overrules.count] ?? ` ${handback.overrules.count} `}次：${handback.overrules.reason}`;
+  return handback.headline;
+}
+
 /**
  * 等你那一行的原话和就地答要的东西：在问的用第一个问题的原话，等批准的用那一步给人看的那一行；老版本本机程序没报时退回泛称。
  * summary（第二行，主循环第 64、66 条）：在问的是第一个问题的原文，等批准的是执行方写的那句人话（没有为 null）。
@@ -122,7 +131,7 @@ export async function assembleWaiting(input: WaitingInput): Promise<TWaitingItem
     const kind = sub.waiting === "needs_person" ? "needs_person" as const : "verdict" as const;
     add({ id: `${kind}:card:${view.id}`, kind, title: kind === "needs_person" ? "等你补" : "验收两次没过", source: [view.title, taskName(taskId)].filter(Boolean).join(" · "),
       at: view.card.handback?.createdAt ?? null, open: { kind: "card", id: view.id }, taskId, projectId: sub.projectId, letter: sub.letter, answer: "open",
-      summary: view.card.handback?.headline ?? null });
+      summary: blockedLine(view.card.handback) });
   }
   // 规划员、验收员在等批准、等回复（停着等额度恢复的不算）。
   // 只算真在问（idle 带提问）和在等批准的；一轮做完停下的不算（9.6）。
