@@ -18,6 +18,8 @@ export interface RecorderState {
   status: RecorderStatus;
   /** 失败时给人看的一句话。 */
   error?: string;
+  /** 服务端这份录音的 id（录上以后才有，结束后留着，好查转写走到哪一步）。 */
+  recordingId?: string;
 }
 
 /** 每一片多长：够短，断网丢一片也只丢几秒；够长，一小时的会不到 400 次请求。 */
@@ -120,7 +122,7 @@ export function useMeetingRecorder(meetingId: string) {
     media.start(SLICE_MS);
     recorder.current = media;
     startMeter(stream.current);
-    setState({ status: "recording" });
+    setState({ status: "recording", recordingId: body.recordingId });
   }, [base, upload]);
 
   /** 停下、传完最后一片、告诉服务端录完了。没在录就什么都不做。返回服务端是否接下了转写。 */
@@ -128,7 +130,7 @@ export function useMeetingRecorder(meetingId: string) {
     const media = recorder.current;
     const id = recordingId.current;
     if (!media || !id) return false;
-    setState({ status: "stopping" });
+    setState({ status: "stopping", recordingId: id });
     await new Promise<void>((resolve) => {
       media.addEventListener("stop", () => resolve(), { once: true });
       media.stop();
@@ -140,10 +142,10 @@ export function useMeetingRecorder(meetingId: string) {
     recordingId.current = null;
     if (!response?.ok) {
       const body = (await response?.json().catch(() => ({}))) as { message?: string } | undefined;
-      setState({ status: "failed", error: body?.message ?? "录音未能提交转写，请稍后在「会议记录」中导入妙记。" });
+      setState({ status: "failed", error: body?.message ?? "录音未能提交转写，请稍后在「会议记录」中导入妙记。", recordingId: id });
       return false;
     }
-    setState(failed.current ? { status: "finished", error: failed.current } : { status: "finished" });
+    setState(failed.current ? { status: "finished", error: failed.current, recordingId: id } : { status: "finished", recordingId: id });
     return true;
   }, [base]);
 

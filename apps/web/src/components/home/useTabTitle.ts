@@ -2,16 +2,21 @@
 
 /**
  * 不用盯着页面也能知道（设计 9.7）：等你大于 0 时，标签页标题写「(3) 天枢」，图标右上角一个 8px 强调色圆点；
- * 离开新首页、等你清零时还原。
+ * 离开新首页、等你清零时还原。开着会时标题前加「● 」（开会，设计 2026-11-12）。
  */
 import { useEffect } from "react";
 
 const TITLE = "天枢";
 
-export function useTabTitle(waiting: number) {
+export function useTabTitle(waiting: number, meeting = false) {
   useEffect(() => {
-    document.title = waiting > 0 ? `(${waiting}) ${TITLE}` : TITLE;
-  }, [waiting]);
+    const title = `${meeting ? "● " : ""}${waiting > 0 ? `(${waiting}) ${TITLE}` : TITLE}`;
+    document.title = title;
+    // 整页打开时页面自己的标题晚一步写进来，会盖掉这里写的：被换掉就再写回去。
+    const observer = new MutationObserver(() => { if (document.title !== title) document.title = title; });
+    observer.observe(document.head, { childList: true, subtree: true, characterData: true });
+    return () => observer.disconnect();
+  }, [waiting, meeting]);
   useEffect(() => () => { document.title = TITLE; }, []);
   useEffect(() => {
     const links = [...document.querySelectorAll<HTMLLinkElement>('link[rel~="icon"]')];
