@@ -77,6 +77,20 @@ export async function writeAgreement(q: Query, row: AgreementRow, next: { brief?
   return revision;
 }
 
+const BY_TEXT = { person: "本人直接改", worker: "本人确认执行方的提议", pipeline: "伙伴改的" } as const;
+
+/**
+ * 验收交代里的「约定后来改过」（跟在本人原话后面）：每次第几版、谁改的、原因，旧的在前。本人改过或确认过的，原话和新约定冲突的地方以新约定为准；
+ * 只有伙伴改的那几次照列，不适用这句。没改过为空。
+ */
+export async function agreementChangeLines(q: Query, cardId: string): Promise<string[]> {
+  const rows = (await q("SELECT revision,by_kind,reason FROM card_agreement_changes WHERE card_id=$1 ORDER BY revision", [cardId])).rows as
+    { revision: number; by_kind: AgreementBy["kind"]; reason: string | null }[];
+  if (!rows.length) return [];
+  return ["## 约定后来改过", "", ...rows.map((row) => `- 第 ${row.revision} 版：${BY_TEXT[row.by_kind]}，原因：${row.reason?.trim() || "没写"}`),
+    ...(rows.some((row) => row.by_kind !== "pipeline") ? ["", "原话和本人改过或确认过的新约定冲突的地方，以新约定为准，不算原话没要的或漏了的。"] : [])];
+}
+
 /** 本人的这张卡此刻的约定（带版本号）；不是本人的、没有的 404。lock 时在调用方的事务里锁住。 */
 export async function agreementRow(q: Query, ownerId: string, cardId: string, lock = false): Promise<AgreementRow> {
   const row = /^[0-9a-f-]{36}$/i.test(cardId) ? (await q(`SELECT id::text,owner_id,status,brief,done_definition,agreement_revision FROM tasks WHERE id=$1${lock ? " FOR UPDATE" : ""}`,

@@ -15,6 +15,11 @@ import { TEST_CEO, TEST_MEMBER } from "./helpers.js";
 const TOKEN = "chat-token";
 const running = (title: string) => ["status", { status: "running", title, agent: "claude-code", modelLabel: "订阅 · Sonnet" }] as [string, unknown];
 
+/** 本人在项目对话里说一句（没接 Chat，存在天枢自己 scope 为 project:<id> 的对话里）。 */
+const say = (f: Awaited<ReturnType<typeof boardFixture>>, projectId: string, message: string) => f.t.app.inject({ method: "POST",
+  url: `/api/conversations/${encodeURIComponent(`project:${projectId}`)}/messages`,
+  headers: { cookie: f.member, origin: f.t.publicOrigin, accept: "text/event-stream" }, payload: { message } });
+
 async function fixture(seed: Parameters<typeof boardFixture>[1] = {}) {
   const sent: { id: string; text: string }[] = [];
   const feishuClient = { sendMessage: async (_type: string, id: string, _msgType: string, content: { text: string }) => {
@@ -113,9 +118,11 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
       await f.undo(set.auditId!);
       expect((await f.call("GET", "/api/me/tasks/task-open/budget")).json()).toMatchObject({ inherited: true });
 
-      const split = await f.ok("split_cards", { projectId, words: "先拆打分，录屏不要" });
+      // 伙伴带的原话是本人在项目对话里说过的原样片段：存片段。
+      expect((await say(f, projectId, "先拆打分，录屏不要")).statusCode).toBe(200);
+      const split = await f.ok("split_cards", { projectId, words: "先拆打分" });
       expect(split.undoable).toBe(true);
-      expect((await f.t.sql("SELECT source_words FROM card_split_requests WHERE id=$1", [split.result!.requestId]))[0].source_words).toEqual(["先拆打分，录屏不要"]);
+      expect((await f.t.sql("SELECT source_words FROM card_split_requests WHERE id=$1", [split.result!.requestId]))[0].source_words).toEqual(["先拆打分"]);
       // 已经有一条没开的登记：再登记拿到的是那一条，不给撤。
       expect((await f.ok("split_cards", { projectId })).undoable).toBe(false);
       await f.undo(split.auditId!);
@@ -126,6 +133,28 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
       expect(log.map((entry) => entry.action)).toEqual(["split_cards", "split_cards", "set_budget", "archive_project", "link_task_to_project", "rename_project",
         "create_project", "set_appearance"]);
       expect(log.find((entry) => entry.action === "create_project")!.undoable).toBe(true);
+    } finally { await f.close(); }
+  });
+  it("3700 小卡 U：伙伴登记拆卡带的原话里有自己补的交代，存的改成本人在项目对话里真说的话；几段都是原样片段才存片段", async () => {
+    const f = await fixture();
+    try {
+      await f.grant();
+      await f.t.sql("INSERT INTO project_bootstraps(person_id,done_at,report) VALUES($1,now(),'{}')", [TEST_MEMBER.personId]);
+      const projectId = (await f.ok("create_project", { name: "验收1112" })).result!.projectId as string;
+      const said = ["开一张卡：在 验收1112 文件夹里新建 文件清单.md，别的文件都不要动。", "清单按文件名排"];
+      for (const text of said) expect((await say(f, projectId, text)).statusCode).toBe(200);
+      const stored = async (requestId: unknown) => (await f.t.sql("SELECT source_words FROM card_split_requests WHERE id=$1", [requestId]))[0].source_words;
+
+      // 一段是原样的、一段是项目对话自己写的交代：整件改用本人最近说的那几条。
+      const padded = await f.ok("split_cards", { projectId, words: `本人原话：${said[0]}\n\n交代：\n1. 只新建 文件清单.md，不许新建别的文件` });
+      expect(await stored(padded.result!.requestId)).toEqual(said);
+      await f.undo(padded.auditId!);
+
+      // 摘的两段（空行隔开）都在本人说过的话里：存这两段。
+      const exact = await f.ok("split_cards", { projectId, words: "新建 文件清单.md\n\n  清单按文件名排  " });
+      expect(await stored(exact.result!.requestId)).toEqual(["新建 文件清单.md", "清单按文件名排"]);
+      // 网页按钮自己带的话照旧原样存。
+      expect((await f.call("POST", `/api/me/projects/${projectId}/card-splits`, { words: "按钮里写的" })).json().sourceWords).toEqual(["按钮里写的"]);
     } finally { await f.close(); }
   });
 
@@ -399,6 +428,9 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
     expect(description("split_cards")).toContain("不拆、不开工");
     // 3700 验收：项目对话把「只拆这两张验收卡，范围限定在…」塞进了 modelWords。说明里写死只放来源、模型、思考的原话，没说就不带。
     for (const word of ["modelWords 只放本人关于用哪个来源、哪个模型、思考开到多少的原话", "本人没说这些就不带", "不放 modelWords"])
+      expect(description("split_cards")).toContain(word);
+    // 3700 小卡 U：项目对话把自己写的交代塞进了 words。说明里写死只能原样摘，拿不准就不带。
+    for (const word of ["words 只能原样摘本人在项目对话里说过的话，不改写、不加自己的交代", "拿不准就不带，云端取本人最近说的话"])
       expect(description("split_cards")).toContain(word);
     expect(description("ask_user")).toContain("建项目、拆卡之前一定先用它把现实问清楚");
     for (const personality of ["steady", "direct", "warm", "coach"] as const)

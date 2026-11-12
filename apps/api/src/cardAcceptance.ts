@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { wordsLines } from "./sourceWords.js";
+import { agreementChangeLines } from "./cardAgreements.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Pool, PoolClient } from "pg";
@@ -35,7 +36,8 @@ export function returnText(criteria: string[], result: StoredAcceptance, workerO
   for (const issue of result.sourceWordIssues ?? [])
     missed.push(`本人原话「${issue.quote}」${issue.kind === "missing" ? "说了要的没做" : "没要的做了"}，${issue.reason}`);
   if (!missed.length) return null;
-  return `${workerOnly ? "你能补的" : "验收没过"}：${missed.join("。")}。改完再交回。`;
+  // 验收员写的那几句自己常带句号：每段先去掉末尾的「。」再连，不出「。。」。
+  return `${workerOnly ? "你能补的" : "验收没过"}：${missed.map((text) => text.trim().replace(/。+$/, "")).join("。")}。改完再交回。`;
 }
 
 /** 通过时写进执行事项的验收记录：by 记推进人，agentHandbackId 表示是 Agent 验收；本人「仍然通过」时 verdict 写推翻的原因。 */
@@ -352,6 +354,7 @@ export async function verifyBrief(q: Query, ownerId: string, handbackKey: string
   const outputs = row.output_ids.length ? (await q("SELECT * FROM local_outputs WHERE id=ANY($1::uuid[]) ORDER BY created_at,id", [row.output_ids])).rows as OutputRow[] : [];
   const history = (await q("SELECT * FROM card_handbacks WHERE task_id=$1 AND attempt<$2 ORDER BY attempt DESC", [row.task_id, row.attempt])).rows as HandbackRow[];
   const previous = history.find((item) => item.status === "done" && item.result);
+  const changes = await agreementChangeLines(q, task.id);
   const cut = (text: string) => text.length > BRIEF_ITEM_CHARS ? `${text.slice(0, BRIEF_ITEM_CHARS)}…` : text;
   const pointed = task.criterion_index && task.criterion_text ? [`这张卡对的是 Task 第 ${task.criterion_index} 条标准：${task.criterion_text}`] : [];
   const lines = [
@@ -361,6 +364,8 @@ export async function verifyBrief(q: Query, ownerId: string, handbackKey: string
     // 本人原话（16.8）：逐条对完标准再对一遍；明显对不上算没过。
     ...(task.source_words.length ? ["", ...wordsLines(task.source_words, "逐条判完完成标准后，再对一遍本人原话：产出做了原话里没要的、或漏了原话里明说的，"
       + "就算没过，在相关那条的 reason 里写明是哪句。")] : []),
+    // 约定后来改过（3700 小卡 U）：本人后来加的要求不能拿原话判成「没要的」。
+    ...(changes.length ? ["", ...changes] : []),
     "", `## 完成标准（共 ${row.criteria.length} 条，逐条判）`, "", ...row.criteria.map((text, index) => `${index + 1}. ${text}`),
     ...(pointed.length || agreement ? ["", "## 约定", "", ...pointed, ...(agreement?.proof ? [`用什么证明：${agreement.proof}`] : []),
       ...(agreement?.exclusions.length ? ["这次不包括（不能当作没达到的理由）：", ...agreement.exclusions.map((text) => `- ${text}`)] : [])] : []),

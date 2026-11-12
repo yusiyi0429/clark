@@ -21,6 +21,7 @@ import { autoRelayStep } from "./autoRelay.js";
 import type { RunAsk } from "./localDevices.js";
 import { agreementRow, writeAgreement } from "./cardAgreements.js";
 import { CardError } from "./taskCards.js";
+import { checkedWords, recentOwnerWords, type ProjectHistory } from "./sourceWords.js";
 
 /**
  * 伙伴代本人做事（新首页 17.4，契约 buddyActions.ts）。Chat 每轮读动作清单（actionList），模型调哪个就按名字执行（runAction）。
@@ -72,7 +73,8 @@ const DESCRIPTION: Record<BuddyActionName, string> = {
   archive_project: "归档一个项目。",
   link_task_to_project: "把本人负责的一件 Task 挂到某个项目上（原来挂在别的项目上就移过来）。",
   transfer_project: "把项目转交给同事：发起转交，交接说明由云端写好后直接发出。toPersonId 是同事的人员 id。",
-  split_cards: "登记拆卡：给一件 Task（taskId）或一个没挂 Task 的项目（projectId）拆执行卡，二选一；words 是本人关于怎么拆的原话。"
+  split_cards: "登记拆卡：给一件 Task（taskId）或一个没挂 Task 的项目（projectId）拆执行卡，二选一。words 只能原样摘本人在项目对话里说过的话，不改写、不加自己的交代，摘几段用空行隔开；"
+    + "拿不准就不带，云端取本人最近说的话。"
     + "modelWords 只放本人关于用哪个来源、哪个模型、思考开到多少的原话（比如「用 Opus」「思考开到最高」），原样摘那一截，不翻译成型号；"
     + "本人没说这些就不带。拆哪几张、范围、怎么做的话放 words，不放 modelWords。"
     + "拆之前先用 ask_user 问清现实：在哪个文件夹、哪个目录开工，本机有没有、要不要新建，是不是从别处（比如 Codex）迁过来的，要不要连 GitHub，拆完做成的样子和本人要的是不是一回事。"
@@ -142,6 +144,8 @@ export type BuddyDeps = {
   names: () => Map<string, string>;
   /** 往这一轮的对话事件流里插一帧（接了 Chat 才有）。 */
   stream?: BuddyStream;
+  /** 读本人那段项目对话（登记拆卡取本人原话用，sourceWords.ts）。 */
+  history: ProjectHistory;
 };
 type Call = { personId: string; conversationId: string | null; runId: string | null };
 type Outcome = { summary: string; result?: unknown; undo?: Undo | null; ui?: TBuddyUiEffect[]; card?: TConversationCard };
@@ -364,13 +368,19 @@ const handlers: Handlers = {
   },
   split_cards: async (deps, call, args) => {
     if (Boolean(args.taskId) === Boolean(args.projectId)) throw new BuddyError(400, "INVALID_ARGS", "taskId 和 projectId 要带且只带一个");
-    const body = { ...args.words?.trim() ? { words: args.words } : {}, ...args.modelWords?.trim() ? { modelWords: args.modelWords.trim() } : {} };
+    // 原话只认本人真说的（16.8）：伙伴带的每段都得是本人最近在项目对话里说的话的原样子串才用，不然改用本人最近说的那几条（同内部登记）。
+    // 要在登记之前读：本人最近说的话从上一次登记之后算。
+    const said = await recentOwnerWords(deps.q, deps.history, call.personId, { taskId: args.taskId ?? null, projectId: args.projectId ?? null }, call.runId ?? randomUUID());
+    const words = checkedWords(said, args.words?.trim() ? args.words.trim().split(/\n\s*\n/) : undefined);
+    const body = args.modelWords?.trim() ? { modelWords: args.modelWords.trim() } : {};
     // 登记之前就有一条没开的：那条不是这次登记的，不给撤。
     const before = new Set(((await deps.q("SELECT id::text FROM card_split_requests WHERE owner_id=$1 AND closed_at IS NULL", [call.personId])).rows as
       { id: string }[]).map((row) => row.id));
     const request = await web<{ id: string }>(deps, call.personId, "POST", args.taskId
       ? `/api/plan-tasks/${encodeURIComponent(args.taskId)}/card-splits` : `/api/me/projects/${encodeURIComponent(args.projectId!)}/card-splits`, body);
     const created = !before.has(request.id);
+    // 网页那条路只存按钮输入框的一段话，原话在这里写；没有可存的就不动已有那条的。
+    if (words.length) await deps.q("UPDATE card_split_requests SET source_words=$2::jsonb WHERE id=$1", [request.id, JSON.stringify(words)]);
     return { summary: "登记了拆卡，本人电脑上开着的网页接下后就开始拆", result: { requestId: request.id },
       undo: created ? { kind: "split", requestId: request.id } : null,
       ui: [args.projectId ? projectRefresh(args.projectId) : { kind: "refresh", what: ["work_home"] }] };

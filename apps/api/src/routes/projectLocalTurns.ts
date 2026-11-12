@@ -10,6 +10,7 @@ import { ChatServiceError } from "../chatService.js";
 import { deviceOfToken } from "../localDevices.js";
 import { personDisplayNames } from "../people.js";
 import { authenticateLocalToken } from "../personalTokens.js";
+import { projectHistoryReader } from "../sourceWords.js";
 import { LocalTurnError, finishLocalTurn, heartbeatLocalTurn, issueProjectKey, startLocalTurn, type LocalTurnDeps } from "../projectLocalTurns.js";
 import type { AppInstance, RouteContext } from "./shared.js";
 
@@ -17,7 +18,7 @@ import type { AppInstance, RouteContext } from "./shared.js";
  * 项目对话在本人电脑上跑（17.2 第 38 条，契约 projectLocalTurns.ts）：本机程序用设备令牌取项目钥匙、开始 / 心跳 / 结束一轮。不在网页的 OpenAPI 里。
  */
 export function localTurnDeps(app: AppInstance, ctx: RouteContext): LocalTurnDeps {
-  const buddy: BuddyDeps = { app, q: ctx.q, env: ctx.env, now: ctx.now, names: () => personDisplayNames(ctx.peopleDirectory) };
+  const buddy: BuddyDeps = { app, q: ctx.q, env: ctx.env, now: ctx.now, names: () => personDisplayNames(ctx.peopleDirectory), history: projectHistoryReader(ctx) };
   return { pool: ctx.pool, q: ctx.q, chat: ctx.chat, now: ctx.now, pepper: ctx.env.sessionSecret, publicOrigin: ctx.env.publicOrigin, buddy };
 }
 

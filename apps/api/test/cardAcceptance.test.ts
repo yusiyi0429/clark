@@ -80,6 +80,10 @@ describe("Agent 验收：队列、推翻、退回记录", { timeout: 30_000 }, (
       expect(failed).toMatchObject({ stage: "doing", wait: "review_failed", handback: { outcome: "fail", met: 1, total: 2, returnText: text, returnedAt: null } });
       expect(returnText(["甲", "乙"], { headline: "", beyondScope: [], criteria: [{ index: 2, verdict: "unmet", reason: "没有", evidence: null, fix: null },
         { index: 1, verdict: "partial", reason: "一半", evidence: null, fix: "补" }] })).toBe("验收没过：第 1 条「甲」，一半；怎么补：补。第 2 条「乙」，没有；怎么补：补上能核对的证据。改完再交回。");
+      // 3700 小卡 U：验收员写的 fix、原话那几处的 reason 自己带了句号，连起来不出「。。」。
+      expect(returnText(["甲"], { headline: "", beyondScope: [], criteria: [{ index: 1, verdict: "unmet", reason: "没有", evidence: null, fix: "补上。" }],
+        sourceWordIssues: [{ quote: "别的文件都不要动", kind: "extra", reason: "多了 风险.md，让执行方删掉。" }] }))
+        .toBe("验收没过：第 1 条「甲」，没有；怎么补：补上。本人原话「别的文件都不要动」没要的做了，多了 风险.md，让执行方删掉。改完再交回。");
       const returned = await f.call("POST", `/api/me/cards/${id}/handbacks/${first}/returned`);
       expect(returned.statusCode).toBe(200);
       expect(returned.json().task.card).toMatchObject({ stage: "doing", wait: null });
