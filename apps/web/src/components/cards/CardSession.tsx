@@ -28,7 +28,7 @@ import { useSessionMode } from "./PermissionMode";
 import { FilePreview, cloudOutputFile, localChangedFile, type PreviewFile } from "./FilePreview";
 import { filesRestored, filesSignal, matchChangedFile, useSessionFiles } from "@/lib/local/sessionFiles";
 import { ChangedFiles } from "./ChangedFiles";
-import { TurnFilesContext, latestFilesSeq } from "./TurnFiles";
+import { TurnFilesContext, turnFilesView } from "./TurnFiles";
 import { HARNESS_NAME, runLabel, sessionModelText } from "@/lib/local/runModel";
 import { useCardDetail, type CardDetail } from "./useCardDetail";
 import { SourceWordIssues, SourceWords } from "./SourceWords";
@@ -262,8 +262,7 @@ export function CardSession({ cardId, embedded = false, waiting, queued = null }
         <div className={s.scroll} ref={scroll.scrollRef}>
           <div ref={scroll.contentRef}>
             {session ? (
-              <TurnFilesContext.Provider value={{ open: fileSession ? openChanges : null, restored: (path) => !!files.find((file) => file.path === path)?.restoredAt, latest: latestFilesSeq(view.entries),
-                count: fileSession ? (path, turn) => local.runner.readFileChanges(fileSession, { path, range: "turn", turn }).then((data) => (data.detail === "none" ? null : data.changes?.length ?? 0)) : undefined, version: files }}>
+              <TurnFilesContext.Provider value={turnFilesView(local.runner, fileSession, files, view.entries, openChanges)}>
               <SessionTranscript entries={send.entries} agentName={agentName} canAct={canAct} onResend={(entry) => void say(entry.text).catch(() => showWorkspaceToast({ text: "没发出去" }))} onRetry={send.retry} draft={draft} drafted={drafted} device={device} live={sessionRunning} starting={status === "starting"} ended={ended} pinned={embedded} lead={`交代：${item.title}${item.card?.criterion ? ` · 按「${item.card.criterion.text}」验收` : ""}`}
                 onFile={openFile}
                 onDecide={(request, decision, options) => decide(request.requestId, decision, options)} tail={tail} asking={question}
