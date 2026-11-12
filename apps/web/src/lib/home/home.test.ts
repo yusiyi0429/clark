@@ -103,7 +103,7 @@ describe("新首页的数据（B 的 work-home 没上时照契约的形状拼）
     expect(statusLine({ ...idle, subSessions: [{ ...old, state: "waiting", waiting: null }] })).toBe("已停下 1");
   });
 
-  it("等你：子会话的批准、会议记录待确认；群消息只是让你知道，不进（设计 9.6）；去哪儿看由 open 映射到路由；受阻去项目对话；第一次没过自动重做，不在这里", () => {
+  it("等你：子会话的批准、会议记录待确认；群消息只是让你知道，不进（设计 9.6）；去哪儿看由 open 映射到路由；受阻去那张卡；第一次没过自动重做，不在这里", () => {
     expect(data.waiting.map((entry) => [entry.kind, waitingHref(entry)])).toEqual([
       ["approval", "/me/work/projects/mission%3Am1"], ["meeting", "/me/meetings/mt1"],
     ]);
@@ -113,7 +113,7 @@ describe("新首页的数据（B 的 work-home 没上时照契约的形状拼）
     expect(data.waiting[0]).toMatchObject({ title: "等你批准", source: "天枢 11 月", taskId: "t1", projectId: "mission:m1", open: { kind: "project", id: "mission:m1" } });
     expect(waitingHref({ open: { kind: "project", id: "p1", focus: { sessionId: "s1", requestId: null } } })).toBe("/me/work/projects/p1#ask-s1");
     const blocked = deriveWorkHome({ plan, workers: [worker({ key: "card:c9", cardId: "c9", wait: "blocked" })], boards: {}, proposals: [], merges: [], notices: null, deviceId: null });
-    expect(blocked.waiting.map((entry) => [entry.kind, entry.title, waitingHref(entry)])).toEqual([["verdict", "受阻", "/me/work/projects/mission%3Am1"]]);
+    expect(blocked.waiting.map((entry) => [entry.kind, entry.title, waitingHref(entry)])).toEqual([["verdict", "受阻", "/me/work/cards/c9"]]);
   });
 
   it("验收过了、本机没能自动合回（needsMerge）：子会话是等你合回，等你里一条「合进 main」；本机还在自己合的不算等你；合回了折进已完成", () => {
@@ -148,8 +148,8 @@ describe("树上的卡：worker 列表只有今天完成的，看板补上之前
     expect(both.projects[0]!.subSessions.map((sub) => [sub.id, sub.state])).toEqual([["c9", "waiting"]]);
   });
 
-  it("受阻（验收两次没过）进项目对话：云端给的目标是那张卡时也一样（选项框在对话里）", () => {
-    expect(waitingHref({ kind: "verdict", projectId: "p1", open: { kind: "card", id: "c1" } })).toBe("/me/work/projects/p1");
+  it("受阻（验收两次没过）进那张卡：项目下没挂 Task 的卡也有框", () => {
+    expect(waitingHref({ kind: "verdict", projectId: "p1", open: { kind: "card", id: "c1" } })).toBe("/me/work/cards/c1");
     // 岗位修改建议点进去是新首页里的「岗位」二级页，不再跳出新首页。
     expect(waitingHref({ open: { kind: "role", id: "r1" } })).toBe("/me/work/settings/roles");
     expect(waitingHref({ kind: "approval", projectId: "p1", open: { kind: "card", id: "c1" } })).toBe("/me/work/cards/c1");

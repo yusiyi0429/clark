@@ -3,11 +3,13 @@
 /**
  * 对话里一轮末尾那一行（设计第 72 条第一步，事件 files_changed）：这一轮改过文件时出一行淡字「改了 周报.md · 2 处 ›」，不是按钮的样子；
  * 多个文件各一行，超过 3 个收成「改了 5 个文件 ›」（点了展开成各一行）；全部恢复以后写「已恢复」。
- * 点了在右边打开预览，看的是那一轮（带轮号），停在第一处。卡在工作树里的会话本机不发这个事件，没有这一行。
+ * 点了在右边打开预览，看的是那一轮（带轮号），停在第一处。卡在工作树里的会话本机不发这个事件，没有这一行。卡的子会话和自由子会话都接（turnFilesView）。
  * 手机上、别的电脑上（连不上那台电脑的本机程序）：那一行照样出，点了写「在那台电脑上看」。
  */
 import { createContext, useContext, useEffect, useRef, useState } from "react";
+import type { TLocalChangedFile } from "@warmap/contracts";
 import type { TurnFile } from "@/lib/local/fileChanges";
+import type { LocalRunner } from "@/lib/local/runner";
 import type { SessionEntry } from "@/lib/local/sessionView";
 import c from "@/styles/change-view.module.css";
 
@@ -28,6 +30,20 @@ export const TurnFilesContext = createContext<TurnFilesView | null>(null);
 /** 对话记录里最近一轮那一行的编号；它后面来了本人的话（开了新一轮）就没有：本机对更早的一轮给的是当时的改动，重读会把恢复过的又算回去。 */
 export const latestFilesSeq = (entries: readonly SessionEntry[]) =>
   entries.reduce<number | null>((last, entry) => (entry.kind === "files" ? entry.seq : entry.kind === "user" ? null : last), null);
+
+/**
+ * 这台电脑上跑着的会话给对话那一行的东西（卡的子会话、自由子会话共用）：fileSession 为 null（手机、别的电脑）时点不开、不重读。
+ * files 是右栏清单（useSessionFiles），恢复过文件它就变，最近一轮那一行跟着重读。
+ */
+export function turnFilesView(runner: Pick<LocalRunner, "readFileChanges">, fileSession: string | null, files: readonly TLocalChangedFile[], entries: readonly SessionEntry[], open: (path: string, turn: number) => void): TurnFilesView {
+  return {
+    open: fileSession ? open : null,
+    restored: (path) => !!files.find((file) => file.path === path)?.restoredAt,
+    latest: latestFilesSeq(entries),
+    count: fileSession ? (path, turn) => runner.readFileChanges(fileSession, { path, range: "turn", turn }).then((data) => (data.detail === "none" ? null : data.changes?.length ?? 0)) : undefined,
+    version: files,
+  };
+}
 
 /** 收成一行的门槛：超过这么多个文件写「改了 N 个文件」。 */
 const FOLD_OVER = 3;

@@ -405,4 +405,21 @@ describe("执行方异常", () => {
       await t.cleanup();
     }
   });
+
+  it("Claude Code 续接被打断的那一轮时自己补的「No response requested.」：给本人看换成中文（3700 自由子会话 T）", async () => {
+    const work = tempDir("tl-work-");
+    const t = await startTestRunner({ pickFolder: work });
+    try {
+      const token = await pair(t.port);
+      await api(t.port, token, "POST", "/v1/folders/pick", {});
+      writeFileSync(join(work, ".fake-claude.json"), JSON.stringify({ synthetic: true }));
+      const s = await api(t.port, token, "POST", "/v1/sessions", { subject: { kind: "topic", topicId: "t" }, title: "x", cwd: work, firstMessage: "hi" });
+      const events = await readSse(t.port, token, s.body.id, { until: has("turn_end") });
+      expect(events.filter((e) => e.type === "assistant_text").map((e) => e.text)).toEqual(["这一轮被打断了，没有回话。"]);
+      expect(events.find((e) => e.type === "turn_end")).toMatchObject({ isError: false, text: "这一轮被打断了，没有回话。" });
+      expect(JSON.stringify(events)).not.toContain("No response requested");
+    } finally {
+      await t.cleanup();
+    }
+  });
 });

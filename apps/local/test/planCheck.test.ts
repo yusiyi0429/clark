@@ -75,6 +75,25 @@ describe("开拆前的检查", { timeout: 30_000 }, () => {
     });
   }
 
+  it("不是 git 仓库、本人在上面那次答过（答完还不是 git 仓库，就是选了不建）：同一个文件夹再拆不再拦着问；规划员知道第 71 条、不推 git init（3700 验收）", async () => {
+    const dir = join(work, "plain");
+    const p = await open(dir);
+    await until(() => items(p.id, "card_plan").length === 1);
+    expect(items(p.id, "status").filter((i) => i.data.question)).toEqual([]);
+    const text = prompt(p.id);
+    expect(text).toContain("不是 git 仓库（本人之前拆这个文件夹时答过，选了不建 git：直接在这里拆，不再问 git、GitHub）");
+    expect(text).not.toContain("要先问清楚");
+    expect(text).toContain("执行方改文件之前本机会留一份，本人能在「改动」里看、恢复。不要为了能恢复去建议 git init");
+    expect(text).toContain("本人选过不建 git 的，就不再问连不连 GitHub");
+    // 别的普通文件夹没答过：照旧先问
+    const other = join(work, "plain-2");
+    mkdirSync(other, { recursive: true });
+    writeFileSync(join(other, "notes.md"), "笔记");
+    const q = await open(other);
+    await until(() => items(q.id, "status").find((i) => i.data.question));
+    expect(prompt(q.id)).toContain("要先问清楚：绑的文件夹不是 git 仓库");
+  });
+
   it("没绑文件夹：不出派活单，要先问；本人在项目对话里说了一句以后才收", async () => {
     const p = await open();
     expect(p.cwd).toBe(join(t.dataDir, "plans", "T1"));

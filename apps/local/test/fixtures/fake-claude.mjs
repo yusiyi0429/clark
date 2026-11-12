@@ -83,6 +83,12 @@ function startTurn(text) {
     out({ type: "result", subtype: "success", is_error: true, result: 'API Error: 402 {"msg":"Insufficient wallet balance! balance must be higher than stop line."}', api_error_status: 402, duration_ms: 5, usage: {}, model_usage_since_last_result: {} });
     return;
   }
+  if (live.synthetic) {
+    // 续接被打断、没回完的对话时 Claude Code 自己补的那条（model <synthetic>，程序里的原字），这一轮就这一句
+    out({ type: "assistant", message: { id: `msg_synthetic${turns}`, model: "<synthetic>", content: [{ type: "text", text: "No response requested." }] }, parent_tool_use_id: null });
+    finish(true, "No response requested.");
+    return;
+  }
   if (live.work) {
     // 干活的一轮：不要权限，work.ms 后做完；中途收到「预算用完了…就停下」就提前收尾（ignoreStop 时不理，等本机打断）
     out({ type: "assistant", message: { content: [{ type: "text", text: `开始做：${text}` }] }, parent_tool_use_id: null });

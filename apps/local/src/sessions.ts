@@ -915,9 +915,14 @@ export class SessionManager {
     if (rec.subject.kind === "plan") {
       // 开拆前看一眼项目的文件夹（只读）：在本机给它的专用目录里做就是没绑
       const facts = await planFolderFacts(isInside(join(this.d.dataDir, "plans"), rec.cwd) ? null : rec.cwd);
+      // 不是 git 仓库，本人之前拆这个文件夹时已经答过（答完还不是 git 仓库，就是选了不建）：普通文件夹改之前本机会留一份（第 71 条），不再拦着问
+      const folder = facts.folder;
+      const settled = Boolean(folder) && facts.flags.includes("not_git") && [...this.records.values()].some((o) => o.id !== rec.id && o.subject.kind === "plan"
+        && o.planAsked && o.planFlags?.includes("not_git") && isInside(o.cwd, folder!) && isInside(folder!, o.cwd));
+      if (settled) facts.flags = facts.flags.filter((f) => f !== "not_git");
       rec.planFlags = facts.flags;
       if (this.records.has(rec.id)) this.save(rec);
-      prompt += `\n${planFactsSection(facts)}\n`;
+      prompt += `\n${planFactsSection(facts, settled)}\n`;
     }
     // 两边照同一份规矩：仓库里只有另一家的规矩文件（CLAUDE.md、AGENTS.md）时把它的内容接上，不往仓库里写
     prompt += otherRules(rec.agent, rec.cwd);
@@ -2553,7 +2558,7 @@ export class SessionManager {
     const rec = this.must(id);
     if (rec.subject.kind !== "plan") throw new SessionError("validation", "只有规划员交计划");
     if (rec.planFlags?.length && !rec.planAsked) {
-      throw new SessionError("validation", `先不交派活单：${flagText(rec.planFlags)}。用「问用户」（AskUserQuestion）问本人在哪个文件夹做、要不要新建、要不要连 GitHub 仓库、是不是从别处迁过来的，每个问题给几个选项、推荐的排第一并标「（推荐）」；本人答了再拆。`);
+      throw new SessionError("validation", `先不交派活单：${flagText(rec.planFlags)}。用「问用户」（AskUserQuestion）问本人在哪个文件夹做、要不要新建、是不是从别处迁过来的，每个问题给几个选项、推荐的排第一并标「（推荐）」；本人答了再拆。`);
     }
     const list = (v: unknown) => (Array.isArray(v) ? v : []);
     const plan: TLocalCardPlan = {

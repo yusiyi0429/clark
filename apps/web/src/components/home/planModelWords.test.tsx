@@ -27,7 +27,7 @@ const render = async (modelWords: string | null, later?: string | null) => {
 const picks = (html: string) => [...html.matchAll(/data-testid="model-pick"[^>]*><span title="[^"]*">([^<]*)<\/span>/g)].map((match) => match[1]);
 
 describe("派活单照对话里说的模型要求预选（第 69 条）", () => {
-  it("对上了：每张卡的模型照原话预选（不再是「自动 · …」），思考档也照它；不多出任何字", async () => {
+  it("对上了：每张卡的模型照原话预选（不再是「… · 自动」），思考档也照它；不多出任何字", async () => {
     const html = await render("这几件用 Haiku 5.5，思考开高");
     expect(picks(html)).toEqual(["Claude 订阅 · Haiku 5.5", "Claude 订阅 · Haiku 5.5"]);
     expect(html).not.toContain("model-words-missing");
@@ -35,13 +35,13 @@ describe("派活单照对话里说的模型要求预选（第 69 条）", () => 
     expect(html.match(/<span title="高">高<\/span>/g)).toHaveLength(2);
     expect(await render("这几件用 Haiku 5.5")).not.toContain('<span title="高">高</span>');
     // 没有原话时照旧是自动。
-    expect(picks(await render(null)).every((label) => label!.startsWith("自动 · "))).toBe(true);
+    expect(picks(await render(null)).every((label) => label!.endsWith(" · 自动"))).toBe(true);
   });
 
   it("没对上：单子顶上一行「没找到「原话」」（太长截断、悬停看全），模型用自动", async () => {
     const html = await render("用 Kimi 做");
     expect(html).toMatch(/<p[^>]*title="用 Kimi 做"[^>]*data-testid="model-words-missing"[^>]*>没找到「用 Kimi 做」<\/p>/);
-    expect(picks(html).every((label) => label!.startsWith("自动 · "))).toBe(true);
+    expect(picks(html).every((label) => label!.endsWith(" · 自动"))).toBe(true);
     const long = "这几件都用一个我们还没接进来的新模型来做，思考程度先随便，回头再说具体用哪个";
     expect(await render(long)).toMatch(new RegExp(`title="${long}"[^>]*>没找到「${long.slice(0, 23)}…」`));
   });
@@ -50,7 +50,7 @@ describe("派活单照对话里说的模型要求预选（第 69 条）", () => 
     const html = await render("这几件用本机的 Opus，思考开高", "用 Kimi 做");
     const labels = picks(html);
     expect(labels.slice(0, 2)).toEqual(["Claude 订阅 · Opus 5.5", "Claude 订阅 · Opus 5.5"]);
-    expect(labels.slice(2).every((label) => label!.startsWith("自动 · "))).toBe(true);
+    expect(labels.slice(2).every((label) => label!.endsWith(" · 自动"))).toBe(true);
     expect(html.match(/data-testid="model-words-missing"/g)).toHaveLength(1);
     expect(html).toContain("没找到「用 Kimi 做」");
     // 两批都对不上：按原话各写一行。
