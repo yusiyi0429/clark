@@ -69,7 +69,7 @@ describe("子会话显示「来源 · 模型」", () => {
     expect((await runner.listSessions())[0]!.run?.actual?.modelName).toBe("Haiku 5.5");
   });
 
-  it("开工选项框每一步右边：没单独选时写「自动 · 模型」，订阅读不到模型名写「自动 · Claude 订阅」；执行方和来源在悬停的全称里；本机还没回预览时照模型配置写", () => {
+  it("开工选项框每一步右边：没单独选时写「来源 · 自动」，如「Claude 订阅 · 自动」；执行方和来源在悬停的全称里；本机还没回预览时照模型配置写", () => {
     const models: TLocalModelProfile[] = [{ id: "subscription", label: "我的 Claude 订阅", source: "subscription", agent: "claude-code", baseUrl: null, model: null, smallModel: null, webSearch: true, hasKey: false, isDefault: true }];
     const local = { runner: createMockRunner(), phase: "offline", version: null, status: null, models, folders: [], sessions: [], pairing: null, error: null,
       refresh: vi.fn(), pair: vi.fn(), unpair: vi.fn(), pickFolder: vi.fn(), setIncludePersonal: vi.fn() } as unknown as Parameters<typeof LocalContext.Provider>[0]["value"];
@@ -80,16 +80,16 @@ describe("子会话显示「来源 · 模型」", () => {
       <PlanDecision target={{ taskId: "t1" }} name="派活单" drafts={[draft]} roles={[]} handheld={false} onSay={vi.fn()} onChanged={vi.fn()} />
     </LocalContext.Provider>);
     const pick = html.match(/<button[^>]*data-testid="model-pick"[^>]*>[\s\S]*?<\/button>/)?.[0] ?? "";
-    expect(pick).toMatch(/<span title="自动 · Claude Code · Claude 订阅">自动 · Claude 订阅<\/span><svg/);
+    expect(pick).toMatch(/<span title="Claude Code · Claude 订阅 · 自动">Claude 订阅 · 自动<\/span><svg/);
   });
 });
 
 describe("派活单的模型胶囊（67 条）", () => {
-  it("写「来源 · 模型」；自动前面加「自动 · 」；订阅读不到模型名只写「Claude 订阅」「Codex 订阅」；悬停前面多写执行方，重复的不写两遍", () => {
+  it("写「来源 · 模型」；没单独选时模型写「自动」、悬停后面写落到哪个；订阅读不到模型名只写「Claude 订阅」「Codex 订阅」；悬停前面多写执行方，重复的不写两遍", () => {
     const opus = { harness: "claude-code" as const, model: "Opus 5.5", source: "我的 Claude 订阅", subscription: true };
     expect(pickLabel(opus, false)).toEqual({ label: "Claude 订阅 · Opus 5.5", title: "Claude Code · Claude 订阅 · Opus 5.5" });
-    expect(pickLabel(opus, true)).toEqual({ label: "自动 · Claude 订阅 · Opus 5.5", title: "自动 · Claude Code · Claude 订阅 · Opus 5.5" });
-    expect(pickLabel({ ...opus, model: null }, true)).toEqual({ label: "自动 · Claude 订阅", title: "自动 · Claude Code · Claude 订阅" });
+    expect(pickLabel(opus, true)).toEqual({ label: "Claude 订阅 · 自动", title: "Claude Code · Claude 订阅 · 自动 · Opus 5.5" });
+    expect(pickLabel({ ...opus, model: null }, true)).toEqual({ label: "Claude 订阅 · 自动", title: "Claude Code · Claude 订阅 · 自动" });
     expect(pickLabel({ harness: "codex", model: null, source: "Codex 订阅 · 经 magpie", subscription: true }, false).label).toBe("Codex 订阅");
     // 网关读不到模型名时写来源；全称里来源和模型一样时只写一次。
     expect(pickLabel({ harness: "claude-code", model: null, source: "TokenHub", subscription: false }, false)).toEqual({ label: "TokenHub", title: "Claude Code · TokenHub" });

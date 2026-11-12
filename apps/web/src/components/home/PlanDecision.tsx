@@ -184,7 +184,7 @@ export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onC
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 草稿、改过的岗位和模型变了才再问
   }, [ready, local.runner, local.models, drafts, edits, roles]);
   /**
-   * 胶囊上写的（67 条）：「来源 · 模型」，思考在旁边的胶囊；自动时前面加「自动 · 」，订阅读不到模型名只写来源；执行方在悬停里（见 pickLabel）。
+   * 胶囊上写的（67 条）：「来源 · 模型」，思考在旁边的胶囊；没单独选时模型写「自动」，订阅读不到模型名只写来源；执行方在悬停里（见 pickLabel）。
    * 本机开工前算出来的（previewRun）优先；还没回（或老版本不报）时照模型配置写。
    */
   const modelText = (draft: TCardDraftView, model: TLocalModelProfile, role: CardRole, auto: boolean) => {
@@ -315,7 +315,7 @@ export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onC
 
 /**
  * 选模型（21 条）：「自动」在最上面、写明落到哪一个；下面按执行方分组（Claude Code、Codex），每行写模型名，后面淡色写来源，如「Opus 5.5 · 我的 Claude 订阅」「GPT-6.1 · Codex 订阅 · 经 magpie」。
- * 胶囊上只写模型（自动时「自动 · 模型」），太长出省略号、下拉箭头始终在；悬停是全称（执行方 · 模型 · 来源）。
+ * 胶囊上写「来源 · 模型」（自动时「来源 · 自动」），太长出省略号、下拉箭头始终在；悬停是全称（执行方 · 模型 · 来源）。
  */
 function ModelPick({ models, value, shown, auto, onPick }: {
   models: TLocalModelProfile[]; value: string; shown: { label: string; title: string }; auto: string | null; onPick: (id: string) => void;

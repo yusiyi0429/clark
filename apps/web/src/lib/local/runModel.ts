@@ -118,13 +118,14 @@ export function sessionModelText(session: Pick<TLocalSessionSummary, "run" | "ag
 const SUBSCRIPTION_NAME: Record<TLocalAgentKind, string> = { "claude-code": "Claude 订阅", codex: "Codex 订阅" };
 
 /**
- * 派活单每一步右边的模型胶囊：「来源 · 模型」（思考在旁边单独一个胶囊），没单独选时前面加「自动 · 」；订阅读不到具体模型名时只写来源。
- * 悬停前面多写执行方，如「自动 · Claude Code · Claude 订阅 · Opus 5.5」。
+ * 派活单每一步右边的模型胶囊：和别处一样「来源 · 模型」（modelLine，思考在旁边单独一个胶囊）；没单独选时模型写「自动」（「Claude 订阅 · 自动」）。
+ * 订阅读不到具体模型名、单独选了的只写来源。悬停前面多写执行方，自动时后面写落到哪个模型，如「Claude Code · Claude 订阅 · 自动 · Opus 5.5」。
  */
 export function pickLabel(pick: { harness: TLocalAgentKind; model: string | null; source: string | null; subscription: boolean }, auto: boolean): { label: string; title: string } {
-  const line = modelLine({ source: pick.source ?? (pick.subscription ? SUBSCRIPTION_NAME[pick.harness] : null), model: pick.model }) ?? HARNESS_NAME[pick.harness];
-  const prefix = auto ? "自动 · " : "";
-  return { label: `${prefix}${line}`, title: `${prefix}${[HARNESS_NAME[pick.harness], line].filter((part, index, all) => all.indexOf(part) === index).join(" · ")}` };
+  const source = pick.source ?? (pick.subscription ? SUBSCRIPTION_NAME[pick.harness] : null);
+  const line = modelLine({ source, model: auto ? "自动" : pick.model }) ?? HARNESS_NAME[pick.harness];
+  const landed = auto ? modelLine({ model: pick.model }) : null;
+  return { label: line, title: [HARNESS_NAME[pick.harness], ...line.split(" · "), landed].filter((part, index, all) => !!part && all.indexOf(part) === index).join(" · ") };
 }
 
 /** 子会话的「来源 · 模型 · 思考」（左栏名字的悬停、页头退回时）：实际跑的优先；只有来源时只写来源；老版本本机不报来源时为 null。 */

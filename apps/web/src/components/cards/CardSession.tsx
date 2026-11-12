@@ -34,7 +34,7 @@ import { useCardDetail, type CardDetail } from "./useCardDetail";
 import { SourceWordIssues, SourceWords } from "./SourceWords";
 import { MergeAction } from "@/components/work/MergeAction";
 import { ApprovalDecision, QuestionDecision, awayChip } from "@/components/work/decisions";
-import { HandbackDecision, MergeDecision, useRelayNow } from "@/components/home/TaskDecisions";
+import { HandbackDecision, MergeDecision, handbackTitle, useRelayNow } from "@/components/home/TaskDecisions";
 import { ATTENTION_LABEL, attentionOf, isMergeLater, viewAsk, type Attention } from "@/lib/home/attention";
 import { DecisionBox, FailedLine, PendingBoxes, PendingDock, failureOf, type Failure } from "@/components/work/DecisionBox";
 import { useViewChrome } from "@/components/home/view";
@@ -53,18 +53,21 @@ const workHref = (taskId: string | null) => (taskId ? `/me/work/tasks/${encodeUR
 const VERDICT: Record<string, string> = { met: "达到", partial: "部分达到", unmet: "未达到", needs_person: "要你补" };
 const money = (usd: number | null) => (usd === null ? null : `约 $${usd.toFixed(usd < 1 ? 3 : 2)}`);
 
+/** 手机上（没有右栏）没选过看哪边时：不在这台电脑上先看摘要；有等你处理的框（受阻、等你补、提议）先看对话，框钉在下面。 */
+export const paneFirst = (hasSession: boolean, hasBox: boolean) => !hasSession && !hasBox;
+
 /**
  * 新首页页头的状态 chip（5.4.3「状态 chip」、5.6 状态词）：中性、警告、等你（中性底加强调色圆点）三档；新首页不用成功色。
  * 「等你」档只给等本人处理的框（attention，第 54 条，和左栏的点同一个来源）：等你批准、在问你、等你拿主意、等你合回；
  * 批准、提问不在这台电脑上时写「等你 · {电脑名}」（away）。首页数据里它在排队时照写排队的状态词（queued，「已排队 · 等 B」，第 68 条）。
- * 别的照会话和阶段：已停止、已停下（一轮做完）、受阻（不是验收没过的）、重做中、已排队、进行中…。
+ * 别的照会话和阶段：做完一轮（等本人下一句，和项目动态那行报告同一个说法）、已停下（本人停的、强停、本机程序重启打断）、受阻（不是验收没过的）、重做中、已排队、进行中…。
  */
 export function stateChip(attention: Attention | null, rest: CardWait | null, stage: CardStage, away: string | null, queued: string | null = null): { text: string; tone: "neutral" | "warn" | "wait" } {
   if (attention) return { text: (attention === "approval" || attention === "question") && away ? away : ATTENTION_LABEL[attention], tone: "wait" };
   if (queued) return { text: queued, tone: "neutral" };
   if (rest === "blocked") return { text: "受阻", tone: "warn" };
-  if (rest === "paused") return { text: "已停止", tone: "neutral" };
-  if (rest === "reply") return { text: "已停下", tone: "neutral" };
+  if (rest === "paused") return { text: "已停下", tone: "neutral" };
+  if (rest === "reply") return { text: "做完一轮", tone: "neutral" };
   if (rest === "review_failed") return { text: "重做中", tone: "neutral" };
   return { text: stage === "todo" ? "已排队" : STAGES.find((entry) => entry.id === stage)?.label ?? "进行中", tone: "neutral" };
 }
@@ -245,7 +248,7 @@ export function CardSession({ cardId, embedded = false, waiting, queued = null }
   const ws = session?.workspace;
   const mergeLater = embedded && attention !== "merge" && !!session && ws?.kind === "worktree" && !!ws.needsMerge && !ws.mergedCommit && isMergeLater(session.id);
   const settled = (title: string, answerText: string) => <DecisionBox kind="question" title={title} options={[]} onPick={() => undefined} resolved={answerText} />;
-  const tail = !embedded ? asking : blockedAnswer && handback ? settled(handback.headline ?? "验收", blockedAnswer) : mergeLater ? settled(`「${item.title}」无法合回`, "先不合") : null;
+  const tail = !embedded ? asking : blockedAnswer && handback ? settled(handbackTitle(handback), blockedAnswer) : mergeLater ? settled(`「${item.title}」无法合回`, "先不合") : null;
   const dock = <PendingDock above latest={{ visible: !scroll.atBottom, jump: scroll.jumpToLatest }} />;
   // 新首页里输入框只在这台电脑上跑着这张卡时出（别处看摘要）；老页面照旧灰着。
   // 输入框下面一行的右边写「执行方 · 模型」（21 条），来源在悬停里：这台电脑上的会话报的（实际跑的优先），没有时退回「来源 · 模型」、再退回云端记的。文件夹在左边。
@@ -288,7 +291,7 @@ export function CardSession({ cardId, embedded = false, waiting, queued = null }
   // 新首页的展示区（5.4.3「页头」）：上一级 / 名字，右边状态 chip、「停止」或「推翻」（弱按钮）、信息图标；下面是对话，点信息图标换成结果。模型和文件夹在输入框下面一行。
   if (embedded) {
     const inSide = !!side;
-    const showPane = side ? side.open : details ?? !session;
+    const showPane = side ? side.open : details ?? paneFirst(!!session, !!pinned);
     const openDetails = (open?: boolean) => (side ? side.toggle(open) : setDetails(open ?? !showPane));
     const chipOf = stateChip(attention, session ? localWait(view) : card.wait, stage, !canAct && device ? awayChip(device) : null, queued);
     const handback = detail.handbacks[0] ?? null;

@@ -60,8 +60,6 @@ export function waitingHref(item: Pick<WaitingItem, "open"> & Partial<Pick<Waiti
   const { open } = item;
   // 月中 Task 改了（16.4）：落在项目对话里那个「停掉 / 留着」框上（等你的 id 是 goal_changed:<改动 id>）。
   if (item.kind === "goal_changed" && open.kind === "project" && item.id?.startsWith("goal_changed:")) return `${projectHref(open.id)}#${goalAnchor(item.id.slice("goal_changed:".length))}`;
-  // 受阻（验收两次没过）进项目对话：「按这个改 / 仍然通过」的选项框在那里（5.4.4），云端给的目标是那张卡时也一样。
-  if (item.kind === "verdict" && item.projectId) return projectHref(item.projectId);
   switch (open.kind) {
     case "href": return open.href;
     case "card": return cardHref(open.id);
@@ -407,9 +405,8 @@ function workerWaiting(workers: Worker[], deviceId: string | null, projectOf: (t
     if (!kind || (kind === "question" && !worker.session?.pendingQuestion)) return [];
     const relayed = (kind === "approval" || kind === "question") && !!project;
     const source = relayed ? project.name : [who, worker.taskName].filter(Boolean).join(" · ");
-    // 受阻在项目对话里拍板（按这个改 / 我去看看 / 仍然通过）；批准、回答在子会话里（规划员的在项目对话）。
+    // 受阻进那张卡（框钉在卡的输入框上方，手机上也有）；批准、回答在子会话里（规划员的在项目对话）。
     const open = relayed ? { kind: "project" as const, id: project.projectId, ...(sessionId ? { focus: { sessionId, requestId: worker.session?.pendingQuestion?.requestId ?? null } } : {}) }
-      : kind === "verdict" && project ? { kind: "project" as const, id: project.projectId }
       : worker.kind === "topic" && worker.topicId ? { kind: "topic" as const, id: worker.topicId }
       : (worker.kind === "card" || worker.kind === "verify") && worker.cardId ? { kind: "card" as const, id: worker.cardId }
       : project ? { kind: "project" as const, id: project.projectId } : { kind: "href" as const, href: HOME_HREF };
