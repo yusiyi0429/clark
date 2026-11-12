@@ -351,7 +351,8 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
       await report("artifact", { artifactId: "a1", title: "规划员岗位", fileName: "planner.md", mimeType: "text/markdown", size: artifact.length,
         sha256: createHash("sha256").update(artifact).digest("hex"), contentBase64: artifact.toString("base64") });
       const artifactKey = `${machine.device}:${session}:${seq}`;
-      await report("stopped", { why: "turn_done", summary: "规划员岗位写好了，放在 planner.md。", blocker: null,
+      // 本机截摘要时逗号、冒号结尾的行也补了「；」（3700 上的「三件事都做完了：；已删除…」）：存的时候去掉。
+      await report("stopped", { why: "turn_done", summary: "规划员岗位写好了，；放在 planner.md。", blocker: null,
         outputs: [{ key: artifactKey, title: "规划员岗位", fileName: "planner.md" }, { key: `${machine.device}:${session}:999`, title: "截图", fileName: "a.png" }] });
       const outputId = (await f.t.sql("SELECT id::text FROM local_outputs WHERE client_id=$1", [artifactKey]))[0].id as string;
       expect((await feed()).filter((item) => item.kind === "sub_session_report")).toEqual([{ kind: "sub_session_report", id: expect.any(String), at: expect.any(String),
@@ -364,6 +365,9 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
       await report("stopped", { why: "held", summary: null, blocker: "订阅额度用完，14:00 恢复", outputs: [] });
       expect((await feed()).filter((item) => item.kind === "sub_session_report").map((item) => [item.why, item.blocker])).toEqual([["turn_done", null],
         ["held", "订阅额度用完，14:00 恢复"]]);
+      // 已经存下的旧摘要，读的时候也去掉。
+      await f.t.sql("UPDATE sub_session_reports SET summary='三件事都做完了：；已删除旧的 planner.md。' WHERE why='held'");
+      expect((await feed()).find((item) => item.kind === "sub_session_report" && item.why === "held").summary).toBe("三件事都做完了：已删除旧的 planner.md。");
       // 主循环第 63 条：报告不再替本人给项目主管线发一句、不让它回一小轮——项目对话里一条消息都没有（没跑模型）。
       await new Promise((resolve) => setTimeout(resolve, 300));
       expect(await f.t.sql(`SELECT 1 FROM conversation_messages m JOIN conversations c ON c.id=m.conversation_id WHERE c.scope=$1`, [`project:${project}`])).toEqual([]);
@@ -382,6 +386,9 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
     }
     expect(description("create_project")).toContain("这个文件夹已经有项目了还要再建，先问本人");
     expect(description("split_cards")).toContain("不拆、不开工");
+    // 3700 验收：项目对话把「只拆这两张验收卡，范围限定在…」塞进了 modelWords。说明里写死只放来源、模型、思考的原话，没说就不带。
+    for (const word of ["modelWords 只放本人关于用哪个来源、哪个模型、思考开到多少的原话", "本人没说这些就不带", "不放 modelWords"])
+      expect(description("split_cards")).toContain(word);
     expect(description("ask_user")).toContain("建项目、拆卡之前一定先用它把现实问清楚");
     for (const personality of ["steady", "direct", "warm", "coach"] as const)
       expect(buddyPersona({ name: "团团", personality }, "测试乙")).toContain("# 先从现实出发（哪种性格都一样）");

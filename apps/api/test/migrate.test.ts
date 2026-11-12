@@ -246,6 +246,7 @@ describe("migration", () => {
         "276_free_sessions.sql",
         "277_model_words.sql",
         "278_turn_scope.sql",
+        "279_gap_close.sql",
       ]);
 
       // 幂等：重复执行不再变更

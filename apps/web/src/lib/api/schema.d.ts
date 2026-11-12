@@ -6614,6 +6614,7 @@ export interface components {
                             /** Format: date-time */
                             at: string;
                         } | null;
+                        overruleReason?: string | null;
                     } | null;
                     deliverable: {
                         state: "pending" | "included";
@@ -10908,6 +10909,7 @@ export interface components {
                         /** Format: date-time */
                         at: string;
                     } | null;
+                    overruleReason?: string | null;
                 } | null;
                 deliverable: {
                     state: "pending" | "included";
@@ -11122,6 +11124,7 @@ export interface components {
                                 /** Format: date-time */
                                 at: string;
                             } | null;
+                            overruleReason?: string | null;
                         } | null;
                         deliverable: {
                             state: "pending" | "included";
@@ -12513,6 +12516,7 @@ export interface components {
                             /** Format: date-time */
                             at: string;
                         } | null;
+                        overruleReason?: string | null;
                     } | null;
                     deliverable: {
                         state: "pending" | "included";
@@ -12768,6 +12772,7 @@ export interface components {
                             /** Format: date-time */
                             at: string;
                         } | null;
+                        overruleReason?: string | null;
                     } | null;
                     deliverable: {
                         state: "pending" | "included";
@@ -12956,6 +12961,7 @@ export interface components {
                                 /** Format: date-time */
                                 at: string;
                             } | null;
+                            overruleReason?: string | null;
                         } | null;
                         deliverable: {
                             state: "pending" | "included";
@@ -13144,6 +13150,7 @@ export interface components {
                             /** Format: date-time */
                             at: string;
                         } | null;
+                        overruleReason?: string | null;
                     } | null;
                     deliverable: {
                         state: "pending" | "included";
@@ -13741,6 +13748,7 @@ export interface components {
                             /** Format: date-time */
                             at: string;
                         } | null;
+                        overruleReason?: string | null;
                     } | null;
                     deliverable: {
                         state: "pending" | "included";
@@ -13968,6 +13976,7 @@ export interface components {
                                 /** Format: date-time */
                                 at: string;
                             } | null;
+                            overruleReason?: string | null;
                         } | null;
                         deliverable: {
                             state: "pending" | "included";
@@ -14145,6 +14154,7 @@ export interface components {
                             /** Format: date-time */
                             at: string;
                         } | null;
+                        overruleReason?: string | null;
                     } | null;
                     deliverable: {
                         state: "pending" | "included";
@@ -16808,6 +16818,7 @@ export interface components {
                     /** Format: date-time */
                     at: string;
                 } | null;
+                overruleReason?: string | null;
             } | null;
             deliverable: {
                 state: "pending" | "included";
@@ -16978,6 +16989,7 @@ export interface components {
                         /** Format: date-time */
                         at: string;
                     } | null;
+                    overruleReason?: string | null;
                 } | null;
                 deliverable: {
                     state: "pending" | "included";
@@ -17218,6 +17230,7 @@ export interface components {
                             /** Format: date-time */
                             at: string;
                         } | null;
+                        overruleReason?: string | null;
                     } | null;
                     deliverable: {
                         state: "pending" | "included";
@@ -17480,6 +17493,7 @@ export interface components {
                             /** Format: date-time */
                             at: string;
                         } | null;
+                        overruleReason?: string | null;
                     } | null;
                     deliverable: {
                         state: "pending" | "included";
@@ -17554,6 +17568,7 @@ export interface components {
                 /** Format: date-time */
                 at: string;
             } | null;
+            overruleReason?: string | null;
             runId: string | null;
             criteria: string[];
             claims: {
@@ -17758,6 +17773,7 @@ export interface components {
                             /** Format: date-time */
                             at: string;
                         } | null;
+                        overruleReason?: string | null;
                     } | null;
                     deliverable: {
                         state: "pending" | "included";
@@ -17869,6 +17885,7 @@ export interface components {
                     /** Format: date-time */
                     at: string;
                 } | null;
+                overruleReason?: string | null;
                 runId: string | null;
                 criteria: string[];
                 claims: {
@@ -19987,6 +20004,7 @@ export interface components {
                     /** Format: date-time */
                     at: string;
                 } | null;
+                overruleReason?: string | null;
             };
         } | {
             /** @constant */
@@ -20055,6 +20073,7 @@ export interface components {
                     /** Format: date-time */
                     at: string;
                 } | null;
+                overruleReason?: string | null;
             };
         } | {
             /** @constant */
@@ -20448,6 +20467,7 @@ export interface components {
                     /** Format: date-time */
                     at: string;
                 } | null;
+                overruleReason?: string | null;
             };
         } | {
             /** @constant */
@@ -20516,6 +20536,7 @@ export interface components {
                     /** Format: date-time */
                     at: string;
                 } | null;
+                overruleReason?: string | null;
             };
         } | {
             /** @constant */
@@ -20766,6 +20787,7 @@ export interface components {
                         /** Format: date-time */
                         at: string;
                     } | null;
+                    overruleReason?: string | null;
                 };
             } | {
                 /** @constant */
@@ -20834,6 +20856,7 @@ export interface components {
                         /** Format: date-time */
                         at: string;
                     } | null;
+                    overruleReason?: string | null;
                 };
             } | {
                 /** @constant */
@@ -21161,6 +21184,7 @@ export interface components {
                             /** Format: date-time */
                             at: string;
                         } | null;
+                        overruleReason?: string | null;
                     } | null;
                     deliverable: {
                         state: "pending" | "included";

@@ -137,7 +137,9 @@ export const CardSourceWordIssue = Type.Object({
  * 下面三样是主循环第 61、62 条加的，云端都带；标成可选只为老数据：
  * - gaps：没达到的几条（见 CardGapItem，按 index 排）；通过的、还没结论的为空数组。
  * - relay：这次交回最近一次从手机或别的电脑登记的「再改一轮」「我来补」（见 CardRelayView）；没登记过为 null。
- * - passedWithGap：本人「就到这里」了（没过或等本人补的那次被推翻成通过），见 CardGapPass；没有为 null。
+ * - passedWithGap：本人「就到这里」了（没过或等本人补的那次被推翻成通过；或本人推翻过的通过又「就到这里」），见 CardGapPass；没有为 null。
+ * overruleReason：本人推翻这次验收时写的原因（overruled 为 true 时有，否则 null；老的云端不带）。这次是通过被本人推翻成没过、因此受阻的，
+ * 受阻框第一行写它，不写 headline（headline 是验收员判通过时那一句）。
  */
 export const CardHandbackBrief = Type.Object({
   id: Type.String({ format: "uuid" }),
@@ -157,6 +159,7 @@ export const CardHandbackBrief = Type.Object({
   gaps: Type.Optional(Type.Array(CardGapItem, { maxItems: 50 })),
   relay: Type.Optional(Nullable(CardRelayView)),
   passedWithGap: Type.Optional(Nullable(CardGapPass)),
+  overruleReason: Type.Optional(Nullable(Type.String())),
 }, strict);
 
 /**

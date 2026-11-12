@@ -73,6 +73,8 @@ const DESCRIPTION: Record<BuddyActionName, string> = {
   link_task_to_project: "把本人负责的一件 Task 挂到某个项目上（原来挂在别的项目上就移过来）。",
   transfer_project: "把项目转交给同事：发起转交，交接说明由云端写好后直接发出。toPersonId 是同事的人员 id。",
   split_cards: "登记拆卡：给一件 Task（taskId）或一个没挂 Task 的项目（projectId）拆执行卡，二选一；words 是本人关于怎么拆的原话。"
+    + "modelWords 只放本人关于用哪个来源、哪个模型、思考开到多少的原话（比如「用 Opus」「思考开到最高」），原样摘那一截，不翻译成型号；"
+    + "本人没说这些就不带。拆哪几张、范围、怎么做的话放 words，不放 modelWords。"
     + "拆之前先用 ask_user 问清现实：在哪个文件夹、哪个目录开工，本机有没有、要不要新建，是不是从别处（比如 Codex）迁过来的，要不要连 GitHub，拆完做成的样子和本人要的是不是一回事。"
     + "这几件没问清，不拆、不开工，拆了只会更糟。",
   set_task_due_date: "给挂在项目上的一件 Task 存验收截止日（YYYY-MM-DD；null 不存了，退回 Mission 的节点）。本人说了哪天交、或者 Task 的截止和 Mission 节点对不上时用。",
