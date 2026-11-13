@@ -5,7 +5,7 @@ import { Value } from "@sinclair/typebox/value";
 import {
   BuddyActionParams, BUDDY_ACTION_NAMES, PROJECT_ONLY_ACTIONS, type BuddyActionName, type TBudget, type TBuddyActionSpec, type TBuddyAskQuestion, type TBuddyAuditEntry, type TBuddyAuthority,
   type TBuddyMessageDraft, type TBuddyPlan, type TBuddyUiEffect, type TConversationCard, type TSessionCommand, type TSessionCommandView,
-  type TSessionStopView, type TTrashItem,
+  type TSessionStopView, type TTrashItem, type TWorkHomeResponse,
 } from "@warmap/contracts";
 import type { Static } from "@sinclair/typebox";
 import { BUDDY_FORWARD_PREFIX, FORWARDED_HEADER } from "./chatService.js";
@@ -56,7 +56,8 @@ const KIND: Record<BuddyActionName, Kind> = {
 const IRREVERSIBLE = "这一步撤不回：只在动手前请本人点头时说一次，做完以后和别的回话里不再提。";
 const DESCRIPTION: Record<BuddyActionName, string> = {
   read_work_home: "读本人的首页：项目、每个项目的子会话（卡、专题）和状态、等你、本月的 Mission 和 Task。要找项目 id、子会话 id、Task id 时先读它。",
-  read_project: "读一个项目的详情（目标、挂着的 Task）和最近的动态（含子会话停下的报告：做成了什么、卡在哪、交了什么）。"
+  read_project: "读一个项目的详情（目标、挂着的 Task）、当前子会话状态 subSessions 和最近的动态（含子会话停下的报告：做成了什么、卡在哪、交了什么）。"
+    + "subSessions 为 null 表示当前首页未列出该项目，不能当成没有子会话。state=waiting 且 waiting=null 只表示停下一轮，不是完成；waiting/merge 是等合回，done 才是已完成，failed 是验收没过。"
     + "子会话停了不会再叫你；本人问到近况、或你要说某个子会话的结果，先读它再说，没读过的不评论。",
   find_people: "按名字在人员目录里找同事，拿到人员 id（转达、转交要的是 id）。回最多 10 个：personId、name、self（是不是本人自己）。",
   open_page: "让本人的网页打开某一处：home 首页、preferences 偏好，或某个项目、子会话（同「等你」的 open）。只动界面。",
@@ -259,7 +260,12 @@ const handlers: Handlers = {
   read_project: async (deps, call, args) => {
     const path = `/api/me/projects/${encodeURIComponent(args.projectId)}`;
     const project = await web(deps, call.personId, "GET", path);
-    return { summary: "读了这个项目", result: { ...(project as object), feed: await web(deps, call.personId, "GET", `${path}/feed`) } };
+    const [feed, home] = await Promise.all([
+      web(deps, call.personId, "GET", `${path}/feed`),
+      web<TWorkHomeResponse>(deps, call.personId, "GET", "/api/me/work-home"),
+    ]);
+    const current = home.projects.find((entry) => entry.projectId === args.projectId);
+    return { summary: "读了这个项目", result: { ...(project as object), feed, subSessions: current?.subSessions ?? null } };
   },
   find_people: async (deps, call, args) => {
     const query = args.query.trim().toLowerCase();

@@ -445,7 +445,7 @@ export function DroppedRecord({ task }: { task: string }) {
   return <p className={h.resolvedLine} data-testid="plan-dropped"><Check {...ICON} /><span className={h.resolvedQ}>{task}：这样开工？</span><span className={h.resolvedA}>{DROP_LABEL}</span></p>;
 }
 
-const WAIT_TEXT: Record<string, string> = { approval: "等你批准", question: "等你回复", verdict: "受阻", merge: "等你合回" };
+const WAIT_TEXT: Record<NonNullable<SubSession["waiting"]>, string> = { approval: "等你批准", question: "等你回复", verdict: "受阻", merge: "等你合回", needs_person: "等你补" };
 /** 事件行的阶段（5.6 状态词）。 */
 export function subStage(sub: SubSession): string {
   switch (sub.state) {

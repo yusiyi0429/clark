@@ -42,6 +42,7 @@ import { PermissionModeMenu, ProjectModeContext, useProjectMode } from "@/compon
 import { showWorkspaceToast } from "@/lib/toast";
 import { FolderMenu, FolderText, FootText } from "./InputFooter";
 import { PipelineModelMenu } from "./PipelineModel";
+import { SubSessionSummary } from "./SubSessionSummary";
 
 /** 首页输入框发来、等着进对话的一句。 */
 /** files：首页输入框带的附件，到了那条对话再传（14.5）。 */
@@ -122,8 +123,9 @@ function useEscStopsReply(data: ConversationData) {
 /**
  * context：从 Mission 详情「问伙伴」带来的「关于：{Mission}」，输入框左上角一枚胶囊（14.5），去掉调 onClearContext。
  */
-export function BuddyView({ buddy, outbox, consume, onSpeaking, context = null, onClearContext }: {
+export function BuddyView({ buddy, outbox, consume, onSpeaking, projects, other, go, context = null, onClearContext }: {
   buddy: Buddy | null; outbox: Outbox; consume: (id: number) => void; onSpeaking: (speaking: boolean) => void; context?: string | null; onClearContext?: () => void;
+  projects: Project[]; other: SubSession[]; go: (href: string) => void;
 }) {
   const data = useConversation("global");
   const chrome = useViewChrome();
@@ -136,11 +138,14 @@ export function BuddyView({ buddy, outbox, consume, onSpeaking, context = null, 
       <div className={h.convo} data-testid="buddy-view">
         <ChatColumn data={data} buddy={buddy} tone="light"
           head={(
-            <header className={h.viewHead} data-flush="">
-              {chrome.lead}
-              <h1 className={h.viewTitle} tabIndex={-1}>{name}</h1>
-              {chrome.trail}
-            </header>
+            <>
+              <header className={h.viewHead} data-flush="">
+                {chrome.lead}
+                <h1 className={h.viewTitle} tabIndex={-1}>{name}</h1>
+                {chrome.trail}
+              </header>
+              <SubSessionSummary projects={projects} other={other} go={go} />
+            </>
           )}
           timeline={(current) => <WorkTimeline data={current} blocks={NO_BLOCKS} modelRule={modelRule} />}
           dock={(latest) => <PendingDock latest={latest} />}
@@ -381,6 +386,7 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
                 {trail}
                 {chrome.trail}
               </header>
+              <SubSessionSummary projects={[project]} grouped={false} go={go} />
             </>
           )}
           timeline={(current) => <WorkTimeline data={current} blocks={blocks} modelRule={modelRule} />}
