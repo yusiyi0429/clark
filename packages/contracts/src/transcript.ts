@@ -137,7 +137,7 @@ export const TranscriptCandidateProjection = Type.Object(
   { additionalProperties: false },
 );
 
-/** CEO 确认候选时的 speaker 映射：覆盖全部唯一 speakerName，personId 必须命中人员目录。 */
+/** 确认候选时选填的 speaker 映射：personId 必须命中人员目录，未映射的说话人保留原名。 */
 export const TranscriptSpeakerMapping = Type.Object(
   {
     speakerName: Type.String({ minLength: 1, maxLength: 200 }),
@@ -148,7 +148,7 @@ export const TranscriptSpeakerMapping = Type.Object(
 
 export const ConfirmTranscriptCandidateRequest = Type.Object(
   {
-    speakerMappings: Type.Array(TranscriptSpeakerMapping, { minItems: 1, maxItems: 50 }),
+    speakerMappings: Type.Array(TranscriptSpeakerMapping, { maxItems: 50 }),
     confirmAddParticipants: Type.Literal(true),
   },
   { additionalProperties: false },

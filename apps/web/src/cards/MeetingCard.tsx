@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { UNSAFE_PortalProvider } from "react-aria/PortalProvider";
 import { Check, ChevronDown, FileUp, Loader2, Pencil, RefreshCw, X } from "lucide-react";
 import { browserApi } from "@/lib/api/client";
 import { feishuConnectHref } from "@/lib/feishuLogin";
@@ -247,6 +248,8 @@ export function TranscriptCandidateDialog({
                   <td>{row.speakerName}</td>
                   <td>{row.turnCount}</td>
                   <td>
+                    {/* 原生 modal 外的内容不可交互；下拉和手持 sheet 都挂在当前 dialog 内。 */}
+                    <UNSAFE_PortalProvider getContainer={() => dialogRef.current}>
                     <div style={{ maxWidth: 220 }}><Select
                       aria-label={`映射 ${row.speakerName}`}
                       size="compact"
@@ -260,6 +263,7 @@ export function TranscriptCandidateDialog({
                         ...directory.map((person) => ({ value: person.personId, label: person.displayName })),
                       ]}
                     /></div>
+                    </UNSAFE_PortalProvider>
                   </td>
                   <td>{MAPPING_STATUS_LABEL[row.status]}</td>
                 </tr>

@@ -39,8 +39,18 @@
   --meeting-home-default: var(--default); --meeting-home-default-fg: var(--default-foreground); --meeting-home-default-hover: var(--default-hover); --meeting-home-default-soft: var(--default-soft);
   /* 卡片和进度行用的细边、浅一级字色（框架里可能被重写，一并记下）。 */
   --meeting-home-hairline: var(--hairline); --meeting-home-faint: var(--ink-faint);
+  /* 记录候选留在会议页 DOM 内（showModal 只把它升到顶层），和上传、错误提示共用这些深色值。 */
+  --meeting-home-ink: var(--ink); --meeting-home-warning: var(--judgment); --meeting-home-warning-wash: var(--judgment-wash);
+  --meeting-home-danger: var(--counter); --meeting-home-danger-wash: var(--counter-wash);
+  --meeting-home-danger-border: color-mix(in oklab, var(--counter) 35%, transparent);
+  --meeting-home-link: var(--tianshu-blue-secondary); --meeting-home-backdrop: var(--backdrop);
 }
 :global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .root :global([data-ts-theme]) {
   --field-bg: var(--meeting-home-field-bg); --field-ink: var(--meeting-home-field-ink); --field-placeholder: var(--meeting-home-field-placeholder);
   --field-border: var(--meeting-home-field-border); --field-border-hover: var(--meeting-home-field-border-hover); --field-border-focus: var(--meeting-home-field-border-focus);
 }
+/* ActionFeedback 用全局类名：只接住新首页会议页内的反馈，不改变其他页面。 */
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .root :global(.action-error) { background: var(--meeting-home-danger-wash); color: var(--meeting-home-danger); }
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .root :global(.action-conflict) { background: var(--meeting-home-warning-wash); color: var(--meeting-home-warning); }
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .root :global(:is(.action-error, .action-conflict) button) { border-color: var(--meeting-home-hairline); background: var(--meeting-home-default); color: var(--meeting-home-default-fg); }
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .root :global(:is(.action-error, .action-conflict) button:hover) { background: var(--meeting-home-default-hover); }

@@ -273,10 +273,10 @@
 .summaryEdit{display:block;margin:0 0 12px;font-size:12px;color:var(--ink-muted)}
 .summaryEdit>span{display:block;margin-bottom:6px;font-size:11px;color:var(--ink-muted)}
 .summaryEdit textarea,.summaryEdit select{width:100%}
-.error{display:flex;align-items:center;gap:7px;margin:0!important;border:1px solid #e7c9c5;border-radius:10px;background:#fdecea;padding:10px 12px;color:#a1443c;font-size:12px}
-.error button{border:1px solid #d9a49e;border-radius:8px;background:#fff;padding:5px 10px;font-size:12px;color:#a1443c}
+.error{display:flex;align-items:center;gap:7px;margin:0!important;border:1px solid var(--meeting-home-danger-border,#e7c9c5);border-radius:10px;background:var(--meeting-home-danger-wash,#fdecea);padding:10px 12px;color:var(--meeting-home-danger,#a1443c);font-size:12px}
+.error button{border:1px solid var(--meeting-home-danger-border,#d9a49e);border-radius:8px;background:var(--meeting-home-default,#fff);padding:5px 10px;font-size:12px;color:var(--meeting-home-danger,#a1443c)}
 .empty{color:#6e6e73;font-size:12px}
-.warnings{margin:0 0 10px;color:#8a6220;font-size:12px;line-height:1.7}
+.warnings{margin:0 0 10px;color:var(--meeting-home-warning,#8a6220);font-size:12px;line-height:1.7}
 .requestList{margin:12px 0 0;padding:0;list-style:none;display:grid;gap:8px}
 .requestRow{display:flex;flex-direction:column;gap:6px;padding:10px 12px;border:1px solid #e6e9ed;border-radius:10px;background:#fff}
 .requestText{color:#4f5866;font-size:12px;line-height:1.6}
@@ -337,36 +337,36 @@
 .readerPaneFoot a{margin-left:auto;color:#215ba1}
 
 /* 妙记 Markdown 候选预览（设计 aB4pK）：来源摘要 + 映射表 + 抽样发言；全量 turns 不落浏览器。 */
-.candidateDialog{width:min(880px,calc(100vw - 64px));max-height:min(860px,calc(100dvh - 64px));margin:auto;padding:0;border:1px solid #e1e4e9;border-radius:20px;background:#fff;color:#282c32;box-shadow:0 24px 70px #10151f2e}
+.candidateDialog{width:min(880px,calc(100vw - 64px));max-height:min(860px,calc(100dvh - 64px));margin:auto;padding:0;border:1px solid var(--meeting-home-hairline,#e1e4e9);border-radius:20px;background:var(--meeting-home-surface,#fff);color:var(--meeting-home-ink,#282c32);box-shadow:0 24px 70px #10151f2e}
 .candidateDialog[open]{display:flex;flex-direction:column}
-.candidateDialog::backdrop{background:#10151f4d}
-.candidateHeader{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:16px 20px 14px;border-bottom:1px solid #eceef2;flex:none}
+.candidateDialog::backdrop{background:var(--meeting-home-backdrop,#10151f4d)}
+.candidateHeader{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:16px 20px 14px;border-bottom:1px solid var(--meeting-home-hairline,#eceef2);flex:none}
 .candidateHeader h2{margin:0;font-size:16px;font-weight:650}
-.candidateHeader p{margin:4px 0 0;font-size:11px;color:#8a919c}
-.candidateHeader>button{display:grid;place-items:center;width:30px;height:30px;flex:none;border:0;border-radius:50%;background:#f1f3f6;color:#626873;cursor:pointer}
-.candidateHeader>button:hover{background:#e6eaef}
+.candidateHeader p{margin:4px 0 0;font-size:11px;color:var(--meeting-home-muted,#8a919c)}
+.candidateHeader>button{display:grid;place-items:center;width:30px;height:30px;flex:none;border:0;border-radius:50%;background:var(--meeting-home-default,#f1f3f6);color:var(--meeting-home-default-fg,#626873);cursor:pointer}
+.candidateHeader>button:hover{background:var(--meeting-home-default-hover,#e6eaef)}
 .candidateBody{display:flex;flex-direction:column;gap:14px;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:16px 20px;scrollbar-width:thin}
 .candidateSection{display:flex;flex-direction:column;gap:8px}
-.candidateSection h3{margin:0;font-size:12px;font-weight:650;color:#3f4750}
-.candidateSection p{margin:0;font-size:12px;color:#4c545e}
+.candidateSection h3{margin:0;font-size:12px;font-weight:650;color:var(--meeting-home-ink,#3f4750)}
+.candidateSection p{margin:0;font-size:12px;color:var(--meeting-home-muted,#4c545e)}
 .mappingTable{width:100%;border-collapse:collapse;font-size:12px}
-.mappingTable th{text-align:left;padding:6px 8px;border-bottom:1px solid #e6e9ed;color:#8a919c;font-size:10px;font-weight:600;letter-spacing:.04em}
-.mappingTable td{padding:6px 8px;border-bottom:1px solid #f0f2f5;vertical-align:middle}
-.mappingTable tr[data-status=unmapped] td{background:#fff8e6}
+.mappingTable th{text-align:left;padding:6px 8px;border-bottom:1px solid var(--meeting-home-hairline,#e6e9ed);color:var(--meeting-home-muted,#8a919c);font-size:10px;font-weight:600;letter-spacing:.04em}
+.mappingTable td{padding:6px 8px;border-bottom:1px solid var(--meeting-home-hairline,#f0f2f5);vertical-align:middle}
+.mappingTable tr[data-status=unmapped] td{background:var(--meeting-home-warning-wash,#fff8e6)}
 .mappingTable select{width:100%;max-width:220px;height:32px;padding:0 12px}
 .sampleTurns{display:flex;flex-direction:column;gap:8px;margin:0;padding:0;list-style:none}
-.sampleTurns li{padding:8px 10px;border:1px solid #eceef2;border-radius:10px;background:#fafbfc}
-.sampleTurns span{font-size:10px;color:#8a919c}
-.sampleTurns p{margin:3px 0 0;font-size:12px;line-height:18px;color:#37414c;overflow-wrap:anywhere}
-.candidateFooter{display:flex;align-items:center;gap:10px;padding:12px 20px;border-top:1px solid #eceef2;flex:none}
+.sampleTurns li{padding:8px 10px;border:1px solid var(--meeting-home-hairline,#eceef2);border-radius:10px;background:var(--meeting-home-default-soft,#fafbfc)}
+.sampleTurns span{font-size:10px;color:var(--meeting-home-muted,#8a919c)}
+.sampleTurns p{margin:3px 0 0;font-size:12px;line-height:18px;color:var(--meeting-home-ink,#37414c);overflow-wrap:anywhere}
+.candidateFooter{display:flex;align-items:center;gap:10px;padding:12px 20px;border-top:1px solid var(--meeting-home-hairline,#eceef2);flex:none}
 .candidateSpacer{flex:1}
 .candidateDiscard,.candidateCancel,.candidateConfirm{height:36px;padding:0 14px;border-radius:10px;font-size:13px;cursor:pointer}
-.candidateDiscard{border:1px solid #e7c9c5;background:#fff;color:#a1443c}
-.candidateCancel{border:1px solid #d9dde5;background:#fff;color:#3f4750}
+.candidateDiscard{border:1px solid var(--meeting-home-danger-border,#e7c9c5);background:var(--meeting-home-surface,#fff);color:var(--meeting-home-danger,#a1443c)}
+.candidateCancel{border:1px solid var(--meeting-home-hairline,#d9dde5);background:var(--meeting-home-default,#fff);color:var(--meeting-home-default-fg,#3f4750)}
 .candidateConfirm{border:0;background:#007aff;color:#fff;font-weight:500}
 .candidateConfirm:disabled{opacity:.5;cursor:not-allowed}
-.candidateReopen{display:flex;align-items:center;gap:6px;padding:9px 13px;border:1px solid #d9dde5;border-radius:10px;background:#fff;color:#3f4750;font-size:13px;cursor:pointer}
-.candidateReopen:hover{background:#f7f8fa}
+.candidateReopen{display:flex;align-items:center;gap:6px;padding:9px 13px;border:1px solid var(--meeting-home-hairline,#d9dde5);border-radius:10px;background:var(--meeting-home-default,#fff);color:var(--meeting-home-default-fg,#3f4750);font-size:13px;cursor:pointer}
+.candidateReopen:hover{background:var(--meeting-home-default-hover,#f7f8fa)}
 .candidateHeader button:focus-visible,.candidateFooter button:focus-visible,.candidateReopen:focus-visible{outline:2px solid #007aff88;outline-offset:2px}
 @media(max-width:900px){.candidateDialog{width:calc(100vw - 24px);max-height:calc(100dvh - 40px)}}
 /* 手持（≤959）字号下限：标签、角标、编号 13px，说明性的辅助字 14px（老花眼也看得清）；三屏和桌面不变。 */
@@ -486,8 +486,8 @@
 .lensAnswers{display:flex;flex-direction:column;gap:4px;margin:6px 0 0;padding:0;list-style:none;color:#8a6220;font-size:12px;line-height:18px}
 .lensAnswers b{margin-right:6px;font-weight:600}
 /* 会后要自己交会议记录时的上传区：一整块虚线，点它选文件；拖文件到主栏任何地方也行。字号、颜色沿用本页已有的。 */
-.recordUpload{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:72px;padding:14px;border:1.5px dashed #d9dde5;border-radius:14px;background:#f7f8fa;color:#215ba1;font:inherit;font-size:13px;font-weight:500;cursor:pointer}
-.recordUpload:hover{border-color:#215ba1;background:#fff}
+.recordUpload{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:72px;padding:14px;border:1.5px dashed var(--meeting-home-hairline,#d9dde5);border-radius:14px;background:var(--meeting-home-default-soft,#f7f8fa);color:var(--meeting-home-link,#215ba1);font:inherit;font-size:13px;font-weight:500;cursor:pointer}
+.recordUpload:hover{border-color:var(--meeting-home-link,#215ba1);background:var(--meeting-home-default-hover,#fff)}
 .recordUpload:disabled{cursor:default;opacity:.7}
 .recordUpload:focus-visible{outline:2px solid #96beff;outline-offset:2px}
 .recordUpload+.candidateReopen{margin-top:10px}
