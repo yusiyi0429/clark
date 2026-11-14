@@ -84,7 +84,8 @@ try {
   status.apiOrigin = apiOrigin;
   status.accounts = actors.slice(0, 2).map(({ displayName, loginId, passcode }) => ({ displayName, loginId, passcode }));
   const nextCli = join(webDir, 'node_modules', 'next', 'dist', 'bin', 'next');
-  nextProcess = spawn(process.execPath, [nextCli, 'dev', '--hostname', '127.0.0.1', '--port', String(webPort)], {
+  // The acceptance preview uses Webpack while investigating grouped-route 404s after a Turbopack restart.
+  nextProcess = spawn(process.execPath, [nextCli, 'dev', '--webpack', '--hostname', '127.0.0.1', '--port', String(webPort)], {
     cwd: webDir, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
     env: { ...process.env, API_SERVER_URL: apiOrigin, M2_SERVER_URL: apiOrigin, NEXT_TELEMETRY_DISABLED: '1' },
   });
@@ -108,8 +109,13 @@ try {
   });
   status.state = 'verifying_http';
   await save();
+  status.loginUrl = webOrigin + '/access?next=%2Fme%2Fwork';
   const results: Record<string, unknown>[] = [];
   try {
+    const loginPage = await fetch(String(status.loginUrl), { signal: AbortSignal.timeout(60_000), redirect: 'manual' });
+    assert.equal(loginPage.status, 200, 'Login page must return 200');
+    await loginPage.text();
+    results.push({ path: '/access', status: loginPage.status });
     for (let index = 0; index < 2; index++) {
       const { loginId, passcode, personId } = actors[index];
       const response = await fetch(webOrigin + '/api/auth/login', {
@@ -133,12 +139,14 @@ try {
     status.verified = results;
   } catch (error) {
     const cause = error as Error & { cause?: { code?: string } };
-    status.state = 'awaiting_browser';
+    // A blocked HTTP probe needs manual verification; an actual bad response is a startup failure.
+    status.state = cause.cause?.code === 'EACCES' ? 'awaiting_browser' : 'failed';
     status.httpError = { message: cause.message, code: cause.cause?.code };
+    status.verified = results;
+    if (status.state === 'failed') process.exitCode = 1;
   }
-  status.loginUrl = webOrigin + '/access?next=%2Fme%2Fwork';
   await save();
-  announce('available_for_verification', status);
+  announce(status.state === 'ready' ? 'preview_ready' : status.state === 'failed' ? 'preview_verification_failed' : 'preview_http_blocked', status);
   await new Promise<void>(resolve => {
     const timer = setInterval(() => {
       void access(join(runDir, 'stop')).then(() => finish(true), () => {});

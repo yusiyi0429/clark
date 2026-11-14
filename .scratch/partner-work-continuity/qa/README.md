@@ -53,6 +53,8 @@ node apps/api/node_modules/tsx/dist/cli.mjs .scratch/partner-work-continuity/qa/
 
 脚本启动仅监听 `127.0.0.1` 的独立API与Next服务，在控制台给出随机端口、登录入口、合成账号和运行目录。合成成员甲为 `qaone / 2847`，乙为 `qatwo / 5827`。预先完成引导并为每人创建项目，甲向乙发出一条信息征集。模型调用使用验收替身。
 
+预览明确使用 `next dev --webpack`。2026-11-14 的一次Turbopack重启后，`/access` 返回200，但现存的 `/me` 与 `/me/work` 路由返回404，临时诊断显示没有进入成员页面守卫。该表现与上游的[开发路由初始化问题报告](https://github.com/vercel/next.js/issues/97897)类似，尚未确认是同一个框架缺陷。切换仅涉及此验收脚本；需要在本机重新启动后复核。启动自检现包含登录页；HTTP 404等错误明确记为failed，仅本机连接被拒绝的EACCES保留awaiting_browser状态。
+
 运行目录中的 `status.json` 记录真实状态，`next.log` 记录服务输出；在该目录创建空 `stop` 文件即请求关闭本次进程。Next意外退出会标记失败并返回非零退出码，不能只凭中途的Ready输出宣告预览可用。
 
 2026-11-14 工具环境的Shell访问曾返回EACCES，浏览器导航也超时；重启时另遇到旧Next实例的开发锁。14:04（新加坡时间）用户从本机PowerShell重启后，`preview-2026-11-14T06-04-01-743Z/status.json` 已为ready：两位成员分别通过真实HTTP登录和会话身份断言，各自访问首页、伙伴页、首页数据、项目、收件的10次请求全部返回200，Next日志也记录了页面请求。该次Web端口63175，API端口64678；端口以后以当前状态文件为准。
