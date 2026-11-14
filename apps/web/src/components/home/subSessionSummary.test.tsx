@@ -35,9 +35,21 @@ describe("主管线的子会话摘要", () => {
     expect(html).toContain("等你补");
     expect(html).toContain("重做中");
     expect(html.match(/>已完成</g)).toHaveLength(1);
-    expect(html).toContain("1 进行中");
+    expect(html).not.toContain("进行中");
+    expect(html).toContain("1 重做中");
     expect(html).toContain("2 等你");
     expect(html).not.toContain('<h2');
+  });
+
+  it("运行与验收返工分别计数，不能用汇总暗示返工已有运行进程", () => {
+    const html = render({ projects: [project("天枢", [
+      sub("正在执行", { state: "running" }), sub("验收返工", { state: "failed" }),
+      sub("等批准", { state: "waiting", waiting: "approval" }),
+    ])] });
+    expect(html).toContain("1 进行中");
+    expect(html).toContain("1 重做中");
+    expect(html).toContain("1 等你");
+    expect(html).not.toContain("2 进行中");
   });
 
   it("排队显示实际原因和占着文件夹的会话，不冒充正在运行", () => {

@@ -7,7 +7,8 @@ import { useWorkspace } from "@/components/shell/WorkspaceContext";
 import { uploadToConversation } from "@/lib/home/attachments";
 import { showWorkspaceToast } from "@/lib/toast";
 import { HeroButton } from "@/components/HeroButton";
-import h from "@/styles/home.module.css";
+import { ChevronRight } from "lucide-react";
+import s from "./work-intake.module.css";
 
 const CHANGED = "tianshu:work-intake";
 const URL = "/api/me/work-intake";
@@ -105,6 +106,8 @@ export function useQueueWorkInput() {
 export function WorkIntakeQueue({ scope, refreshHistory }: { scope: string; refreshHistory: () => void }) {
   const [items, setItems] = useState<TWorkIntakeEntry[]>([]);
   const [error, setError] = useState("");
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const changing = useRef(false);
   const refresh = useRef(refreshHistory);
   refresh.current = refreshHistory;
   const load = useRef<() => void>(() => {});
@@ -136,18 +139,53 @@ export function WorkIntakeQueue({ scope, refreshHistory }: { scope: string; refr
     return () => { active = false; window.clearInterval(timer); window.removeEventListener(CHANGED,changed); window.removeEventListener("focus",changed); };
   },[scope]);
   const change = useCallback(async (item: TWorkIntakeEntry,action: TWorkIntakeChange["action"]) => {
+    if (changing.current) return;
+    changing.current = true;
+    setBusyId(item.id);
     try { await request(URL + "/" + encodeURIComponent(item.id), "PATCH", {action}); }
     catch (cause) { showWorkspaceToast({text: cause instanceof Error ? cause.message : "没有改成"}); }
+    finally { changing.current = false; setBusyId(null); }
     load.current();
   },[]);
+  return <WorkIntakeQueueView items={items} error={error} busyId={busyId} onReload={() => load.current()} onChange={change} />;
+}
+
+/** 输入附近的待发回执；完整正文和操作按需展开，失败始终有提示。 */
+export function WorkIntakeQueueView({ items, error, busyId = null, onReload, onChange }: {
+  items: readonly TWorkIntakeEntry[]; error: string; busyId?: string | null;
+  onReload: () => void; onChange: (item: TWorkIntakeEntry, action: TWorkIntakeChange["action"]) => void;
+}) {
   if (!items.length && !error) return null;
-  return <section aria-label="待发需求">
-    {error ? <p role="status">{error} <HeroButton variant="ghost" size="sm" onPress={() => load.current()}>重试</HeroButton></p> : null}
-    {items.map(item => <div key={item.id} className={h.line}>
-      <span>{item.state === "failed" ? "发送失败" : item.state === "sending" ? "递送中" : item.priority ? "优先待发" : "排队中"} · {item.message}{item.error ? " · " + item.error : ""}</span>
-      {item.state === "failed" ? <HeroButton size="sm" variant="ghost" onPress={() => void change(item,"retry")}>重试</HeroButton> : null}
-      {item.state === "queued" && !item.priority ? <HeroButton size="sm" variant="ghost" onPress={() => void change(item,"first")}>优先发送</HeroButton> : null}
-      {item.state !== "sending" ? <HeroButton size="sm" variant="ghost" onPress={() => void change(item,"cancel")}>撤回</HeroButton> : null}
-    </div>)}
+  const failed = items.filter(item => item.state === "failed").length;
+  const sending = items.filter(item => item.state === "sending").length;
+  const queued = items.filter(item => item.state === "queued").length;
+  return <section className={s.root} aria-label="待发需求" data-testid="work-intake-queue">
+    {error ? <div className={s.error} role="status"><span>{error}</span><HeroButton className={s.action} variant="ghost" size="sm" onPress={onReload}>重新读取</HeroButton></div> : null}
+    {items.length ? <details className={s.queue} open={failed > 0 || undefined}>
+      <summary className={s.summary}>
+        <ChevronRight size={14} aria-hidden className={s.chevron} />
+        <span>待发需求 {items.length}</span>
+        <span className={s.counts}>
+          {failed ? <span className={s.failed}>{failed} 发送失败</span> : null}
+          {sending ? <span>{sending} 递送中</span> : null}
+          {queued ? <span>{queued} 排队中</span> : null}
+        </span>
+      </summary>
+      <ol className={s.list}>
+        {items.map(item => <li key={item.id} className={s.item} aria-busy={busyId === item.id}>
+          <span className={s.state} data-failed={item.state === "failed" ? "" : undefined}>{item.state === "failed" ? "发送失败" : item.state === "sending" ? "递送中" : item.priority ? "优先待发" : "排队中"}</span>
+          <details className={s.message}>
+            <summary className={s.preview}><span>{item.message}</span><span className={s.more}>全文</span></summary>
+            <p className={s.fullText}>{item.message}</p>
+          </details>
+          {item.error ? <p className={s.failure}>{item.error}</p> : null}
+          <div className={s.actions}>
+            {item.state === "failed" ? <HeroButton className={s.action} size="sm" variant="secondary" isDisabled={busyId !== null} onPress={() => onChange(item,"retry")}>重试发送</HeroButton> : null}
+            {item.state === "queued" && !item.priority ? <HeroButton className={s.action} size="sm" variant="ghost" isDisabled={busyId !== null} onPress={() => onChange(item,"first")}>优先发送</HeroButton> : null}
+            {item.state !== "sending" ? <HeroButton className={s.action} size="sm" variant="ghost" isDisabled={busyId !== null} onPress={() => onChange(item,"cancel")}>撤回</HeroButton> : null}
+          </div>
+        </li>)}
+      </ol>
+    </details> : null}
   </section>;
 }

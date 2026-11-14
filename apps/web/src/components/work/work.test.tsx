@@ -303,6 +303,19 @@ describe("开工（Task 管线里的选项框）", () => {
 });
 
 describe("对话里插块和锚点", () => {
+  it.each([
+    [{ sequence: 1 }],
+    [{ sequence: 1, createdAt: "2026-11-15T03:00:00Z" }, { sequence: 2, createdAt: "2026-11-15T06:00:00Z" }],
+  ])("不同偏移的会议和来件按实际时刻排列，即使落在同一个消息间隙", (...messages) => {
+    const blocks = [
+      { key: "later-utc", at: "2026-11-15T05:00:00Z", node: null },
+      { key: "earlier-local", at: "2026-11-15T12:00:00+08:00", node: null },
+      { key: "same-instant", at: "2026-11-15T04:00:00Z", node: null },
+    ];
+    const placed = placeBlocks(messages, blocks);
+    expect(placed.get(0)?.map(block => block.key)).toEqual(["earlier-local", "same-instant", "later-utc"]);
+  });
+
   it("块插在它之前最近的一条消息后面，比第一条还早的放最前", () => {
     const placed = placeBlocks([{ sequence: 1, createdAt: "2026-11-06T01:00:00Z" }, { sequence: 2, createdAt: "2026-11-06T02:00:00Z" }], [
       { key: "early", at: "2026-11-06T00:30:00Z", node: null },

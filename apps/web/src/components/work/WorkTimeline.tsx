@@ -29,7 +29,14 @@ export function placeBlocks(messages: { createdAt?: string; sequence: number }[]
   const untimed = messages.some((message) => !message.createdAt);
   const times = messages.map((message) => Date.parse(message.createdAt ?? ""));
   const placed = new Map<number, TimedBlock[]>();
-  for (const block of [...blocks].sort((a, b) => a.at.localeCompare(b.at))) {
+  // ISO offsets can differ across meeting providers; compare instants, not their text.
+  const chronological = blocks.map(block => ({ block, time: Date.parse(block.at) })).sort((a, b) => {
+    const aValid = Number.isFinite(a.time), bValid = Number.isFinite(b.time);
+    if (aValid && bValid) return a.time - b.time;
+    if (aValid !== bValid) return aValid ? -1 : 1;
+    return a.block.at.localeCompare(b.block.at);
+  });
+  for (const { block } of chronological) {
     let index = -1;
     if (block.afterSequence === null || (block.afterSequence === undefined && untimed)) index = messages.length - 1;
     else if (block.afterSequence !== undefined) messages.forEach((message, i) => { if (message.sequence <= block.afterSequence!) index = i; });
@@ -69,8 +76,8 @@ export function WorkTimeline({ data, blocks, modelRule }: { data: ConversationDa
   return (
     <RescopeContext.Provider value={rescope}>
     <AskContext.Provider value={ask}>
-    {blocksAt(-1)}
     <ConversationTurns messages={data.messages} partial={data.streaming ? data.partial : ""} status={status} modelRule={modelRule}
+      insertions={blocksAt}
       trailing={!data.streaming && data.localTurn ? <LocalTurnRow turn={data.localTurn} /> : undefined}
       thought={data.thought?.seconds != null ? { text: data.thought.text, seconds: data.thought.seconds } : null}
       steps={!data.thinking || data.stage === "answering" ? data.steps : null}
@@ -83,11 +90,10 @@ export function WorkTimeline({ data, blocks, modelRule }: { data: ConversationDa
         const buddyAsks = cards.filter((card): card is Extract<typeof card, { kind: "buddy_question" }> => card.kind === "buddy_question")
           .filter((card) => buddyQuestionOpen(card, data.messages, index));
         const rest = cards.filter((card) => card.kind !== "questions" && card.kind !== "buddy_question");
-        const inserted = blocksAt(index);
         const plan = data.messages[index].plan;
-        if (!rest.length && !asks.length && !buddyAsks.length && !inserted.length && !plan) return null;
+        if (!rest.length && !asks.length && !buddyAsks.length && !plan) return null;
         return <>{plan ? <PlanChecklist entries={plan.entries} collapsed={plan.collapsed} /> : null}{rest.length ? <EntryCards cards={rest} createdAt={data.messages[index].createdAt} /> : null}{asks.map((card) => <AskDecision key={card.askId} card={card} />)}
-          {buddyAsks.map((card) => <BuddyQuestionDecision key={card.questionId} card={card} busy={data.streaming} send={(text, questionId) => data.send(text, [], { buddyQuestionId: questionId })} />)}{inserted}</>;
+          {buddyAsks.map((card) => <BuddyQuestionDecision key={card.questionId} card={card} busy={data.streaming} send={(text, questionId) => data.send(text, [], { buddyQuestionId: questionId })} />)}</>;
       }} />
     </AskContext.Provider>
     </RescopeContext.Provider>

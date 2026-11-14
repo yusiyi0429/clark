@@ -1,0 +1,99 @@
+{
+  "baseline": "a1f365a1",
+  "branch": "codex/partner-ui-20261115",
+  "captured_at": "2026-11-14T17:42:07.0600174Z",
+  "files": [
+    {
+      "path": "apps/web/src/components/home/buddyWorkspace.test.tsx",
+      "sha256": "2f866819239c367e228a754305284ca7d944de4442e36fb3ee90299ad332395c"
+    },
+    {
+      "path": "apps/web/src/components/home/Conversations.tsx",
+      "sha256": "d79587397fc0af7eaa06e28b5947272d068a0fe3b37cfb470fdf1d31ac2ab672"
+    },
+    {
+      "path": "apps/web/src/components/home/partner-meetings.module.css",
+      "sha256": "1dbe3d022d5f0ecd5e1e20561378ea2524995d2a754f3ac932c1e5603d93e241"
+    },
+    {
+      "path": "apps/web/src/components/home/partnerMeetings.test.tsx",
+      "sha256": "b524444d37ee0ab36b4e087d774fc1c91f007a4f8bd95bc6e62671add3104728"
+    },
+    {
+      "path": "apps/web/src/components/home/PartnerMeetings.tsx",
+      "sha256": "726e609ec4bad39ae06d93778a3b4b1f09832caeb2febc12e366945a434c645b"
+    },
+    {
+      "path": "apps/web/src/components/home/partnerTeam.module.css",
+      "sha256": "870630bf7be8d9e946810eca6f6eb381355ade2ebd60e13f39b916a166767c0c"
+    },
+    {
+      "path": "apps/web/src/components/home/partnerTeam.test.tsx",
+      "sha256": "758e8c04987dfceb25284bf83c8337d81002e3fb00bfc51810e30707128d377d"
+    },
+    {
+      "path": "apps/web/src/components/home/partnerTeamCard.behavior.test.tsx",
+      "sha256": "929cb15d419709bd9dd98bd0fae67a472bfe4c699cb5100ff9160ac10f46761d"
+    },
+    {
+      "path": "apps/web/src/components/home/PartnerTeamCard.tsx",
+      "sha256": "0ddf3d45aef34a4cd4d8bebb94c23f4844f72bffcd2d888eba9536776c17ae0c"
+    },
+    {
+      "path": "apps/web/src/components/home/subSessionSummary.test.tsx",
+      "sha256": "9352d1a3ac5a209d1d13a6e0451acd71dbc34ec732b820ddba8af719a3f16414"
+    },
+    {
+      "path": "apps/web/src/components/home/SubSessionSummary.tsx",
+      "sha256": "e01bd9a5abd99ee1778be3431eac98f3403111e37682d0e3f5ce8c0e15e6d296"
+    },
+    {
+      "path": "apps/web/src/components/home/work-intake.module.css",
+      "sha256": "924a37b061dc6cf72a48ab202652510c985c9f82d920e194249fe3663f3a5db1"
+    },
+    {
+      "path": "apps/web/src/components/home/WorkIntake.tsx",
+      "sha256": "36173cbad37e01801179a4f623d4048bf256946f1eba96ed0db7d0018400f58c"
+    },
+    {
+      "path": "apps/web/src/components/home/workIntakeQueue.test.tsx",
+      "sha256": "43fb98da744380f15fbdf3f512d80ad4d75e67c415065bc638f87400f8e558e3"
+    },
+    {
+      "path": "apps/web/src/components/meeting/meeting-work-handoffs.module.css",
+      "sha256": "435d6a5078aeba23f59f6e9d53c6d179bcc91bc2483c6f2bf3a18b8ffb0f71bf"
+    },
+    {
+      "path": "apps/web/src/components/meeting/meetingWorkHandoffs.test.tsx",
+      "sha256": "14a7adb43dc4465debdd7f86b83a313518971582671f40e3a61dc7010f7f1a14"
+    },
+    {
+      "path": "apps/web/src/components/meeting/MeetingWorkHandoffs.tsx",
+      "sha256": "034afe16d0227284a092d75d981b85348b1e9d4bc7eb5083294926d4149c1fc3"
+    },
+    {
+      "path": "apps/web/src/components/work/work.test.tsx",
+      "sha256": "bb920d75f98a6e007e634955a51d833548e2a905ccf344aed584b92b5bc279ed"
+    },
+    {
+      "path": "apps/web/src/components/work/workTimeline.identity.test.tsx",
+      "sha256": "371ebfa4e3a00eec894594e87a2ad44b4883619773782f8d7063b0dfd82b7f8a"
+    },
+    {
+      "path": "apps/web/src/components/work/WorkTimeline.tsx",
+      "sha256": "845ed6344893a073e163f0c7ee1d6757cfc9bd8ce9e78b3d23f47e93101f88ed"
+    },
+    {
+      "path": "apps/web/src/conversation/conversationTimeline.test.tsx",
+      "sha256": "2b58b7843675c1e6986bca115f53b76bd743ad559e98737567a27fae4151e7ef"
+    },
+    {
+      "path": "apps/web/src/conversation/Transcript.tsx",
+      "sha256": "482ffb0097503b7aa7c082bf2b2a041a1f9b59fe8a597a4afd55bcd6cc760706"
+    },
+    {
+      "path": "apps/web/src/styles/sub-session-summary.module.css",
+      "sha256": "ed161ce2d8e10740068cb2b88b45545e0f200086435f1e69d148603244442762"
+    }
+  ]
+}

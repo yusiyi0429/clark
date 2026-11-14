@@ -1,0 +1,15 @@
+{
+  "files": 308,
+  "tests": 2553,
+  "passed": 2551,
+  "failed": 2,
+  "success": false,
+  "failures": [
+    {
+      "fullName": "统一输入框样式：聚焦只换边色，不叠粗框 聚焦规则里没有 ≥2px 的 outline"
+    },
+    {
+      "fullName": "统一输入框样式：文本域不留手动拉高的手柄 textarea 规则里没有 resize: vertical / both"
+    }
+  ]
+}

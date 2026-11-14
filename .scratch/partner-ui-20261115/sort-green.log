@@ -1,0 +1,11 @@
+$ vitest run "src/components/work/work.test.tsx" "--reporter=dot"
+
+ RUN  v3.2.7 C:/Users/10021/Desktop/clark/Tianshu-MVP/.claude/worktrees/new-home-integration/apps/web
+
+········································
+
+ Test Files  1 passed (1)
+      Tests  40 passed (40)
+   Start at  01:26:39
+   Duration  10.71s (transform 2.24s, setup 0ms, collect 9.35s, tests 80ms, environment 0ms, prepare 219ms)
+

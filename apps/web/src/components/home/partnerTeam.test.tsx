@@ -61,6 +61,23 @@ describe("伙伴主对话的团队指令", () => {
 });
 
 describe("伙伴自己的时间线", () => {
+  it("多成员进度留在首层，默认只收起历史与原文件，历史里的转发仍可到达", () => {
+    const html = card({ ...delivery, recipients: [
+      { ...member, status: "answered", replies: [{ id: "history", status: "answered", text: "很长的中文反馈".repeat(30), attachments: [attachment], createdAt: at }] },
+      { ...member, personId: "p-wang", displayName: "小王", status: "needs_info" },
+      { ...member, personId: "p-zhou", displayName: "小周", status: "pending" },
+    ] }, true);
+    const disclosures = [...html.matchAll(/<details\b([^>]*)>([\s\S]*?)<\/details>/g)];
+    expect(disclosures).toHaveLength(2);
+    disclosures.forEach((disclosure) => expect(disclosure[1]).not.toMatch(/\bopen(?:=|\s|$)/));
+    expect(disclosures[0][2]).toContain("附件 · 1");
+    expect(disclosures[0][2]).toContain(attachment.href);
+    expect(disclosures[1][2]).toContain("1 条往来");
+    expect(disclosures[1][2]).toContain("转发这条回复");
+    const firstLevel = html.replace(/<details\b[^>]*>[\s\S]*?<\/details>/g, "");
+    for (const word of ["客户希望下一版改什么？", "https://example.org/report", "小林", "小王", "小周", "已回复", "需补充", "待回复", "给小王补充说明"]) expect(firstLevel).toContain(word);
+  });
+
   it("发起人看同一征集的分人结果、失败项的单独重试、按人澄清和可选的回复文字", () => {
     const html = card({ ...delivery, recipients: [
       { ...member, status: "needs_info", replies: [{ id: "r1", status: "needs_info", text: "还缺成本范围", attachments: [attachment], createdAt: at }] },

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { useWorkspace } from "@/components/shell/WorkspaceContext";
 import { HeroButton } from "@/components/HeroButton";
 import { MeetingBookingSheet } from "@/components/meeting/MeetingBookingSheet";
@@ -12,6 +12,7 @@ import { calendarDate, COMPANY_TIMEZONE } from "@/lib/companyTime";
 import { meetingHref } from "@/lib/home/meeting";
 import { usePartnerMeetings, type PartnerMeeting } from "@/lib/home/partnerMeetingFeed";
 import type { WaitingItem } from "@/lib/home/types";
+import type { TimedBlock } from "@/components/work/WorkTimeline";
 import { MeetingControl, type HomeMeeting } from "./MeetingControl";
 import h from "@/styles/home.module.css";
 import s from "./partner-meetings.module.css";
@@ -98,31 +99,33 @@ export function PartnerHomeMeetings({ meeting }: { meeting: HomeMeeting }) {
   </section>;
 }
 
-/** 同一个 item 保留自己的行和原会议入口，从预约、入会更新到正文。 */
-export function PartnerMeetingInbox() {
+/** 时间是会议本身的时间；预约独立展示，不伪装成伙伴已经收到的事件。 */
+export function usePartnerMeetingFeed(): { blocks: TimedBlock[]; notice: ReactNode; scheduled: ReactNode } {
   const { items, error, reload } = usePartnerMeetings();
-  const section = useRef<HTMLElement>(null);
-  const lastLocated = useRef("");
-  useEffect(() => {
-    const locate = () => {
-      const hash = location.hash;
-      if (!hash.startsWith("#minute-")) { lastLocated.current = ""; return; }
-      if (lastLocated.current === hash) return;
-      const target = document.getElementById(hash.slice(1));
-      if (!target || !section.current?.contains(target)) return;
-      lastLocated.current = hash;
-      target.focus({ preventScroll: true });
-      target.scrollIntoView({ block: "nearest" });
-    };
-    locate();
-    window.addEventListener("hashchange", locate);
-    return () => window.removeEventListener("hashchange", locate);
-  }, [items]);
-  if (!items.length && !error) return null;
-  return <section ref={section} aria-label="会议收件" className={s.inbox}>
+  const appointments = items.filter((item) => item.stage === "scheduled").sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+  return {
+    blocks: items.filter((item) => item.stage !== "scheduled").map((item) => ({
+      key: "partner-meeting:" + item.id,
+      at: item.at,
+      node: <MeetingRows items={[item]} inbox timeline />,
+    })),
+    notice: error ? <ReadError message={error} retry={reload} /> : null,
+    scheduled: appointments.length ? <details className={s.later}>
+      <summary>会议安排 <span>{appointments.length}</span></summary>
+      <MeetingRows items={appointments} inbox />
+    </details> : null,
+  };
+}
+
+/** 兼容原收件入口；主会话可直接合并 blocks，复用同一个会议 provider。 */
+export function PartnerMeetingInbox() {
+  const { blocks, notice, scheduled } = usePartnerMeetingFeed();
+  if (!blocks.length && !notice && !scheduled) return null;
+  return <section aria-label="会议收件" className={s.inbox}>
     <h2 className={h.sectionTitle}>会议收件</h2>
-    {error ? <ReadError message={error} retry={reload} /> : null}
-    <MeetingRows items={items} inbox />
+    {notice}
+    {scheduled}
+    {blocks.map((block) => <div key={block.key} data-block={block.key}>{block.node}</div>)}
   </section>;
 }
 
@@ -130,14 +133,14 @@ function ReadError({ message, retry }: { message: string; retry(): void }) {
   return <p role="alert" className={s.error}>{message}<button type="button" className={s.link} onClick={retry}>重试</button></p>;
 }
 
-function MeetingRows({ items, inbox = false }: { items: PartnerMeeting[]; inbox?: boolean }) {
+function MeetingRows({ items, inbox = false, timeline = false }: { items: PartnerMeeting[]; inbox?: boolean; timeline?: boolean }) {
   const { navigate } = useWorkspace();
   return <ul className={s.rows}>
-    {items.map((item) => <MeetingRow key={item.id} item={item} navigate={navigate} inbox={inbox} />)}
+    {items.map((item) => <MeetingRow key={item.id} item={item} navigate={navigate} inbox={inbox} timeline={timeline} />)}
   </ul>;
 }
 
-function MeetingRow({ item, navigate, inbox }: { item: PartnerMeeting; navigate: Navigate; inbox: boolean }) {
+function MeetingRow({ item, navigate, inbox, timeline }: { item: PartnerMeeting; navigate: Navigate; inbox: boolean; timeline: boolean }) {
   const now = Date.now();
   const unmatched = item.stage === "unmatched";
   const titleHref = item.meetingId ? item.href : unmatched ? null : external(item.sourceUrl) ? item.sourceUrl : external(item.href) ? item.href : null;
@@ -147,28 +150,67 @@ function MeetingRow({ item, navigate, inbox }: { item: PartnerMeeting; navigate:
     ? [{ label: "查看记录", recordHref: item.recordHref, sourceUrl: item.sourceUrl }] : [];
   const [opened, setOpened] = useState<string | null>(null);
   const [organize, setOrganize] = useState(false);
+  const row = useRef<HTMLLIElement>(null);
+  const lastLocated = useRef("");
+  const anchorId = inbox && item.id.startsWith("feishu-minute:") ? "minute-" + encodeURIComponent(tokenOf(item)) : undefined;
+  useEffect(() => {
+    if (!anchorId) return;
+    const locate = () => {
+      if (location.hash.slice(1) !== anchorId) { lastLocated.current = ""; return; }
+      const target = row.current;
+      if (!target || lastLocated.current === anchorId) return;
+      // Native details may wrap this row in the header's schedule disclosure.
+      let parent = target.closest<HTMLDetailsElement>("details");
+      while (parent) {
+        parent.open = true;
+        parent = parent.parentElement?.closest<HTMLDetailsElement>("details") ?? null;
+      }
+      lastLocated.current = anchorId;
+      target.focus({ preventScroll: true });
+      target.scrollIntoView({ block: "nearest" });
+    };
+    locate();
+    window.addEventListener("hashchange", locate);
+    return () => window.removeEventListener("hashchange", locate);
+  }, [anchorId]);
   const record = sources.find((source) => source.recordHref && source.recordHref === opened);
   const sourceLabel = item.source === "feishu" ? (unmatched ? "飞书妙记" : item.meetingId ? "飞书会议" : "飞书日程") : "天枢会议";
-  return <li className={s.row} id={unmatched && inbox ? "minute-" + encodeURIComponent(tokenOf(item)) : undefined}
-    tabIndex={unmatched && inbox ? -1 : undefined} data-stage={item.stage}>
+  const primary = s.link + " " + s.primary;
+  const firstRecord = sources.find((source) => source.recordHref);
+  const openRecord = (href: string) => setOpened(opened === href ? null : href);
+  return <li ref={row} className={s.row + (timeline ? " " + s.event : "")} id={anchorId}
+    tabIndex={anchorId ? -1 : undefined} data-stage={item.stage}>
     <div className={s.rowBody}>
       <div className={s.subject}>
         {titleHref && (internal(titleHref) || external(titleHref)) ? <a className={s.title} href={titleHref}
           target={external(titleHref) ? "_blank" : undefined} rel={external(titleHref) ? "noopener noreferrer" : undefined}
           onClick={(event) => follow(event, titleHref, navigate)}>{item.title}</a> : <strong className={s.title}>{item.title}</strong>}
-        <p className={s.meta}><time dateTime={item.at}>{meetingTime(item, now)}</time><span> · {sourceLabel}{item.statusText === sourceLabel ? "" : " · " + item.statusText}</span></p>
-        {item.preflightText && item.meetingId ? <a className={s.preflight} href={item.href} onClick={(event) => follow(event, item.href, navigate)}>{item.preflightText}</a> : null}
+        <p className={s.meta}>会议时间 · <time dateTime={item.at}>{meetingTime(item, now)}</time></p>
+        <p className={s.status} data-needs-action={item.needsAction || undefined}>{item.statusText}</p>
       </div>
       <div className={s.actions}>
-        {join ? <a className={s.link} href={join} target="_blank" rel="noopener noreferrer">加入会议</a> : null}
-        {sources.map((source) => source.recordHref ? <button type="button" key={source.recordHref} className={s.link}
-          aria-expanded={opened === source.recordHref} onClick={() => setOpened(opened === source.recordHref ? null : source.recordHref)}>
-          {sources.length === 1 ? "查看记录" : source.label}
-        </button> : null)}
-        {sourceHref && (!sources.length || !unmatched) ? <a className={s.link} href={sourceHref} target="_blank" rel="noopener noreferrer">打开来源</a> : null}
-        {unmatched ? <button type="button" className={s.link} aria-expanded={organize} onClick={() => setOrganize(!organize)}>整理妙记</button> : null}
+        {join ? <a className={primary} href={join} target="_blank" rel="noopener noreferrer">加入会议</a>
+          : unmatched ? <button type="button" className={primary} aria-expanded={organize} onClick={() => setOrganize(!organize)}>整理妙记</button>
+          : item.meetingId && item.needsAction ? <a className={primary} href={item.href} onClick={(event) => follow(event, item.href, navigate)}>处理会议事项</a>
+          : firstRecord ? <button type="button" className={primary} aria-expanded={opened === firstRecord.recordHref} onClick={() => openRecord(firstRecord.recordHref)}>查看记录</button>
+          : item.meetingId ? <a className={primary} href={item.href} onClick={(event) => follow(event, item.href, navigate)}>打开会议</a>
+          : titleHref ? <a className={primary} href={titleHref} target="_blank" rel="noopener noreferrer">查看日程</a> : null}
       </div>
     </div>
+    <details className={s.sources}>
+      <summary>来源与详情</summary>
+      <div className={s.sourceBody}>
+        <p className={s.meta}>{sourceLabel}</p>
+        {item.preflightText && item.meetingId ? <a className={s.preflight} href={item.href} onClick={(event) => follow(event, item.href, navigate)}>{item.preflightText}</a> : null}
+        <div className={s.actions}>
+          {sources.map((source) => source.recordHref ? <button type="button" key={source.recordHref} className={s.link}
+            aria-expanded={opened === source.recordHref} onClick={() => openRecord(source.recordHref)}>
+            {sources.length === 1 ? "查看记录" : source.label}
+          </button> : null)}
+          {sourceHref ? <a className={s.link} href={sourceHref} target="_blank" rel="noopener noreferrer">打开来源</a> : null}
+        </div>
+      </div>
+    </details>
     {record?.recordHref ? <RecordText key={record.recordHref} href={record.recordHref} sourceUrl={record.sourceUrl ?? null} /> : null}
     {organize && unmatched ? <OrganizeMinute token={tokenOf(item)} navigate={navigate} /> : null}
   </li>;

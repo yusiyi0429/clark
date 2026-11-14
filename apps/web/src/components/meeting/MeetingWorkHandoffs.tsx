@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type {
   TContinueMeetingWork, TMeetingWorkConclusion, TMeetingWorkFeedItem, TMeetingWorkHandoffs,
   TMeetingWorkReceipt, TMeetingWorkTarget, TMeetingWorkTargetOption,
@@ -8,6 +8,8 @@ import type {
 import { browserApi } from "@/lib/api/client";
 import { unwrap } from "@/lib/board/cloud";
 import { cardHref, infoHref, projectHref, topicHref } from "@/lib/home/derive";
+import { monthDayTime } from "@/lib/companyTime";
+import type { TimedBlock } from "@/components/work/WorkTimeline";
 import s from "./meeting-work-handoffs.module.css";
 
 const labels = { project: "项目", task: "Task", card: "执行子会话", topic: "探索子会话" };
@@ -101,7 +103,7 @@ function TargetPicker({ targets, excluded, suggestion, action, onContinue, onCan
       </div>;
     })}
   </fieldset><div className={s.actions}>
-    <button type="button" disabled={busy || !selection.length || selection.length > 30} onClick={() => void send()}>{busy ? "递送中…" : action}</button>
+    <button type="button" className={s.primary} disabled={busy || !selection.length || selection.length > 30} onClick={() => void send()}>{busy ? "递送中…" : action}</button>
     <button type="button" disabled={busy} onClick={onCancel}>暂不递送</button>
   </div>{selection.length > 30 && <p role="status">每次最多选择 30 个去向。</p>}{error && <p role="alert">{error}</p>}</div>;
 }
@@ -124,7 +126,7 @@ export function ConfirmAndHandOff({ requestId, amendedValue, onConfirmed }: { re
           continueWork: { authorization: "continue", targets: selected } } }));
       window.dispatchEvent(new Event(refreshed)); onConfirmed(result.confirmationRef);
     }} />;
-  return <div className={s.actions}><button type="button" disabled={loading} onClick={() => void choose()}>{loading ? "读取去向…" : "选择去向并确认"}</button>
+  return <div className={s.actions}><button type="button" className={s.primary} disabled={loading} onClick={() => void choose()}>{loading ? "读取去向…" : "选择去向并确认"}</button>
     {error && <span role="alert">{error}</span>}</div>;
 }
 
@@ -137,6 +139,21 @@ function ChangeRow({ item, targets, update }: {
   const [choosing, setChoosing] = useState(false);
   const [pending, setPending] = useState<string[]>([]);
   const [error, setError] = useState("");
+  const counts = receipts.reduce((total, receipt) => ({ ...total, [receipt.status]: total[receipt.status] + 1 }), { delivered: 0, pending: 0, failed: 0 });
+  useEffect(() => {
+    const anchor = `meeting-work-${change.confirmationRef}`;
+    const reveal = () => {
+      if (window.location.hash.slice(1) !== anchor) return;
+      const article = document.getElementById(anchor);
+      if (!article) return;
+      article.querySelectorAll<HTMLDetailsElement>("details").forEach(detail => { detail.open = true; });
+      article.scrollIntoView?.({ block: "nearest" });
+      article.focus({ preventScroll: true });
+    };
+    reveal();
+    window.addEventListener("hashchange", reveal);
+    return () => window.removeEventListener("hashchange", reveal);
+  }, [change.confirmationRef]);
   async function retry(r: TMeetingWorkReceipt) {
     setPending(old => [...old, r.id]); setError("");
     try { update((await submit(change, [{ ...r.target, instruction: r.instruction }])).receipts); }
@@ -144,32 +161,43 @@ function ChangeRow({ item, targets, update }: {
     finally { setPending(old => old.filter(id => id !== r.id)); }
   }
   return <article className={s.entry} id={`meeting-work-${change.confirmationRef}`} tabIndex={-1}>
-    <strong>{change.question}</strong><Content change={change} />
-    <div className={s.meta}>{change.decision === "amended" ? "已修改并确认" : "已确认"} · 第 {change.revision} 版</div>
-    <Source change={change} />
-    {receipts.length > 0 && <ul className={s.receipts} aria-label="递送回执">{receipts.map(r => {
+    <header className={s.header}><span>会议交接 · {change.decision === "amended" ? "已修改并确认" : "已确认"}</span>
+      <time dateTime={change.confirmedAt}>确认于 {monthDayTime(change.confirmedAt)} 北京时间</time></header>
+    <h3 className={s.title}>{change.question}</h3><Content change={change} />
+    <p className={s.progress} aria-label="递送进度">
+      <span data-state="delivered">已递送 <strong>{counts.delivered}</strong></span>
+      <span data-state="pending">待递送 <strong>{counts.pending}</strong></span>
+      <span data-state="failed">失败 <strong>{counts.failed}</strong></span>
+    </p>
+    <p className={s.next}>下一步 · {counts.failed ? "重试失败的去向，查看下方原因与操作。"
+      : counts.pending ? "递送等待中的工作去向。"
+      : counts.delivered ? "打开递送去向查看，或添加工作去向。" : "选择既有工作去向，继续推进。"}</p>
+    {receipts.length > 0 && <details className={s.receiptDetails} open={counts.failed + counts.pending > 0}>
+      <summary>递送明细（{receipts.length}）{counts.failed + counts.pending > 0 ? ` · ${counts.failed + counts.pending} 个待处理` : ""}</summary>
+      <ul className={s.receipts} aria-label="递送回执">{receipts.map(r => {
       const dest = targets.find(t => same(t, r.target));
-      const label = dest ? destName(dest) : `${labels[r.target.kind]} ${r.target.id}（当前不可选）`;
-      return <li key={r.id}><span>{stateText[r.status]} · {label}</span>
-        {r.reason && <span className={s.meta}>{r.reason}</span>}
-        {r.status === "delivered" ? dest && <a href={destHref(dest)}>打开去向</a>
-          : <button type="button" disabled={pending.includes(r.id)} onClick={() => void retry(r)}>{pending.includes(r.id) ? "递送中…" : r.status === "pending" ? "递送此去向" : "重试此去向"}</button>}
+      const label = dest ? destName(dest) : `${labels[r.target.kind]} ${r.target.id}（${r.status === "delivered" ? "历史去向" : "当前不可选"}）`;
+      return <li key={r.id} data-state={r.status}><div className={s.receiptBody}><span>{stateText[r.status]} · {label}</span>
+        {r.instruction && <p className={s.meta}>本次交代 · {r.instruction}</p>}
+        {r.reason && <p className={r.status === "failed" ? s.failure : s.meta}>{r.reason}</p>}</div>
+        {r.status === "delivered" ? <a href={destHref(r.target)}>打开去向</a>
+          : <button type="button" className={s.primary} disabled={pending.includes(r.id)} onClick={() => void retry(r)}>{pending.includes(r.id) ? "递送中…" : r.status === "pending" ? "递送此去向" : "重试此去向"}</button>}
       </li>;
-    })}</ul>}
+    })}</ul></details>}
     {suggestion && !receipts.some(r => same(r.target, suggestion)) && <p className={s.meta}>建议去向 · {destName(suggestion)}</p>}
     {choosing ? <TargetPicker targets={targets} excluded={receipts} suggestion={suggestion} action="继续推进" onCancel={() => setChoosing(false)}
       onContinue={async selected => { update((await submit(change, selected)).receipts); setChoosing(false); }} />
-      : <button type="button" onClick={() => setChoosing(true)}>{receipts.length ? "添加工作去向" : "选择工作去向"}</button>}
+      : <div className={s.actions}><button type="button" className={!receipts.length ? s.primary : undefined} onClick={() => setChoosing(true)}>{receipts.length ? "添加工作去向" : "选择工作去向"}</button></div>}
     {error && <p role="alert">{error}</p>}
+    <Source change={change} />
   </article>;
 }
 
-export function MeetingWorkHandoffs() {
+export function useMeetingWorkHandoffFeed(): { blocks: TimedBlock[]; notice: ReactNode } {
   const [items, setItems] = useState<TMeetingWorkHandoffs["items"]>([]);
   const [targets, setTargets] = useState<TMeetingWorkTargetOption[]>([]);
   const [error, setError] = useState("");
   const [version, setVersion] = useState(0);
-  const loadedHash = useRef("");
   useEffect(() => {
     let active = true;
     const refresh = () => setVersion(v => v + 1);
@@ -192,19 +220,20 @@ export function MeetingWorkHandoffs() {
     window.addEventListener("focus", refresh); window.addEventListener(refreshed, refresh);
     return () => { active = false; window.removeEventListener("focus", refresh); window.removeEventListener(refreshed, refresh); };
   }, [version]);
-  useEffect(() => {
-    const anchor = window.location.hash.slice(1);
-    if (items.length && anchor.startsWith("meeting-work-") && loadedHash.current !== anchor) {
-      loadedHash.current = anchor;
-      document.getElementById(anchor)?.scrollIntoView?.({ block: "nearest" });
-    }
-  }, [items]);
-  if (!items.length && !error) return null;
-  return <section id="meeting-work-handoffs" className={s.panel} aria-label="会后工作交接"><h2>会后工作交接</h2>
-    {error && <p role="alert">{error} <button type="button" onClick={() => setVersion(v => v + 1)}>重试</button></p>}
-    {items.map(item => <ChangeRow key={item.conclusion.confirmationRef} item={item} targets={targets} update={next => setItems(old =>
+  const blocks = items.map(item => ({ key: `meeting-handoff:${item.conclusion.confirmationRef}`, at: item.conclusion.confirmedAt,
+    node: <ChangeRow item={item} targets={targets} update={next => setItems(old =>
       old.map(row => row.conclusion.confirmationRef !== item.conclusion.confirmationRef ? row : { ...row, receipts: [
         ...row.receipts.filter(r => !next.some(n => n.id === r.id)), ...next,
-      ] }))} />)}
+      ] }))} /> }));
+  const notice = error ? <p className={s.notice} role="alert">{error} <button type="button" onClick={() => setVersion(v => v + 1)}>重试</button></p> : null;
+  return { blocks, notice };
+}
+
+/** Compatibility surface for pages that do not yet render the unified WorkTimeline. */
+export function MeetingWorkHandoffs() {
+  const { blocks, notice } = useMeetingWorkHandoffFeed();
+  if (!blocks.length && !notice) return null;
+  return <section id="meeting-work-handoffs" className={s.panel} aria-label="会后工作交接"><h2>会后工作交接</h2>
+    {notice}{blocks.map(block => <div key={block.key} data-block={block.key}>{block.node}</div>)}
   </section>;
 }

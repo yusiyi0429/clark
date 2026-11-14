@@ -1,0 +1,41 @@
+$ vitest run "src/components/work/work.test.tsx" "--reporter=dot"
+
+ RUN  v3.2.7 C:/Users/10021/Desktop/clark/Tianshu-MVP/.claude/worktrees/new-home-integration/apps/web
+
+····················xx··················
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/work/work.test.tsx > 对话里插块和锚点 > 不同偏移的会议和来件按实际时刻排列，即使落在同一个消息间隙
+ FAIL  src/components/work/work.test.tsx > 对话里插块和锚点 > 不同偏移的会议和来件按实际时刻排列，即使落在同一个消息间隙
+AssertionError: expected [ 'same-instant', 'later-utc', …(1) ] to deeply equal [ 'earlier-local', …(2) ]
+
+- Expected
++ Received
+
+  [
+-   "earlier-local",
+    "same-instant",
+    "later-utc",
++   "earlier-local",
+  ]
+
+ ❯ src/components/work/work.test.tsx:316:52
+    314|     ];
+    315|     const placed = placeBlocks(messages, blocks);
+    316|     expect(placed.get(0)?.map(block => block.key)).toEqual(["earlier-l…
+       |                                                    ^
+    317|   });
+    318| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 38 passed (40)
+   Start at  01:26:00
+   Duration  14.23s (transform 3.62s, setup 0ms, collect 12.94s, tests 74ms, environment 0ms, prepare 348ms)
+
+C:\Users\10021\Desktop\clark\Tianshu-MVP\.claude\worktrees\new-home-integration\apps\web:
+[ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL] @warmap/web@0.1.0 test: `vitest run "src/components/work/work.test.tsx" "--reporter=dot"`
+Exit status 1

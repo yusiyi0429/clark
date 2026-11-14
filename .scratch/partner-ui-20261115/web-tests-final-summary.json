@@ -1,0 +1,12 @@
+{
+  "files": 309,
+  "tests": 2566,
+  "passed": 2566,
+  "failed": 0,
+  "pending": 0,
+  "success": true,
+  "command": "pnpm --filter @warmap/web test --maxWorkers=4 --reporter=json --outputFile=../../.scratch/partner-ui-20261115/web-tests-final.json",
+  "typecheck": "pnpm --filter @warmap/web typecheck: exit0",
+  "source_manifest": "source-manifest.json",
+  "source_diff_check": "passed"
+}

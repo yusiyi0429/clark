@@ -46,8 +46,8 @@ import { SubSessionSummary } from "./SubSessionSummary";
 import { WorkIntakeQueue, useQueueWorkInput } from "./WorkIntake";
 import { usePartnerWorkEvents } from "./PartnerWorkEvents";
 import { usePartnerTeam } from "./PartnerTeam";
-import { PartnerMeetingInbox } from "./PartnerMeetings";
-import { MeetingWorkHandoffs, MeetingWorkFeedEntry } from "../meeting/MeetingWorkHandoffs";
+import { usePartnerMeetingFeed } from "./PartnerMeetings";
+import { useMeetingWorkHandoffFeed, MeetingWorkFeedEntry } from "../meeting/MeetingWorkHandoffs";
 
 /** 首页输入框发来、等着进对话的一句。 */
 /** files：首页输入框带的附件，到了那条对话再传（14.5）。 */
@@ -100,6 +100,7 @@ function ChatInput({ data, placeholder, onHeight, context, footer, intercept, du
   useAnswerOptionFill(data.scope, (text) => setFill({ text, nonce: Date.now() }));
   return (
     <InputBar placeholder={placeholder} busy={data.streaming} interruptible={durable || data.interruptible} onStop={data.stop} textRequired={!intercept} onHeight={onHeight} fill={fill} context={context} footer={footer}
+      dock={durable ? <WorkIntakeQueue key={data.scope} scope={data.scope} refreshHistory={data.followLatest} /> : null}
       draftKey={`tianshu-home-draft-v1:${data.scope}`}
       onSend={async (text, files) => {
         if (intercept && await intercept(text,files)) return true;
@@ -143,6 +144,8 @@ export function BuddyView({ buddy, outbox, consume, onSpeaking, projects, other,
   const chrome = useViewChrome();
   const team = usePartnerTeam();
   const events = usePartnerWorkEvents(waiting, go);
+  const meetingFeed = usePartnerMeetingFeed();
+  const handoffFeed = useMeetingWorkHandoffFeed();
   useOutbox(data, "main", outbox, consume, team.intercept, team.composing);
   useEscStopsReply(data);
   useEffect(() => { onSpeaking(data.streaming); return () => onSpeaking(false); }, [data.streaming, onSpeaking]);
@@ -159,10 +162,10 @@ export function BuddyView({ buddy, outbox, consume, onSpeaking, projects, other,
                 {chrome.trail}
               </header>
               <SubSessionSummary projects={projects} other={other} go={go} />
+              {meetingFeed.scheduled}
             </>
           )}
-          timeline={(current) => <><WorkTimeline data={current} blocks={[...team.blocks, ...events]} modelRule={modelRule} /><PartnerMeetingInbox /><MeetingWorkHandoffs />
-            <WorkIntakeQueue scope={data.scope} refreshHistory={data.followLatest} /></>}
+          timeline={(current) => <>{meetingFeed.notice}{handoffFeed.notice}<WorkTimeline data={current} blocks={[...team.blocks, ...events, ...meetingFeed.blocks, ...handoffFeed.blocks]} modelRule={modelRule} /></>}
           dock={(latest) => <>{team.composer}<PendingDock latest={latest} /></>}
           input={(onHeight) => <ChatInput data={data} placeholder={`与${name}讨论…`} onHeight={onHeight} intercept={team.intercept} footer={{ left: team.launcher, right: <ModelText data={data} /> }}
             context={context ? { label: context, onClear: () => onClearContext?.() } : null} />} />
@@ -405,8 +408,7 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
               <SubSessionSummary projects={[project]} grouped={false} go={go} />
             </>
           )}
-          timeline={(current) => <><WorkTimeline data={current} blocks={blocks} modelRule={modelRule} />
-            {api.live && !readOnly ? <WorkIntakeQueue scope={data.scope} refreshHistory={data.followLatest} /> : null}</>}
+          timeline={(current) => <WorkTimeline data={current} blocks={blocks} modelRule={modelRule} />}
           dock={(latest) => <PendingDock latest={latest} />}
           input={readOnly ? () => null : (onHeight) => <ChatInput data={data} durable={api.live} placeholder={handheld ? "说点什么…" : `与${project.name}讨论…`} onHeight={onHeight} footer={{
             left: folder,

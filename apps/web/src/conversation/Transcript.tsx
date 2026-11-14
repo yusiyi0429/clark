@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, createContext, memo, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { Fragment, createContext, memo, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactElement, type ReactNode, type RefObject } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import type { PluggableList } from "unified";
 import remend from "remend";
@@ -333,7 +333,7 @@ function CarriedDivider({ message }: { message: Message }) {
  * 状态区紧贴在正在写的文字下面，正文第一个字就出现在思考原来的位置；卡先做好就先在下面淡入，正文往下长时把卡往下推。
  * 状态区占的是完成后选项（footer）的位置，卡的位置不变，读回历史时卡不重挂。
  */
-export function ConversationTurns({ messages, partial = "", footer, after, trailing, thought, steps, status, modelRule }: {
+export function ConversationTurns({ messages, partial = "", footer, after, insertions, trailing, thought, steps, status, modelRule }: {
   messages: Message[]; partial?: string;
   /** 本轮的步骤（正文开始后才给）：与思考摘要一样，流式中挂在正在写的那条，结束后挂在最后一条回答上。 */
   steps?: Step[] | null;
@@ -345,44 +345,52 @@ export function ConversationTurns({ messages, partial = "", footer, after, trail
   footer?: (index: number) => ReactNode;
   /** 第 index 条消息之后插的内容（提案卡）。 */
   after?: (index: number) => ReactNode;
+  /** 独立事件：-1 为首条消息之前；每项需有全局唯一 key，与消息同层，换位置时保留交互状态。 */
+  insertions?: (index: number) => readonly ReactElement[];
   /** 当前输出之后的内容（流式中本轮的提案卡）。 */
   trailing?: ReactNode;
   /** 画「换成 …」那一行的办法（67 条）：新首页的对话给（分隔线同「11 月目标」那一种）；别处不给，就不画。 */
   modelRule?: (label: string) => ReactNode;
 }) {
   const switches = modelRule ? modelSwitches(messages) : null;
-  return (
-    <>
-      {messages.map((message, index) => (
-        <Fragment key={`turn-${index}`}>
-          {switches?.has(index) ? modelRule!(switches.get(index)!) : null}
-          {message.kind === "carried" && messages[index - 1]?.kind !== "carried" ? <CarriedDivider message={message} /> : null}
-          {isReportPrompt(message) ? null : (
-            <ConversationTurn message={message} ms={message.role === "assistant" ? turnMs(messages, index) : undefined}
-              thought={!partial && thought && index === messages.length - 1 && message.role === "assistant" ? thought : undefined}
-              steps={!partial && steps?.length && index === messages.length - 1 && message.role === "assistant" ? steps : undefined} />
-          )}
-          {footer?.(index) ?? null}
-          {after?.(index) ?? null}
-        </Fragment>
-      ))}
-      {/* 飞书或微信里刚问、还在答：这里先占一行，答完读回历史时换成回答。 */}
-      {!partial && !status && feishuWaiting(messages) ? (
-        <div className={s.thinking} data-testid="conversation-feishu-waiting">
-          <span className={s.pulse} aria-hidden />
-          <span role="status">{isReportPrompt(messages.at(-1)!) ? "正在看子会话的回报" : `正在回答${VIA_LABEL[messages.at(-1)!.via as keyof typeof VIA_LABEL]}里的提问`}</span>
-        </div>
-      ) : null}
-      {partial || trailing || status ? (
-        <Fragment key={`turn-${messages.length}`}>
-          {partial ? <ConversationTurn message={{ sequence: -1, role: "assistant", content: partial }} streaming thought={thought ?? undefined} steps={steps?.length ? steps : undefined} /> : null}
-          {/* 与上面 footer 同一个位置（流式中没有选项，这里放状态区）：完成后提案卡仍在同一位置，不重挂。 */}
-          {status ?? null}
-          {trailing ?? null}
-        </Fragment>
-      ) : null}
-    </>
+  // Every independent event belongs to this one flat array, including leading
+  // events. A per-turn or nested array parent would remount it when its bucket
+  // changes (e.g. timed history → an untimed optimistic message → timed history).
+  // Namespace event outlets so caller keys cannot collide with turn-N/waiting.
+  const insertedAt = (index: number) => (insertions?.(index) ?? []).map(node => <Fragment key={`insertion:${node.key}`}>{node}</Fragment>);
+  const rows: ReactNode[] = [...insertedAt(-1)];
+  messages.forEach((message, index) => {
+    rows.push(
+      <Fragment key={`turn-${index}`}>
+        {switches?.has(index) ? modelRule!(switches.get(index)!) : null}
+        {message.kind === "carried" && messages[index - 1]?.kind !== "carried" ? <CarriedDivider message={message} /> : null}
+        {isReportPrompt(message) ? null : (
+          <ConversationTurn message={message} ms={message.role === "assistant" ? turnMs(messages, index) : undefined}
+            thought={!partial && thought && index === messages.length - 1 && message.role === "assistant" ? thought : undefined}
+            steps={!partial && steps?.length && index === messages.length - 1 && message.role === "assistant" ? steps : undefined} />
+        )}
+        {footer?.(index) ?? null}
+        {after?.(index) ?? null}
+      </Fragment>,
+      ...insertedAt(index),
+    );
+  });
+  // 飞书或微信里刚问、还在答：这里先占一行，答完读回历史时换成回答。
+  if (!partial && !status && feishuWaiting(messages)) rows.push(
+    <div key="waiting" className={s.thinking} data-testid="conversation-feishu-waiting">
+      <span className={s.pulse} aria-hidden />
+      <span role="status">{isReportPrompt(messages.at(-1)!) ? "正在看子会话的回报" : `正在回答${VIA_LABEL[messages.at(-1)!.via as keyof typeof VIA_LABEL]}里的提问`}</span>
+    </div>,
   );
+  if (partial || trailing || status) rows.push(
+    <Fragment key={`turn-${messages.length}`}>
+      {partial ? <ConversationTurn message={{ sequence: -1, role: "assistant", content: partial }} streaming thought={thought ?? undefined} steps={steps?.length ? steps : undefined} /> : null}
+      {/* 与上面 footer 同一个位置（流式中没有选项，这里放状态区）：完成后提案卡仍在同一位置，不重挂。 */}
+      {status ?? null}
+      {trailing ?? null}
+    </Fragment>,
+  );
+  return <>{rows}</>;
 }
 
 /** 现场行的阶段（新首页设计 5.4.3）：拿到具体阶段以前（刚发出、模型在想）只有呼吸点，不写「正在思考」这类笼统的词。 */

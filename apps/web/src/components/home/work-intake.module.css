@@ -1,0 +1,25 @@
+.root { min-width: 0; margin-bottom: 8px; color: var(--ink); font-size: var(--text-xs); }
+.queue { border: 1px solid var(--hairline); border-radius: var(--r-control); background: var(--surface); }
+.summary { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-height: 44px; padding: 8px 10px; cursor: pointer; list-style: none; }
+.summary::-webkit-details-marker { display: none; }
+.summary:hover { background: var(--default-soft); }
+.summary:focus-visible, .preview:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; border-radius: var(--r-control); }
+.chevron { flex: none; color: var(--ink-muted); }
+.queue[open] > .summary .chevron { transform: rotate(90deg); }
+.counts { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; color: var(--ink-muted); }
+.failed, .state[data-failed], .failure { color: var(--danger); }
+.list { max-height: min(28dvh, 220px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; list-style: none; margin: 0; padding: 0 10px 8px; }
+.item { min-width: 0; padding: 10px 0 4px; border-top: 1px solid var(--hairline); }
+.state { color: var(--ink-muted); }
+.message { min-width: 0; margin-top: 2px; }
+.preview { display: flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; list-style: none; }
+.preview::-webkit-details-marker { display: none; }
+.preview > span:first-child { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.more { flex: none; color: var(--ink-muted); }
+.message[open] .preview > span:first-child { display: none; }
+.fullText, .failure { margin: 4px 0; overflow-wrap: anywhere; white-space: pre-wrap; line-height: 1.6; }
+.actions { display: flex; flex-wrap: wrap; gap: 4px; }
+.action { min-width: 44px; min-height: 44px; }
+.error { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 0 10px; border: 1px solid var(--hairline); border-radius: var(--r-control); }
+.error > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 640px) { .root { font-size: 13px; } .counts { margin-left: 0; } }

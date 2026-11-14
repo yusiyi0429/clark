@@ -20,14 +20,15 @@ export function SubSessionSummary({ projects, other = [], grouped = true, go }: 
   const groups = projects.filter((project) => project.subSessions.length);
   const all = [...groups.flatMap((project) => project.subSessions), ...other];
   if (!all.length) return null;
-  const running = all.filter((sub) => sub.state === "running" || sub.state === "failed").length;
+  const running = all.filter((sub) => sub.state === "running").length;
+  const reworking = all.filter((sub) => sub.state === "failed").length;
   const waiting = all.filter((sub) => sub.state === "waiting" && sub.waiting).length;
   const rows = (subs: readonly SubSession[]) => {
     const letters = subLetters([...subs]);
     return <ul className={s.list}>{subs.map((sub) => (
       <li key={subKey(sub)}>
         <button type="button" className={s.row} onClick={() => go(subHref(sub))} data-state={sub.state}>
-          <StateIcon {...subIcon(sub)} />
+          <StateIcon {...subIcon(sub)} {...(sub.state === "failed" ? { label: "重做中" } : {})} />
           {letters.has(subKey(sub)) ? <SubLetter letter={letters.get(subKey(sub))!} /> : <span />}
           <span className={s.title}>{sub.title}</span>
           <span className={s.stage} data-attention={sub.state === "waiting" && sub.waiting ? "" : undefined}>{subStage(sub)}</span>
@@ -41,6 +42,7 @@ export function SubSessionSummary({ projects, other = [], grouped = true, go }: 
         <ChevronRight size={14} aria-hidden className={s.chevron} />
         <span>子会话 {all.length}</span>
         {running ? <span className={s.count}>{running} 进行中</span> : null}
+        {reworking ? <span className={s.count}>{reworking} 重做中</span> : null}
         {waiting ? <span className={s.attention}>{waiting} 等你</span> : null}
       </summary>
       <div className={s.body}>
