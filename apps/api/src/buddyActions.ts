@@ -1,17 +1,15 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { FormatRegistry } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import {
   BuddyActionParams, BUDDY_ACTION_NAMES, PROJECT_ONLY_ACTIONS, type BuddyActionName, type TBudget, type TBuddyActionSpec, type TBuddyAskQuestion, type TBuddyAuditEntry, type TBuddyAuthority,
   type TBuddyMessageDraft, type TBuddyPlan, type TBuddyUiEffect, type TConversationCard, type TSessionCommand, type TSessionCommandView,
-  type TSessionStopView, type TTrashItem, type TWorkHomeResponse,
+  type TSessionStopView, type TTrashItem, type TWorkHomeResponse, type TTeamDelivery,
 } from "@warmap/contracts";
 import type { Static } from "@sinclair/typebox";
-import { BUDDY_FORWARD_PREFIX, FORWARDED_HEADER } from "./chatService.js";
-import { sseEvents } from "./homeTurn.js";
+import { BUDDY_FORWARD_PREFIX } from "./chatService.js";
 import { currentSessionVersion } from "./memberAccess.js";
-import { logEvent } from "./observability.js";
 import { UUID_PATTERN, type Query } from "./meetingStore.js";
 import { CLAIM_TTL, cancelStart, requestStarts } from "./sessionStarts.js";
 import { SESSION_COOKIE, createSessionToken } from "./session.js";
@@ -43,6 +41,7 @@ if (!FormatRegistry.Has("uuid")) FormatRegistry.Set("uuid", (value) => UUID_PATT
 type Kind = TBuddyActionSpec["kind"];
 const KIND: Record<BuddyActionName, Kind> = {
   read_work_home: "read", read_project: "read", find_people: "read", open_page: "ui", update_plan: "plan", ask_user: "ui",
+  read_partner_inbox: "read", read_partner_item: "read",
   set_appearance: "write", set_feishu_push: "write", start_sub_session: "write", stop_sub_session: "write", archive_sub_session: "write",
   delete_sub_session: "write", create_project: "write", rename_project: "write", archive_project: "write", link_task_to_project: "write",
   transfer_project: "write", split_cards: "write", set_budget: "write", set_task_due_date: "write", message_project: "write", send_message: "write",
@@ -55,6 +54,8 @@ const KIND: Record<BuddyActionName, Kind> = {
  */
 const IRREVERSIBLE = "这一步撤不回：只在动手前请本人点头时说一次，做完以后和别的回话里不再提。";
 const DESCRIPTION: Record<BuddyActionName, string> = {
+  read_partner_inbox: "读本人伙伴的会议 meetings、同事来件 received、发件进度 sent 或关键工作事件 events。每页默认20条，nextOffset 可取下一页；按需打开原文。",
+  read_partner_item: "以本人身份读会议正文 meeting、本人待整理的妙记 minute、团队请求及答复 delivery、请求附件文字 attachment。id 取自收件列表。会议有多个来源时可选 source（feishu 或 tianshu）；附件须带 attachmentId。没有内容或权限时如实说明。",
   read_work_home: "读本人的首页：项目、每个项目的子会话（卡、专题）和状态、等你、本月的 Mission 和 Task。要找项目 id、子会话 id、Task id 时先读它。",
   read_project: "读一个项目的详情（目标、挂着的 Task）、当前子会话状态 subSessions 和最近的动态（含子会话停下的报告：做成了什么、卡在哪、交了什么）。"
     + "subSessions 为 null 表示当前首页未列出该项目，不能当成没有子会话。state=waiting 且 waiting=null 只表示停下一轮，不是完成；waiting/merge 是等合回，done 才是已完成，failed 是验收没过。"
@@ -256,6 +257,26 @@ type Args<N extends BuddyActionName> = Static<(typeof BuddyActionParams)[N]>;
 type Handlers = { [N in BuddyActionName]: (deps: BuddyDeps, call: Call, args: Args<N>) => Promise<Outcome> };
 
 const handlers: Handlers = {
+  read_partner_inbox: async (deps, call, { section, offset = 0, limit = 20 }) => {
+    const path = section === "meetings" ? "/api/me/partner-meetings" : section === "events" ? "/api/me/partner-work-events" : "/api/me/team-deliveries?box=" + section;
+    const result = await web<{ items: unknown[] }>(deps, call.personId, "GET", path);
+    let items = result.items.slice(offset, offset + limit);
+    if (section === "received" || section === "sent") {
+      items = (items as TTeamDelivery[]).map(item => ({ id: item.id, kind: item.kind, createdAt: item.createdAt, sender: item.sender, dueAt: item.dueAt,
+        text: item.text.slice(0, 250), attachments: item.attachments.length,
+        recipients: item.recipients.map(person => ({ personId: person.personId, name: person.displayName, status: person.status, replies: person.replies.length })) }));
+    }
+    return { summary: "读了本人的伙伴收件记录", result: { items, total: result.items.length, nextOffset: offset + limit < result.items.length ? offset + limit : null } };
+  },
+  read_partner_item: async (deps,call,{kind,id,attachmentId,source}) => {
+    if ((kind === "attachment") !== Boolean(attachmentId)) throw new BuddyError(400,"INVALID_ARGS","读取附件时请提供该请求里的附件标识");
+    if (source && kind !== "meeting") throw new BuddyError(400, "INVALID_ARGS", "只有会议记录可以选择正文来源");
+    const prefix = kind === "meeting" ? "meeting:" : kind === "minute" ? "feishu-minute:" : null;
+    const key = encodeURIComponent(prefix && id.startsWith(prefix) ? id.slice(prefix.length) : id);
+    const path = kind === "meeting" ? `/api/me/partner-meetings/${key}/record${source ? "?source=" + source : ""}` : kind === "minute" ? `/api/me/partner-meetings/minutes/${key}`
+      : "/api/me/team-deliveries/" + key + (attachmentId ? "/attachments/"+encodeURIComponent(attachmentId)+"/text" : "");
+    return {summary:"读取了本人有权打开的内容",result:await web(deps,call.personId,"GET",path)};
+  },
   read_work_home: async (deps, call) => ({ summary: "读了首页", result: await web(deps, call.personId, "GET", "/api/me/work-home") }),
   read_project: async (deps, call, args) => {
     const path = `/api/me/projects/${encodeURIComponent(args.projectId)}`;
@@ -421,8 +442,10 @@ const handlers: Handlers = {
     const name = await projectName(deps, call.personId, args.projectId);
     // 项目对话还没开过就开（归档的、别人的照网页接口回错）。
     await web(deps, call.personId, "POST", `${path}/pipeline`);
-    forwardToProject(deps, call.personId, args.projectId, `${BUDDY_FORWARD_PREFIX}${args.text}`);
-    return { summary: `已把话转给项目「${name}」的对话，由它去安排；有结果、出问题或要本人拿主意时再回报`, undo: null, ui: [projectRefresh(args.projectId)] };
+    const requestId = call.runId ? forwardedInputId(call.runId, call.personId, args.projectId, args.text) : randomUUID();
+    const item = await web(deps, call.personId, "POST", "/api/me/work-intake", { id: requestId, scope: `project:${args.projectId}`,
+      message: BUDDY_FORWARD_PREFIX + args.text, attachments: [] });
+    return { summary: `已把这条要求排进项目「${name}」的对话`, result: item, undo: null, ui: [projectRefresh(args.projectId)] };
   },
   send_message: async (deps, call, args) => {
     const names = deps.names();
@@ -529,34 +552,10 @@ const handlers: Handlers = {
   },
 };
 
-const FORWARD_RETRY_MS = 5_000;
-const FORWARD_GIVE_UP_MS = 10 * 60_000;
-/**
- * 在后台以本人身份往项目对话里说这一句（message 已带开头「【伙伴转来】」），走网页同一个对话接口；
- * 读完这一轮的流（结果留在项目对话里）。项目对话正在回上一轮时不打断它，隔 5 秒再试，最多等 10 分钟（同 homeTurn.ts）。失败只记日志。
- */
-function forwardToProject(deps: BuddyDeps, personId: string, projectId: string, message: string): void {
-  void (async () => {
-    const startedAt = Date.now();
-    for (;;) {
-      const response = await deps.app.inject({ method: "POST", url: `/api/conversations/${encodeURIComponent(`project:${projectId}`)}/messages`, payloadAsStream: true,
-        headers: { cookie: await sessionCookie(deps, personId), origin: deps.env.publicOrigin, accept: "text/event-stream", "content-type": "application/json",
-          [FORWARDED_HEADER]: "buddy" }, payload: JSON.stringify({ message }) });
-      const stream = response.stream();
-      if (response.statusCode === 200) {
-        for await (const _event of sseEvents(stream)) { /* 读到这一轮结束 */ }
-        return;
-      }
-      let body = "";
-      for await (const chunk of stream) body += chunk.toString();
-      const code = (() => { try { return (JSON.parse(body) as { code?: string }).code; } catch { return undefined; } })();
-      if (code !== "TURN_IN_PROGRESS" || Date.now() - startedAt >= FORWARD_GIVE_UP_MS) {
-        logEvent({ event: "buddy.forward_failed", projectId, httpStatus: response.statusCode, errorCode: code });
-        return;
-      }
-      await new Promise((resolve) => setTimeout(resolve, FORWARD_RETRY_MS));
-    }
-  })().catch((error) => logEvent({ event: "buddy.forward_failed", projectId, error: (error as Error)?.message }));
+/** 同一轮工具调用重放时引用原队列项；本人在以后的对话里可再次提出相同要求。 */
+function forwardedInputId(run: string, person: string, project: string, message: string): string {
+  const id = createHash("sha256").update(JSON.stringify([run, person, project, message])).digest("hex");
+  return `${id.slice(0, 8)}-${id.slice(8, 12)}-8${id.slice(13, 16)}-a${id.slice(17, 20)}-${id.slice(20, 32)}`;
 }
 
 /** 转交的说明写好了、还在准备中、没有疑似凭据：发出。说明还没写好时等后台写好再发（projectTransfers.ts 的 writeLater）。 */

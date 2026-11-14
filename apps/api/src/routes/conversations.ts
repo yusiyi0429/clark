@@ -160,13 +160,13 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
       const card = objectType === "issue"
         ? await getIssueRow(q, objectId).then((row) => row && projectMemberIssueCard(row, env.sessionSecret))
         : await getMeetingRow(q, objectId).then((row) => row && cardWithMeetingFacts(q, row, projectMemberMeetingCard(row, env.sessionSecret, person.personId),
-          { personId: person.personId, isCeo: false }));
+          { personId: person.personId, isCeo: false }, app.meetingFollowThrough.minutes));
       if (!card) return { snapshot: null, visible: false };
       return { visible: true, snapshot: { cardId: card.id, version: card.version, kind: card.kind, title: card.title,
         objectRef: card.objectRef, payload: card.payload } };
     }
     return person.role === "ceo" || scope === "global" || scope.startsWith("mission-card:") || scope.startsWith("task:") || scope.startsWith("monthly-review-item:") || scope.startsWith("personal-review:")
-      ? getScopeObject(q, scope, env.sessionSecret, { person, people: peopleDirectory.searchPeople(undefined), now: ctx.now() })
+      ? getScopeObject(q, scope, env.sessionSecret, { person, people: peopleDirectory.searchPeople(undefined), now: ctx.now(), minutes:app.meetingFollowThrough.minutes })
       : { snapshot: null, visible: false };
   };
   const conversationScopeVisible = async (person: SessionPerson, scope: TConversationScope) =>
@@ -226,10 +226,17 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
       const person = req.person!;
       const owner = person.personId;
       if (await pipelineDenied(reply, person, req.params.scope)) return;
+      if (req.body.queuedInputId) {
+        const claim = req.headers["x-work-intake-claim"];
+        if (typeof claim !== "string" || !(await q(`SELECT 1 FROM work_intake WHERE id=$1 AND owner_id=$2
+            AND scope=$3 AND state='sending' AND claim_id::text=$4`, [req.body.queuedInputId, owner, req.params.scope, claim])).rowCount) {
+          return fail(reply, 409, "INTAKE_CHANGED", "发件状态已变化，请查看工作队列");
+        }
+      }
       // 接手人说了第一句：管线可以自己开子会话了（16.7）。
-      if (isProject(req.params.scope)) await ownerSpoke(q, owner, projectIdOf(req.params.scope));
+      if (!req.body.queuedInputId && isProject(req.params.scope)) await ownerSpoke(q, owner, projectIdOf(req.params.scope));
       // 本人在这个项目对话里说了话（含伙伴台转来的），自动接力清零（18 节第 12 条）。
-      if (isProject(req.params.scope)) await resetAutoRelay(q, projectIdOf(req.params.scope));
+      if (!req.body.queuedInputId && isProject(req.params.scope)) await resetAutoRelay(q, projectIdOf(req.params.scope));
       if (chat && onChat(req.params.scope)) {
         // 和天枢自己的对话同一条规则：成员不能借显式引用把 Card 带进对话。
         if (person.role !== "ceo" && req.body.references?.length) return fail(reply, 404, "REFERENCE_NOT_FOUND", "Card 引用不存在");
@@ -266,7 +273,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
       }
       // 成员在 2a 看不到任何 Card，也不能借显式引用把 Card 带进自己的 Agent。
       if (person.role !== "ceo" && req.body.references?.length) return fail(reply, 404, "REFERENCE_NOT_FOUND", "Card 引用不存在");
-      const references = await resolveReferenceSnapshots(q, req.body.references ?? [], env.sessionSecret, person);
+      const references = await resolveReferenceSnapshots(q, req.body.references ?? [], env.sessionSecret, person, app.meetingFollowThrough.minutes);
       if (!("snapshots" in references)) {
         return fail(reply, references.status, references.code, references.message);
       }
@@ -283,7 +290,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
           }
           return [current.snapshot];
         }
-        return readHomeSnapshots(ctx, person);
+        return readHomeSnapshots(ctx, person, app.meetingFollowThrough.minutes);
       };
       const scene = {
         scene: req.params.scope === "global" ? (person.role === "ceo" ? "公司首页" : "我的工作台") : OBJECT_SCENES[req.params.scope.split(":", 1)[0]] ?? "对象详情",
@@ -319,6 +326,15 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
       let hijacked = false;
       let heartbeat: ReturnType<typeof setInterval> | undefined;
       try {
+        if (req.body.queuedInputId) {
+          const existing = (await client.query("SELECT run_id FROM conversation_input_receipts WHERE owner_id=$1 AND scope=$2 AND client_id=$3",
+            [owner, req.params.scope, req.body.queuedInputId])).rows[0];
+          if (existing) {
+            const receipt = { type: "receipt", state: "delivered", messageId: req.body.queuedInputId, runId: existing.run_id };
+            await reply.type("text/event-stream").send(`event: receipt\ndata: ${JSON.stringify(receipt)}\n\n`);
+            return;
+          }
+        }
         // 当前对话 = 这个人最早一条未删除、未归档的会话；不存在则在锁内惰性创建。
         let row: { id: string; pi_session_id: string; runtime_entries: unknown[] };
         const existing = await client.query<{ id: string; pi_session_id: string; runtime_entries: unknown[] }>(
@@ -419,13 +435,27 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
         const prepared = conversationCompaction
           ? await conversationCompaction.prepareTurn(client.query.bind(client), row)
           : { runtimeEntries: row.runtime_entries };
-        await client.query(
-          `INSERT INTO conversation_messages
+        if (req.body.queuedInputId) await client.query("BEGIN");
+        try {
+          await client.query(
+            `INSERT INTO conversation_messages
              (conversation_id, sequence, role, content, references_snapshot, attachments, run_id, meta)
            VALUES ($1, $2, 'user', $3, $4::jsonb, $5::jsonb, $6, $7::jsonb)`,
-          [row.id, userSequence, req.body.message, JSON.stringify(references.snapshots), JSON.stringify(attachments), runId,
-            answerRecord ? JSON.stringify({ answers: answerRecord }) : null],
-        );
+            [row.id, userSequence, req.body.message, JSON.stringify(references.snapshots), JSON.stringify(attachments), runId,
+              answerRecord ? JSON.stringify({ answers: answerRecord }) : null]);
+          if (req.body.queuedInputId) {
+            await client.query("INSERT INTO conversation_input_receipts(owner_id,scope,client_id,run_id) VALUES ($1,$2,$3,$4)",
+              [owner, req.params.scope, req.body.queuedInputId, runId]);
+            if (isProject(req.params.scope)) {
+              await ownerSpoke(client.query.bind(client), owner, projectIdOf(req.params.scope));
+              await resetAutoRelay(client.query.bind(client), projectIdOf(req.params.scope));
+            }
+            await client.query("COMMIT");
+          }
+        } catch (err) {
+          if (req.body.queuedInputId) await client.query("ROLLBACK");
+          throw err;
+        }
         // 个人记忆：任何页面都读本人的记忆；后台提炼按游标增量跑（personalDistillation.ts），这里不排任务。
         // 「记住」「忘掉」「改成」由主 Agent 调工具完成，不在主回答之前同步跑提炼：记忆改动失败只是工具报错，不替换回答、不动上下文（3c）。
         // 场景锚点聚焦的那张卡（页面对象或本人选中的卡）就是这一轮记忆的 anchor：检索时只比对象、不比版本；钉住的版本比现在旧时标「基于旧版本」（R8）。

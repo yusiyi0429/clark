@@ -224,8 +224,8 @@ describe("飞书妙记待整理：列表与忽略", () => {
       const response = await list(t, owner);
       expect(response.statusCode).toBe(200);
       const minutes = response.json().minutes as { minuteToken: string; suggestion: unknown; title: string; startsAt: string; endsAt: string }[];
-      expect(minutes.map((item) => item.minuteToken)).toEqual(["minutenewer", "minuteolder"]);
-      expect(minutes.map((item) => item.suggestion)).toEqual([null, null]);
+      expect(minutes.map((item) => item.minuteToken)).toEqual(["minutenewer", "minuteolder", "minutestale"]);
+      expect(minutes.map((item) => item.suggestion)).toEqual([null, null, null]);
       expect(minutes[0]).toMatchObject({ title: "会 minutenewer" });
       expect(Date.parse(minutes[0].endsAt) - Date.parse(minutes[0].startsAt)).toBe(70 * MINUTE_MS);
     } finally {
@@ -519,7 +519,8 @@ describe("飞书妙记待整理：记到天枢里约好的会", () => {
     const { t, api, host, owner, book } = await setup([minute(TOKEN, { meetingId: "vc_live", createdAt: T })]);
     try {
       const meetingId = await book(at(-10 * MINUTE_MS));
-      await t.sql("UPDATE meetings SET feishu_meeting_id = 'vc_live' WHERE id = $1", [meetingId]);
+      await t.sql("UPDATE meetings SET feishu_event_id='event-owner-attach' WHERE id=$1",[meetingId]);
+      await t.app.meetingFollowThrough.minutes.onMeetingEnded({ meeting: { id:"vc_live",calendar_event_id:"event-owner-attach",end_time:T.toISOString() } });
       await insertRow(t, TOKEN, { owner: OWNER, startsAt: T, feishuMeetingId: "vc_live" });
       expect((await list(t, owner)).json().minutes).toEqual([expect.objectContaining({ minuteToken: TOKEN, suggestion: { meetingId, title: "预约的会" } })]);
 
@@ -553,7 +554,7 @@ describe("飞书妙记待整理：记到天枢里约好的会", () => {
       const taken = await book(T, "已有妙记的会");
       await t.sql("UPDATE meetings SET minute_token = 'minuteelse' WHERE id = $1", [taken]);
       const notMine = await book(T, "别人主持的会");
-      await t.sql("UPDATE meetings SET lead_dri_id = $2, created_by = $2 WHERE id = $1", [notMine, CEO]);
+      await t.sql("UPDATE meetings SET lead_dri_id = $2, created_by = $2, invited_person_ids=ARRAY[$2] WHERE id = $1", [notMine, CEO]);
       await insertRow(t, TOKEN, { owner: HOST, startsAt: T, feishuMeetingId: "vc_none" });
       expect((await list(t, host)).json().minutes).toEqual([expect.objectContaining({ minuteToken: TOKEN, suggestion: { meetingId: chosen, title: "一小时前的会" } })]);
     } finally {
@@ -587,7 +588,8 @@ describe("飞书妙记待整理：记到天枢里约好的会", () => {
     const { t, host, owner, book } = await setup([minute(TOKEN, { meetingId: "vc_live", createdAt: T })]);
     try {
       const suggested = await book(at(-10 * MINUTE_MS));
-      await t.sql("UPDATE meetings SET feishu_meeting_id = 'vc_live' WHERE id = $1", [suggested]);
+      await t.sql("UPDATE meetings SET feishu_event_id='event-owner-check' WHERE id=$1",[suggested]);
+      await t.app.meetingFollowThrough.minutes.onMeetingEnded({ meeting: { id:"vc_live",calendar_event_id:"event-owner-check",end_time:T.toISOString() } });
       const other = await book(T, "另一场会");
       await insertRow(t, TOKEN, { owner: OWNER, startsAt: T, feishuMeetingId: "vc_live" });
       const unchanged = { minute_token: null, minutes_status: "none" };
@@ -611,6 +613,30 @@ describe("飞书妙记待整理：记到天枢里约好的会", () => {
       expect(await meetingMinutes(t, suggested)).toMatchObject(unchanged);
       expect(await inboxRow(t, TOKEN)).toEqual({ status: "pending", meeting_id: null });
       expect(await t.sql("SELECT 1 FROM jobs WHERE kind = 'meeting.minute_inbox_ingest'")).toEqual([]);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("所有者能纠正历史的时间匹配，旧会的原文持续隔离", async () => {
+    const token = "minutehistorical";
+    const { t, host, owner, book } = await setup([minute(token,{ meetingId:"original-vc",createdAt:T })]);
+    try {
+      const previous = await book(T,"上一版误挂的会");
+      const chosen = await book(at(2*MINUTE_MS),"本人确认的会");
+      await t.sql("UPDATE meetings SET invited_person_ids=ARRAY[$2,$3] WHERE id=ANY($1::uuid[])",[[previous,chosen],HOST,OWNER]);
+      const transcript = {source:{format:"feishu_minutes",contentHash:"historical-version"},turns:[]};
+      await t.sql(`UPDATE meetings SET minute_token=$2,minute_source_meeting_id='original-vc',minute_binding='unverified',transcript=$3::jsonb,status='held'
+        WHERE id=$1`,[previous,token,JSON.stringify(transcript)]);
+      await insertRow(t,token,{owner:OWNER,startsAt:T,feishuMeetingId:"original-vc"});
+      const oldRecord = () => t.app.inject({method:"GET",url:`/api/me/partner-meetings/${previous}/record`,headers:{cookie:host}});
+      expect((await oldRecord()).statusCode).toBe(404);
+      const result = await attach(t,owner,token,chosen);
+      expect(result.statusCode).toBe(200);
+      expect(await inboxRow(t,token)).toEqual({status:"attached",meeting_id:chosen});
+      expect(await t.sql("SELECT minute_token,minute_binding,transcript FROM meetings WHERE id=$1",[previous]))
+        .toEqual([{minute_token:null,minute_binding:"unverified",transcript}]);
+      expect((await oldRecord()).statusCode).toBe(404);
     } finally {
       await t.close();
     }

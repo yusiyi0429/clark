@@ -42,6 +42,15 @@ export const NEXUS_DRI_REQUESTS_PATH = "/api/integrations/nexus/dri/requests";
 export const NEXUS_DRI_CONFIRMATIONS_PATH = "/api/integrations/nexus/dri/confirmations";
 export const nexusDriIdempotencyKey = (requestId: string, revision: number): string => `nexus-dri-delivery:${requestId}:${revision}`;
 
+export const MeetingWorkTarget = Type.Object({
+  projectId: Type.String({ format: "uuid" }), kind: Type.Union([Type.Literal("project"), Type.Literal("task"), Type.Literal("card"), Type.Literal("topic")]),
+  id: Type.String({ minLength: 1, maxLength: 500 }),
+}, { additionalProperties: false });
+export const MeetingWorkAuthorization = Type.Object({
+  authorization: Type.Literal("continue"),
+  targets: Type.Array(Type.Object({ ...MeetingWorkTarget.properties, instruction: Type.Optional(Type.String({ maxLength: 4000 })) }, { additionalProperties: false }), { minItems: 1, maxItems: 30 }),
+}, { additionalProperties: false });
+
 const Sha256Hex = Type.String({ pattern: "^[0-9a-f]{64}$" });
 const Id = (maxLength = 300) => Type.String({ minLength: 1, maxLength });
 
@@ -175,9 +184,9 @@ export const NexusConfirmationItem = Type.Object(
 );
 export const NexusConfirmationListResponse = Type.Object({ items: Type.Array(NexusConfirmationItem) }, { additionalProperties: false });
 export const NexusConfirmationParams = Type.Object({ id: Type.String({ format: "uuid" }) }, { additionalProperties: false });
-/** value 只在 amended 时带：本人改后的原文。 */
+/** value 只在 amended 时带；continueWork 是本人同时选定并明确授权的去向，可以在确认后独立重试。 */
 export const NexusConfirmationDecisionRequest = Type.Object(
-  { decision: NexusDriDecision, value: Type.Optional(Type.String({ minLength: 1, maxLength: 20000 })) },
+  { decision: NexusDriDecision, value: Type.Optional(Type.String({ minLength: 1, maxLength: 20000 })), continueWork: Type.Optional(MeetingWorkAuthorization) },
   { additionalProperties: false },
 );
 export const NexusConfirmationDecisionResponse = Type.Object({ confirmationRef: Type.String({ minLength: 1 }) }, { additionalProperties: false });

@@ -34,13 +34,11 @@ export function createFeishuCalendarFeedService({ pool, feishu, now = () => new 
   now?: () => Date;
 }): FeishuCalendarFeedService {
   const q = pool.query.bind(pool);
-  const cache = new Map<string, { until: number; events: TFeishuCalendarEvent[] }>();
+  const cache = new Map<string, { token: string; until: number; events: TFeishuCalendarEvent[] }>();
   const calendars = new Map<string, string>();
 
-  async function read(personId: string, at: Date): Promise<TFeishuCalendarEvent[]> {
+  async function read(personId: string, at: Date, token: string): Promise<TFeishuCalendarEvent[]> {
     if (!feishu) return [];
-    const token = await activeUserAccessToken(q, feishu.env, personId, at);
-    if (!token) return [];
     let calendarId = calendars.get(personId);
     if (!calendarId) {
       calendarId = await feishu.api.primaryCalendarId(token);
@@ -48,14 +46,14 @@ export function createFeishuCalendarFeedService({ pool, feishu, now = () => new 
     }
     const instances = (await feishu.api.listInstances(token, calendarId, at, new Date(at.getTime() + RANGE_MS)))
       .filter((item) => item.status !== "cancelled" && !HIDDEN_RSVP.has(item.selfRsvpStatus ?? ""));
-    const ids = [...new Set(instances.map((item) => baseEventId(item.eventId)))];
+    const ids = [...new Set(instances.flatMap((item) => [item.eventId,baseEventId(item.eventId)]))];
     const booked = new Set(ids.length
-      ? (await q("SELECT feishu_event_id FROM meetings WHERE feishu_event_id = ANY($1::text[])", [ids])).rows.map((row) => String(row.feishu_event_id))
+      ? (await q("SELECT feishu_event_id FROM meetings WHERE feishu_event_id=ANY($1::text[])",[ids])).rows.map((row) => String(row.feishu_event_id))
       : []);
     return instances.flatMap((item) => {
       const startsAt = instant(item.start);
       const endsAt = instant(item.end);
-      if (!startsAt || !endsAt || endsAt.getTime() <= at.getTime() || booked.has(baseEventId(item.eventId))) return [];
+      if (!startsAt || !endsAt || endsAt.getTime() <= at.getTime() || booked.has(item.eventId) || booked.has(baseEventId(item.eventId))) return [];
       return [{ eventId: item.eventId, title: item.summary.trim() || "无主题日程", startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString(),
         allDay: !item.start.timestamp, url: item.appLink }];
     }).sort((a, b) => a.startsAt.localeCompare(b.startsAt));
@@ -64,16 +62,23 @@ export function createFeishuCalendarFeedService({ pool, feishu, now = () => new 
   return {
     async listFor(personId) {
       const at = now();
+      const token = feishu && await activeUserAccessToken(q, feishu.env, personId, at);
+      if (!token) {
+        cache.delete(personId);
+        calendars.delete(personId);
+        return [];
+      }
       const hit = cache.get(personId);
-      if (hit && hit.until > at.getTime()) return hit.events.filter((event) => Date.parse(event.endsAt) > at.getTime());
+      if (hit && hit.token === token && hit.until > at.getTime()) return hit.events.filter((event) => Date.parse(event.endsAt) > at.getTime());
+      if (hit && hit.token !== token) calendars.delete(personId);
       try {
-        const events = await read(personId, at);
-        cache.set(personId, { until: at.getTime() + CACHE_MS, events });
+        const events = await read(personId, at, token);
+        cache.set(personId, { token, until: at.getTime() + CACHE_MS, events });
         return events;
       } catch (error) {
         // 授权失效（重新连飞书后）换了主日历也能自愈：下次重新取主日历。
         calendars.delete(personId);
-        cache.set(personId, { until: at.getTime() + FAILURE_CACHE_MS, events: [] });
+        cache.set(personId, { token, until: at.getTime() + FAILURE_CACHE_MS, events: [] });
         logEvent({ event: "feishu.calendar_feed", objectRef: `person:${personId}`, status: "failed", errorCode: error instanceof FeishuApiError ? String(error.code) : "FEISHU_CALENDAR_FEED" });
         return [];
       }

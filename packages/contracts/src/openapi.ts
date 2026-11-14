@@ -4,6 +4,10 @@ import { boardPaths, boardSchemas } from "./boardOpenapi.js";
 import { workHomePaths, workHomeSchemas } from "./workHomeOpenapi.js";
 import { taskContinuityPaths, taskContinuitySchemas } from "./taskContinuityOpenapi.js";
 import { monthReviewPaths, monthReviewSchemas } from "./monthReviewOpenapi.js";
+import { workIntakePaths, workIntakeSchemas } from "./workIntakeOpenapi.js";
+import { partnerMeetingPaths, partnerMeetingSchemas } from "./partnerMeetingsOpenapi.js";
+import { teamDeliveryPaths, teamDeliverySchemas } from "./teamDeliveriesOpenapi.js";
+import { meetingWorkHandoffPaths, meetingWorkHandoffSchemas } from "./meetingWorkHandoffsOpenapi.js";
 import { AcceptIssueDraftRequest, IssueDraftResponse } from "./issueDrafts.js";
 import {
   RequestStep, RequestPerson, RequestRecipientView, RequestQuestionView, RequestClarification, RequestView, RequestResponse,
@@ -3232,6 +3236,10 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
       ...workHomePaths,
       ...taskContinuityPaths,
       ...monthReviewPaths,
+      ...workIntakePaths,
+      ...partnerMeetingPaths,
+      ...teamDeliveryPaths,
+      ...meetingWorkHandoffPaths,
     },
     components: {
       schemas: {
@@ -3604,6 +3612,10 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         ...workHomeSchemas,
         ...taskContinuitySchemas,
         ...monthReviewSchemas,
+        ...workIntakeSchemas,
+        ...partnerMeetingSchemas,
+        ...teamDeliverySchemas,
+        ...meetingWorkHandoffSchemas,
       },
     },
   };

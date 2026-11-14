@@ -493,19 +493,20 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
     };
   }, [loadHistory, scope]);
 
-  // 回到前台（切走、锁屏回来）：没有在写、也没有在重连时安静地重读一次；最后一句还在回答就接上这一轮。
+  // 队列在服务端开始一轮，或本人回到前台时，接回同一轮的流和停止键。
+  const followLatest = useCallback(async () => {
+    if (abortRef.current || historyRun.current) return;
+    const started = generation.current;
+    const loaded = await loadHistory("quiet");
+    const run = loaded ? runningQuestion(loaded) : undefined;
+    if (run && generation.current === started && !abortRef.current) followRef.current(run);
+  }, [loadHistory]);
   useEffect(() => {
     if (typeof document === "undefined" || typeof document.addEventListener !== "function") return;
-    const onVisible = async () => {
-      if (document.visibilityState !== "visible" || abortRef.current) return;
-      const started = generation.current;
-      const loaded = await loadHistory("quiet");
-      const run = loaded ? runningQuestion(loaded) : undefined;
-      if (run && generation.current === started && !abortRef.current) followRef.current(run);
-    };
+    const onVisible = () => { if (document.visibilityState === "visible") void followLatest(); };
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [loadHistory, scope]);
+  }, [followLatest]);
 
   // 别处改了这条对话的记录（转议题后首页多了留痕行）：安静地重读。
   useEffect(() => {
@@ -1121,6 +1122,7 @@ ${input}` : input;
     historyError,
     historyWaiting,
     retryHistory,
+    followLatest,
     attachments,
     uploading,
     attachmentError,

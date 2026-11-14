@@ -43,6 +43,7 @@ import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR } from "./
 import { resolveWorldEnv, resolveWorldTkEnv, WorldClient, worldConfigured } from "./worldClient.js";
 import { missionAutoLoadJobs } from "./missionAutoLoad.js";
 import { createJobWorker, exampleJobHandlers } from "./jobs.js";
+import { INTAKE_JOB, scanIntake } from "./workIntake.js";
 import { resolveNexusDriEnv } from "./nexusDri.js";
 import { usageReportJobs } from "./usage.js";
 import { resolveFeishuEnv } from "./feishu/config.js";
@@ -323,11 +324,12 @@ await app.nexusDri.resume();
 const jobWorker = createJobWorker({
   pool,
   handlers: {
+    [INTAKE_JOB]: () => scanIntake({ app, pool, env }),
     ...exampleJobHandlers, ...feishuTokens?.handlers, ...followThroughJobs.handlers, ...docChangeJobs.handlers, ...app.collectionJobs.handlers, ...usageJobs.handlers, ...summaryJobs.handlers, ...ceoNoticeJobs.handlers, ...homePush.handlers, ...app.taskPlacementJobs, ...missionLoadJobs.handlers, ...app.nexusDri.jobs, ...app.monthReviewJobs.handlers,
     ...(env.feishu ? feishuEventJobs(pool, mergeFeishuEventHandlers(followThroughJobs.feishuEvents, docChangeJobs.feishuEvents, app.feishuChat?.events ?? {})) : {}),
     ...(feishuClient ? feishuNotifyJobs({ pool, client: feishuClient, publicOrigin: env.publicOrigin }) : {}),
   },
-  recurring: [...(feishuTokens?.recurring ?? []), ...followThroughJobs.recurring, ...app.collectionJobs.recurring, ...usageJobs.recurring, ...summaryJobs.recurring, ...ceoNoticeJobs.recurring, ...homePush.recurring, ...missionLoadJobs.recurring, ...app.monthReviewJobs.recurring],
+  recurring: [{ kind: INTAKE_JOB, everyMs: 10_000 }, ...(feishuTokens?.recurring ?? []), ...followThroughJobs.recurring, ...app.collectionJobs.recurring, ...usageJobs.recurring, ...summaryJobs.recurring, ...ceoNoticeJobs.recurring, ...homePush.recurring, ...missionLoadJobs.recurring, ...app.monthReviewJobs.recurring],
 });
 let feishuEvents: { close: () => void } | undefined;
 app.addHook("onClose", async () => {

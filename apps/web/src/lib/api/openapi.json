@@ -24832,6 +24832,1146 @@
           }
         }
       }
+    },
+    "/api/me/partner-work-events": {
+      "get": {
+        "operationId": "listPartnerWorkEvents",
+        "responses": {
+          "200": {
+            "description": "已读取",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartnerWorkEvents"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/work-intake": {
+      "get": {
+        "operationId": "listWorkIntake",
+        "parameters": [
+          {
+            "name": "scope",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "pattern": "^(global|project:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "已读取",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkIntakeList"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createWorkIntake",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWorkIntake"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "已读取",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkIntakeEntry"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/work-intake/{id}": {
+      "patch": {
+        "operationId": "changeWorkIntake",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkIntakeChange"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "已读取",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkIntakeEntry"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/partner-meetings": {
+      "get": {
+        "operationId": "listPartnerMeetings",
+        "summary": "本人的会议、预审和会后收件",
+        "responses": {
+          "200": {
+            "description": "伙伴里的会议",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartnerMeetingsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "读取失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/partner-meetings/minutes/{token}": {
+      "get": {
+        "operationId": "readUnmatchedPartnerMinute",
+        "summary": "所有者用自己的授权读待整理的妙记",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "妙记正文",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartnerMeetingRecordResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "读取失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "读取失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "读取失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "读取失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "读取失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "读取失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/partner-meetings/{id}/record": {
+      "get": {
+        "operationId": "readPartnerMeetingRecord",
+        "summary": "按当前参会资格和来源权限打开会议记录",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "tianshu",
+                "feishu"
+              ]
+            }
+          },
+          {
+            "name": "recordingId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "会议记录正文",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartnerMeetingRecordResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "读取失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "读取失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "读取失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "读取失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "读取失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "读取失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/team-deliveries": {
+      "get": {
+        "operationId": "listTeamDeliveries",
+        "summary": "本人伙伴收到或发出的团队来件",
+        "parameters": [
+          {
+            "name": "box",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "received",
+                "sent"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamDeliveryListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "sendTeamDelivery",
+        "summary": "向指定同事的伙伴发文件、信息或临时问题",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendTeamDeliveryRequest"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "payload"
+                ],
+                "properties": {
+                  "payload": {
+                    "type": "string",
+                    "description": "首先发送 JSON 字符串（SendTeamDeliveryRequest）"
+                  },
+                  "files": {
+                    "type": "array",
+                    "maxItems": 20,
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamDeliveryResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/team-delivery-sources": {
+      "get": {
+        "operationId": "listTeamDeliverySources",
+        "summary": "本人可选的子会话文件版本",
+        "responses": {
+          "200": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamDeliverySourcesResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/team-deliveries/{id}": {
+      "get": {
+        "operationId": "readTeamDelivery",
+        "summary": "打开本人的来件；发起人看到逐人答复",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamDeliveryResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/team-deliveries/{id}/replies": {
+      "post": {
+        "operationId": "replyTeamDelivery",
+        "summary": "在原请求下回复、说明缺项或给指定接收人澄清",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplyTeamDeliveryRequest"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "payload"
+                ],
+                "properties": {
+                  "payload": {
+                    "type": "string",
+                    "description": "首先发送 JSON 字符串（ReplyTeamDeliveryRequest）"
+                  },
+                  "files": {
+                    "type": "array",
+                    "maxItems": 20,
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamDeliveryResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/team-deliveries/{id}/recipients/{personId}/retry": {
+      "post": {
+        "operationId": "retryTeamDeliveryRecipient",
+        "summary": "发送人重试原名单中的一人",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "personId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamDeliveryResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/team-deliveries/{id}/attachments/{attachmentId}": {
+      "get": {
+        "operationId": "downloadTeamDeliveryAttachment",
+        "summary": "按本人和原件权限下载本次投递的指定版本",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "attachmentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "文件原件",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/team-deliveries/{id}/attachments/{attachmentId}/text": {
+      "get": {
+        "operationId": "readTeamDeliveryAttachmentText",
+        "summary": "按同一权限读取指定文件版本的正文",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "attachmentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamDeliveryTextResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/meeting-work-handoffs": {
+      "get": {
+        "operationId": "listMeetingWorkHandoffs",
+        "summary": "本人可递送的已确认会后变化和各去向的回执",
+        "responses": {
+          "200": {
+            "description": "当前确认版本",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingWorkHandoffs"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/meeting-work-handoff-targets": {
+      "get": {
+        "operationId": "listMeetingWorkTargets",
+        "summary": "本人的项目和可选工作去向",
+        "responses": {
+          "200": {
+            "description": "当前可选去向",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingWorkTargetList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/meeting-work-handoffs/{confirmationRef}": {
+      "post": {
+        "operationId": "continueMeetingWork",
+        "summary": "本人明确继续推进，按目标分别递送这版确认内容",
+        "parameters": [
+          {
+            "name": "confirmationRef",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContinueMeetingWork"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "各目标的递送回执",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingWorkResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -32487,6 +33627,10 @@
             "maxLength": 20000,
             "type": "string"
           },
+          "queuedInputId": {
+            "format": "uuid",
+            "type": "string"
+          },
           "anchorSelection": {
             "additionalProperties": false,
             "type": "object",
@@ -33012,6 +34156,10 @@
                                   },
                                   {
                                     "const": "nexus_confirmation",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "team_request",
                                     "type": "string"
                                   }
                                 ]
@@ -89308,6 +90456,69 @@
             "minLength": 1,
             "maxLength": 20000,
             "type": "string"
+          },
+          "continueWork": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "authorization",
+              "targets"
+            ],
+            "properties": {
+              "authorization": {
+                "const": "continue",
+                "type": "string"
+              },
+              "targets": {
+                "minItems": 1,
+                "maxItems": 30,
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "projectId",
+                    "kind",
+                    "id"
+                  ],
+                  "properties": {
+                    "projectId": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "kind": {
+                      "anyOf": [
+                        {
+                          "const": "project",
+                          "type": "string"
+                        },
+                        {
+                          "const": "task",
+                          "type": "string"
+                        },
+                        {
+                          "const": "card",
+                          "type": "string"
+                        },
+                        {
+                          "const": "topic",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "id": {
+                      "minLength": 1,
+                      "maxLength": 500,
+                      "type": "string"
+                    },
+                    "instruction": {
+                      "maxLength": 4000,
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       },
@@ -89411,6 +90622,27 @@
                       "type": "null"
                     }
                   ]
+                },
+                "suggestions": {
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "meetingId",
+                      "title"
+                    ],
+                    "properties": {
+                      "meetingId": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "title": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -107841,6 +109073,11 @@
             "maxLength": 20000,
             "type": "string"
           },
+          "originalMarkdown": {
+            "minLength": 1,
+            "maxLength": 20000,
+            "type": "string"
+          },
           "role": {
             "anyOf": [
               {
@@ -111288,6 +112525,11 @@
         ],
         "properties": {
           "markdown": {
+            "minLength": 1,
+            "maxLength": 20000,
+            "type": "string"
+          },
+          "originalMarkdown": {
             "minLength": 1,
             "maxLength": 20000,
             "type": "string"
@@ -118487,6 +119729,10 @@
               {
                 "const": "nexus_confirmation",
                 "type": "string"
+              },
+              {
+                "const": "team_request",
+                "type": "string"
               }
             ]
           },
@@ -118621,6 +119867,10 @@
               {
                 "const": "needs_person",
                 "type": "string"
+              },
+              {
+                "const": "team_request",
+                "type": "string"
               }
             ]
           },
@@ -118701,6 +119951,10 @@
                   },
                   {
                     "const": "nexus_confirmation",
+                    "type": "string"
+                  },
+                  {
+                    "const": "team_request",
                     "type": "string"
                   }
                 ]
@@ -120874,6 +122128,10 @@
                     {
                       "const": "needs_person",
                       "type": "string"
+                    },
+                    {
+                      "const": "team_request",
+                      "type": "string"
                     }
                   ]
                 },
@@ -120954,6 +122212,10 @@
                         },
                         {
                           "const": "nexus_confirmation",
+                          "type": "string"
+                        },
+                        {
+                          "const": "team_request",
                           "type": "string"
                         }
                       ]
@@ -127567,6 +128829,324 @@
                 ]
               }
             }
+          },
+          {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "kind",
+              "id",
+              "at",
+              "target",
+              "conclusion",
+              "instruction",
+              "authorizedBy",
+              "authorizedAt",
+              "criteria",
+              "superseded"
+            ],
+            "properties": {
+              "kind": {
+                "const": "meeting_handoff",
+                "type": "string"
+              },
+              "id": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "at": {
+                "format": "date-time",
+                "type": "string"
+              },
+              "target": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "projectId",
+                  "kind",
+                  "id",
+                  "projectName",
+                  "name"
+                ],
+                "properties": {
+                  "projectId": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "const": "project",
+                        "type": "string"
+                      },
+                      {
+                        "const": "task",
+                        "type": "string"
+                      },
+                      {
+                        "const": "card",
+                        "type": "string"
+                      },
+                      {
+                        "const": "topic",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "id": {
+                    "minLength": 1,
+                    "maxLength": 500,
+                    "type": "string"
+                  },
+                  "projectName": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "name": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                }
+              },
+              "conclusion": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "confirmationRef",
+                  "requestId",
+                  "itemId",
+                  "meetingId",
+                  "revision",
+                  "decision",
+                  "confirmedAt",
+                  "confirmedBy",
+                  "question",
+                  "content",
+                  "source"
+                ],
+                "properties": {
+                  "confirmationRef": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "requestId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "itemId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "meetingId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "decision": {
+                    "anyOf": [
+                      {
+                        "const": "confirmed",
+                        "type": "string"
+                      },
+                      {
+                        "const": "amended",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "confirmedAt": {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  "confirmedBy": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "question": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "content": {
+                    "additionalProperties": true,
+                    "type": "object",
+                    "required": [
+                      "classification",
+                      "targetRef"
+                    ],
+                    "properties": {
+                      "classification": {
+                        "minLength": 1,
+                        "maxLength": 100,
+                        "type": "string"
+                      },
+                      "targetRef": {
+                        "minLength": 1,
+                        "maxLength": 500,
+                        "type": "string"
+                      },
+                      "fieldKey": {
+                        "minLength": 1,
+                        "maxLength": 200,
+                        "type": "string"
+                      },
+                      "value": {
+                        "minLength": 1,
+                        "maxLength": 20000,
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "source": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "id",
+                      "version",
+                      "hash",
+                      "minutesRef",
+                      "reference",
+                      "turnId",
+                      "quote",
+                      "readState"
+                    ],
+                    "properties": {
+                      "id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "version": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "hash": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "minutesRef": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "reference": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "turnId": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "quote": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "readState": {
+                        "anyOf": [
+                          {
+                            "const": "excerpt",
+                            "type": "string"
+                          },
+                          {
+                            "const": "reference_only",
+                            "type": "string"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              },
+              "instruction": {
+                "type": "string"
+              },
+              "authorizedBy": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "authorizedAt": {
+                "format": "date-time",
+                "type": "string"
+              },
+              "criteria": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "id",
+                    "revision",
+                    "index",
+                    "text"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "anyOf": [
+                        {
+                          "const": "task",
+                          "type": "string"
+                        },
+                        {
+                          "const": "card",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "id": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "revision": {
+                      "anyOf": [
+                        {
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "index": {
+                      "anyOf": [
+                        {
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "text": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "superseded": {
+                "type": "boolean"
+              }
+            }
           }
         ]
       },
@@ -129517,6 +131097,324 @@
                           "type": "null"
                         }
                       ]
+                    }
+                  }
+                },
+                {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "id",
+                    "at",
+                    "target",
+                    "conclusion",
+                    "instruction",
+                    "authorizedBy",
+                    "authorizedAt",
+                    "criteria",
+                    "superseded"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "meeting_handoff",
+                      "type": "string"
+                    },
+                    "id": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "at": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "target": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "projectId",
+                        "kind",
+                        "id",
+                        "projectName",
+                        "name"
+                      ],
+                      "properties": {
+                        "projectId": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "kind": {
+                          "anyOf": [
+                            {
+                              "const": "project",
+                              "type": "string"
+                            },
+                            {
+                              "const": "task",
+                              "type": "string"
+                            },
+                            {
+                              "const": "card",
+                              "type": "string"
+                            },
+                            {
+                              "const": "topic",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "id": {
+                          "minLength": 1,
+                          "maxLength": 500,
+                          "type": "string"
+                        },
+                        "projectName": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "name": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "conclusion": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "confirmationRef",
+                        "requestId",
+                        "itemId",
+                        "meetingId",
+                        "revision",
+                        "decision",
+                        "confirmedAt",
+                        "confirmedBy",
+                        "question",
+                        "content",
+                        "source"
+                      ],
+                      "properties": {
+                        "confirmationRef": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "itemId": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "meetingId": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "revision": {
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "decision": {
+                          "anyOf": [
+                            {
+                              "const": "confirmed",
+                              "type": "string"
+                            },
+                            {
+                              "const": "amended",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "confirmedAt": {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        "confirmedBy": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "question": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "content": {
+                          "additionalProperties": true,
+                          "type": "object",
+                          "required": [
+                            "classification",
+                            "targetRef"
+                          ],
+                          "properties": {
+                            "classification": {
+                              "minLength": 1,
+                              "maxLength": 100,
+                              "type": "string"
+                            },
+                            "targetRef": {
+                              "minLength": 1,
+                              "maxLength": 500,
+                              "type": "string"
+                            },
+                            "fieldKey": {
+                              "minLength": 1,
+                              "maxLength": 200,
+                              "type": "string"
+                            },
+                            "value": {
+                              "minLength": 1,
+                              "maxLength": 20000,
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "source": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "id",
+                            "version",
+                            "hash",
+                            "minutesRef",
+                            "reference",
+                            "turnId",
+                            "quote",
+                            "readState"
+                          ],
+                          "properties": {
+                            "id": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "version": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "hash": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "minutesRef": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "reference": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "turnId": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "quote": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "readState": {
+                              "anyOf": [
+                                {
+                                  "const": "excerpt",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "reference_only",
+                                  "type": "string"
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "instruction": {
+                      "type": "string"
+                    },
+                    "authorizedBy": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "authorizedAt": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "criteria": {
+                      "type": "array",
+                      "items": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "kind",
+                          "id",
+                          "revision",
+                          "index",
+                          "text"
+                        ],
+                        "properties": {
+                          "kind": {
+                            "anyOf": [
+                              {
+                                "const": "task",
+                                "type": "string"
+                              },
+                              {
+                                "const": "card",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "revision": {
+                            "anyOf": [
+                              {
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "index": {
+                            "anyOf": [
+                              {
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "text": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "superseded": {
+                      "type": "boolean"
                     }
                   }
                 }
@@ -138239,6 +140137,2532 @@
                       }
                     }
                   }
+                }
+              }
+            }
+          }
+        }
+      },
+      "CreateWorkIntake": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "scope",
+          "message",
+          "attachments"
+        ],
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "scope": {
+            "pattern": "^(global|project:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
+            "type": "string"
+          },
+          "message": {
+            "minLength": 1,
+            "maxLength": 20000,
+            "type": "string"
+          },
+          "pagePath": {
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^/",
+            "type": "string"
+          },
+          "attachments": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id"
+              ],
+              "properties": {
+                "id": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "WorkIntakeChange": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "properties": {
+          "action": {
+            "anyOf": [
+              {
+                "const": "cancel",
+                "type": "string"
+              },
+              {
+                "const": "first",
+                "type": "string"
+              },
+              {
+                "const": "retry",
+                "type": "string"
+              }
+            ]
+          }
+        }
+      },
+      "WorkIntakeEntry": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "scope",
+          "message",
+          "createdAt",
+          "updatedAt",
+          "state",
+          "priority",
+          "error"
+        ],
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "scope": {
+            "pattern": "^(global|project:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "const": "queued",
+                "type": "string"
+              },
+              {
+                "const": "sending",
+                "type": "string"
+              },
+              {
+                "const": "delivered",
+                "type": "string"
+              },
+              {
+                "const": "failed",
+                "type": "string"
+              },
+              {
+                "const": "cancelled",
+                "type": "string"
+              }
+            ]
+          },
+          "priority": {
+            "type": "boolean"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "WorkIntakeList": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "scope",
+                "message",
+                "createdAt",
+                "updatedAt",
+                "state",
+                "priority",
+                "error"
+              ],
+              "properties": {
+                "id": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "scope": {
+                  "pattern": "^(global|project:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "createdAt": {
+                  "type": "string"
+                },
+                "updatedAt": {
+                  "type": "string"
+                },
+                "state": {
+                  "anyOf": [
+                    {
+                      "const": "queued",
+                      "type": "string"
+                    },
+                    {
+                      "const": "sending",
+                      "type": "string"
+                    },
+                    {
+                      "const": "delivered",
+                      "type": "string"
+                    },
+                    {
+                      "const": "failed",
+                      "type": "string"
+                    },
+                    {
+                      "const": "cancelled",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "priority": {
+                  "type": "boolean"
+                },
+                "error": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "PartnerWorkEvents": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "at",
+                "projectId",
+                "projectName",
+                "title",
+                "detail",
+                "subjectKind",
+                "subjectId",
+                "waitingId"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "at": {
+                  "type": "string"
+                },
+                "projectId": {
+                  "type": "string"
+                },
+                "projectName": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "detail": {
+                  "type": "string"
+                },
+                "subjectKind": {
+                  "anyOf": [
+                    {
+                      "const": "card",
+                      "type": "string"
+                    },
+                    {
+                      "const": "topic",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "subjectId": {
+                  "type": "string"
+                },
+                "waitingId": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "PartnerMeetingItem": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "meetingId",
+          "title",
+          "at",
+          "stage",
+          "statusText",
+          "href",
+          "joinUrl",
+          "needsAction",
+          "source"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "meetingId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "stage": {
+            "anyOf": [
+              {
+                "const": "scheduled",
+                "type": "string"
+              },
+              {
+                "const": "live",
+                "type": "string"
+              },
+              {
+                "const": "processing",
+                "type": "string"
+              },
+              {
+                "const": "ready",
+                "type": "string"
+              },
+              {
+                "const": "attention",
+                "type": "string"
+              },
+              {
+                "const": "unmatched",
+                "type": "string"
+              }
+            ]
+          },
+          "statusText": {
+            "type": "string"
+          },
+          "href": {
+            "type": "string"
+          },
+          "joinUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "needsAction": {
+            "type": "boolean"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "const": "feishu",
+                "type": "string"
+              },
+              {
+                "const": "tianshu",
+                "type": "string"
+              }
+            ]
+          },
+          "preflightText": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sourceUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recordHref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "endsAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "allDay": {
+            "type": "boolean"
+          },
+          "canStartRecording": {
+            "type": "boolean"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "label",
+                "recordHref",
+                "sourceUrl"
+              ],
+              "properties": {
+                "label": {
+                  "type": "string"
+                },
+                "recordHref": {
+                  "type": "string"
+                },
+                "sourceUrl": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "PartnerMeetingsResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "meetingId",
+                "title",
+                "at",
+                "stage",
+                "statusText",
+                "href",
+                "joinUrl",
+                "needsAction",
+                "source"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "meetingId": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "title": {
+                  "type": "string"
+                },
+                "at": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "stage": {
+                  "anyOf": [
+                    {
+                      "const": "scheduled",
+                      "type": "string"
+                    },
+                    {
+                      "const": "live",
+                      "type": "string"
+                    },
+                    {
+                      "const": "processing",
+                      "type": "string"
+                    },
+                    {
+                      "const": "ready",
+                      "type": "string"
+                    },
+                    {
+                      "const": "attention",
+                      "type": "string"
+                    },
+                    {
+                      "const": "unmatched",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "statusText": {
+                  "type": "string"
+                },
+                "href": {
+                  "type": "string"
+                },
+                "joinUrl": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "needsAction": {
+                  "type": "boolean"
+                },
+                "source": {
+                  "anyOf": [
+                    {
+                      "const": "feishu",
+                      "type": "string"
+                    },
+                    {
+                      "const": "tianshu",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "preflightText": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "sourceUrl": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "recordHref": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "endsAt": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "allDay": {
+                  "type": "boolean"
+                },
+                "canStartRecording": {
+                  "type": "boolean"
+                },
+                "sources": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "label",
+                      "recordHref",
+                      "sourceUrl"
+                    ],
+                    "properties": {
+                      "label": {
+                        "type": "string"
+                      },
+                      "recordHref": {
+                        "type": "string"
+                      },
+                      "sourceUrl": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "PartnerMeetingRecordResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "title",
+          "text",
+          "sourceUrl"
+        ],
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "sourceUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "ReplyTeamDeliveryRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "clientId",
+          "status"
+        ],
+        "properties": {
+          "clientId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "const": "answered",
+                "type": "string"
+              },
+              {
+                "const": "needs_info",
+                "type": "string"
+              },
+              {
+                "const": "clarification",
+                "type": "string"
+              }
+            ]
+          },
+          "recipientId": {
+            "minLength": 1,
+            "maxLength": 100,
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 20000,
+            "type": "string"
+          },
+          "sourceAttachments": {
+            "maxItems": 20,
+            "uniqueItems": true,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "sha256"
+              ],
+              "properties": {
+                "id": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "sha256": {
+                  "pattern": "^[a-f0-9]{64}$",
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "SendTeamDeliveryRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "clientId",
+          "kind",
+          "recipientIds"
+        ],
+        "properties": {
+          "clientId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "const": "share",
+                "type": "string"
+              },
+              {
+                "const": "question",
+                "type": "string"
+              }
+            ]
+          },
+          "recipientIds": {
+            "minItems": 1,
+            "maxItems": 50,
+            "uniqueItems": true,
+            "type": "array",
+            "items": {
+              "minLength": 1,
+              "maxLength": 100,
+              "type": "string"
+            }
+          },
+          "text": {
+            "maxLength": 20000,
+            "type": "string"
+          },
+          "sourceUrl": {
+            "minLength": 1,
+            "maxLength": 2048,
+            "pattern": "^https?://",
+            "type": "string"
+          },
+          "dueAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "sourceAttachments": {
+            "maxItems": 20,
+            "uniqueItems": true,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "sha256"
+              ],
+              "properties": {
+                "id": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "sha256": {
+                  "pattern": "^[a-f0-9]{64}$",
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "TeamDelivery": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "text",
+          "sourceUrl",
+          "dueAt",
+          "createdAt",
+          "sender",
+          "attachments",
+          "recipients"
+        ],
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "const": "share",
+                "type": "string"
+              },
+              {
+                "const": "question",
+                "type": "string"
+              }
+            ]
+          },
+          "text": {
+            "maxLength": 20000,
+            "type": "string"
+          },
+          "sourceUrl": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "maxLength": 2048,
+                "pattern": "^https?://",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "dueAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "sender": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "personId",
+              "displayName"
+            ],
+            "properties": {
+              "personId": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "displayName": {
+                "minLength": 1,
+                "type": "string"
+              }
+            }
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "fileName",
+                "size",
+                "sha256",
+                "href"
+              ],
+              "properties": {
+                "id": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "fileName": {
+                  "minLength": 1,
+                  "maxLength": 255,
+                  "type": "string"
+                },
+                "size": {
+                  "minimum": 1,
+                  "maximum": 31457280,
+                  "type": "integer"
+                },
+                "sha256": {
+                  "pattern": "^[a-f0-9]{64}$",
+                  "type": "string"
+                },
+                "href": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "recipients": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "personId",
+                "displayName",
+                "status",
+                "error",
+                "replies"
+              ],
+              "properties": {
+                "personId": {
+                  "minLength": 1,
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                "displayName": {
+                  "type": "string"
+                },
+                "status": {
+                  "anyOf": [
+                    {
+                      "const": "delivered",
+                      "type": "string"
+                    },
+                    {
+                      "const": "pending",
+                      "type": "string"
+                    },
+                    {
+                      "const": "needs_info",
+                      "type": "string"
+                    },
+                    {
+                      "const": "answered",
+                      "type": "string"
+                    },
+                    {
+                      "const": "failed",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "error": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "replies": {
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "id",
+                      "status",
+                      "text",
+                      "createdAt",
+                      "attachments"
+                    ],
+                    "properties": {
+                      "id": {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      "status": {
+                        "anyOf": [
+                          {
+                            "const": "answered",
+                            "type": "string"
+                          },
+                          {
+                            "const": "needs_info",
+                            "type": "string"
+                          },
+                          {
+                            "const": "clarification",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "text": {
+                        "maxLength": 20000,
+                        "type": "string"
+                      },
+                      "createdAt": {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      "attachments": {
+                        "type": "array",
+                        "items": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "id",
+                            "fileName",
+                            "size",
+                            "sha256",
+                            "href"
+                          ],
+                          "properties": {
+                            "id": {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            "fileName": {
+                              "minLength": 1,
+                              "maxLength": 255,
+                              "type": "string"
+                            },
+                            "size": {
+                              "minimum": 1,
+                              "maximum": 31457280,
+                              "type": "integer"
+                            },
+                            "sha256": {
+                              "pattern": "^[a-f0-9]{64}$",
+                              "type": "string"
+                            },
+                            "href": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "TeamDeliveryAttachment": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "fileName",
+          "size",
+          "sha256",
+          "href"
+        ],
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "fileName": {
+            "minLength": 1,
+            "maxLength": 255,
+            "type": "string"
+          },
+          "size": {
+            "minimum": 1,
+            "maximum": 31457280,
+            "type": "integer"
+          },
+          "sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "type": "string"
+          },
+          "href": {
+            "type": "string"
+          }
+        }
+      },
+      "TeamDeliveryListQuery": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "box"
+        ],
+        "properties": {
+          "box": {
+            "anyOf": [
+              {
+                "const": "received",
+                "type": "string"
+              },
+              {
+                "const": "sent",
+                "type": "string"
+              }
+            ]
+          }
+        }
+      },
+      "TeamDeliveryListResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "kind",
+                "text",
+                "sourceUrl",
+                "dueAt",
+                "createdAt",
+                "sender",
+                "attachments",
+                "recipients"
+              ],
+              "properties": {
+                "id": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "kind": {
+                  "anyOf": [
+                    {
+                      "const": "share",
+                      "type": "string"
+                    },
+                    {
+                      "const": "question",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "text": {
+                  "maxLength": 20000,
+                  "type": "string"
+                },
+                "sourceUrl": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "maxLength": 2048,
+                      "pattern": "^https?://",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "dueAt": {
+                  "anyOf": [
+                    {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "createdAt": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "sender": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "personId",
+                    "displayName"
+                  ],
+                  "properties": {
+                    "personId": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "displayName": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  }
+                },
+                "attachments": {
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "id",
+                      "fileName",
+                      "size",
+                      "sha256",
+                      "href"
+                    ],
+                    "properties": {
+                      "id": {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      "fileName": {
+                        "minLength": 1,
+                        "maxLength": 255,
+                        "type": "string"
+                      },
+                      "size": {
+                        "minimum": 1,
+                        "maximum": 31457280,
+                        "type": "integer"
+                      },
+                      "sha256": {
+                        "pattern": "^[a-f0-9]{64}$",
+                        "type": "string"
+                      },
+                      "href": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "recipients": {
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "personId",
+                      "displayName",
+                      "status",
+                      "error",
+                      "replies"
+                    ],
+                    "properties": {
+                      "personId": {
+                        "minLength": 1,
+                        "maxLength": 100,
+                        "type": "string"
+                      },
+                      "displayName": {
+                        "type": "string"
+                      },
+                      "status": {
+                        "anyOf": [
+                          {
+                            "const": "delivered",
+                            "type": "string"
+                          },
+                          {
+                            "const": "pending",
+                            "type": "string"
+                          },
+                          {
+                            "const": "needs_info",
+                            "type": "string"
+                          },
+                          {
+                            "const": "answered",
+                            "type": "string"
+                          },
+                          {
+                            "const": "failed",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "error": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "replies": {
+                        "type": "array",
+                        "items": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "id",
+                            "status",
+                            "text",
+                            "createdAt",
+                            "attachments"
+                          ],
+                          "properties": {
+                            "id": {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            "status": {
+                              "anyOf": [
+                                {
+                                  "const": "answered",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "needs_info",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "clarification",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "text": {
+                              "maxLength": 20000,
+                              "type": "string"
+                            },
+                            "createdAt": {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            "attachments": {
+                              "type": "array",
+                              "items": {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "id",
+                                  "fileName",
+                                  "size",
+                                  "sha256",
+                                  "href"
+                                ],
+                                "properties": {
+                                  "id": {
+                                    "format": "uuid",
+                                    "type": "string"
+                                  },
+                                  "fileName": {
+                                    "minLength": 1,
+                                    "maxLength": 255,
+                                    "type": "string"
+                                  },
+                                  "size": {
+                                    "minimum": 1,
+                                    "maximum": 31457280,
+                                    "type": "integer"
+                                  },
+                                  "sha256": {
+                                    "pattern": "^[a-f0-9]{64}$",
+                                    "type": "string"
+                                  },
+                                  "href": {
+                                    "type": "string"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "TeamDeliveryRecipient": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "personId",
+          "displayName",
+          "status",
+          "error",
+          "replies"
+        ],
+        "properties": {
+          "personId": {
+            "minLength": 1,
+            "maxLength": 100,
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "const": "delivered",
+                "type": "string"
+              },
+              {
+                "const": "pending",
+                "type": "string"
+              },
+              {
+                "const": "needs_info",
+                "type": "string"
+              },
+              {
+                "const": "answered",
+                "type": "string"
+              },
+              {
+                "const": "failed",
+                "type": "string"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "replies": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "status",
+                "text",
+                "createdAt",
+                "attachments"
+              ],
+              "properties": {
+                "id": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "status": {
+                  "anyOf": [
+                    {
+                      "const": "answered",
+                      "type": "string"
+                    },
+                    {
+                      "const": "needs_info",
+                      "type": "string"
+                    },
+                    {
+                      "const": "clarification",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "text": {
+                  "maxLength": 20000,
+                  "type": "string"
+                },
+                "createdAt": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "attachments": {
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "id",
+                      "fileName",
+                      "size",
+                      "sha256",
+                      "href"
+                    ],
+                    "properties": {
+                      "id": {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      "fileName": {
+                        "minLength": 1,
+                        "maxLength": 255,
+                        "type": "string"
+                      },
+                      "size": {
+                        "minimum": 1,
+                        "maximum": 31457280,
+                        "type": "integer"
+                      },
+                      "sha256": {
+                        "pattern": "^[a-f0-9]{64}$",
+                        "type": "string"
+                      },
+                      "href": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "TeamDeliveryReply": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "text",
+          "createdAt",
+          "attachments"
+        ],
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "const": "answered",
+                "type": "string"
+              },
+              {
+                "const": "needs_info",
+                "type": "string"
+              },
+              {
+                "const": "clarification",
+                "type": "string"
+              }
+            ]
+          },
+          "text": {
+            "maxLength": 20000,
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "fileName",
+                "size",
+                "sha256",
+                "href"
+              ],
+              "properties": {
+                "id": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "fileName": {
+                  "minLength": 1,
+                  "maxLength": 255,
+                  "type": "string"
+                },
+                "size": {
+                  "minimum": 1,
+                  "maximum": 31457280,
+                  "type": "integer"
+                },
+                "sha256": {
+                  "pattern": "^[a-f0-9]{64}$",
+                  "type": "string"
+                },
+                "href": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "TeamDeliveryResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "delivery"
+        ],
+        "properties": {
+          "delivery": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "id",
+              "kind",
+              "text",
+              "sourceUrl",
+              "dueAt",
+              "createdAt",
+              "sender",
+              "attachments",
+              "recipients"
+            ],
+            "properties": {
+              "id": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "kind": {
+                "anyOf": [
+                  {
+                    "const": "share",
+                    "type": "string"
+                  },
+                  {
+                    "const": "question",
+                    "type": "string"
+                  }
+                ]
+              },
+              "text": {
+                "maxLength": 20000,
+                "type": "string"
+              },
+              "sourceUrl": {
+                "anyOf": [
+                  {
+                    "minLength": 1,
+                    "maxLength": 2048,
+                    "pattern": "^https?://",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "dueAt": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "createdAt": {
+                "format": "date-time",
+                "type": "string"
+              },
+              "sender": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "personId",
+                  "displayName"
+                ],
+                "properties": {
+                  "personId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "displayName": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                }
+              },
+              "attachments": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "fileName",
+                    "size",
+                    "sha256",
+                    "href"
+                  ],
+                  "properties": {
+                    "id": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "fileName": {
+                      "minLength": 1,
+                      "maxLength": 255,
+                      "type": "string"
+                    },
+                    "size": {
+                      "minimum": 1,
+                      "maximum": 31457280,
+                      "type": "integer"
+                    },
+                    "sha256": {
+                      "pattern": "^[a-f0-9]{64}$",
+                      "type": "string"
+                    },
+                    "href": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "recipients": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "personId",
+                    "displayName",
+                    "status",
+                    "error",
+                    "replies"
+                  ],
+                  "properties": {
+                    "personId": {
+                      "minLength": 1,
+                      "maxLength": 100,
+                      "type": "string"
+                    },
+                    "displayName": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "anyOf": [
+                        {
+                          "const": "delivered",
+                          "type": "string"
+                        },
+                        {
+                          "const": "pending",
+                          "type": "string"
+                        },
+                        {
+                          "const": "needs_info",
+                          "type": "string"
+                        },
+                        {
+                          "const": "answered",
+                          "type": "string"
+                        },
+                        {
+                          "const": "failed",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "error": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "replies": {
+                      "type": "array",
+                      "items": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "status",
+                          "text",
+                          "createdAt",
+                          "attachments"
+                        ],
+                        "properties": {
+                          "id": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
+                          "status": {
+                            "anyOf": [
+                              {
+                                "const": "answered",
+                                "type": "string"
+                              },
+                              {
+                                "const": "needs_info",
+                                "type": "string"
+                              },
+                              {
+                                "const": "clarification",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "text": {
+                            "maxLength": 20000,
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "format": "date-time",
+                            "type": "string"
+                          },
+                          "attachments": {
+                            "type": "array",
+                            "items": {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "id",
+                                "fileName",
+                                "size",
+                                "sha256",
+                                "href"
+                              ],
+                              "properties": {
+                                "id": {
+                                  "format": "uuid",
+                                  "type": "string"
+                                },
+                                "fileName": {
+                                  "minLength": 1,
+                                  "maxLength": 255,
+                                  "type": "string"
+                                },
+                                "size": {
+                                  "minimum": 1,
+                                  "maximum": 31457280,
+                                  "type": "integer"
+                                },
+                                "sha256": {
+                                  "pattern": "^[a-f0-9]{64}$",
+                                  "type": "string"
+                                },
+                                "href": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "TeamDeliverySource": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "fileName",
+          "size",
+          "sha256",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "fileName": {
+            "minLength": 1,
+            "maxLength": 255,
+            "type": "string"
+          },
+          "size": {
+            "minimum": 1,
+            "maximum": 31457280,
+            "type": "integer"
+          },
+          "sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        }
+      },
+      "TeamDeliverySourcesResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "fileName",
+                "size",
+                "sha256",
+                "createdAt"
+              ],
+              "properties": {
+                "id": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "fileName": {
+                  "minLength": 1,
+                  "maxLength": 255,
+                  "type": "string"
+                },
+                "size": {
+                  "minimum": 1,
+                  "maximum": 31457280,
+                  "type": "integer"
+                },
+                "sha256": {
+                  "pattern": "^[a-f0-9]{64}$",
+                  "type": "string"
+                },
+                "createdAt": {
+                  "format": "date-time",
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "TeamDeliveryTextResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "text",
+          "fileName",
+          "truncated"
+        ],
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "fileName": {
+            "type": "string"
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ContinueMeetingWork": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "authorization",
+          "targets",
+          "revision"
+        ],
+        "properties": {
+          "authorization": {
+            "const": "continue",
+            "type": "string"
+          },
+          "targets": {
+            "minItems": 1,
+            "maxItems": 30,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "projectId",
+                "kind",
+                "id"
+              ],
+              "properties": {
+                "projectId": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "kind": {
+                  "anyOf": [
+                    {
+                      "const": "project",
+                      "type": "string"
+                    },
+                    {
+                      "const": "task",
+                      "type": "string"
+                    },
+                    {
+                      "const": "card",
+                      "type": "string"
+                    },
+                    {
+                      "const": "topic",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "id": {
+                  "minLength": 1,
+                  "maxLength": 500,
+                  "type": "string"
+                },
+                "instruction": {
+                  "maxLength": 4000,
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "revision": {
+            "minimum": 1,
+            "type": "integer"
+          }
+        }
+      },
+      "MeetingWorkHandoffs": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "conclusion",
+                "receipts"
+              ],
+              "properties": {
+                "conclusion": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "confirmationRef",
+                    "requestId",
+                    "itemId",
+                    "meetingId",
+                    "revision",
+                    "decision",
+                    "confirmedAt",
+                    "confirmedBy",
+                    "question",
+                    "content",
+                    "source"
+                  ],
+                  "properties": {
+                    "confirmationRef": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "itemId": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "meetingId": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "revision": {
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    "decision": {
+                      "anyOf": [
+                        {
+                          "const": "confirmed",
+                          "type": "string"
+                        },
+                        {
+                          "const": "amended",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "confirmedAt": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "confirmedBy": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "question": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "content": {
+                      "additionalProperties": true,
+                      "type": "object",
+                      "required": [
+                        "classification",
+                        "targetRef"
+                      ],
+                      "properties": {
+                        "classification": {
+                          "minLength": 1,
+                          "maxLength": 100,
+                          "type": "string"
+                        },
+                        "targetRef": {
+                          "minLength": 1,
+                          "maxLength": 500,
+                          "type": "string"
+                        },
+                        "fieldKey": {
+                          "minLength": 1,
+                          "maxLength": 200,
+                          "type": "string"
+                        },
+                        "value": {
+                          "minLength": 1,
+                          "maxLength": 20000,
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "source": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "version",
+                        "hash",
+                        "minutesRef",
+                        "reference",
+                        "turnId",
+                        "quote",
+                        "readState"
+                      ],
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "version": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "hash": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "minutesRef": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "reference": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "turnId": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "quote": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "readState": {
+                          "anyOf": [
+                            {
+                              "const": "excerpt",
+                              "type": "string"
+                            },
+                            {
+                              "const": "reference_only",
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  }
+                },
+                "receipts": {
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "id",
+                      "target",
+                      "instruction",
+                      "status",
+                      "reason",
+                      "authorizedAt",
+                      "deliveredAt"
+                    ],
+                    "properties": {
+                      "id": {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      "target": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "projectId",
+                          "kind",
+                          "id"
+                        ],
+                        "properties": {
+                          "projectId": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
+                          "kind": {
+                            "anyOf": [
+                              {
+                                "const": "project",
+                                "type": "string"
+                              },
+                              {
+                                "const": "task",
+                                "type": "string"
+                              },
+                              {
+                                "const": "card",
+                                "type": "string"
+                              },
+                              {
+                                "const": "topic",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "id": {
+                            "minLength": 1,
+                            "maxLength": 500,
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "instruction": {
+                        "type": "string"
+                      },
+                      "status": {
+                        "anyOf": [
+                          {
+                            "const": "pending",
+                            "type": "string"
+                          },
+                          {
+                            "const": "delivered",
+                            "type": "string"
+                          },
+                          {
+                            "const": "failed",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "reason": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "authorizedAt": {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      "deliveredAt": {
+                        "anyOf": [
+                          {
+                            "format": "date-time",
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "MeetingWorkResult": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "receipts"
+        ],
+        "properties": {
+          "receipts": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "target",
+                "instruction",
+                "status",
+                "reason",
+                "authorizedAt",
+                "deliveredAt"
+              ],
+              "properties": {
+                "id": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "target": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "projectId",
+                    "kind",
+                    "id"
+                  ],
+                  "properties": {
+                    "projectId": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "kind": {
+                      "anyOf": [
+                        {
+                          "const": "project",
+                          "type": "string"
+                        },
+                        {
+                          "const": "task",
+                          "type": "string"
+                        },
+                        {
+                          "const": "card",
+                          "type": "string"
+                        },
+                        {
+                          "const": "topic",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "id": {
+                      "minLength": 1,
+                      "maxLength": 500,
+                      "type": "string"
+                    }
+                  }
+                },
+                "instruction": {
+                  "type": "string"
+                },
+                "status": {
+                  "anyOf": [
+                    {
+                      "const": "pending",
+                      "type": "string"
+                    },
+                    {
+                      "const": "delivered",
+                      "type": "string"
+                    },
+                    {
+                      "const": "failed",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "reason": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "authorizedAt": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "deliveredAt": {
+                  "anyOf": [
+                    {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "MeetingWorkTargetList": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "targets"
+        ],
+        "properties": {
+          "targets": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "projectId",
+                "kind",
+                "id",
+                "projectName",
+                "name"
+              ],
+              "properties": {
+                "projectId": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "kind": {
+                  "anyOf": [
+                    {
+                      "const": "project",
+                      "type": "string"
+                    },
+                    {
+                      "const": "task",
+                      "type": "string"
+                    },
+                    {
+                      "const": "card",
+                      "type": "string"
+                    },
+                    {
+                      "const": "topic",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "id": {
+                  "minLength": 1,
+                  "maxLength": 500,
+                  "type": "string"
+                },
+                "projectName": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "name": {
+                  "minLength": 1,
+                  "type": "string"
                 }
               }
             }

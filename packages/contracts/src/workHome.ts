@@ -288,6 +288,7 @@ export const WaitingKind = Type.Union([
   Type.Literal("approval"), Type.Literal("question"), Type.Literal("verdict"), Type.Literal("meeting"), Type.Literal("mission_card"), Type.Literal("role"),
   Type.Literal("merge"), Type.Literal("plan_start"), Type.Literal("acceptance"), Type.Literal("month"), Type.Literal("device"), Type.Literal("quota"),
   Type.Literal("transfer"), Type.Literal("goal_changed"), Type.Literal("auto_relay"), Type.Literal("nexus_confirmation"), Type.Literal("needs_person"),
+  Type.Literal("team_request"),
 ]);
 
 /**
@@ -302,7 +303,7 @@ export const WaitingKind = Type.Union([
  */
 export const WaitingTarget = Type.Object({
   kind: Type.Union([Type.Literal("card"), Type.Literal("topic"), Type.Literal("project"), Type.Literal("meeting"), Type.Literal("mission_card"), Type.Literal("role"),
-    Type.Literal("task_detail"), Type.Literal("month"), Type.Literal("connections"), Type.Literal("transfer"), Type.Literal("nexus_confirmation")]),
+    Type.Literal("task_detail"), Type.Literal("month"), Type.Literal("connections"), Type.Literal("transfer"), Type.Literal("nexus_confirmation"), Type.Literal("team_request")]),
   id: Type.String({ minLength: 1 }),
   round: Type.Optional(Type.Boolean()),
   focus: Type.Optional(Type.Object({ sessionId: Type.String({ format: "uuid" }), requestId: Nullable(Type.String({ minLength: 1 })) }, strict)),

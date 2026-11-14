@@ -18,7 +18,7 @@ const MIME: Record<string, string> = { png: "image/png", jpg: "image/jpeg", jpeg
   pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation", csv: "text/csv", txt: "text/plain", md: "text/markdown", markdown: "text/markdown",
   json: "application/json", html: "text/html", htm: "text/html", xml: "application/xml", yaml: "application/yaml", yml: "application/yaml" };
 /** 类型按扩展名定（不信上传带的）；代码和日志都是纯文本。 */
-const mimeOf = (fileName: string, kind: TSessionAttachment["kind"]) =>
+export const attachmentMimeType = (fileName: string, kind: TSessionAttachment["kind"]) =>
   MIME[fileName.toLowerCase().split(".").pop() ?? ""] ?? (kind === "code" ? "text/plain" : "application/octet-stream");
 
 const view = (row: Row): TSessionAttachment => ({ id: row.id, subject: row.card_id ? { kind: "card", id: row.card_id } : { kind: "topic", id: row.topic_id! },
@@ -51,12 +51,23 @@ export async function storeSessionAttachments(q: Query, storageDir: string, owne
     const rows: Row[] = [];
     for (const item of prepared) rows.push((await q(`INSERT INTO session_attachments(id,owner_id,card_id,topic_id,file_name,mime_type,size,sha256,kind,storage_key,created_at)
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`, [item.id, ownerId, subject.kind === "card" ? subject.id : null, subject.kind === "topic" ? subject.id : null,
-      item.fileName, mimeOf(item.fileName, item.kind), item.buffer.length, item.sha256, item.kind, item.storageKey, now])).rows[0] as Row);
+      item.fileName, attachmentMimeType(item.fileName, item.kind), item.buffer.length, item.sha256, item.kind, item.storageKey, now])).rows[0] as Row);
     return rows.map(view);
   } catch (cause) {
     await Promise.all(written.map((path) => rm(path, { force: true })));
     throw cause;
   }
+}
+
+// 选分享来源和打开原件必须使用相同的子会话读取权限。
+const visibleAttachment = `(a.owner_id=$1 OR EXISTS (SELECT 1 FROM projects p WHERE p.id=COALESCE(
+  (SELECT ${CARD_PROJECT("t")} FROM tasks t WHERE t.id=a.card_id),(SELECT ${CARD_PROJECT("r")} FROM research_topics r WHERE r.id=a.topic_id))
+  AND (p.owner_id=$1 OR EXISTS (SELECT 1 FROM project_transfers x WHERE x.project_id=p.id AND x.status='accepted' AND (x.from_id=$1 OR x.to_id=$1)))))`;
+
+export async function listShareableSessionAttachments(q: Query, personId: string) {
+  const rows = (await q(`SELECT a.id,a.file_name,a.size,a.sha256,a.created_at FROM session_attachments a
+    WHERE ${visibleAttachment} ORDER BY a.created_at DESC, a.id`, [personId])).rows as Pick<Row, "id" | "file_name" | "size" | "sha256" | "created_at">[];
+  return rows.map((row) => ({ id: row.id, fileName: row.file_name, size: row.size, sha256: row.sha256, createdAt: row.created_at.toISOString() }));
 }
 
 /**
@@ -65,10 +76,7 @@ export async function storeSessionAttachments(q: Query, storageDir: string, owne
  */
 export async function readSessionAttachment(q: Query, storageDir: string, ownerId: string, id: string): Promise<{ attachment: TSessionAttachment; data: Buffer } | null> {
   if (!UUID_PATTERN.test(id)) return null;
-  const row = (await q(`SELECT a.* FROM session_attachments a WHERE a.id=$1 AND (a.owner_id=$2 OR EXISTS (SELECT 1 FROM projects p WHERE p.id=COALESCE(
-      (SELECT ${CARD_PROJECT("t")} FROM tasks t WHERE t.id=a.card_id),(SELECT ${CARD_PROJECT("r")} FROM research_topics r WHERE r.id=a.topic_id))
-    AND (p.owner_id=$2 OR EXISTS (SELECT 1 FROM project_transfers x WHERE x.project_id=p.id AND x.status='accepted' AND (x.from_id=$2 OR x.to_id=$2)))))`,
-  [id, ownerId])).rows[0] as Row | undefined;
+  const row = (await q(`SELECT a.* FROM session_attachments a WHERE a.id=$2 AND ${visibleAttachment}`, [ownerId, id])).rows[0] as Row | undefined;
   const data = row ? await readFile(join(storageDir, row.storage_key)).catch(() => null) : null;
   return row && data ? { attachment: view(row), data } : null;
 }

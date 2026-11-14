@@ -118,8 +118,10 @@ export function registerThreadRoutes(app: AppInstance, ctx: RouteContext): void 
         } else await insertNotification(client, { personId: id, kind: "thread_member_added", objectType: ref.objectType, objectId: ref.objectId, actorId: inviterId });
         if (ref.objectType === "meeting") {
           const person = directory.get(id)!;
-          await client.query(`UPDATE meetings SET participants=participants || $2::jsonb,version=version+1,updated_at=now()
-            WHERE id::text=$1 AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(participants) p WHERE p->>'personId'=$3)`,
+          await client.query(`UPDATE meetings SET participants=CASE WHEN EXISTS (SELECT 1 FROM jsonb_array_elements(participants) p WHERE p->>'personId'=$3)
+              THEN participants ELSE participants || $2::jsonb END,
+            invited_person_ids=CASE WHEN $3=ANY(COALESCE(invited_person_ids,'{}')) THEN invited_person_ids ELSE array_append(invited_person_ids,$3) END,
+            version=version+1,updated_at=now() WHERE id::text=$1`,
           [ref.objectId, JSON.stringify([{ personId: person.personId, displayName: person.displayName, roles: person.roles, sourceRef: person.sourceRef, updatedAt: person.updatedAt }]), id]);
         }
         await client.query(`INSERT INTO thread_reads(object_type,object_id,person_id,last_read_id)
@@ -128,6 +130,10 @@ export function registerThreadRoutes(app: AppInstance, ctx: RouteContext): void 
         [ref.objectType, ref.objectId, id]);
       }
       if (ref.objectType === "task" && added.length) await client.query("UPDATE tasks SET version=version+1,updated_at=now() WHERE id::text=$1", [ref.objectId]);
+      if (ref.objectType === "meeting" && added.length) {
+        const meeting = (await client.query("SELECT version FROM meetings WHERE id::text=$1 AND status='scheduled' AND ended_at IS NULL",[ref.objectId])).rows[0];
+        if (meeting) await app.meetingFollowThrough.feishuEvents.schedule(ref.objectId,`invite:${meeting.version}`,added,client.query.bind(client));
+      }
       await client.query("COMMIT");
     } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; }
     finally { client.release(); }
@@ -158,7 +164,7 @@ export function registerThreadRoutes(app: AppInstance, ctx: RouteContext): void 
         await client.query("UPDATE task_members SET left_at=now() WHERE task_id::text=$1 AND person_id=$2", [ref.objectId, me]);
         await client.query("UPDATE tasks SET version=version+1,updated_at=now() WHERE id::text=$1", [ref.objectId]);
       }
-      if (ref.objectType === "meeting") await client.query(`UPDATE meetings SET participants=(SELECT COALESCE(jsonb_agg(p),'[]'::jsonb) FROM jsonb_array_elements(participants) p WHERE p->>'personId'<>$2),version=version+1,updated_at=now() WHERE id::text=$1`, [ref.objectId, me]);
+      if (ref.objectType === "meeting") await client.query(`UPDATE meetings SET participants=(SELECT COALESCE(jsonb_agg(p),'[]'::jsonb) FROM jsonb_array_elements(participants) p WHERE p->>'personId'<>$2),invited_person_ids=array_remove(invited_person_ids,$2::text),version=version+1,updated_at=now() WHERE id::text=$1`, [ref.objectId, me]);
       await client.query("COMMIT");
     } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; }
     finally { client.release(); }

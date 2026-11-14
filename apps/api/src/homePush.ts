@@ -73,6 +73,7 @@ export function waitingPath(open: TWaitingTarget): string {
     case "month": return `/me/work/month/${id}`;
     case "connections": return "/me/work/settings/connections";
     case "meeting": return `/me/work/meetings/${id}`;
+    case "team_request": return `/me/work/buddy#team-request-${id}`;
     case "mission_card": return open.round ? "/me" : `/me/mission-cards/${id}`;
     case "role": return "/me/team";
     case "nexus_confirmation": return "/me/work";

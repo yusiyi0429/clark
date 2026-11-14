@@ -119,6 +119,11 @@ export type TUpdateCardActionParams = Static<typeof UpdateCardActionParams>;
 
 export const BuddyActionParams = {
   read_work_home: Type.Object({}, strict),
+  read_partner_inbox: Type.Object({ section: Type.Union([Type.Literal("meetings"), Type.Literal("received"), Type.Literal("sent"), Type.Literal("events")]),
+    offset: Type.Optional(Type.Integer({ minimum: 0 })), limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 50 })) }, strict),
+  read_partner_item: Type.Object({ kind: Type.Union([Type.Literal("meeting"),Type.Literal("minute"),Type.Literal("delivery"),Type.Literal("attachment")]),
+    id: Type.String({ minLength: 1, maxLength: 220, pattern: "^(?:(?:meeting|feishu-minute):)?[a-zA-Z0-9_-]+$" }),
+    attachmentId: Type.Optional(Uuid), source: Type.Optional(Type.Union([Type.Literal("feishu"), Type.Literal("tianshu")])) }, strict),
   read_project: Type.Object({ projectId: Uuid }, strict),
   find_people: Type.Object({ query: Type.String({ minLength: 1, maxLength: 40 }) }, strict),
   open_page: Type.Object({ target: Type.Union([WaitingTarget, Type.Object({ kind: Type.Union([Type.Literal("home"), Type.Literal("preferences")]) }, strict)]) }, strict),

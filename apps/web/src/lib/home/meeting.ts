@@ -35,18 +35,19 @@ export function meetingSpan(startsAt: string, endsAt: string | null): string {
   return `${clock(startsAt)}–${clock(endsAt ?? new Date(Date.parse(startsAt) + SLOT_MS).toISOString())}`;
 }
 
-export type BookedMeeting = { meetingId: string; title: string; startsAt: string; endsAt: string | null; hostName: string; followUp?: boolean; processing?: unknown };
+type BookedMeeting = { meetingId: string | null; title: string; at: string; endsAt?: string | null; canStartRecording?: boolean; stage: string };
 
-/** 我主持、现在能开的会：开始前 15 分钟到结束之间、还没开完、没在出记录（取消的接口本来就不给）；先开始的在前。 */
-export function startableMeetings(meetings: readonly BookedMeeting[], me: string, now: number): BookedMeeting[] {
+/** 还在开会时间内，并且服务端允许本人录音；两位同名成员不会看到对方的操作。 */
+export function startableMeetings(meetings: readonly BookedMeeting[], now: number) {
   return meetings
-    .filter((meeting) => meeting.hostName === me && !meeting.followUp && !meeting.processing)
+    .filter((meeting): meeting is BookedMeeting & { meetingId: string } =>
+      !!meeting.meetingId && !!meeting.canStartRecording && (meeting.stage === "scheduled" || meeting.stage === "live"))
     .filter((meeting) => {
-      const start = Date.parse(meeting.startsAt);
+      const start = Date.parse(meeting.at);
       const end = meeting.endsAt ? Date.parse(meeting.endsAt) : start + SLOT_MS;
-      return now >= start - EARLY_MS && now <= end;
+      return now >= start - EARLY_MS && now < end;
     })
-    .sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt));
+    .sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
 }
 
 type Picked = Pick<TWorldAnchor, "kind" | "id">;

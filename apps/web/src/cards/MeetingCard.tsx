@@ -1586,12 +1586,13 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
         {feishuEvent.organizerId === workspace.viewerId ? <button type="button" className={s.feishuAction}
           onClick={() => window.location.assign(feishuConnectHref(`${window.location.pathname}${window.location.search}`))}>连接飞书</button> : null}
       </span>
-    ) : feishuEvent.status === "failed" && retryBooking ? (
+    ) : feishuEvent.status === "failed" ? (
       <span className={s.feishuEntry}>
         <span className={s.feishuFailed}>飞书未约上</span>
-        <button type="button" className={s.feishuAction} disabled={pending} onClick={() => void run(retryBooking, {})}>重试</button>
+        {retryBooking ? <button type="button" className={s.feishuAction} disabled={pending} onClick={() => void run(retryBooking, {})}>重试</button> : null}
       </span>
-    ) : feishuEvent.joinUrl && !live ? <a className={s.feishuLink} href={feishuEvent.joinUrl} target="_blank" rel="noreferrer">进入飞书会议</a> : null;
+    ) : feishuEvent.status === "pending" ? <span className={s.feishuEntry} role="status">正在飞书创建日程</span>
+      : feishuEvent.status === "booked" && !feishuEvent.joinUrl ? <span className={s.feishuEntry} role="status">飞书日程已建，尚无入会地址</span> : null;
 
   // 会开完以后走到哪一步看进度线，这一行不再重复写。
   const statusNow = progress && ended ? undefined
@@ -1810,7 +1811,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
   // 能上传会议记录的人（CEO、主持人）：进度线上待交记录后面的「上传会议记录」打开这里的选文件。
   const canUpload = payload.status === "scheduled" && (!memberReadOnly || isHost);
   // 等开会、进行中时「进入飞书会议」在页头最右那一格；待交记录时正文最上面单独一块给贴妙记链接、上传会议记录这几样补救。
-  const joinUrl = live === "waiting" || live === "live" ? payload.feishuEvent?.joinUrl ?? null : null;
+  const joinUrl = live === "live" || (live === "waiting" && Date.parse(payload.endsAt) > progressNow) ? payload.feishuEvent?.joinUrl ?? null : null;
   const progressActions = progress?.upload ? (
     <MinutesRecovery meetingId={meetingId} status={source.minutesStatus ?? "none"} failure={source.minutesFailure ?? null}
       canFetch={canFetchMinutes} onFetched={() => void reloadCard()} onUpload={canUpload ? () => uploadRef.current?.click() : undefined}

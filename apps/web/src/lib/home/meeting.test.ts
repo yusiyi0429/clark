@@ -17,15 +17,15 @@ describe("伙伴台开会的默认值（设计 2026-11-12 第二节）", () => {
     const now = Date.parse("2026-11-12T02:00:00Z");
     const at = (minutes: number) => new Date(now + minutes * 60_000).toISOString();
     const meetings = [
-      { meetingId: "later", title: "b", startsAt: at(20), endsAt: at(80), hostName: "我" },
-      { meetingId: "soon", title: "a", startsAt: at(10), endsAt: at(70), hostName: "我" },
-      { meetingId: "on", title: "c", startsAt: at(-30), endsAt: at(30), hostName: "我" },
-      { meetingId: "over", title: "d", startsAt: at(-90), endsAt: at(-30), hostName: "我" },
-      { meetingId: "ended", title: "e", startsAt: at(-10), endsAt: at(50), hostName: "我", followUp: true },
-      { meetingId: "others", title: "f", startsAt: at(0), endsAt: at(60), hostName: "别人" },
-      { meetingId: "busy", title: "g", startsAt: at(0), endsAt: at(60), hostName: "我", processing: { since: null, failed: false } },
+      { meetingId: "later", title: "b", at: at(20), endsAt: at(80), canStartRecording: true, stage: "scheduled" },
+      { meetingId: "soon", title: "a", at: at(10), endsAt: at(70), canStartRecording: true, stage: "scheduled" },
+      { meetingId: "on", title: "c", at: at(-30), endsAt: at(30), canStartRecording: true, stage: "live" },
+      { meetingId: "over", title: "d", at: at(-90), endsAt: at(-30), canStartRecording: true, stage: "scheduled" },
+      { meetingId: "ended", title: "e", at: at(-10), endsAt: at(50), canStartRecording: true, stage: "attention" },
+      { meetingId: "others", title: "f", at: at(0), endsAt: at(60), canStartRecording: false, stage: "scheduled" },
+      { meetingId: "busy", title: "g", at: at(0), endsAt: at(60), canStartRecording: true, stage: "processing" },
     ];
-    expect(startableMeetings(meetings, "我", now).map((meeting) => meeting.meetingId)).toEqual(["on", "soon"]);
+    expect(startableMeetings(meetings, now).map((meeting) => meeting.meetingId)).toEqual(["on", "soon"]);
   });
 
   it("挂点：项目本月目标的 Mission > 上次用的 > 我的第一个 Mission > 第一个 Mission；选项里没有的不用", () => {

@@ -11,10 +11,11 @@ import { isRealPerson, personDisplayNames } from "../people.js";
 import { projectRadarCard } from "../signals.js";
 import { listMyTasks } from "../tasks.js";
 import { readMemberWork } from "../memberWork.js";
+import { meetingForViewer, type MinuteReader } from "../partnerMeetings.js";
 import { idParams, type AppInstance, type RouteContext } from "./shared.js";
 
 /** CEO 首页的 Card 集合（首页与对话的场景锚点共用同一份投影，不另写一套汇总）。 */
-export async function readHomeCards(ctx: RouteContext, person: MissionRoundPerson): Promise<TCardCollection> {
+export async function readHomeCards(ctx: RouteContext, person: MissionRoundPerson, minutes?: MinuteReader): Promise<TCardCollection> {
   const { q, env, now, peopleDirectory, radar } = ctx;
   const at = now();
   const period = companyPeriod(at);
@@ -32,9 +33,8 @@ export async function readHomeCards(ctx: RouteContext, person: MissionRoundPerso
     listMissionRoundCards(q, people, env.sessionSecret, person, undefined, at),
   ]);
   // 会前通知看 scheduled；会后的会议记录待确认走 /api/me/meeting-cards（不再单列给 CEO 确认的战略项）
-  const meetings = meetingRows
-    .filter((row) => hasMeetingNotice(row, person.personId, at))
-    .map((row) => projectMeetingCard(row, env.sessionSecret, at));
+  const meetings = await Promise.all(meetingRows.filter((row) => hasMeetingNotice(row, person.personId, at))
+    .map(async row => projectMeetingCard(await meetingForViewer(q,minutes,row,person), env.sessionSecret, at)));
   const monthly = monthlyNotice && (monthlyNotice.payload as { status?: string }).status !== "confirmed" ? [monthlyNotice] : [];
   return { cards: [radarCard, ...battlefields, ...capabilities, ...issues, ...meetings, ...missions, ...monthly, ...rounds] };
 }
@@ -43,9 +43,9 @@ export async function readHomeCards(ctx: RouteContext, person: MissionRoundPerso
  * 首页上本人能看到的东西（对话的场景锚点与给独立 Chat 的 /internal/home-cards 共用，不带 Action）：
  * CEO 是公司首页的 Card；成员是我的工作台上本人的执行事项、任务卡与战场。
  */
-export async function readHomeSnapshots(ctx: RouteContext, person: MissionRoundPerson): Promise<TReferenceSnapshot[]> {
+export async function readHomeSnapshots(ctx: RouteContext, person: MissionRoundPerson, minutes?: MinuteReader): Promise<TReferenceSnapshot[]> {
   const { q, env, peopleDirectory } = ctx;
-  if (person.role === "ceo") return (await readHomeCards(ctx, person)).cards.map((card) => ({
+  if (person.role === "ceo") return (await readHomeCards(ctx, person, minutes)).cards.map((card) => ({
     cardId: card.id, version: card.version, kind: card.kind, title: card.title, objectRef: card.objectRef, payload: card.payload,
   }));
   const [tasks, { work }] = await Promise.all([
@@ -75,7 +75,7 @@ export function registerCardRoutes(app: AppInstance, ctx: RouteContext): void {
   app.get("/api/people/directory", { preHandler: ctx.requirePerson, schema: { response: { 200: PersonDirectoryResponse } } }, async () => ({
     people: peopleDirectory.searchPeople(undefined).filter(isRealPerson).map(({ personId, displayName }) => ({ personId, displayName })),
   }));
-  app.get("/api/cards/home", { preHandler: requireCEO }, async (req): Promise<TCardCollection> => readHomeCards(ctx, req.person!));
+  app.get("/api/cards/home", { preHandler: requireCEO }, async (req): Promise<TCardCollection> => readHomeCards(ctx, req.person!, app.meetingFollowThrough.minutes));
   app.get(
     "/api/cards/issues/:id",
     {
@@ -90,9 +90,9 @@ export function registerCardRoutes(app: AppInstance, ctx: RouteContext): void {
     },
   );
 
-  app.get("/api/cards/meetings", { preHandler: requireCEO }, async (): Promise<TCardCollection> => {
+  app.get("/api/cards/meetings", { preHandler: requireCEO }, async (req): Promise<TCardCollection> => {
     const rows = await listMeetingRows(q);
-    return { cards: rows.map((row) => projectMeetingCard(row, env.sessionSecret)) };
+    return { cards: await Promise.all(rows.map(async row => projectMeetingCard(await meetingForViewer(q,app.meetingFollowThrough.minutes,row,req.person!), env.sessionSecret))) };
   });
 
   app.get(
@@ -100,7 +100,7 @@ export function registerCardRoutes(app: AppInstance, ctx: RouteContext): void {
     { preHandler: requireCEO, schema: { params: idParams } },
     async (req, reply): Promise<TCardCollection | FastifyReply> => {
       const meeting = await getMeetingRow(q, req.params.id);
-      return meeting ? { cards: [projectMeetingCard(meeting, env.sessionSecret)] } : fail(reply, 404, "CARD_NOT_FOUND", "Card 不存在");
+      return meeting ? { cards: [projectMeetingCard(await meetingForViewer(q,app.meetingFollowThrough.minutes,meeting,req.person!), env.sessionSecret)] } : fail(reply, 404, "CARD_NOT_FOUND", "Card 不存在");
     },
   );
 
@@ -110,7 +110,8 @@ export function registerCardRoutes(app: AppInstance, ctx: RouteContext): void {
     const at = now();
     const rows = (await listMeetingRows(q)).filter((row) => hasMeetingNotice(row, req.person!.personId, at));
     const monthlyNotice = env.tianshuMonthlyCycle ? await getMonthlyPlanNotice(q, env.sessionSecret, at) : null;
-    return { cards: [...(monthlyNotice ? [monthlyNotice] : []), ...rows.map((row) => projectMeetingCard(row, env.sessionSecret, at))] };
+    const cards = await Promise.all(rows.map(async row => projectMeetingCard(await meetingForViewer(q,app.meetingFollowThrough.minutes,row,req.person!), env.sessionSecret, at)));
+    return { cards: [...(monthlyNotice ? [monthlyNotice] : []), ...cards] };
   });
 
   app.get("/api/cards/monthly-plans", { preHandler: requireCEO }, async (): Promise<TCardCollection> => {

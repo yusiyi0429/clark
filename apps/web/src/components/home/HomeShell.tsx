@@ -42,7 +42,11 @@ import { useBackground } from "@/lib/home/useBackground";
 import { useWorkHome } from "@/lib/home/useWorkHome";
 import { BackgroundPanel, BackgroundTasks, useMachine } from "./BackgroundPanel";
 import { BuddyView, PipelineView, type Outbox, type OutboxEntry } from "./Conversations";
-import { HomeComposer, HomeView, WaitingList, type SendTarget } from "./HomeView";
+import { HomeComposer, HomeView, HomeWaiting, HomeMonth, type SendTarget } from "./HomeView";
+import { PartnerMeetingsProvider, PartnerHomeMeetings } from "./PartnerMeetings";
+import { isTeamDraft } from "./PartnerTeam";
+import { TEAM_DELIVERY_CHANGED } from "@/lib/home/teamDelivery";
+import { useViewerQueueWorkInput } from "./WorkIntake";
 import { LeftColumn, SubLetter, subKey, subLetters, type RowActions } from "./LeftColumn";
 import { ForeignTaskInfo, TaskInfo } from "./TaskInfo";
 import { MissionInfo } from "./MissionInfo";
@@ -86,7 +90,9 @@ const CLAIM_SOON_MS = 3_000;
 export function HomeShell({ account }: { account: Account }) {
   return (
     <LocalRunnerProvider person={linkPerson(account)}>
-      <HomeFrame account={account} />
+      <PartnerMeetingsProvider key={account.personId ?? account.loginId ?? account.displayName}>
+        <HomeFrame account={account} />
+      </PartnerMeetingsProvider>
       <ShellToast />
     </LocalRunnerProvider>
   );
@@ -114,6 +120,7 @@ function HomeFrame({ account }: { account: Account }) {
   }, []);
   const [speaking, setSpeaking] = useState(false);
   const [outbox, setOutbox] = useState<Outbox>([]);
+  const queueWorkInput = useViewerQueueWorkInput(account.personId ?? null);
   /** 从 Mission 详情点「问伙伴」带进总管线的上下文（输入框左上角「关于：{Mission}」胶囊，14.2、14.5）。 */
   const [buddyContext, setBuddyContext] = useState<string | null>(null);
   /** 月份页在复盘期间换的页头（「11 月复盘」和右边那几样）。 */
@@ -187,13 +194,17 @@ function HomeFrame({ account }: { account: Account }) {
     return routeText(text, data.projects);
   }, [api.live, data.projects]);
   const send = useCallback(async (text: string, target: SendTarget, files: File[]) => {
-    const resolved = target === "auto" ? await route(text) : target;
-    outboxId.current += 1;
-    // 每句排在队里，按对话各发各的：连着发、或那条对话正在回话时，前一句不会被后一句顶掉。
-    const entry: OutboxEntry = { id: outboxId.current, target: resolved === "main" ? "main" : resolved.projectId, text, files };
-    setOutbox((queue) => [...queue, entry]);
+    const toTeam = target === "auto" || target === "main" ? isTeamDraft(text, files) : false;
+    const resolved = toTeam ? "main" : target === "auto" ? await route(text) : target;
+    if (toTeam || (api.known && !api.live)) {
+      // 团队草稿交给伙伴收件人选择器。旧版工作台仍走原有的对话入口。
+      const entry: OutboxEntry = { id: ++outboxId.current, target: resolved === "main" ? "main" : resolved.projectId, text, files, team: toTeam };
+      setOutbox((queue) => [...queue, entry]);
+    } else {
+      await queueWorkInput(resolved === "main" ? "global" : `project:${resolved.projectId}`, text, files);
+    }
     go(resolved === "main" ? "/me/work/buddy" : projectHref(resolved.projectId));
-  }, [route, go]);
+  }, [route, go, api.known, api.live, queueWorkInput]);
   const consume = useCallback((id: number) => setOutbox((queue) => queue.filter((entry) => entry.id !== id)), []);
 
   // ---- 开规划员、开卡（一次交给本机）----
@@ -228,6 +239,10 @@ function HomeFrame({ account }: { account: Account }) {
     if (seenKind && seenId) markSeen(seenKind, seenId, seenMarker);
   }, [seenKind, seenId, seenMarker, markSeen]);
   const changed = useCallback(() => { void api.refresh(); }, [api]);
+  useEffect(() => {
+    window.addEventListener(TEAM_DELIVERY_CHANGED, changed);
+    return () => window.removeEventListener(TEAM_DELIVERY_CHANGED, changed);
+  }, [changed]);
   /**
    * 这个标签页里自动开工没开起来的子会话（卡 id、专题 id）：Task 管线里那一行出「失败」加「手动开始」（5.4.3、9.8，手动开始只有这一处），
    * 不弹提示。开起来了、或换了文件夹和模型（自动再试）就去掉。
@@ -560,7 +575,7 @@ function HomeFrame({ account }: { account: Account }) {
   );
   const display = (current: View) => {
     switch (current.kind) {
-      case "home": return <HomeView data={data} api={api} buddy={buddy} today={todayLabel(work.plan?.today ?? null)} go={go} route={route} onSend={send} projects={projects} trail={backgroundButton} offline={machine.disconnected} />;
+      case "home": return <HomeView data={data} api={api} buddy={buddy} today={todayLabel(work.plan?.today ?? null)} go={go} route={route} onSend={send} projects={projects} meeting={meeting} trail={backgroundButton} offline={machine.disconnected} />;
       case "project": {
         const project = projects.all.find((entry) => entry.id === current.id);
         if (!project) return <Missing loading={!api.ready} onRetry={api.planFailed ? () => void api.retryPlan() : undefined} />;
@@ -578,7 +593,7 @@ function HomeFrame({ account }: { account: Account }) {
       }
       case "transfer": return <TransferView key={current.id} id={current.id} go={go} onChanged={api.refresh} />;
       case "meeting": return <MeetingView key={current.id} id={current.id} go={go} />;
-      case "buddy": return <BuddyView buddy={buddy} outbox={outbox} consume={consume} onSpeaking={setSpeaking} projects={projects.projects} other={data.other.subSessions} go={go} context={buddyContext} onClearContext={() => setBuddyContext(null)} />;
+      case "buddy": return <BuddyView buddy={buddy} outbox={outbox} consume={consume} onSpeaking={setSpeaking} projects={projects.projects} other={data.other.subSessions} waiting={data.waiting} go={go} context={buddyContext} onClearContext={() => setBuddyContext(null)} />;
       case "mission": {
         const mission = data.month.missions.find((entry) => entry.missionId === current.id);
         if (!mission) return <Missing loading={!api.ready} onRetry={api.planFailed ? () => void api.retryPlan() : undefined} />;
@@ -642,12 +657,11 @@ function HomeFrame({ account }: { account: Account }) {
       }} cardAt={cardAt} working={working} seen={seenMarks} onOpen={markSeen}
       meeting={{ slot: <MeetingControl meeting={meeting} missionId={meetingMission} />, listening: meeting.listening }}
       today={todayLabel(work.plan?.today ?? null)} machine={machineDot} trail={handheld ? backgroundButton : null}
-      top={handheld && data.waiting.length ? (
-        <section aria-label="等你" className={h.phoneWaiting}>
-          <p className={h.sectionTitle}>等你 <span>{data.waiting.length}</span></p>
-          <WaitingList items={data.waiting} api={api} go={go} />
-        </section>
-      ) : null} />
+      top={handheld ? <>
+        <HomeWaiting data={data} api={api} go={go} phone />
+        <PartnerHomeMeetings meeting={meeting} />
+        <HomeMonth data={data} api={api} projects={projects} go={go} />
+      </> : null} />
   );
 
   if (handheld) {

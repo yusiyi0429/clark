@@ -3,6 +3,7 @@ import { LocalPermissionBrief, LocalPermissionMode, LocalQuestionRequestView, Lo
 import { PersonRef, ProjectTransfer } from "./projectTransfers.js";
 import { CardDraftView, CardPlanView, CardTaskView } from "./taskCards.js";
 import { SubSessionLetter, TaskFeedItem } from "./workHome.js";
+import { MeetingWorkFeedItem } from "./meetingWorkHandoffs.js";
 
 /**
  * 项目常驻，每月目标挂在项目上（设计《新首页》第 16 节，11/07 晚用户批准）。
@@ -270,7 +271,7 @@ export const ProjectSubSessionDecisionItem = Type.Object({
 export const SUB_SESSION_REPORT_PREFIX = "【子会话回报】";
 
 export const ProjectFeedItem = Type.Union([TaskFeedItem, ProjectGoalLinkedItem, ProjectHandoverItem, ProjectHandoverSummaryItem, ProjectTransferDeclinedItem,
-  ProjectGoalChangedItem, ProjectSubSessionReportItem, ProjectSubSessionDecisionItem]);
+  ProjectGoalChangedItem, ProjectSubSessionReportItem, ProjectSubSessionDecisionItem, MeetingWorkFeedItem]);
 /** GET /api/me/projects/:projectId/feed：从旧到新。 */
 export const ProjectFeedResponse = Type.Object({ items: Type.Array(ProjectFeedItem) }, strict);
 

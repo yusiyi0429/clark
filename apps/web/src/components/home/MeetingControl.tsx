@@ -25,13 +25,15 @@ import { HeroButton } from "@/components/HeroButton";
 import { Select } from "@/components/ui/Select";
 import type { MeetingPayload } from "@/cards/payloads";
 import { useMeetingRecorder } from "@/components/meeting/useMeetingRecorder";
-import { BOOK_ERROR } from "@/components/meeting/MeetingBookingSheet";
+import { BOOK_ERROR, MeetingBookingSheet } from "@/components/meeting/MeetingBookingSheet";
 import { bookMeeting, listPeople, listPersonDirectory, listWorldAnchorOptions, type DirectoryPerson } from "@/components/meeting/meetingDecisionApi";
 import { WorldAnchorPicker } from "@/components/meeting/WorldAnchorPicker";
 import { companyMonth } from "@/lib/companyTime";
-import { SLOT_MS, announceMeeting, defaultAnchor, defaultMeetingTitle, elapsed, meetingHref, meetingSpan, startableMeetings, type BookedMeeting } from "@/lib/home/meeting";
+import { SLOT_MS, announceMeeting, defaultAnchor, defaultMeetingTitle, elapsed, meetingHref, meetingSpan, startableMeetings } from "@/lib/home/meeting";
+import { usePartnerMeetings } from "@/lib/home/partnerMeetingFeed";
 import { ICON } from "./StateIcon";
 import h from "@/styles/home.module.css";
+import s from "./partner-meetings.module.css";
 
 /**
  * 开着的这场会（本机记着，刷新后接上）。audio：这场会在录音（麦克风给了）；recordingId：服务端那份录音
@@ -109,8 +111,10 @@ export function useHomeMeeting({ account, go }: { account: Account; go: (href: s
   const meeting = "meeting" in phase ? phase.meeting : null;
   const recorder = useMeetingRecorder(meeting?.id ?? "");
   const pendingStart = useRef(false);
+  const currentPhase = useRef<MeetingPhase["kind"]>("idle");
   const role = account.role;
   const setPhase = useCallback((next: MeetingPhase) => {
+    currentPhase.current = next.kind;
     setPhaseState(next);
     write(STORE, next.kind === "idle" || next.kind === "starting" ? null : next);
   }, []);
@@ -162,6 +166,7 @@ export function useHomeMeeting({ account, go }: { account: Account; go: (href: s
 
   /** 开一场：已约的直接开，新的一场先建会。没开成回一句短话。 */
   const start = useCallback(async (target: { meetingId: string; title: string } | { book: TMeetingBookingRequest }): Promise<string | null> => {
+    if (currentPhase.current !== "idle") return "已经有一场会在进行";
     setPhase({ kind: "starting" });
     let id: string;
     let title: string;
@@ -266,17 +271,19 @@ function useTick(on: boolean) {
 }
 
 /** 伙伴台右下角那一颗：平时是图标按钮，开着会是走秒胶囊。 */
-export function MeetingControl({ meeting, missionId }: { meeting: HomeMeeting; missionId?: string | null }) {
+export function MeetingControl({ meeting, missionId, inline = false }: { meeting: HomeMeeting; missionId?: string | null; inline?: boolean }) {
   const { phase } = meeting;
   const [open, setOpen] = useState(false);
+  const [remote, setRemote] = useState(false);
+  const slot = inline ? s.inlineSlot : h.meetSlot;
   const now = useTick(phase.kind === "live" || phase.kind === "organizing");
-  useEffect(() => { if (phase.kind === "organizing" || phase.kind === "ready" || phase.kind === "idle") setOpen(false); }, [phase.kind]);
+  useEffect(() => { if (phase.kind === "organizing" || phase.kind === "ready") setOpen(false); }, [phase.kind]);
 
   if (phase.kind === "organizing") {
-    return <span className={h.meetSlot}><span className={h.meetPill} data-state="organizing" role="status" data-testid="meeting-pill">整理中 {elapsed(now - phase.since)}</span></span>;
+    return <span className={slot}><span className={h.meetPill} data-state="organizing" role="status" data-testid="meeting-pill">整理中 {elapsed(now - phase.since)}</span></span>;
   }
   if (phase.kind === "ready") {
-    return <span className={h.meetSlot}><Pressable className={h.meetPill} data-state="ready" onPress={meeting.open} data-testid="meeting-pill">记录待确认</Pressable></span>;
+    return <span className={slot}><Pressable className={h.meetPill} data-state="ready" onPress={meeting.open} data-testid="meeting-pill">记录待确认</Pressable></span>;
   }
 
   let trigger;
@@ -315,32 +322,34 @@ export function MeetingControl({ meeting, missionId }: { meeting: HomeMeeting; m
           {phase.retry ? <>
             {phase.retry === "end"
               ? <HeroButton variant="tertiary" onPress={() => setOpen(false)}>取消</HeroButton>
-              : <HeroButton variant="tertiary" onPress={meeting.dismiss}>收起</HeroButton>}
+              : <HeroButton variant="tertiary" onPress={() => { setOpen(false); meeting.dismiss(); }}>收起</HeroButton>}
             <HeroButton variant="primary" autoFocus onPress={() => { setOpen(false); void meeting.end(); }}>重试</HeroButton>
           </> : <>
-            <HeroButton variant="tertiary" onPress={meeting.dismiss}>收起</HeroButton>
-            <HeroButton variant="primary" autoFocus onPress={meeting.open}>打开会议</HeroButton>
+            <HeroButton variant="tertiary" onPress={() => { setOpen(false); meeting.dismiss(); }}>收起</HeroButton>
+            <HeroButton variant="primary" autoFocus onPress={() => { setOpen(false); meeting.open(); }}>打开会议</HeroButton>
           </>}
         </div>
       </>
     );
   } else {
     trigger = (
-      <HeroButton variant="ghost" size="sm" isIconOnly className={h.meetButton} title="开会" aria-label="开会" isDisabled={phase.kind === "starting"} data-testid="meeting-button">
-        <AudioLines {...ICON} />
+      <HeroButton variant="ghost" size="sm" isIconOnly={!inline} className={h.meetButton} title="现在开会" aria-label="现在开会" isDisabled={phase.kind === "starting"} data-testid="meeting-button">
+        {inline ? "现在开会" : <AudioLines {...ICON} />}
       </HeroButton>
     );
-    body = <StartForm meeting={meeting} missionId={missionId ?? null} onStarted={() => setOpen(false)} />;
+    body = <StartForm meeting={meeting} missionId={missionId ?? null} onStarted={() => setOpen(false)} onRemote={() => { setOpen(false); setRemote(true); }} />;
   }
 
   return (
-    <span className={h.meetSlot} data-testid="meeting-slot">
+    <span className={slot} data-testid="meeting-slot">
       <Popover isOpen={open} onOpenChange={setOpen}>
         {trigger}
         <Popover.Content placement="bottom end" offset={6} className={`${h.pop} ${h.meetPop}`}>
           <Popover.Dialog aria-label="开会" className={h.meetDialog} data-testid="meeting-pop">{body}</Popover.Dialog>
         </Popover.Content>
       </Popover>
+      {remote && meeting.account.personId ? <MeetingBookingSheet open immediate viewer={{ ...meeting.account, personId: meeting.account.personId }}
+        onClose={() => setRemote(false)} /> : null}
     </span>
   );
 }
@@ -357,26 +366,31 @@ function MeetingLink({ id, title, go }: { id: string; title: string; go: (href: 
 }
 
 /** 弹层里：现在能开的已约会议 + 新的一场。 */
-function StartForm({ meeting, missionId, onStarted }: { meeting: HomeMeeting; missionId: string | null; onStarted: () => void }) {
+function StartForm({ meeting, missionId, onStarted, onRemote }: { meeting: HomeMeeting; missionId: string | null; onStarted: () => void; onRemote: () => void }) {
   const { account } = meeting;
   const me = account.personId ?? "";
   const ceo = account.role === "ceo";
   const [title, setTitle] = useState(() => defaultMeetingTitle(new Date()));
-  const [booked, setBooked] = useState<BookedMeeting[]>([]);
+  const feed = usePartnerMeetings();
+  const booked = startableMeetings(feed.items, Date.now());
   const [options, setOptions] = useState<TWorldAnchorOption[] | null>(null);
   const [optionsFailed, setOptionsFailed] = useState(false);
   const [anchors, setAnchors] = useState<TWorldAnchor[]>([]);
   const [picking, setPicking] = useState(false);
   const [people, setPeople] = useState<{ personId: string; displayName: string }[]>([]);
   const [hosts, setHosts] = useState<DirectoryPerson[]>([]);
+  const [hostsFailed, setHostsFailed] = useState(false);
   const [host, setHost] = useState(() => (ceo ? read<string>(LAST_HOST) ?? "" : me));
   const [error, setError] = useState("");
+  const [retry, setRetry] = useState(0);
   const busy = meeting.phase.kind === "starting";
   const startButton = useRef<HTMLButtonElement>(null);
   const focused = useRef(false);
+  const draftId = useRef<string | null>(null);
 
   useEffect(() => {
     let live = true;
+    setOptionsFailed(false);
     void listWorldAnchorOptions(companyMonth(new Date())).then((next) => {
       if (!live) return;
       setOptions(next);
@@ -384,15 +398,16 @@ function StartForm({ meeting, missionId, onStarted }: { meeting: HomeMeeting; mi
       setAnchors(first ? [first] : []);
     }, () => { if (live) setOptionsFailed(true); });
     void listPersonDirectory().then((next) => { if (live) setPeople(next); }, () => undefined);
-    if (ceo) void listPeople().then((next) => { if (live) setHosts(next.filter((person) => person.roles.includes("dri"))); }, () => undefined);
-    // 已约的会只有成员的「会议安排」给（CEO 没有这个接口）。
-    else void browserApi.GET("/api/me/meetings").then(({ data }) => {
-      if (live && data) setBooked(startableMeetings(data.meetings, account.displayName, Date.now()));
-    }, () => undefined);
+    if (ceo) {
+      setHostsFailed(false);
+      void listPeople().then((next) => {
+        if (live) setHosts(next.filter((person) => person.roles.includes("dri")));
+      }, () => { if (live) setHostsFailed(true); });
+    }
     return () => { live = false; };
-  }, [ceo, me, missionId, account.displayName]);
+  }, [ceo, me, missionId, retry]);
 
-  const ready = Boolean(title.trim() && anchors.length && host && !busy);
+  const ready = Boolean(title.trim() && anchors.length && host && (!ceo || hosts.some((person) => person.personId === host)) && !busy);
   // 焦点落在「开始」上（回车就开）：挂点读到、能开的那一刻放过去；人已经在标题框里打字就不抢。
   useEffect(() => {
     if (!ready || focused.current) return;
@@ -411,8 +426,9 @@ function StartForm({ meeting, missionId, onStarted }: { meeting: HomeMeeting; mi
     const at = Date.now();
     write(LAST_ANCHOR, anchors[0]);
     if (ceo) write(LAST_HOST, host);
+    draftId.current ??= crypto.randomUUID();
     void go({ book: {
-      title: title.trim(), scheduledAt: new Date(at).toISOString(), endsAt: new Date(at + SLOT_MS).toISOString(),
+      draftId: draftId.current, title: title.trim(), scheduledAt: new Date(at).toISOString(), endsAt: new Date(at + SLOT_MS).toISOString(),
       ...(ceo ? { leadDriId: host } : {}),
       anchors: anchors.map(({ kind, id }) => ({ kind: kind as TPickedWorldAnchor["kind"], id })),
     } });
@@ -425,7 +441,7 @@ function StartForm({ meeting, missionId, onStarted }: { meeting: HomeMeeting; mi
           {booked.map((entry) => (
             <li key={entry.meetingId}>
               <button type="button" className={h.menuItem} disabled={busy} onClick={() => void go({ meetingId: entry.meetingId, title: entry.title })} data-testid="meeting-booked">
-                <span className={h.meetRowTitle}>{entry.title}</span><span className={h.menuFaint}>{meetingSpan(entry.startsAt, entry.endsAt)}</span>
+                <span className={h.meetRowTitle}>{entry.title}</span><span className={h.menuFaint}>{meetingSpan(entry.at, entry.endsAt ?? null)}</span>
               </button>
               <a className={h.icon} href={meetingHref(entry.meetingId)} aria-label={`打开「${entry.title}」`} data-testid="meeting-booked-open"
                 onClick={(event) => { if (plainClick(event)) { event.preventDefault(); onStarted(); meeting.navigate(meetingHref(entry.meetingId)); } }}>
@@ -435,7 +451,11 @@ function StartForm({ meeting, missionId, onStarted }: { meeting: HomeMeeting; mi
           ))}
         </ul>
       ) : null}
-      <p className={h.sectionTitle}>新的一场</p>
+      {feed.error ? <p className={h.meetError} role="alert">{feed.error} <button type="button" onClick={feed.reload}>重试</button></p> : null}
+      <div className={s.modeHead}>
+        <p className={h.sectionTitle}>现场录音</p>
+        {me ? <HeroButton variant="tertiary" size="sm" isDisabled={busy} onPress={onRemote}>开远程会议</HeroButton> : null}
+      </div>
       <input className={h.projectName} aria-label="标题" value={title} maxLength={200} data-testid="meeting-title"
         onChange={(event) => setTitle(event.currentTarget.value)}
         onKeyDown={(event) => { if (event.key === "Enter" && !event.nativeEvent.isComposing) { event.preventDefault(); startNew(); } }} />
@@ -443,7 +463,7 @@ function StartForm({ meeting, missionId, onStarted }: { meeting: HomeMeeting; mi
         <span className={h.menuFaint}>关于</span>
         {anchors.length && !picking ? (
           <button type="button" className={h.meetAnchor} onClick={() => setPicking(true)} data-testid="meeting-anchor">{anchors[0].title}</button>
-        ) : optionsFailed ? <span className={h.meetError}>没读到</span> : options ? null : <span className={h.menuFaint}>…</span>}
+        ) : optionsFailed ? <span className={h.meetError}>没读到 <button type="button" onClick={() => setRetry(retry + 1)}>重试</button></span> : options ? null : <span className={h.menuFaint}>…</span>}
       </div>
       {options && (picking || !anchors.length) ? (
         <WorldAnchorPicker options={options} value={anchors} viewerId={me} nameOf={nameOf} company={ceo}
@@ -452,12 +472,13 @@ function StartForm({ meeting, missionId, onStarted }: { meeting: HomeMeeting; mi
       {ceo ? (
         <div className={h.meetField}>
           <span className={h.menuFaint}>主持人</span>
-          <Select aria-label="主持人" value={host} placeholder="选主持人" options={hosts.map((person) => ({ value: person.personId, label: person.displayName }))} onChange={setHost} />
+          {hostsFailed ? <span className={h.meetError} role="alert">没读到主持人 <button type="button" onClick={() => setRetry(retry + 1)}>重试</button></span> :
+            <Select aria-label="主持人" value={host} placeholder="选主持人" options={hosts.map((person) => ({ value: person.personId, label: person.displayName }))} onChange={setHost} />}
         </div>
       ) : null}
       {error ? <p className={h.meetError} role="alert">{error}</p> : null}
       <div className={h.dialogActions}>
-        <HeroButton ref={startButton} variant="primary" isDisabled={!ready} onPress={startNew} data-testid="meeting-start">开始</HeroButton>
+        <HeroButton ref={startButton} variant="primary" isDisabled={!ready} onPress={startNew} data-testid="meeting-start">开始现场录音</HeroButton>
       </div>
     </>
   );

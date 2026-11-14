@@ -121,13 +121,13 @@ describe("飞书日历接口的请求", () => {
     });
   });
 
-  it("飞书报错带上错误码；会议链接没有时退回打开日程的链接", async () => {
+  it("飞书报错带上错误码；只有日程链接时不给入会地址", async () => {
     const api = createFeishuCalendarApi({ fetch: (async (url: string) => new Response(JSON.stringify(url.includes("/events?")
       ? { code: 0, data: { event: { event_id: "evt_2_0", app_link: "https://applink.feishu.cn/client/calendar/event/detail?x=2", vchat: { vc_type: "vc" } } } }
       : { code: 99991679, msg: "Unauthorized" }))) as typeof fetch });
     await expect(api.primaryCalendarId("u-1")).rejects.toMatchObject({ code: 99991679 });
     expect(await api.createEvent("u-1", "cal", { summary: "x", start: new Date(), end: new Date() }, "k"))
-      .toEqual({ eventId: "evt_2_0", joinUrl: "https://applink.feishu.cn/client/calendar/event/detail?x=2" });
+      .toEqual({ eventId: "evt_2_0", joinUrl: null });
   });
 
   it("读日程视图：按秒传起止，取主题、起止、状态、本人回复和打开日程的链接", async () => {
@@ -208,6 +208,8 @@ describe("建会后在飞书约上", () => {
       expect(calendar.calls).toEqual([]);
       expect((await row(t, meetingId)).feishu_event_status).toBe("waiting_auth");
 
+      // 即时开会已经进入预约时段，授权完成后仍要给原场次补上真正的入会地址。
+      await t.sql("UPDATE meetings SET scheduled_at=now()-interval '2 minutes',ends_at=now()+interval '45 minutes' WHERE id=$1",[meetingId]);
       await authorize(t, CEO, "ou_ceo");
       expect(await t.app.meetingFollowThrough.feishuEvents.resumeFor(CEO)).toBe(1);
       expect((await row(t, meetingId)).feishu_event_status).toBe("pending");

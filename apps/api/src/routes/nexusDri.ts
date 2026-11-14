@@ -8,6 +8,8 @@ import {
   type TNexusConfirmationDecisionResponse, type TNexusDriConfirmationRecord, type TNexusDriReceipt,
 } from "@warmap/contracts";
 import type { NexusDri } from "../nexusDri.js";
+import { deliverNewMeetingWork } from "../meetingWorkHandoffs.js";
+import { planTaskOpener } from "../taskCards.js";
 import type { AppInstance, RouteContext } from "./shared.js";
 
 /**
@@ -28,8 +30,12 @@ export function registerNexusDriRoutes(app: AppInstance, ctx: RouteContext, nexu
     "/api/me/nexus-confirmations/:id/decision",
     { preHandler: requirePerson, schema: { params: NexusConfirmationParams, body: NexusConfirmationDecisionRequest } },
     async (req, reply): Promise<TNexusConfirmationDecisionResponse | FastifyReply> => {
+      if (req.body.continueWork && req.person!.role !== "member") return fail(reply, 403, "FORBIDDEN", "请切换到 DRI 工作台选择去向");
       const result = await nexusDri.decide(req.person!.personId, req.params.id, req.body);
-      return "error" in result ? fail(reply, result.error.status, result.error.code, result.error.message) : result;
+      if ("error" in result) return fail(reply, result.error.status, result.error.code, result.error.message);
+      if (req.body.continueWork) await deliverNewMeetingWork({ pool: ctx.pool, now: ctx.now,
+        open: q => planTaskOpener(q, ctx.planTasks, ctx.peopleDirectory, ctx.now) }, req.person!.personId, result.confirmationRef);
+      return result;
     },
   );
 

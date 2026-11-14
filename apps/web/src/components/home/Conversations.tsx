@@ -23,7 +23,7 @@ import { uploadToConversation } from "@/lib/home/attachments";
 import { useAnswerOptionFill } from "@/conversation/answerOptions";
 import { InputBar } from "./InputBar";
 import type { Project } from "@/lib/home/projects";
-import type { FeedItem, ProjectFeedItem, SubSession } from "@/lib/home/types";
+import type { FeedItem, ProjectFeedItem, SubSession, WaitingItem } from "@/lib/home/types";
 import type { WorkHomeApi } from "@/lib/home/useWorkHome";
 import { DroppedRecord, PlanDecision, PlanningLine, StartedRecord } from "./PlanDecision";
 import { GoalChangeDecision, SubSessionReport, feedBlocks, useProjectFeed } from "./TaskFeed";
@@ -43,14 +43,17 @@ import { showWorkspaceToast } from "@/lib/toast";
 import { FolderMenu, FolderText, FootText } from "./InputFooter";
 import { PipelineModelMenu } from "./PipelineModel";
 import { SubSessionSummary } from "./SubSessionSummary";
+import { WorkIntakeQueue, useQueueWorkInput } from "./WorkIntake";
+import { usePartnerWorkEvents } from "./PartnerWorkEvents";
+import { usePartnerTeam } from "./PartnerTeam";
+import { PartnerMeetingInbox } from "./PartnerMeetings";
+import { MeetingWorkHandoffs, MeetingWorkFeedEntry } from "../meeting/MeetingWorkHandoffs";
 
 /** 首页输入框发来、等着进对话的一句。 */
 /** files：首页输入框带的附件，到了那条对话再传（14.5）。 */
-export type OutboxEntry = { id: number; target: "main" | string; text: string; files: File[] };
+export type OutboxEntry = { id: number; target: "main" | string; text: string; files: File[]; team?: boolean };
 /** 排着的几句（按发出的先后），每条对话只取给自己的。 */
 export type Outbox = OutboxEntry[];
-
-const NO_BLOCKS: TimedBlock[] = [];
 
 /** 同一条对话里换了模型（67 条）：在换的那一处画一行「换成 来源 · 模型」，样子同「11 月目标」那条分隔线。 */
 const modelRule = (label: string) => <p className={h.monthRule} role="separator" data-testid="model-rule">换成 {label}</p>;
@@ -62,15 +65,20 @@ export function ModelText({ data }: { data: Pick<ConversationData, "model"> }) {
 }
 
 /** 对话读好了、没在回答时，把 outbox 里给这条对话的第一句发出去（一次一句，回完再发下一句）。 */
-function useOutbox(data: ConversationData, key: "main" | string, outbox: Outbox, consume: (id: number) => void) {
+type TeamIntercept = (text: string, files: File[]) => Promise<boolean>;
+function useOutbox(data: ConversationData, key: "main" | string, outbox: Outbox, consume: (id: number) => void, intercept?: TeamIntercept, composing = false) {
   const sent = useRef(new Set<number>());
-  const next = outbox.find((entry) => entry.target === key && !sent.current.has(entry.id)) ?? null;
+  const next = outbox.find((entry) => entry.target === key);
   useEffect(() => {
-    if (!next || data.historyStatus !== "ready" || data.streaming) return;
+    if (!next || sent.current.has(next.id)) return;
+    if (next.team ? !intercept || composing : data.historyStatus !== "ready" || data.streaming) return;
     sent.current.add(next.id);
-    consume(next.id);
-    void sendWithFiles(data, next.text, next.files).catch(() => undefined);
-  }, [next, data, consume]);
+    void (async () => {
+      const ok = next.team && intercept ? await intercept(next.text, next.files) : await sendWithFiles(data, next.text, next.files);
+      if (ok) consume(next.id);
+      else sent.current.delete(next.id);
+    })().catch((err) => { sent.current.delete(next.id); showWorkspaceToast({text: err instanceof Error ? err.message : "发送失败"}); });
+  }, [next, data, consume, intercept, composing]);
 }
 
 /** 先把附件传给这条对话（云端转给 Chat），回执随这句话发出去。 */
@@ -83,16 +91,20 @@ async function sendWithFiles(data: ConversationData, text: string, files: File[]
  * 总管线、Task 管线底下的输入框（14.5）：InputBar，回答进行中右边是停止；回答末尾的选项填进框里；草稿按对话存。
  * context：「关于：{Mission}」胶囊，发出的这一句前面带上它，发完就去掉。
  */
-function ChatInput({ data, placeholder, onHeight, context, footer }: {
+function ChatInput({ data, placeholder, onHeight, context, footer, intercept, durable = true }: {
   data: ConversationData; placeholder: string; onHeight: (height: number) => void; context?: { label: string; onClear: () => void } | null; footer?: { left?: ReactNode; right?: ReactNode };
+  intercept?: TeamIntercept; durable?: boolean;
 }) {
   const [fill, setFill] = useState<{ text: string; nonce: number } | null>(null);
+  const queueWorkInput = useQueueWorkInput();
   useAnswerOptionFill(data.scope, (text) => setFill({ text, nonce: Date.now() }));
   return (
-    <InputBar placeholder={placeholder} busy={data.streaming} interruptible={data.interruptible} onStop={data.stop} textRequired onHeight={onHeight} fill={fill} context={context} footer={footer}
+    <InputBar placeholder={placeholder} busy={data.streaming} interruptible={durable || data.interruptible} onStop={data.stop} textRequired={!intercept} onHeight={onHeight} fill={fill} context={context} footer={footer}
       draftKey={`tianshu-home-draft-v1:${data.scope}`}
       onSend={async (text, files) => {
-        const ok = await sendWithFiles(data, context ? `${context.label}\n\n${text}` : text, files);
+        if (intercept && await intercept(text,files)) return true;
+        const message = context ? `${context.label}\n\n${text}` : text;
+        const ok = durable ? Boolean(await queueWorkInput(data.scope,message,files)) : await sendWithFiles(data,message,files);
         if (ok) context?.onClear();
         return ok;
       }} />
@@ -123,13 +135,15 @@ function useEscStopsReply(data: ConversationData) {
 /**
  * context：从 Mission 详情「问伙伴」带来的「关于：{Mission}」，输入框左上角一枚胶囊（14.5），去掉调 onClearContext。
  */
-export function BuddyView({ buddy, outbox, consume, onSpeaking, projects, other, go, context = null, onClearContext }: {
+export function BuddyView({ buddy, outbox, consume, onSpeaking, projects, other, waiting, go, context = null, onClearContext }: {
   buddy: Buddy | null; outbox: Outbox; consume: (id: number) => void; onSpeaking: (speaking: boolean) => void; context?: string | null; onClearContext?: () => void;
-  projects: Project[]; other: SubSession[]; go: (href: string) => void;
+  projects: Project[]; other: SubSession[]; waiting: WaitingItem[]; go: (href: string) => void;
 }) {
   const data = useConversation("global");
   const chrome = useViewChrome();
-  useOutbox(data, "main", outbox, consume);
+  const team = usePartnerTeam();
+  const events = usePartnerWorkEvents(waiting, go);
+  useOutbox(data, "main", outbox, consume, team.intercept, team.composing);
   useEscStopsReply(data);
   useEffect(() => { onSpeaking(data.streaming); return () => onSpeaking(false); }, [data.streaming, onSpeaking]);
   const name = buddy?.name?.trim() || "伙伴";
@@ -147,9 +161,10 @@ export function BuddyView({ buddy, outbox, consume, onSpeaking, projects, other,
               <SubSessionSummary projects={projects} other={other} go={go} />
             </>
           )}
-          timeline={(current) => <WorkTimeline data={current} blocks={NO_BLOCKS} modelRule={modelRule} />}
-          dock={(latest) => <PendingDock latest={latest} />}
-          input={(onHeight) => <ChatInput data={data} placeholder={`与${name}讨论…`} onHeight={onHeight} footer={{ right: <ModelText data={data} /> }}
+          timeline={(current) => <><WorkTimeline data={current} blocks={[...team.blocks, ...events]} modelRule={modelRule} /><PartnerMeetingInbox /><MeetingWorkHandoffs />
+            <WorkIntakeQueue scope={data.scope} refreshHistory={data.followLatest} /></>}
+          dock={(latest) => <>{team.composer}<PendingDock latest={latest} /></>}
+          input={(onHeight) => <ChatInput data={data} placeholder={`与${name}讨论…`} onHeight={onHeight} intercept={team.intercept} footer={{ left: team.launcher, right: <ModelText data={data} /> }}
             context={context ? { label: context, onClear: () => onClearContext?.() } : null} />} />
       </div>
     </PendingBoxes>
@@ -365,9 +380,10 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
     // 子会话停了的报告（18.10）：按记下的位置插进对话。
     for (const item of feed) {
       if (item.kind === "sub_session_report") list.push({ key: item.id, at: item.at, afterSequence: item.afterSequence, node: <SubSessionReport item={item} go={go} /> });
+      if (item.kind === "meeting_handoff") list.push({ key: item.id, at: item.at, node: <MeetingWorkFeedEntry item={item} /> });
     }
     const decisions = feed.filter((item): item is Extract<ProjectFeedItem, { kind: "sub_session_decision" }> => item.kind === "sub_session_decision");
-    const PROJECT_ONLY = new Set<ProjectFeedItem["kind"]>(["goal_linked", "handover", "handover_summary", "transfer_declined", "goal_changed", "sub_session_report", "sub_session_decision"]);
+    const PROJECT_ONLY = new Set<ProjectFeedItem["kind"]>(["goal_linked", "handover", "handover_summary", "transfer_declined", "goal_changed", "sub_session_report", "sub_session_decision","meeting_handoff"]);
     const checks = feed.filter((item): item is FeedItem => !PROJECT_ONLY.has(item.kind));
     list.push(...feedBlocks({ items: checks, workers: mine, go, onSay: (text) => data.send(text, []), onChanged: () => void changed(), remoteAsks, decisions, letters }));
     return list;
@@ -389,9 +405,10 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
               <SubSessionSummary projects={[project]} grouped={false} go={go} />
             </>
           )}
-          timeline={(current) => <WorkTimeline data={current} blocks={blocks} modelRule={modelRule} />}
+          timeline={(current) => <><WorkTimeline data={current} blocks={blocks} modelRule={modelRule} />
+            {api.live && !readOnly ? <WorkIntakeQueue scope={data.scope} refreshHistory={data.followLatest} /> : null}</>}
           dock={(latest) => <PendingDock latest={latest} />}
-          input={readOnly ? () => null : (onHeight) => <ChatInput data={data} placeholder={handheld ? "说点什么…" : `与${project.name}讨论…`} onHeight={onHeight} footer={{
+          input={readOnly ? () => null : (onHeight) => <ChatInput data={data} durable={api.live} placeholder={handheld ? "说点什么…" : `与${project.name}讨论…`} onHeight={onHeight} footer={{
             left: folder,
             right: <><PipelineModelMenu projectId={project.id} fallback={<ModelText data={data} />} sheet={handheld} />{mode ? <PermissionModeMenu modes={mode.modes} value={mode.value} sheet={handheld} onChange={mode.set} /> : null}</>,
           }} />} />

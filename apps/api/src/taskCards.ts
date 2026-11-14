@@ -1,4 +1,5 @@
 import { letterOfSub } from "./subSessionLetters.js";
+import { withMeetingWorkBrief } from "./meetingWorkHandoffs.js";
 import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import type { TProjectBoardResponse } from "@warmap/contracts";
@@ -266,7 +267,7 @@ export async function cardBrief(q: Query, ownerId: string, id: string, planTask:
     ...(lastReturn ? ["", "## 上一次验收没过", "", lastReturn] : []),
     ...(role?.acceptance_md.trim() ? ["", `## ${role.name}的验收口径`, "", role.acceptance_md.trim()] : []),
   ];
-  return { markdown: lines.join("\n").slice(0, 20_000), role: role ? roleBrief(role) : null, mission: mission ? { missionId: mission.id, title: mission.title } : null,
+  return { ...await withMeetingWorkBrief(q, ownerId, "card", id, lines.join("\n")), role: role ? roleBrief(role) : null, mission: mission ? { missionId: mission.id, title: mission.title } : null,
     task: own ? { taskId: own.task.taskId, name: own.task.name } : null, criterion, exclusions, reviewGap: gap, lastReturn, sourceWords: card.source_words };
 }
 

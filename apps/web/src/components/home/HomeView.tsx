@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * 首页（新首页设计 5.4.4）：页头「11 月 7 日 周六」，从上到下是 等你（有才画）→ 各 Mission 的 Task → 输入框；区块之间 32，Mission 之间 16。
+ * 首页：等你、会议、本月 Mission 下的 Task、输入框。
  * - 等你：一件两行（原话；来源 · 哪件 Task · 截止）。短的（批准、单选、合回、开工、岗位建议）在行尾就地答，推荐的那个是次按钮、另一个弱按钮；
  *   答完这一行变成状态词（「已批准」）停 2 秒再收走，不弹 toast。行首不放强调色点（组头已经写了「等你」）。
  *   会后确认（Nexus 推来的会上待定事项，17.2 第 43 条）：第二行「会后确认 · 待确认的内容 · 截止 11/12 18:00」，行尾「确认」「修改」「拒绝」；
@@ -19,6 +19,10 @@ import { HeroButton } from "@/components/HeroButton";
 import { FailedLine, failureOf, type Failure } from "@/components/work/DecisionBox";
 import { localOptions, oneTap } from "@/components/work/decisions";
 import { InputBar } from "./InputBar";
+import { MeetingWaitingRows, PartnerHomeMeetings, meetingWaitingItems } from "./PartnerMeetings";
+import type { HomeMeeting } from "./MeetingControl";
+import { usePartnerMeetings } from "@/lib/home/partnerMeetingFeed";
+import { ConfirmAndHandOff } from "@/components/meeting/MeetingWorkHandoffs";
 import { acceptDrafts, acceptProjectDrafts, decideAutoRelay, decideNexusConfirmation, planKey, type PlanTarget } from "@/lib/board/cloud";
 import { useLocalRunner, type LocalRunnerState } from "@/lib/local/LocalRunnerProvider";
 import { decideProposal } from "@/lib/team/roles";
@@ -35,10 +39,12 @@ import { usePhone } from "./usePhone";
 import { pageHref } from "./view";
 import h from "@/styles/home.module.css";
 import x from "@/styles/decision-box.module.css";
+import m from "./partner-meetings.module.css";
 
 export type SendTarget = "auto" | RouteTarget;
+type HomeSend = (text: string, target: SendTarget, files: File[]) => Promise<void> | void;
 
-export function HomeView({ data, api, buddy, today, go, route, onSend, projects, trail, offline = false }: {
+export function HomeView({ data, api, buddy, today, go, route, onSend, projects, meeting, trail, offline = false }: {
   data: WorkHomeData;
   api: WorkHomeApi;
   buddy: Buddy | null;
@@ -47,61 +53,71 @@ export function HomeView({ data, api, buddy, today, go, route, onSend, projects,
   go: (href: string) => void;
   /** 「自动」会发去哪（打字时实时显示）。 */
   route: (text: string) => Promise<RouteTarget>;
-  onSend: (text: string, target: SendTarget, files: File[]) => void;
+  onSend: HomeSend;
   projects: ProjectsApi;
+  meeting: HomeMeeting;
   /** 页头右上角（后台任务按钮）。 */
   trail?: ReactNode;
   /** 这台电脑没连上、没配对（第 73 条）：「等你」最前面一行，点了去连接页。 */
   offline?: boolean;
 }) {
-  // 「本月」（16.4）：这个月的 Task 按 Mission 分组；之前月份没了结的在各自的项目里，不在这里列。
-  const missions = data.month.missions.filter((mission) => mission.tasks.length && mission.period === data.period);
-  const status = useMonthStatus(data, api);
-  // 项目名 chip 只在本月的 Task 不止挂在一个项目上时写（都在一个项目里，写了也是同一个名字）。
-  const manyProjects = new Set(missions.flatMap((mission) => mission.tasks.flatMap((task) => (task.project ? [task.project.projectId] : [])))).size > 1;
   return (
     <div className={h.homeView} data-testid="home-view">
       <header className={h.viewHead}><h1 className={h.viewTitle} tabIndex={-1}>{today}</h1>{trail}</header>
       <div className={h.homeScroll}>
         <div className={h.homeInner}>
-          {data.waiting.length || offline ? (
-            <section aria-label="等你" className={h.section}>
-              <p className={h.sectionTitle}>等你 <span>{data.waiting.length + (offline ? 1 : 0)}</span></p>
-              {offline ? (
-                <ul className={h.waiting}>
-                  <li className={h.wait} data-kind="machine">
-                    <button type="button" className={h.waitMain} onClick={() => go(pageHref("connections"))} data-testid="wait-machine"><span className={h.waitTitle}>这台电脑没连上</span></button>
-                  </li>
-                </ul>
-              ) : null}
-              {data.waiting.length ? <WaitingList items={data.waiting} api={api} go={go} /> : null}
-            </section>
-          ) : null}
+          <HomeWaiting data={data} api={api} go={go} offline={offline} />
+          <PartnerHomeMeetings meeting={meeting} />
           {api.planFailed ? (
             <section aria-label="Task" className={h.section}>
               <p className={h.planFailed} data-testid="plan-read-failed">本体读取失败<HeroButton variant="ghost" size="sm" onPress={() => void api.retryPlan()}>重试</HeroButton></p>
             </section>
           ) : null}
-          {missions.length ? (
-            <section aria-label="本月" className={h.section}>
-              <p className={h.sectionTitle}>本月</p>
-              {missions.map((mission) => (
-                <div key={mission.missionId} className={h.taskList}>
-                  {/* Mission 名点了进只读的 Mission 详情（14.2）。 */}
-                  <button type="button" className={h.missionTitle} onClick={() => go(missionHref(mission.missionId))} data-testid="month-mission" title={mission.title}><span className={h.ellipsis}>{mission.title}</span></button>
-                  {[...mission.tasks].sort((a, b) => (status(a)?.rank ?? 3) - (status(b)?.rank ?? 3)).map((task) => (
-                    <MonthRow key={task.taskId} task={task} gate={taskGateLabel(projects.all, api.work.plan, { taskId: task.taskId, missionId: mission.missionId })}
-                      status={status(task)} showProject={manyProjects} projects={projects} go={go} />
-                  ))}
-                </div>
-              ))}
-            </section>
-          ) : null}
+          <HomeMonth data={data} api={api} projects={projects} go={go} />
         </div>
       </div>
       <HomeComposer buddy={buddy} projects={projects.projects} route={route} onSend={onSend} />
     </div>
   );
+}
+
+export function HomeWaiting({ data, api, go, offline = false, phone = false }: {
+  data: WorkHomeData; api: WorkHomeApi; go: (href: string) => void; offline?: boolean; phone?: boolean;
+}) {
+  const { items } = usePartnerMeetings();
+  const meetings = meetingWaitingItems(items, data.waiting);
+  const [confirmed, setConfirmed] = useState<ConfirmedReceipt | null>(null);
+  const count = data.waiting.length + meetings.length + Number(offline);
+  if (!count && !confirmed) return null;
+  return <section aria-label="等你" className={phone ? h.phoneWaiting : h.section}>
+    {count ? <p className={h.sectionTitle}>等你 <span>{count}</span></p> : null}
+    {confirmed ? <p className={m.receipt} role="status">{confirmed.title} · {confirmed.done}
+      <HeroButton variant="ghost" size="sm" onPress={() => go(confirmed.href)}>{confirmed.showReceipts ? "查看递送回执" : "选择工作去向"}</HeroButton>
+      <HeroButton variant="ghost" size="sm" aria-label="收起确认回执" onPress={() => setConfirmed(null)}>收起</HeroButton>
+    </p> : null}
+    {offline ? <ul className={h.waiting}><li className={h.wait} data-kind="machine">
+      <button type="button" className={h.waitMain} onClick={() => go(pageHref("connections"))} data-testid="wait-machine"><span className={h.waitTitle}>这台电脑没连上</span></button>
+    </li></ul> : null}
+    {data.waiting.length ? <WaitingList items={data.waiting} api={api} go={go} onConfirmed={setConfirmed} /> : null}
+    {meetings.length ? <MeetingWaitingRows items={meetings} go={go} /> : null}
+  </section>;
+}
+
+export function HomeMonth({ data, api, projects, go }: { data: WorkHomeData; api: WorkHomeApi; projects: ProjectsApi; go: (href: string) => void }) {
+  const missions = data.month.missions.filter((mission) => mission.tasks.length && mission.period === data.period);
+  const status = useMonthStatus(data, api);
+  const manyProjects = new Set(missions.flatMap((mission) => mission.tasks.flatMap((task) => task.project ? [task.project.projectId] : []))).size > 1;
+  if (!missions.length) return null;
+  return <section aria-label="本月" className={h.section}>
+    <p className={h.sectionTitle}>本月</p>
+    {missions.map((mission) => <div key={mission.missionId} className={h.taskList}>
+      <button type="button" className={h.missionTitle} onClick={() => go(missionHref(mission.missionId))} data-testid="month-mission" title={mission.title}><span className={h.ellipsis}>{mission.title}</span></button>
+      {[...mission.tasks].sort((a, b) => (status(a)?.rank ?? 3) - (status(b)?.rank ?? 3)).map((task) => (
+        <MonthRow key={task.taskId} task={task} gate={taskGateLabel(projects.all, api.work.plan, { taskId: task.taskId, missionId: mission.missionId })}
+          status={status(task)} showProject={manyProjects} projects={projects} go={go} />
+      ))}
+    </div>)}
+  </section>;
 }
 
 /** 「本月」每件 Task 的现状（monthStatus）：子会话从首页数据里取，按看板的卡和 worker 认是哪件 Task 的；做完了的为 null，不写。 */
@@ -155,6 +171,7 @@ function MonthRow({ task, gate, status, showProject, projects, go }: {
 }
 
 type RunAction = { label: string; done: string; primary?: boolean; run: () => Promise<unknown> };
+type ConfirmedReceipt = { href: string; title: string; done: string; showReceipts?: boolean };
 /** 行尾的一个按钮：就地办（run），点了去那件事里（href，开工的「改一改」进项目对话），或就地展开来改（edit，会后确认的「修改」）。 */
 type Action = RunAction | { label: string; primary?: boolean; href: string } | { label: string; primary?: boolean; edit: true };
 /** away：这里答不了的 inline_local（手机、别的电脑、本机没就绪），行尾画「等你 · {电脑名}」chip。 */
@@ -264,7 +281,9 @@ export function confirmationLine(item: WaitingItem, now: number): { from: string
 }
 
 /** 会后确认展开的那一块：有会上原话的先写原话；有内容的给输入框（预填原内容），改了才能「提交」。 */
-function ConfirmEdit({ value, quote, busy, onSubmit, onCancel }: { value: string | null; quote: string | null; busy: boolean; onSubmit: (value: string) => void; onCancel: () => void }) {
+function ConfirmEdit({ value, quote, busy, requestId, onConfirmed, onSubmit, onCancel }: {
+  value: string | null; quote: string | null; busy: boolean; requestId: string; onConfirmed: (ref: string) => void; onSubmit: (value: string) => void; onCancel: () => void;
+}) {
   const [text, setText] = useState(value ?? "");
   const next = text.trim();
   // 输入框的高度跟着内容：按换行和每行大约 30 个字估，2 到 8 行，再长自己滚。
@@ -282,6 +301,8 @@ function ConfirmEdit({ value, quote, busy, onSubmit, onCancel }: { value: string
           </div>
         </>
       ) : null}
+      {!busy && (value === null || !!next) ? <ConfirmAndHandOff requestId={requestId}
+        amendedValue={value !== null && next !== value.trim() ? next : undefined} onConfirmed={onConfirmed} /> : null}
     </div>
   );
 }
@@ -292,7 +313,7 @@ function ConfirmEdit({ value, quote, busy, onSubmit, onCancel }: { value: string
  * 额度那条的 dueAt 是恢复的时刻（原话里已经写了），不当截止写。
  * 答完先在原处写状态词，停 2 秒再刷新（收走）；失败在原处写「失败」加「重试」，不弹 toast。
  */
-export function WaitingList({ items, api, go }: { items: WaitingItem[]; api: WorkHomeApi; go: (href: string) => void }) {
+export function WaitingList({ items, api, go, onConfirmed }: { items: WaitingItem[]; api: WorkHomeApi; go: (href: string) => void; onConfirmed?: (receipt: ConfirmedReceipt) => void }) {
   const answer = useActions(api);
   const local = useLocalRunner();
   const [state, setState] = useState<Record<string, { busy?: boolean; done?: string; failed?: RunAction; reason?: string }>>({});
@@ -308,7 +329,10 @@ export function WaitingList({ items, api, go }: { items: WaitingItem[]; api: Wor
     const key = keyOf(item);
     setState((current) => ({ ...current, [key]: { busy: true } }));
     try {
-      await action.run();
+      const result = await action.run();
+      if (item.kind === "nexus_confirmation" && action.done !== "已拒绝" && result && typeof result === "object" && "confirmationRef" in result && typeof result.confirmationRef === "string") {
+        onConfirmed?.({ href: `/me/work/buddy#meeting-work-${encodeURIComponent(result.confirmationRef)}`, title: item.title, done: action.done });
+      }
       setState((current) => ({ ...current, [key]: { done: action.done } }));
       timers.current.push(window.setTimeout(() => { void Promise.all([local.refresh(), api.refresh()]).finally(() => forget(key)); }, 2000));
     } catch (error) {
@@ -330,7 +354,7 @@ export function WaitingList({ items, api, go }: { items: WaitingItem[]; api: Wor
         const from = confirm ? confirm.from : [item.person?.name, item.source, outside].filter(Boolean).join(" · ");
         // 会后确认没有自己的页面：点这一行就地展开（看全内容和会上原话，能改的在这里改）。
         const detail = confirm && !row?.done ? item.confirmation ?? null : null;
-        const canOpen = !!detail && (detail.value !== null || !!detail.quote);
+        const canOpen = !!detail;
         const open = canOpen && editing === keyOf(item);
         const toggle = () => setEditing(open ? null : keyOf(item));
         const summary = item.summary?.trim() && item.summary.trim() !== item.title.trim() ? item.summary.trim() : null;
@@ -360,7 +384,12 @@ export function WaitingList({ items, api, go }: { items: WaitingItem[]; api: Wor
                 ))}
             </span>
             {open && detail ? (
-              <ConfirmEdit value={detail.value} quote={detail.quote} busy={!!row?.busy} onCancel={() => setEditing(null)}
+              <ConfirmEdit value={detail.value} quote={detail.quote} busy={!!row?.busy} requestId={detail.id}
+                onConfirmed={(ref) => {
+                  onConfirmed?.({ href: `/me/work/buddy#meeting-work-${encodeURIComponent(ref)}`, title: item.title, done: "已确认", showReceipts: true });
+                  setEditing(null);
+                  void api.refresh();
+                }} onCancel={() => setEditing(null)}
                 onSubmit={(value) => { setEditing(null); void run(item, { label: "修改", done: "已修改", run: () => decideNexusConfirmation(detail.id, "amended", value) }); }} />
             ) : null}
           </li>
@@ -393,7 +422,7 @@ function AttachMenu({ taskName, projects, onPick, onCreate }: { taskName: string
  * 首页底部的输入框（5.4.3「输入框和『发给』」、14.5、16.4）：InputBar，占位「说点什么…」；框下面「发给」默认自动，回车发出，跳进那条对话（附件到了那条对话再传）。
  * 「发给」是选择器的触发器：「发给」淡色 + 目标墨色 + ChevronDown；点开是弹层：自动、伙伴，再是各项目，当前那项行尾一个勾。
  */
-export function HomeComposer({ buddy, projects, route, onSend }: { buddy: Buddy | null; projects: Project[]; route: (text: string) => Promise<RouteTarget>; onSend: (text: string, target: SendTarget, files: File[]) => void }) {
+export function HomeComposer({ buddy, projects, route, onSend }: { buddy: Buddy | null; projects: Project[]; route: (text: string) => Promise<RouteTarget>; onSend: HomeSend }) {
   const [text, setText] = useState("");
   const [target, setTarget] = useState<SendTarget>("auto");
   const [guess, setGuess] = useState<RouteTarget>("main");
@@ -411,7 +440,7 @@ export function HomeComposer({ buddy, projects, route, onSend }: { buddy: Buddy 
     return () => window.clearTimeout(timer);
   }, [text, target, route]);
   const label = target === "auto" ? (text.trim() ? `自动 · ${nameOf(guess)}` : "自动") : nameOf(target);
-  const send = async (value: string, files: File[]) => { onSend(value, target, files); return true; };
+  const send = async (value: string, files: File[]) => { await onSend(value, target, files); return true; };
   const keyOf = (value: SendTarget) => (value === "auto" || value === "main" ? value : `project:${value.projectId}`);
   const current = keyOf(target);
   const pick = (key: string) => setTarget(key === "auto" || key === "main" ? key : { projectId: key.slice("project:".length) });

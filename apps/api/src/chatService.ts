@@ -176,8 +176,10 @@ export function createChatService(options: {
   onFallback?: (viewer: ChatViewer, runId: string, reason: TLocalFallbackReason) => Promise<void>;
   /** 本人在伙伴回答到一半时发来新消息、上一轮要停掉之前（17.4）：收起那一轮的计划清单。失败只记日志。 */
   onInterrupt?: (viewer: ChatViewer, runId: string) => Promise<void>;
-  /** 本人在这个对话（scope）里发出一条新消息、交给 Chat 之前（18 节第 9 条）：伙伴还 open 的选项框收掉，answered 是这一句回答的那个。失败只记日志。 */
-  onMessage?: (viewer: ChatViewer, scope: string, answered: string | undefined) => Promise<void>;
+  /** 本人发出新消息时收掉旧选项框。排队的消息须等 Chat 确认已开始这一轮。 */
+  onMessage?: (viewer: ChatViewer, scope: string, answered: string | undefined, queuedId?: string) => Promise<void>;
+  /** 读取或首次登记队列项的首页对话段。 */
+  intakeSegment?: (viewer: ChatViewer, id: string, proposed?: ChatConversation) => Promise<ChatConversation | undefined>;
   /** 项目对话（target）这一轮写出了回答、结束了（17.2 第 25 条，项目的蓝点）。失败只记日志。 */
   onProjectReply?: (viewer: ChatViewer, scope: string) => Promise<void>;
 }) {
@@ -468,17 +470,24 @@ export function createChatService(options: {
       forwarded = false): Promise<void> {
       const startedAt = Date.now();
       const scope = target?.scope ?? "global";
-      await options.onMessage?.(viewer, scope, body.buddyQuestionId)
+      const onMessage = () => options.onMessage?.(viewer, scope, body.buddyQuestionId, body.queuedInputId)
         .catch((error) => logEvent({ event: "chat_service.message_hook_failed", requestId, error: (error as Error)?.message }));
+      if (!body.queuedInputId) await onMessage();
       // 「继续」进那一轮所在的段；带附件的这句进附件所在的那段（上传时已判过段）；其余按规则判段。
       const resumed = !target && rotation && body.resumeRunId ? await segmentOfRun(viewer, requestId, body.resumeRunId) : null;
+      const queuedId = target ? undefined : body.queuedInputId;
+      const pinned = queuedId && options.intakeSegment ? await options.intakeSegment(viewer, queuedId) : undefined;
+      const previous = pinned ?? resumed;
       const current = target ? { conversation: { conversationId: target.conversationId, createdAt: "", updatedAt: "" }, started: false }
-        : resumed ? { conversation: resumed, started: false } : await segment(viewer, requestId, !body.attachments?.length);
+        : previous ? { conversation: previous, started: false } : await segment(viewer, requestId, !body.attachments?.length);
+      if (queuedId && !pinned && options.intakeSegment) {
+        current.conversation = (await options.intakeSegment(viewer, queuedId, current.conversation)) ?? current.conversation;
+      }
       if (!target) record(viewer, requestId, current.conversation);
       const id = current.conversation.conversationId;
       const pagePath = body.pagePath ?? (target ? `/me/work/projects/${encodeURIComponent(target.projectId)}` : undefined);
       const page = pagePath && options.pageGuide ? await options.pageGuide(pagePath, viewer) : null;
-      const clientRequestId = randomUUID();
+      const clientRequestId = body.queuedInputId ?? randomUUID();
       const send = () => call(viewer, requestId, `/conversations/${id}/turns`, {
         method: "POST", headers: { "content-type": "application/json", accept: "text/event-stream" },
         body: JSON.stringify({ clientRequestId, message: body.message, attachmentIds: (body.attachments ?? []).map((item) => item.id),
@@ -497,7 +506,7 @@ export function createChatService(options: {
       try {
         upstream = await send();
       } catch (error) {
-        if (via || forwarded || !(error instanceof ChatServiceError) || error.code !== "TURN_IN_PROGRESS") throw error;
+        if (via || forwarded || body.queuedInputId || !(error instanceof ChatServiceError) || error.code !== "TURN_IN_PROGRESS") throw error;
         // 找不到在跑的那一轮（Chat 那边刚好结束）就照旧回「上一轮还没结束」。
         const previous = await runningTurn(viewer, requestId, id, scope);
         if (!previous) throw error;
@@ -608,8 +617,12 @@ export function createChatService(options: {
               continue;
             }
             const data = block.split("\n").find((line) => line.startsWith("data:"));
-            const event = data ? translate(JSON.parse(data.slice(5).trimStart()) as ChatEvent) : null;
-            if (event) write(event);
+            if (data) {
+              const raw = JSON.parse(data.slice(5).trimStart()) as ChatEvent;
+              if (body.queuedInputId && raw.type === "turn_started") await onMessage();
+              const event = translate(raw);
+              if (event) write(event);
+            }
           }
           if (done) break;
         }

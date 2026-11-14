@@ -50,12 +50,14 @@ export type DirectoryPerson = { personId: string; displayName: string; roles: st
 /** 完整人员目录（带角色，只给 CEO）：CEO 约会议时选主持人。 */
 export async function listPeople(): Promise<DirectoryPerson[]> {
   const { data, response } = await browserApi.GET("/api/people");
-  return response.ok && data ? data.people : [];
+  if (!response.ok || !data) throw new Error("没有读到人员目录");
+  return data.people;
 }
 /** 人员名册（CEO 和成员）：约会议选参会人。 */
 export async function listPersonDirectory(): Promise<{ personId: string; displayName: string }[]> {
   const { data, response } = await browserApi.GET("/api/people/directory");
-  return response.ok && data ? data.people : [];
+  if (!response.ok || !data) throw new Error("没有读到人员目录");
+  return data.people;
 }
 
 /** 约会议：成功给新会议卡，失败给错误码（界面换成短标签）。 */

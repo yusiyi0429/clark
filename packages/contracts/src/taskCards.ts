@@ -292,6 +292,8 @@ export const CardDetailResponse = Type.Object({
  */
 export const CardBriefResponse = Type.Object({
   markdown: Type.String({ minLength: 1, maxLength: 20000 }),
+  /** 会后变化与原交代合计超过本机首句上限且原交代需缩略时，保留此前能看到的整份原交代。 */
+  originalMarkdown: Type.Optional(Type.String({ minLength: 1, maxLength: 20000 })),
   role: Nullable(RoleBrief),
   mission: Nullable(Type.Object({ missionId: Type.String({ minLength: 1 }), title: Type.String() }, strict)),
   task: Nullable(Type.Object({ taskId: Type.String({ minLength: 1 }), name: Type.String() }, strict)),

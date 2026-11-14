@@ -8,7 +8,7 @@ import { afterIssueDraftCreated, ChatDecideIssueBody, ChatProposeIssueBody, deci
 import { listPendingIssueSummaries } from "../issues.js";
 import { logEvent } from "../observability.js";
 import type { Viewer } from "../meetingCard.js";
-import { listConfirmedMeetings, PayloadHashMismatchError, readConfirmedMeeting } from "../meetingCardRead.js";
+import { canOpenConfirmedMeetingSource, listConfirmedMeetings, PayloadHashMismatchError, readConfirmedMeeting } from "../meetingCardRead.js";
 import { DraftMeetingParams, draftMeeting, draftTimeLabel, type DraftMeetingArgs } from "../meetingDraft.js";
 import { meetingHasEnded } from "../meetingStore.js";
 import { canEnterMemberView, roleOf, type SessionRole } from "../memberAccess.js";
@@ -89,14 +89,14 @@ export function registerInternalMeetingRoutes(app: AppInstance, ctx: RouteContex
     if (!view) return reply;
     const { from, to } = req.query;
     if ([from, to].some((value) => value !== undefined && Number.isNaN(Date.parse(value)))) return fail(reply, 400, "INVALID_INPUT", "from / to 要是 ISO 时间");
-    return { meetings: await listConfirmedMeetings(q, meetingViewer(view), req.query) };
+    return { meetings: await listConfirmedMeetings(q, meetingViewer(view), req.query, app.meetingFollowThrough.minutes) };
   });
 
   app.get("/internal/confirmed-meetings/:meetingId", { onRequest, schema: { params: meetingParams } }, async (req, reply) => {
     const view = viewOf(req, reply, meetingNotFound);
     if (!view) return reply;
     try {
-      return await readConfirmedMeeting(q, meetingViewer(view), req.params.meetingId) ?? notFound(reply);
+      return await readConfirmedMeeting(q, meetingViewer(view), req.params.meetingId, app.meetingFollowThrough.minutes) ?? notFound(reply);
     } catch (error) {
       if (error instanceof PayloadHashMismatchError) return fail(reply, 500, error.code, "会议确认版正文和摘要值对不上");
       throw error;
@@ -108,7 +108,7 @@ export function registerInternalMeetingRoutes(app: AppInstance, ctx: RouteContex
     const view = viewOf(req, reply, meetingNotFound);
     if (!view) return reply;
     try {
-      if ((await readConfirmedMeeting(q, meetingViewer(view), req.params.meetingId))?.status !== "confirmed") return notFound(reply);
+      if (!await canOpenConfirmedMeetingSource(q,meetingViewer(view),req.params.meetingId)) return notFound(reply);
     } catch (error) {
       if (error instanceof PayloadHashMismatchError) return fail(reply, 500, error.code, "会议确认版正文和摘要值对不上");
       throw error;
@@ -204,7 +204,7 @@ export function registerInternalMeetingRoutes(app: AppInstance, ctx: RouteContex
   app.get("/internal/home-cards", { onRequest }, async (req, reply) => {
     const view = viewOf(req, reply);
     if (!view) return reply;
-    const cards = await readHomeSnapshots(ctx, view);
+    const cards = await readHomeSnapshots(ctx, view, app.meetingFollowThrough.minutes);
     // 首页分段开着时多给一张「以前的对话」（第一版回看：Chat 还没接会话目录和两个工具，借首页卡交给模型）；读不到不影响首页卡。
     const past = env.chatSessionRotation === true ? await ctx.conversationRecall.homeCard(view).catch((error: unknown) => {
       logEvent({ event: "conversation.catalog_card_unavailable", error: (error as Error)?.message });

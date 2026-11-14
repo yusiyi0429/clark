@@ -335,6 +335,24 @@ describe("首页切走、刷新回来：这一轮在服务端照常写，回来�
   const asked: Message = { sequence: 1, role: "user", content: "王总那边的进展？", runId: RUN };
   const followUrl = `/api/conversations/global/turns/${RUN}/stream`;
   const requestTo = (url: string) => requests.filter((request) => request.url === url).at(-1);
+  it("伙伴页面接上排队后才开始的回答，同一轮只订阅一次", async () => {
+    scope = "global";
+    page();
+    render();
+    historyRequest().resolve(ok([]));
+    await flush();
+    const view = render();
+    const refresh = view.followLatest();
+    const read = historyRequest();
+    await view.followLatest();
+    expect(historyRequest()).toBe(read);
+    read.resolve(ok([{ ...asked, running: true }]));
+    await refresh;
+    expect(requestTo(followUrl)).toBeDefined();
+    await render().followLatest();
+    expect(requests.filter(request => request.url === followUrl)).toHaveLength(1);
+    expect(requests.some(request => request.init?.method === "POST")).toBe(false);
+  });
   /** 页面前后台：visibilitychange 由测试触发。 */
   function page(visibility: "visible" | "hidden" = "visible") {
     const listeners = new Set<() => void>();

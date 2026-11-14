@@ -264,9 +264,10 @@ export function createMeetingRecordingService({
     };
     const people = peopleDirectory.searchPeople(undefined);
     const candidate = buildTranscriptCandidate(turns, people, source, await voiceprintSuggestions(current.id, out, mp3, people));
-    const saved = await saveTranscriptCandidate(pool, current.meeting_id, candidate);
-    if (!("row" in saved)) throw new Error(CANDIDATE_REJECTED[saved.code] ?? `识别完成，但没能写成会议记录候选：${saved.message}`);
-    await update(current.id, "status = 'done'");
+    const saved = await saveTranscriptCandidate(pool, current.meeting_id, candidate, undefined, { keepExisting: true });
+    if (!("row" in saved) && saved.code !== "TRANSCRIPT_ALREADY_IMPORTED" && saved.code !== "TRANSCRIPT_CANDIDATE_EXISTS")
+      throw new Error(CANDIDATE_REJECTED[saved.code] ?? `识别完成，但没能写成会议记录候选：${saved.message}`);
+    await update(current.id, "status = 'done', transcript_candidate = $2::jsonb", [JSON.stringify(candidate)]);
   }
 
   /** 声纹只是预填建议：任何失败只记日志、不带建议照常写候选，不能让一份已经识别完的录音失败。 */

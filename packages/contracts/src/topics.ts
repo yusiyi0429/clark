@@ -106,6 +106,7 @@ export const TopicDetailResponse = Type.Object({
  */
 export const TopicBriefResponse = Type.Object({
   markdown: Type.String({ minLength: 1, maxLength: 20000 }),
+  originalMarkdown: Type.Optional(Type.String({ minLength: 1, maxLength: 20000 })),
   role: Nullable(RoleBrief),
   critics: Type.Array(RoleBrief, { maxItems: 3 }),
   title: Type.String({ minLength: 1 }),

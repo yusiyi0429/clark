@@ -201,7 +201,8 @@ describe("会后确认（17.2 第 43 条，B 契约 f2f4253f）", () => {
     // 没点开时不画输入框和原话；这一行能点开（aria-expanded）。
     expect(html).not.toContain("confirm-edit");
     expect(html).toContain('aria-expanded="false"');
-    expect(render([nexus({ id: CONFIRMATION, value: null, quote: null })])).not.toContain("aria-expanded");
+    // 没有文字可改也能展开「确认并继续推进」；原来的确认和拒绝仍在行尾。
+    expect(render([nexus({ id: CONFIRMATION, value: null, quote: null })])).toContain('aria-expanded="false"');
   });
 
   it("确认、拒绝调同一个决定接口，带这条待定事项的 id", async () => {

@@ -1,7 +1,7 @@
-import type { TCardMerge, TProjectFeedItem, TProjectFeedResponse, TProjectTransfer, TTaskFeedItem } from "@warmap/contracts";
+import type { TCardMerge, TPartnerWorkEvent, TProjectFeedItem, TProjectFeedResponse, TProjectTransfer, TTaskFeedItem } from "@warmap/contracts";
 import { HANDBACKS_WITH_RELAY, effectiveOutcome, failStreak, gapPass, handbackBrief, type HandbackRow } from "./cardProjection.js";
 import type { Query } from "./meetingStore.js";
-import type { GoalRow } from "./projects.js";
+import { CARD_PROJECT, type GoalRow } from "./projects.js";
 
 /**
  * 项目对话里的验收行（契约 workHome.ts 的 TaskFeedItem、projects.ts 的 ProjectFeedItem，设计第 4.5、16.3 节）：从卡和交回现算，不另存事件。
@@ -29,7 +29,9 @@ type FeedCard = { id: string; title: string; status: string; plan_task_id: strin
 async function handbacksOf(q: Query, cards: FeedCard[]): Promise<Map<string, FeedHandback[]>> {
   const handbacks = cards.length ? (await q(`${HANDBACKS_WITH_RELAY} WHERE h.task_id=ANY($1::uuid[]) ORDER BY h.attempt DESC`,
     [cards.map((card) => card.id)])).rows as FeedHandback[] : [];
-  return new Map(cards.map((card) => [card.id, handbacks.filter((row) => row.task_id === card.id)]));
+  const byCard = new Map(cards.map(card => [card.id, [] as FeedHandback[]]));
+  for (const row of handbacks) byCard.get(row.task_id)?.push(row);
+  return byCard;
 }
 
 /** 每条标准最早让它达到的那次通过（对它的卡里最近一次有结论的交回算通过）；没达到的为 undefined。 */
@@ -81,6 +83,64 @@ function criteriaMetItem(cards: FeedCard[], byCard: Map<string, FeedHandback[]>,
 
 const byTime = (a: { at: string; id: string }, b: { at: string; id: string }) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id);
 const FEED_CARD = "id::text,title,status,plan_task_id,criterion_index,rework_of_card_id::text,created_at";
+
+type SubEvent = Pick<TPartnerWorkEvent, "id" | "at" | "title" | "subjectId" | "subjectKind" | "projectId" | "projectName">;
+function subEvent(base: SubEvent, detail: string | null, action: "question" | "approval" | null): TPartnerWorkEvent | null {
+  if (!detail?.trim()) return null;
+  return { ...base, detail, waitingId: action ? `${action}:${base.subjectKind}:${base.subjectId}` : null };
+}
+
+/** 同一验收记录在主管线和伙伴主对话保持相同 id，普通进度只出现在原项目。 */
+export function workEventFromFeed(item: TProjectFeedItem, projectId: string, projectName: string): TPartnerWorkEvent | null {
+  const base = { id: item.id, at: item.at, projectId, projectName };
+  if (item.kind === "sub_session_report" || item.kind === "sub_session_decision") {
+    const sub = { ...base, subjectKind: item.sub.kind, subjectId: item.sub.id, title: item.sub.title };
+    if (item.kind === "sub_session_report") return subEvent(sub, item.blocker, null);
+    if (item.status !== "open") return null;
+    return item.question ? subEvent(sub, item.question.questions[0]?.question || "需要你回答", "question")
+      : subEvent(sub, item.permission?.title || "需要你批准", "approval");
+  }
+  if (item.kind === "card_passed") {
+    const merge = item.merge?.state === "merged" ? "，已合回" : item.merge?.state === "needs_merge" ? "，等合回" : "";
+    return {...base,title:item.title,detail:`验收通过（${item.met}/${item.total}）${merge}`,subjectKind:"card",subjectId:item.cardId,
+      waitingId:item.merge?.state === "needs_merge" ? "merge:card:"+item.cardId : null};
+  }
+  if (item.kind === "card_needs_person" || item.kind === "card_blocked") return {...base,title:item.title,detail:item.fix || (item.kind === "card_needs_person" ? "需要你补充" : "执行受阻"),
+    subjectKind:"card",subjectId:item.cardId,waitingId:(item.kind === "card_needs_person" ? "needs_person" : "verdict")+":card:"+item.cardId};
+  return null;
+}
+
+export async function partnerWorkEvents(q: Query, owner: string): Promise<{items:TPartnerWorkEvent[]}> {
+  // 只汇集自己当前负责的项目。卡、报告、决定卡均使用真实持久来源；读取不会启动模型。
+  const cards = (await q(`SELECT t.id,t.title,t.status,t.plan_task_id,t.criterion_index,t.rework_of_card_id,t.created_at,p.id AS pid,p.name AS pname
+    FROM tasks t JOIN projects p ON p.id=${CARD_PROJECT("t")}
+    WHERE p.owner_id=$1 AND p.archived_at IS NULL AND EXISTS(SELECT 1 FROM card_handbacks h WHERE h.task_id=t.id AND h.status='done')`,[owner])).rows as (FeedCard & {pid:string;pname:string})[];
+  const events: TPartnerWorkEvent[] = [];
+  const grouped = await handbacksOf(q,cards);
+  const projectOf = new Map(cards.map(card => [card.id,card]));
+  for (const item of cardItems(cards,grouped)) {
+    if (!("cardId" in item)) continue;
+    const card = projectOf.get(item.cardId)!;
+    const event = workEventFromFeed(item,card.pid,card.pname);
+    if (event) events.push(event);
+  }
+  const notices = await q(`SELECT n.*,p.name FROM projects p JOIN (
+    SELECT project_id,id,created_at,kind,subject_id,title,blocker AS detail,NULL::text AS action FROM sub_session_reports
+      WHERE nullif(trim(blocker),'') IS NOT NULL
+    UNION ALL
+    SELECT project_id,id,created_at,kind,subject_id,title,
+      CASE WHEN ask->>'kind'='question' THEN COALESCE(NULLIF(ask#>>'{request,questions,0,question}',''),'需要你回答')
+           ELSE COALESCE(NULLIF(ask#>>'{request,title}',''),'需要你批准') END,
+      CASE WHEN ask->>'kind'='question' THEN 'question' ELSE 'approval' END
+      FROM sub_session_decisions WHERE status='open'
+    ) n ON p.id=n.project_id WHERE p.owner_id=$1 AND p.archived_at IS NULL ORDER BY n.created_at DESC,n.id LIMIT 80`, [owner]);
+  for (const row of notices.rows) {
+    const item = subEvent({ id: row.id, at: row.created_at.toISOString(), projectId: row.project_id, projectName: row.name,
+      subjectId: row.subject_id, subjectKind: row.kind, title: row.title }, row.detail, row.action);
+    if (item) events.push(item);
+  }
+  return { items: events.sort((a,b) => byTime(b,a)).slice(0,80) };
+}
 
 /** 这几件 Task 各有几条标准达到了（首页项目行的「标准 1/3」）。 */
 export async function criteriaMetCounts(q: Query, ownerId: string, tasks: { taskId: string; count: number }[]): Promise<Map<string, number>> {

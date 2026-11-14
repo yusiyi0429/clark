@@ -4,8 +4,9 @@ import { canReadMeetingCard, type Viewer } from "./meetingCard.js";
 import { confirmedView, currentConfirmation } from "./meetingCardConfirm.js";
 import { payloadHash } from "./meetingCardHash.js";
 import { attendeesOf } from "./meetingDecisionView.js";
-import { getMeetingRow, type MeetingRow, type Query } from "./meetingStore.js";
+import { getMeetingRow, meetingTranscriptFormat, type MeetingRow, type Query } from "./meetingStore.js";
 import { logEvent } from "./observability.js";
+import { canReadMeetingSource, isPartnerMeetingRecipient, leftPartnerMeeting, type MinuteReader } from "./partnerMeetings.js";
 
 /**
  * 读会议的确认版（规格「提供给独立 Chat 的内部契约」、拍板 7、12）：
@@ -35,10 +36,18 @@ async function readCard(q: Query, meetingId: string): Promise<CardRead | null> {
   return { status: "confirmed", kind: current.kind, payload: current.payload, confirmation: current.confirmation, syncReceipt: confirmedView(current).sync! };
 }
 
+/** 给直接代读来源的入口核对应用权限与会议卡确认版。正文由调用方用本人授权从飞书单独取得。 */
+export async function canOpenConfirmedMeetingSource(q: Query, viewer: Viewer, meetingId: string): Promise<boolean> {
+  const row = await getMeetingRow(q,meetingId);
+  if (!row || row.status === "cancelled" || await leftPartnerMeeting(q,meetingId,viewer.personId)
+    || (!viewer.isCeo && !isPartnerMeetingRecipient(row,viewer.personId,true) && row.created_by !== viewer.personId)) return false;
+  return (await readCard(q,meetingId))?.status === "confirmed";
+}
+
 /** 一场会的确认版；看不到或不存在返回 null。 */
-export async function readConfirmedMeeting(q: Query, viewer: Viewer, meetingId: string): Promise<ConfirmedMeetingRead | null> {
+export async function readConfirmedMeeting(q: Query, viewer: Viewer, meetingId: string, minutes?: MinuteReader): Promise<ConfirmedMeetingRead | null> {
   const meeting = await getMeetingRow(q, meetingId);
-  if (!meeting || !canReadMeetingCard(meeting, viewer)) return null;
+  if (!meeting || !canReadMeetingCard(meeting, viewer) || !await canReadMeetingSource(q,minutes,meeting,{ personId:viewer.personId,role:viewer.isCeo?"ceo":"member" })) return null;
   const card = await readCard(q, meetingId);
   if (card) return card;
   const outcome = meeting.outcome;
@@ -54,7 +63,7 @@ const SNIPPET_MAX = 200;
 const SNIPPET_BEFORE = 60;
 export type ConfirmedMeetingFilter = { query?: string; from?: string; to?: string; participantId?: string; limit?: number };
 type CatalogRow = Pick<MeetingRow, "id" | "lead_dri_id" | "created_by" | "attendees_actual" | "participants"> &
-  { revision: number; payload: TMeetingCardFrozenPayload; confirmation: TMeetingCardConfirmation; action_items: TMeetingActionItem[] };
+  { source_format: string | null; revision: number; payload: TMeetingCardFrozenPayload; confirmation: TMeetingCardConfirmation; action_items: TMeetingActionItem[] };
 /** 确认版里能检索的一段：ref 是段落的稳定 id（summary、sec-N、chg-N、act-N），heading 是给人看的标题。 */
 type Passage = { ref: string; kind: "summary" | "section" | "objectChange" | "actionItem"; heading: string; text: string; searchText: string };
 type ConfirmedMeetingMatch = Pick<Passage, "ref" | "kind" | "heading"> & { snippet: string };
@@ -109,17 +118,25 @@ function matchMeeting(row: CatalogRow, terms: string[]): { score: number; matche
  * 会议名、摘要、段落标题和正文、对象修改后的文字、行动项（10/23 诊断方案二）：命中任一个词就算，命中的词越多越靠前，同样多按实际发生时间从晚到早；带 query 时每场会附 matches（命中的段落和片段）。
  * 没有 query 时按实际发生时间从晚到早。正文和确认时的摘要值对不上的会不进目录（同详情接口，不返回被改过的正文）。
  */
-export async function listConfirmedMeetings(q: Query, viewer: Viewer, filter: ConfirmedMeetingFilter) {
+export async function listConfirmedMeetings(q: Query, viewer: Viewer, filter: ConfirmedMeetingFilter, minutes?: MinuteReader) {
   const rows = (await q(
-    `SELECT m.id, m.lead_dri_id, m.created_by, m.attendees_actual, m.participants, c.revision, c.payload, c.confirmation, c.action_items
+    `SELECT m.id, m.lead_dri_id, m.created_by, m.attendees_actual, m.participants, ${meetingTranscriptFormat("m.")} AS source_format, c.revision, c.payload, c.confirmation, c.action_items
        FROM meeting_cards k
        JOIN meeting_card_confirmations c ON c.meeting_id = k.meeting_id AND c.revision = k.current_revision
        JOIN meetings m ON m.id = k.meeting_id`,
   )).rows as CatalogRow[];
+  const permitted = [];
+  for (const row of rows) {
+    if (!canReadMeetingCard(row,viewer)) continue;
+    if (row.source_format === "feishu_minutes") {
+      const meeting = await getMeetingRow(q,row.id);
+      if (!meeting || !await canReadMeetingSource(q,minutes,meeting,{personId:viewer.personId,role:viewer.isCeo?"ceo":"member"})) continue;
+    }
+    permitted.push(row);
+  }
   const terms = queryTokens(filter.query ?? "");
   const at = (row: CatalogRow) => Date.parse(row.payload.occurredAt ?? "");
-  return rows
-    .filter((row) => canReadMeetingCard(row, viewer))
+  return permitted
     .filter((row) => !filter.from || at(row) >= Date.parse(filter.from))
     .filter((row) => !filter.to || at(row) <= Date.parse(filter.to))
     .filter((row) => !filter.participantId || attendeesOf(row).personIds.includes(filter.participantId))
@@ -159,7 +176,12 @@ export async function meetingCardFacts(q: Query, meetingId: string): Promise<Mee
  * 会议快照（Chat 当前对象、显式引用）：有会议卡的会把旧的逐条结论（outcome、decisions）换成 meetingCard 事实，
  * 给了 viewer 且他读不了会议卡时不带；旧会议原样。逐字稿等其他字段不动。
  */
-export async function cardWithMeetingFacts(q: Query, meeting: MeetingRow, card: TCard, viewer?: Viewer): Promise<TCard> {
+export async function cardWithMeetingFacts(q: Query, meeting: MeetingRow, card: TCard, viewer?: Viewer, minutes?: MinuteReader): Promise<TCard> {
+  if ((meeting.transcript?.source?.format === "feishu_minutes" || meeting.transcript_candidate?.source.format === "feishu_minutes") &&
+    (!viewer || !await canReadMeetingSource(q,minutes,meeting,{personId:viewer.personId,role:viewer.isCeo?"ceo":"member"}))) {
+    const { transcript, transcriptCandidate, outcome, decisions, ...rest } = card.payload as Record<string,unknown>;
+    return { ...card, payload:rest };
+  }
   const facts = await meetingCardFacts(q, meeting.id);
   if (!facts) return card;
   const { outcome: _outcome, decisions: _decisions, ...rest } = card.payload as Record<string, unknown>;

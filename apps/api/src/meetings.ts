@@ -163,8 +163,8 @@ export async function executeCreateMeeting(
       const inserted = await client.query<MeetingRow>(
         `INSERT INTO meetings
            (id, version, title, status, scheduled_at, lead_dri_id, ceo_participant_id,
-            participants, issue_ids, preflight, draft, materials, origin_ref, action_fingerprints, ends_at, created_by)
-         VALUES ($1, 1, $2, 'scheduled', $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, '[]'::jsonb, $10::jsonb, $11::jsonb, $12, $13)
+            participants, issue_ids, preflight, draft, materials, origin_ref, action_fingerprints, ends_at, created_by, invited_person_ids)
+         VALUES ($1, 1, $2, 'scheduled', $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, '[]'::jsonb, $10::jsonb, $11::jsonb, $12, $13, $14)
          RETURNING ${meetingColumns()}`,
         [
           meetingId,
@@ -180,6 +180,7 @@ export async function executeCreateMeeting(
           JSON.stringify([fingerprint]),
           endsAt,
           createdBy,
+          unique([input.leadDriId, input.ceoParticipantId, ...input.participants]),
         ],
       );
       created = inserted.rows[0];
@@ -300,7 +301,7 @@ async function bookOnce(
   if ("error" in anchors) return anchors;
   return insertScheduledMeeting(deps.pool, deps.peopleDirectory, deps.preflightAgent, deps.secret, {
     title: input.title, scheduledAt, endsAt, resolved, issueIds: [], originRef: { type: "booking", ...(input.draftId ? { draftId: input.draftId } : {}) },
-    worldAnchors: anchors, createdBy: viewer.personId,
+    worldAnchors: anchors, createdBy: viewer.personId, invitedPersonIds: unique([leadDriId, ...(input.participants ?? [])]),
   }, deps.introAgent);
 }
 
@@ -325,6 +326,7 @@ async function insertScheduledMeeting(
   input: {
     title: string; scheduledAt: Date; endsAt: Date; resolved: ResolvedParticipants; issueIds: string[]; originRef: Record<string, unknown>;
     worldAnchors?: StoredWorldAnchor[];
+    invitedPersonIds?: string[];
     /** 建会的人（预约的人；配置页是 CEO）：整卡确认只给主持人和他。 */
     createdBy: string;
   },
@@ -332,12 +334,13 @@ async function insertScheduledMeeting(
   materials?: { items: ParsedMaterial[]; storageDir: string },
 ): Promise<{ card: TCard } | { error: MeetingActionError }> {
   const { resolved } = input;
+  const invitedPersonIds = input.invitedPersonIds ?? unique([resolved.lead.personId, input.createdBy]);
   const inserted = await pool.query<MeetingRow>(
     `INSERT INTO meetings
        (id, version, title, status, scheduled_at, lead_dri_id, ceo_participant_id,
         participants, issue_ids, preflight, draft, origin_ref, action_fingerprints, ends_at,
-        world_anchors, created_by)
-     VALUES ($1, 1, $2, 'scheduled', $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, '[]'::jsonb, $11, $12::jsonb, $13)
+        world_anchors, created_by, invited_person_ids)
+     VALUES ($1, 1, $2, 'scheduled', $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, '[]'::jsonb, $11, $12::jsonb, $13, $14)
      RETURNING ${meetingColumns()}`,
     [
       randomUUID(),
@@ -353,14 +356,15 @@ async function insertScheduledMeeting(
       input.endsAt,
       input.worldAnchors ? JSON.stringify(input.worldAnchors) : null,
       input.createdBy,
+      invitedPersonIds,
     ],
   );
   const created = inserted.rows[0];
   const memberClient = await pool.connect();
-  try { await syncMeetingMembers(memberClient, created.id, resolved.participants.map((person) => person.personId)); }
+  try { await syncMeetingMembers(memberClient, created.id, unique([...invitedPersonIds, input.createdBy])); }
   finally { memberClient.release(); }
   scheduleMeetingIntro(pool, peopleDirectory, introAgent, created.id, created.lead_dri_id,
-    created.participants.map((person) => person.personId).filter((id) => id !== created.lead_dri_id), [created.lead_dri_id]);
+    invitedPersonIds.filter((id) => id !== created.lead_dri_id), [created.lead_dri_id]);
   if (materials) {
     const stored = await replaceMeetingMaterials(pool, secret, created.id, materials.items, materials.storageDir);
     if ("error" in stored) return stored;
@@ -480,8 +484,12 @@ export async function executeEditMeetingDetails(
       row.id,
       `title = COALESCE($3, title), scheduled_at = COALESCE($4, scheduled_at),
        lead_dri_id = COALESCE($5, lead_dri_id), participants = COALESCE($6::jsonb, participants),
+       invited_person_ids=CASE WHEN $5::text IS NOT NULL AND NOT ($5=ANY(COALESCE(invited_person_ids,'{}')))
+         THEN array_append(invited_person_ids,$5) ELSE invited_person_ids END,
        ends_at = $7, ended_at = CASE WHEN ${moved} THEN NULL ELSE ended_at END,
        started_at = CASE WHEN ${moved} THEN NULL ELSE started_at END,
+       feishu_live_meeting_id = CASE WHEN ${unrecorded} THEN NULL ELSE feishu_live_meeting_id END,
+       feishu_meeting_id = CASE WHEN ${unrecorded} THEN NULL ELSE feishu_meeting_id END,
        minutes_status = CASE WHEN ${unrecorded} THEN 'none' ELSE minutes_status END,
        minutes_waiting_since = CASE WHEN ${unrecorded} THEN NULL ELSE minutes_waiting_since END,
        minutes_failure = CASE WHEN ${unrecorded} THEN NULL ELSE minutes_failure END,
@@ -496,7 +504,10 @@ export async function executeEditMeetingDetails(
         endsAt,
       ],
     );
-    if (participants) await syncMeetingMembers(client, row.id, participants.map((person) => person.personId));
+    if (participants && input.leadDriId) {
+      await client.query(`INSERT INTO thread_members(object_type,object_id,person_id,added_by) VALUES('meeting',$1,$2,'meeting')
+        ON CONFLICT(object_type,object_id,person_id) DO UPDATE SET left_at=NULL`,[row.id,input.leadDriId]);
+    }
     const result = await commit(client, updated, secret);
     if (participants) {
       const existingIds = row.participants.map((person) => person.personId);
@@ -700,8 +711,8 @@ export async function importDriMeeting(
       const inserted = await client.query<MeetingRow>(
         `INSERT INTO meetings
            (id, version, title, status, scheduled_at, lead_dri_id, ceo_participant_id,
-            participants, issue_ids, preflight, draft, materials, origin_ref, external_id, request_fingerprint, ends_at)
-         VALUES ($1, 1, $2, 'scheduled', $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, '[]'::jsonb, $10::jsonb, $11, $12, $13)
+            participants, issue_ids, preflight, draft, materials, origin_ref, external_id, request_fingerprint, ends_at, invited_person_ids)
+         VALUES ($1, 1, $2, 'scheduled', $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, '[]'::jsonb, $10::jsonb, $11, $12, $13, $14)
          ON CONFLICT DO NOTHING
          RETURNING ${meetingColumns()}`,
         [
@@ -718,6 +729,7 @@ export async function importDriMeeting(
           body.externalId,
           requestFingerprint,
           endsAt,
+          unique([body.leadDriId,body.ceoParticipantId,...body.participants]),
         ],
       );
       if (inserted.rowCount === 1) {
@@ -757,16 +769,16 @@ export async function importDriMeeting(
  */
 export async function insertMinuteMeeting(client: PoolClient, input: {
   title: string; startsAt: Date; endsAt: Date; resolved: ResolvedParticipants; worldAnchors: StoredWorldAnchor[];
-  minuteToken: string; feishuMeetingId: string; now: Date;
+  minuteToken: string; feishuMeetingId: string; now: Date; attendeeIds: string[];
 }): Promise<string | null> {
   const { resolved } = input;
   const inserted = await client.query<{ id: string }>(
     `INSERT INTO meetings
        (id, version, title, status, scheduled_at, ends_at, started_at, ended_at, lead_dri_id, ceo_participant_id, created_by,
         participants, issue_ids, preflight, draft, origin_ref, action_fingerprints, world_anchors,
-        external_id, minute_token, feishu_meeting_id, minutes_status, minutes_waiting_since)
+        external_id, minute_token, feishu_meeting_id, minutes_status, minutes_waiting_since, minute_source_meeting_id, minute_binding, invited_person_ids)
      VALUES ($1, 1, $2, 'scheduled', $3, $4, $3, $4, $5, $6, $5, $7::jsonb, '[]'::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, '[]'::jsonb, $11::jsonb,
-       $12, $13, $14, 'waiting', $15)
+       $12, $13, $14, 'waiting', $15, $14, 'owner', $16)
      ON CONFLICT DO NOTHING
      RETURNING id`,
     [
@@ -785,10 +797,11 @@ export async function insertMinuteMeeting(client: PoolClient, input: {
       input.minuteToken,
       input.feishuMeetingId,
       input.now,
+      input.attendeeIds,
     ],
   );
   const id = inserted.rows[0]?.id;
   if (!id) return null;
-  await syncMeetingMembers(client, id, resolved.participants.map((person) => person.personId));
+  await syncMeetingMembers(client, id, input.attendeeIds);
   return id;
 }

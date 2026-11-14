@@ -7,6 +7,7 @@ import {
 } from "@warmap/contracts";
 import { enqueueJob, type JobHandler } from "./jobs.js";
 import type { Query } from "./meetingStore.js";
+import { authorizeMeetingTargets } from "./meetingWorkHandoffs.js";
 import { logEvent } from "./observability.js";
 
 /**
@@ -155,6 +156,7 @@ export function createNexusDri({ pool, now, env, people }: NexusDriDeps) {
 
   /** 本人确认 / 修改 / 拒绝：存确认记录和要回调的正文，配了回调就排发送任务。 */
   async function decide(personId: string, id: string, input: TNexusConfirmationDecisionRequest): Promise<{ confirmationRef: string } | NexusDriError> {
+    if (input.continueWork && input.decision === "rejected") return fail(400, "NOT_CONFIRMED", "拒绝的事项不能递送");
     return transaction(async (cq) => {
       const row = (await cq(`SELECT ${REQUEST_COLUMNS} FROM nexus_dri_requests WHERE id = $1 FOR UPDATE`, [id])).rows[0] as RequestRow | undefined;
       if (!row) return fail(404, "NOT_FOUND", "没有这一条");
@@ -185,6 +187,7 @@ export function createNexusDri({ pool, now, env, people }: NexusDriDeps) {
          VALUES ($1, $2, $3, $4, $5, $6, $7::json, $8, $9, $10)`,
         [confirmationRef, id, input.decision, personId, row.confirmer_world_id, at, amended ? JSON.stringify(amended.content) : null, amended?.fingerprint ?? null, callback.callbackId, callbackBody],
       );
+      if (input.continueWork) await authorizeMeetingTargets(cq, personId, confirmationRef, input.continueWork.targets, at);
       if (canCallBack) await enqueueJob(cq, { kind: NEXUS_DRI_CALLBACK_KIND, dedupeKey: `${NEXUS_DRI_CALLBACK_KIND}:${confirmationRef}`, payload: { confirmationRef } });
       return { confirmationRef };
     });

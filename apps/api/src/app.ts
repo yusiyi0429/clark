@@ -147,6 +147,14 @@ import { registerRoleRoutes } from "./routes/roles.js";
 import { registerWorkerRoutes } from "./routes/workers.js";
 import { registerTopicRoutes } from "./routes/topics.js";
 import { registerWorkHomeRoutes } from "./routes/workHome.js";
+import { registerWorkIntakeRoutes } from "./routes/workIntake.js";
+import { intakeSegment } from "./workIntake.js";
+import { inTransaction } from "./collector.js";
+import { ownerSpoke } from "./projectTransfers.js";
+import { resetAutoRelay } from "./autoRelay.js";
+import { registerPartnerMeetingRoutes } from "./routes/partnerMeetings.js";
+import { registerTeamDeliveryRoutes } from "./routes/teamDeliveries.js";
+import { registerMeetingWorkHandoffRoutes } from "./routes/meetingWorkHandoffs.js";
 import { registerSessionStartRoutes } from "./routes/sessionStarts.js";
 import { registerTaskPipelineRoutes } from "./routes/taskPipelines.js";
 import { registerProjectRoutes } from "./routes/projects.js";
@@ -584,6 +592,7 @@ export async function buildApp({
       pageFor(path, (taskId) => taskPageFacts(pool.query.bind(pool), openPlanTaskForPage, viewer.personId, taskId),
         (projectId) => projectPageFacts(pool.query.bind(pool), viewer.personId, projectId)) } : {}),
     onSegment: (viewer, segment) => recordChatSegment(pool.query.bind(pool), viewer, segment),
+    intakeSegment: (viewer, id, proposed) => intakeSegment(pool.query.bind(pool), viewer.personId, id, proposed),
     pipelines: (viewer) => pipelineConversationIds(pool.query.bind(pool), viewer.personId),
     // 伙伴代本人做事（17.4）：读回历史时接上每一轮的计划清单和卡；本人中途发新消息时上一轮的清单收起。
     // 再接上每一轮实际用的来源和模型。
@@ -603,7 +612,20 @@ export async function buildApp({
       if (plan) chat?.inject(runId, { type: "plan", plan });
     },
     // 选项框（18 节第 9 条）：本人发出新消息，这个对话里还 open 的收掉，回答的那张标 answered。
-    onMessage: (viewer, scope, answered) => closeQuestions(pool.query.bind(pool), viewer.personId, scope, answered, now()),
+    onMessage: async (viewer, scope, answered, queuedId) => {
+      if (!queuedId) return void await closeQuestions(pool.query.bind(pool), viewer.personId, scope, answered, now());
+      await inTransaction(pool, async (q) => {
+        const ack = await q(`UPDATE work_intake SET accepted_at=now()
+          WHERE id=$1 AND owner_id=$2 AND scope=$3 AND accepted_at IS NULL RETURNING id`, [queuedId, viewer.personId, scope]);
+        if (!ack.rowCount) return;
+        if (scope.startsWith("project:")) {
+          const projectId = scope.slice("project:".length);
+          await ownerSpoke(q, viewer.personId, projectId);
+          await resetAutoRelay(q, projectId);
+        }
+        await closeQuestions(q, viewer.personId, scope, answered, now());
+      });
+    },
     onProjectReply: async (_viewer, scope) => {
       if (scope.startsWith("project:")) await recordProjectReply(pool.query.bind(pool), scope.slice("project:".length), now());
     } }) : undefined;
@@ -988,6 +1010,10 @@ export async function buildApp({
   registerWorkerRoutes(app, ctx);
   registerTopicRoutes(app, ctx);
   registerWorkHomeRoutes(app, ctx);
+  registerWorkIntakeRoutes(app, ctx);
+  registerPartnerMeetingRoutes(app, ctx);
+  registerTeamDeliveryRoutes(app, ctx);
+  registerMeetingWorkHandoffRoutes(app, ctx);
   registerSessionStartRoutes(app, ctx);
   registerTaskPipelineRoutes(app, ctx);
   registerProjectRoutes(app, ctx);

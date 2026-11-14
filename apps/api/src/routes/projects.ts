@@ -1,6 +1,7 @@
 import { decideAutoRelay } from "../autoRelay.js";
 import { deleteProject } from "../subSessionAdmin.js";
 import { projectNotices } from "../subSessionReports.js";
+import { projectMeetingWork } from "../meetingWorkHandoffs.js";
 import type { FastifyReply } from "fastify";
 import { Type } from "@sinclair/typebox";
 import { AcceptCardDraftsRequest, AcceptCardDraftsResponse, AnswerGoalChangeRequest, AutoRelayDecisionRequest, SetGoalDueDateRequest, ProjectGoalChangedItem, CardPlanBriefResponse, CardSplitRequestView, CreateProjectRequest, Project, ProjectBoardResponse,
@@ -132,13 +133,16 @@ export function registerProjectRoutes(app: AppInstance, ctx: RouteContext): void
       const personId = req.person!.personId;
       const { row: project } = await projectReader(q, personId, req.params.projectId);
       const goals = await projectGoalRows(q, project.id);
-      const criteria = new Map(await Promise.all(goals.map(async (goal) =>
-        [goal.task_id, (await boardTask(open, goal.owner_id, goal.task_id).catch(() => null))?.criteria ?? []] as const)));
+      const checked = await Promise.all(goals.map(async (goal) => ({
+        goal, task: await boardTask(open, goal.owner_id, goal.task_id).catch(() => null),
+      })));
+      const criteria = new Map(checked.map(({ goal, task }) => [goal.task_id, task?.criteria ?? []]));
+      const accessibleTasks = new Set(checked.filter(({ goal, task }) => task && goal.owner_id === personId).map(({ goal }) => goal.task_id));
       const transfers = (await decidedTransfers(q, project.id)).map((row) => transferView(row, personDisplayNames(ctx.peopleDirectory)));
       // 月中 Task 改了或取消了的选项框（16.4）。
       // 子会话停了、要介入的报告和决定卡（18 节第 10 条）。
       return readProjectFeed(q, await projectOwners(q, project.id), project.id, goals, criteria, { viewer: personId, transfers },
-        [...await goalChangeItems(q, project.id), ...await projectNotices(q, project.id)]);
+        [...await goalChangeItems(q, project.id), ...await projectNotices(q, project.id), ...await projectMeetingWork(q, personId, project.id, accessibleTasks)]);
     }));
 
   // 天枢里给一件目标存的验收截止日（null 不存了）。

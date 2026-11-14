@@ -1,6 +1,7 @@
 import type { Pool } from "pg";
 import type { ActionScope } from "./actionToken.js";
 import type { FeishuCalendarApi } from "./feishu/calendar.js";
+import { meetingJoinUrl } from "./feishu/calendar.js";
 import { FeishuApiError } from "./feishu/client.js";
 import type { FeishuEnv } from "./feishu/config.js";
 import { activeUserAccessToken } from "./feishu/minutes.js";
@@ -60,15 +61,15 @@ export function createMeetingFeishuEventService(deps: MeetingFeishuEventDeps) {
    * 排一次对齐。trigger 区分这一次（进去重键）：create 建会（记 pending 和组织者；重放不改已有状态），其余只对已经在约的会排。
    * invite 是这次新加进来的参会人（换主持时）。
    */
-  async function schedule(meetingId: string, trigger: string, invite: string[] = []): Promise<void> {
+  async function schedule(meetingId: string, trigger: string, invite: string[] = [], query: Query = q): Promise<void> {
     if (!feishu) return;
     if (trigger === "create") {
-      await q(`UPDATE meetings SET feishu_event_status = 'pending', feishu_event_organizer_id = COALESCE(created_by, lead_dri_id)
+      await query(`UPDATE meetings SET feishu_event_status = 'pending', feishu_event_organizer_id = COALESCE(created_by, lead_dri_id)
         WHERE id = $1 AND feishu_event_status IS NULL`, [meetingId]);
-    } else if (!(await q("SELECT 1 FROM meetings WHERE id = $1 AND feishu_event_status IS NOT NULL", [meetingId])).rowCount) {
+    } else if (!(await query("SELECT 1 FROM meetings WHERE id = $1 AND feishu_event_status IS NOT NULL", [meetingId])).rowCount) {
       return;
     }
-    await enqueueJob(q, { kind: MEETING_FEISHU_EVENT_KIND, dedupeKey: `${MEETING_FEISHU_EVENT_KIND}:${meetingId}:${trigger}`,
+    await enqueueJob(query, { kind: MEETING_FEISHU_EVENT_KIND, dedupeKey: `${MEETING_FEISHU_EVENT_KIND}:${meetingId}:${trigger}`,
       payload: { meetingId, ...(invite.length ? { invite } : {}) } satisfies SyncPayload });
   }
 
@@ -83,7 +84,7 @@ export function createMeetingFeishuEventService(deps: MeetingFeishuEventDeps) {
     const cancelled = row.status === "cancelled";
     if (cancelled && !row.feishu_event_id) return setStatus(meetingId, "cancelled");
     // 开过的会不再动；还没约上、会已经过了的也不再约。
-    if (!cancelled && (row.status !== "scheduled" || (!row.feishu_event_id && row.ends_at.getTime() <= now().getTime()))) return;
+    if (!cancelled && (row.status !== "scheduled" || row.ended_at || (!row.feishu_event_id && row.ends_at.getTime() <= now().getTime()))) return;
     const organizerId = organizerOf(row);
     const token = await calendarToken(organizerId);
     if (!token) return setStatus(meetingId, "waiting_auth");
@@ -96,17 +97,26 @@ export function createMeetingFeishuEventService(deps: MeetingFeishuEventDeps) {
       const input = { summary: row.title, start: row.scheduled_at, end: row.ends_at };
       let calendarId = row.feishu_calendar_id;
       let eventId = row.feishu_event_id;
+      let joinUrl = meetingJoinUrl(row.feishu_event_join_url);
       if (calendarId && eventId) {
         await api.updateEvent(token, calendarId, eventId, input);
       } else {
         calendarId = await api.primaryCalendarId(token);
         const event = await api.createEvent(token, calendarId, input, row.id);
         eventId = event.eventId;
+        joinUrl = meetingJoinUrl(event.joinUrl);
         await q("UPDATE meetings SET feishu_calendar_id = $2, feishu_event_id = $3, feishu_event_join_url = $4, feishu_event_organizer_id = $5 WHERE id = $1",
-          [meetingId, calendarId, eventId, event.joinUrl, organizerId]);
+          [meetingId, calendarId, eventId, joinUrl, organizerId]);
       }
-      const openIds = await openIdsOf(row.feishu_event_status === "booked" ? invite : row.participants.map((person) => person.personId), organizerId);
+      if (!joinUrl && api.getEvent) {
+        joinUrl = meetingJoinUrl((await api.getEvent(token,calendarId,eventId)).joinUrl);
+        await q("UPDATE meetings SET feishu_event_join_url=$2 WHERE id=$1",[meetingId,joinUrl]);
+      }
+      const selected = row.invited_person_ids ?? row.participants.map(person => person.personId)
+        .filter(id => id !== row.ceo_participant_id || id === row.lead_dri_id || id === row.created_by);
+      const openIds = await openIdsOf(row.feishu_event_status === "booked" ? invite.filter(id => selected.includes(id)) : selected, organizerId);
       if (openIds.length) await api.addAttendees(token, calendarId, eventId, openIds);
+      if (!joinUrl) throw new Error("飞书日程已建好，尚未返回入会地址，可重试读取");
       await setStatus(meetingId, "booked");
     } catch (error) {
       const message = (error as Error).message || "飞书接口失败";
@@ -116,14 +126,14 @@ export function createMeetingFeishuEventService(deps: MeetingFeishuEventDeps) {
     }
   }
 
-  /** 有人刚连上飞书：他约的、等他连飞书的会里还没开始的（以及已经取消、日程还没删的）补上。返回排了几场。 */
+  /** 刚连上飞书时补建仍在预约时段内的会议，并补删取消的日程。 */
   async function resumeFor(personId: string): Promise<number> {
     if (!feishu) return 0;
     const at = now();
     const resumed = await q(
       `UPDATE meetings SET feishu_event_status = 'pending', feishu_event_error = NULL
         WHERE feishu_event_status = 'waiting_auth' AND COALESCE(feishu_event_organizer_id, created_by, lead_dri_id) = $1
-          AND ((status = 'scheduled' AND scheduled_at > $2) OR (status = 'cancelled' AND feishu_event_id IS NOT NULL))
+          AND ((status = 'scheduled' AND ended_at IS NULL AND ends_at > $2) OR (status = 'cancelled' AND feishu_event_id IS NOT NULL))
         RETURNING id`,
       [personId, at],
     );

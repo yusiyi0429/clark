@@ -5924,6 +5924,276 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/partner-work-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listPartnerWorkEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/work-intake": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listWorkIntake"];
+        put?: never;
+        post: operations["createWorkIntake"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/work-intake/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["changeWorkIntake"];
+        trace?: never;
+    };
+    "/api/me/partner-meetings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 本人的会议、预审和会后收件 */
+        get: operations["listPartnerMeetings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/partner-meetings/minutes/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 所有者用自己的授权读待整理的妙记 */
+        get: operations["readUnmatchedPartnerMinute"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/partner-meetings/{id}/record": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 按当前参会资格和来源权限打开会议记录 */
+        get: operations["readPartnerMeetingRecord"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/team-deliveries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 本人伙伴收到或发出的团队来件 */
+        get: operations["listTeamDeliveries"];
+        put?: never;
+        /** 向指定同事的伙伴发文件、信息或临时问题 */
+        post: operations["sendTeamDelivery"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/team-delivery-sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 本人可选的子会话文件版本 */
+        get: operations["listTeamDeliverySources"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/team-deliveries/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 打开本人的来件；发起人看到逐人答复 */
+        get: operations["readTeamDelivery"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/team-deliveries/{id}/replies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 在原请求下回复、说明缺项或给指定接收人澄清 */
+        post: operations["replyTeamDelivery"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/team-deliveries/{id}/recipients/{personId}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 发送人重试原名单中的一人 */
+        post: operations["retryTeamDeliveryRecipient"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/team-deliveries/{id}/attachments/{attachmentId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 按本人和原件权限下载本次投递的指定版本 */
+        get: operations["downloadTeamDeliveryAttachment"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/team-deliveries/{id}/attachments/{attachmentId}/text": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 按同一权限读取指定文件版本的正文 */
+        get: operations["readTeamDeliveryAttachmentText"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/meeting-work-handoffs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 本人可递送的已确认会后变化和各去向的回执 */
+        get: operations["listMeetingWorkHandoffs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/meeting-work-handoff-targets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 本人的项目和可选工作去向 */
+        get: operations["listMeetingWorkTargets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/meeting-work-handoffs/{confirmationRef}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 本人明确继续推进，按目标分别递送这版确认内容 */
+        post: operations["continueMeetingWork"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -7094,6 +7364,8 @@ export interface components {
         };
         ConversationMessageRequest: {
             message: string;
+            /** Format: uuid */
+            queuedInputId?: string;
             anchorSelection?: {
                 cardId: string;
                 version: number;
@@ -7190,7 +7462,7 @@ export interface components {
                 /** @constant */
                 kind: "open";
                 target: {
-                    kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections" | "transfer" | "nexus_confirmation";
+                    kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections" | "transfer" | "nexus_confirmation" | "team_request";
                     id: string;
                     round?: boolean;
                     focus?: {
@@ -15514,6 +15786,17 @@ export interface components {
         NexusConfirmationDecisionRequest: {
             decision: "confirmed" | "amended" | "rejected";
             value?: string;
+            continueWork?: {
+                /** @constant */
+                authorization: "continue";
+                targets: {
+                    /** Format: uuid */
+                    projectId: string;
+                    kind: "project" | "task" | "card" | "topic";
+                    id: string;
+                    instruction?: string;
+                }[];
+            };
         };
         NexusConfirmationDecisionResponse: {
             confirmationRef: string;
@@ -15533,6 +15816,10 @@ export interface components {
                     meetingId: string;
                     title: string;
                 } | null;
+                suggestions?: {
+                    meetingId: string;
+                    title: string;
+                }[];
             }[];
         };
         OrganizeFeishuMinuteRequest: {
@@ -18010,6 +18297,7 @@ export interface components {
         };
         CardBriefResponse: {
             markdown: string;
+            originalMarkdown?: string;
             role: {
                 /** Format: uuid */
                 id: string;
@@ -18529,6 +18817,7 @@ export interface components {
         };
         TopicBriefResponse: {
             markdown: string;
+            originalMarkdown?: string;
             role: {
                 /** Format: uuid */
                 id: string;
@@ -19463,7 +19752,7 @@ export interface components {
             }[];
         };
         WaitingTarget: {
-            kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections" | "transfer" | "nexus_confirmation";
+            kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections" | "transfer" | "nexus_confirmation" | "team_request";
             id: string;
             round?: boolean;
             focus?: {
@@ -19474,12 +19763,12 @@ export interface components {
         };
         WaitingItem: {
             id: string;
-            kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge" | "plan_start" | "acceptance" | "month" | "device" | "quota" | "transfer" | "goal_changed" | "auto_relay" | "nexus_confirmation" | "needs_person";
+            kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge" | "plan_start" | "acceptance" | "month" | "device" | "quota" | "transfer" | "goal_changed" | "auto_relay" | "nexus_confirmation" | "needs_person" | "team_request";
             title: string;
             source: string | null;
             at: string | null;
             open: {
-                kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections" | "transfer" | "nexus_confirmation";
+                kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections" | "transfer" | "nexus_confirmation" | "team_request";
                 id: string;
                 round?: boolean;
                 focus?: {
@@ -19761,12 +20050,12 @@ export interface components {
             };
             waiting: {
                 id: string;
-                kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge" | "plan_start" | "acceptance" | "month" | "device" | "quota" | "transfer" | "goal_changed" | "auto_relay" | "nexus_confirmation" | "needs_person";
+                kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge" | "plan_start" | "acceptance" | "month" | "device" | "quota" | "transfer" | "goal_changed" | "auto_relay" | "nexus_confirmation" | "needs_person" | "team_request";
                 title: string;
                 source: string | null;
                 at: string | null;
                 open: {
-                    kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections" | "transfer" | "nexus_confirmation";
+                    kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections" | "transfer" | "nexus_confirmation" | "team_request";
                     id: string;
                     round?: boolean;
                     focus?: {
@@ -20764,6 +21053,64 @@ export interface components {
             } | null;
             status: "open" | "closed";
             closedAt: string | null;
+        } | {
+            /** @constant */
+            kind: "meeting_handoff";
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            at: string;
+            target: {
+                /** Format: uuid */
+                projectId: string;
+                kind: "project" | "task" | "card" | "topic";
+                id: string;
+                projectName: string;
+                name: string;
+            };
+            conclusion: {
+                /** Format: uuid */
+                confirmationRef: string;
+                requestId: string;
+                itemId: string;
+                meetingId: string;
+                revision: number;
+                decision: "confirmed" | "amended";
+                /** Format: date-time */
+                confirmedAt: string;
+                confirmedBy: string;
+                question: string;
+                content: {
+                    classification: string;
+                    targetRef: string;
+                    fieldKey?: string;
+                    value?: string;
+                } & {
+                    [key: string]: unknown;
+                };
+                source: {
+                    id: string;
+                    version: string;
+                    hash: string;
+                    minutesRef: string;
+                    reference: string | null;
+                    turnId: string | null;
+                    quote: string | null;
+                    readState: "excerpt" | "reference_only";
+                };
+            };
+            instruction: string;
+            authorizedBy: string;
+            /** Format: date-time */
+            authorizedAt: string;
+            criteria: {
+                kind: "task" | "card";
+                id: string;
+                revision: number | null;
+                index: number | null;
+                text: string;
+            }[];
+            superseded: boolean;
         };
         ProjectFeedResponse: {
             items: (({
@@ -21090,6 +21437,64 @@ export interface components {
                 } | null;
                 status: "open" | "closed";
                 closedAt: string | null;
+            } | {
+                /** @constant */
+                kind: "meeting_handoff";
+                /** Format: uuid */
+                id: string;
+                /** Format: date-time */
+                at: string;
+                target: {
+                    /** Format: uuid */
+                    projectId: string;
+                    kind: "project" | "task" | "card" | "topic";
+                    id: string;
+                    projectName: string;
+                    name: string;
+                };
+                conclusion: {
+                    /** Format: uuid */
+                    confirmationRef: string;
+                    requestId: string;
+                    itemId: string;
+                    meetingId: string;
+                    revision: number;
+                    decision: "confirmed" | "amended";
+                    /** Format: date-time */
+                    confirmedAt: string;
+                    confirmedBy: string;
+                    question: string;
+                    content: {
+                        classification: string;
+                        targetRef: string;
+                        fieldKey?: string;
+                        value?: string;
+                    } & {
+                        [key: string]: unknown;
+                    };
+                    source: {
+                        id: string;
+                        version: string;
+                        hash: string;
+                        minutesRef: string;
+                        reference: string | null;
+                        turnId: string | null;
+                        quote: string | null;
+                        readState: "excerpt" | "reference_only";
+                    };
+                };
+                instruction: string;
+                authorizedBy: string;
+                /** Format: date-time */
+                authorizedAt: string;
+                criteria: {
+                    kind: "task" | "card";
+                    id: string;
+                    revision: number | null;
+                    index: number | null;
+                    text: string;
+                }[];
+                superseded: boolean;
             })[];
         };
         ProjectBoardResponse: {
@@ -22445,6 +22850,439 @@ export interface components {
                         source: "agent" | "person";
                     }[];
                 }[];
+            }[];
+        };
+        CreateWorkIntake: {
+            /** Format: uuid */
+            id: string;
+            scope: string;
+            message: string;
+            pagePath?: string;
+            attachments: {
+                id: string;
+            }[];
+        };
+        WorkIntakeChange: {
+            action: "cancel" | "first" | "retry";
+        };
+        WorkIntakeEntry: {
+            /** Format: uuid */
+            id: string;
+            scope: string;
+            message: string;
+            createdAt: string;
+            updatedAt: string;
+            state: "queued" | "sending" | "delivered" | "failed" | "cancelled";
+            priority: boolean;
+            error: string | null;
+        };
+        WorkIntakeList: {
+            items: {
+                /** Format: uuid */
+                id: string;
+                scope: string;
+                message: string;
+                createdAt: string;
+                updatedAt: string;
+                state: "queued" | "sending" | "delivered" | "failed" | "cancelled";
+                priority: boolean;
+                error: string | null;
+            }[];
+        };
+        PartnerWorkEvents: {
+            items: {
+                id: string;
+                at: string;
+                projectId: string;
+                projectName: string;
+                title: string;
+                detail: string;
+                subjectKind: "card" | "topic";
+                subjectId: string;
+                waitingId: string | null;
+            }[];
+        };
+        PartnerMeetingItem: {
+            id: string;
+            meetingId: string | null;
+            title: string;
+            /** Format: date-time */
+            at: string;
+            stage: "scheduled" | "live" | "processing" | "ready" | "attention" | "unmatched";
+            statusText: string;
+            href: string;
+            joinUrl: string | null;
+            needsAction: boolean;
+            source: "feishu" | "tianshu";
+            preflightText?: string | null;
+            sourceUrl?: string | null;
+            recordHref?: string | null;
+            endsAt?: string | null;
+            allDay?: boolean;
+            canStartRecording?: boolean;
+            sources?: {
+                label: string;
+                recordHref: string;
+                sourceUrl: string | null;
+            }[];
+        };
+        PartnerMeetingsResponse: {
+            items: {
+                id: string;
+                meetingId: string | null;
+                title: string;
+                /** Format: date-time */
+                at: string;
+                stage: "scheduled" | "live" | "processing" | "ready" | "attention" | "unmatched";
+                statusText: string;
+                href: string;
+                joinUrl: string | null;
+                needsAction: boolean;
+                source: "feishu" | "tianshu";
+                preflightText?: string | null;
+                sourceUrl?: string | null;
+                recordHref?: string | null;
+                endsAt?: string | null;
+                allDay?: boolean;
+                canStartRecording?: boolean;
+                sources?: {
+                    label: string;
+                    recordHref: string;
+                    sourceUrl: string | null;
+                }[];
+            }[];
+        };
+        PartnerMeetingRecordResponse: {
+            title: string;
+            text: string;
+            sourceUrl: string | null;
+        };
+        ReplyTeamDeliveryRequest: {
+            /** Format: uuid */
+            clientId: string;
+            status: "answered" | "needs_info" | "clarification";
+            recipientId?: string;
+            text?: string;
+            sourceAttachments?: {
+                /** Format: uuid */
+                id: string;
+                sha256: string;
+            }[];
+        };
+        SendTeamDeliveryRequest: {
+            /** Format: uuid */
+            clientId: string;
+            kind: "share" | "question";
+            recipientIds: string[];
+            text?: string;
+            sourceUrl?: string;
+            /** Format: date-time */
+            dueAt?: string;
+            sourceAttachments?: {
+                /** Format: uuid */
+                id: string;
+                sha256: string;
+            }[];
+        };
+        TeamDelivery: {
+            /** Format: uuid */
+            id: string;
+            kind: "share" | "question";
+            text: string;
+            sourceUrl: string | null;
+            dueAt: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            sender: {
+                personId: string;
+                displayName: string;
+            };
+            attachments: {
+                /** Format: uuid */
+                id: string;
+                fileName: string;
+                size: number;
+                sha256: string;
+                href: string;
+            }[];
+            recipients: {
+                personId: string;
+                displayName: string;
+                status: "delivered" | "pending" | "needs_info" | "answered" | "failed";
+                error: string | null;
+                replies: {
+                    /** Format: uuid */
+                    id: string;
+                    status: "answered" | "needs_info" | "clarification";
+                    text: string;
+                    /** Format: date-time */
+                    createdAt: string;
+                    attachments: {
+                        /** Format: uuid */
+                        id: string;
+                        fileName: string;
+                        size: number;
+                        sha256: string;
+                        href: string;
+                    }[];
+                }[];
+            }[];
+        };
+        TeamDeliveryAttachment: {
+            /** Format: uuid */
+            id: string;
+            fileName: string;
+            size: number;
+            sha256: string;
+            href: string;
+        };
+        TeamDeliveryListQuery: {
+            box: "received" | "sent";
+        };
+        TeamDeliveryListResponse: {
+            items: {
+                /** Format: uuid */
+                id: string;
+                kind: "share" | "question";
+                text: string;
+                sourceUrl: string | null;
+                dueAt: string | null;
+                /** Format: date-time */
+                createdAt: string;
+                sender: {
+                    personId: string;
+                    displayName: string;
+                };
+                attachments: {
+                    /** Format: uuid */
+                    id: string;
+                    fileName: string;
+                    size: number;
+                    sha256: string;
+                    href: string;
+                }[];
+                recipients: {
+                    personId: string;
+                    displayName: string;
+                    status: "delivered" | "pending" | "needs_info" | "answered" | "failed";
+                    error: string | null;
+                    replies: {
+                        /** Format: uuid */
+                        id: string;
+                        status: "answered" | "needs_info" | "clarification";
+                        text: string;
+                        /** Format: date-time */
+                        createdAt: string;
+                        attachments: {
+                            /** Format: uuid */
+                            id: string;
+                            fileName: string;
+                            size: number;
+                            sha256: string;
+                            href: string;
+                        }[];
+                    }[];
+                }[];
+            }[];
+        };
+        TeamDeliveryRecipient: {
+            personId: string;
+            displayName: string;
+            status: "delivered" | "pending" | "needs_info" | "answered" | "failed";
+            error: string | null;
+            replies: {
+                /** Format: uuid */
+                id: string;
+                status: "answered" | "needs_info" | "clarification";
+                text: string;
+                /** Format: date-time */
+                createdAt: string;
+                attachments: {
+                    /** Format: uuid */
+                    id: string;
+                    fileName: string;
+                    size: number;
+                    sha256: string;
+                    href: string;
+                }[];
+            }[];
+        };
+        TeamDeliveryReply: {
+            /** Format: uuid */
+            id: string;
+            status: "answered" | "needs_info" | "clarification";
+            text: string;
+            /** Format: date-time */
+            createdAt: string;
+            attachments: {
+                /** Format: uuid */
+                id: string;
+                fileName: string;
+                size: number;
+                sha256: string;
+                href: string;
+            }[];
+        };
+        TeamDeliveryResponse: {
+            delivery: {
+                /** Format: uuid */
+                id: string;
+                kind: "share" | "question";
+                text: string;
+                sourceUrl: string | null;
+                dueAt: string | null;
+                /** Format: date-time */
+                createdAt: string;
+                sender: {
+                    personId: string;
+                    displayName: string;
+                };
+                attachments: {
+                    /** Format: uuid */
+                    id: string;
+                    fileName: string;
+                    size: number;
+                    sha256: string;
+                    href: string;
+                }[];
+                recipients: {
+                    personId: string;
+                    displayName: string;
+                    status: "delivered" | "pending" | "needs_info" | "answered" | "failed";
+                    error: string | null;
+                    replies: {
+                        /** Format: uuid */
+                        id: string;
+                        status: "answered" | "needs_info" | "clarification";
+                        text: string;
+                        /** Format: date-time */
+                        createdAt: string;
+                        attachments: {
+                            /** Format: uuid */
+                            id: string;
+                            fileName: string;
+                            size: number;
+                            sha256: string;
+                            href: string;
+                        }[];
+                    }[];
+                }[];
+            };
+        };
+        TeamDeliverySource: {
+            /** Format: uuid */
+            id: string;
+            fileName: string;
+            size: number;
+            sha256: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        TeamDeliverySourcesResponse: {
+            items: {
+                /** Format: uuid */
+                id: string;
+                fileName: string;
+                size: number;
+                sha256: string;
+                /** Format: date-time */
+                createdAt: string;
+            }[];
+        };
+        TeamDeliveryTextResponse: {
+            text: string;
+            fileName: string;
+            truncated: boolean;
+        };
+        ContinueMeetingWork: {
+            /** @constant */
+            authorization: "continue";
+            targets: {
+                /** Format: uuid */
+                projectId: string;
+                kind: "project" | "task" | "card" | "topic";
+                id: string;
+                instruction?: string;
+            }[];
+            revision: number;
+        };
+        MeetingWorkHandoffs: {
+            items: {
+                conclusion: {
+                    /** Format: uuid */
+                    confirmationRef: string;
+                    requestId: string;
+                    itemId: string;
+                    meetingId: string;
+                    revision: number;
+                    decision: "confirmed" | "amended";
+                    /** Format: date-time */
+                    confirmedAt: string;
+                    confirmedBy: string;
+                    question: string;
+                    content: {
+                        classification: string;
+                        targetRef: string;
+                        fieldKey?: string;
+                        value?: string;
+                    } & {
+                        [key: string]: unknown;
+                    };
+                    source: {
+                        id: string;
+                        version: string;
+                        hash: string;
+                        minutesRef: string;
+                        reference: string | null;
+                        turnId: string | null;
+                        quote: string | null;
+                        readState: "excerpt" | "reference_only";
+                    };
+                };
+                receipts: {
+                    /** Format: uuid */
+                    id: string;
+                    target: {
+                        /** Format: uuid */
+                        projectId: string;
+                        kind: "project" | "task" | "card" | "topic";
+                        id: string;
+                    };
+                    instruction: string;
+                    status: "pending" | "delivered" | "failed";
+                    reason: string | null;
+                    /** Format: date-time */
+                    authorizedAt: string;
+                    deliveredAt: string | null;
+                }[];
+            }[];
+        };
+        MeetingWorkResult: {
+            receipts: {
+                /** Format: uuid */
+                id: string;
+                target: {
+                    /** Format: uuid */
+                    projectId: string;
+                    kind: "project" | "task" | "card" | "topic";
+                    id: string;
+                };
+                instruction: string;
+                status: "pending" | "delivered" | "failed";
+                reason: string | null;
+                /** Format: date-time */
+                authorizedAt: string;
+                deliveredAt: string | null;
+            }[];
+        };
+        MeetingWorkTargetList: {
+            targets: {
+                /** Format: uuid */
+                projectId: string;
+                kind: "project" | "task" | "card" | "topic";
+                id: string;
+                projectName: string;
+                name: string;
             }[];
         };
     };
@@ -43100,6 +43938,937 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listPartnerWorkEvents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已读取 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartnerWorkEvents"];
+                };
+            };
+        };
+    };
+    listWorkIntake: {
+        parameters: {
+            query: {
+                scope: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已读取 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkIntakeList"];
+                };
+            };
+        };
+    };
+    createWorkIntake: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateWorkIntake"];
+            };
+        };
+        responses: {
+            /** @description 已读取 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkIntakeEntry"];
+                };
+            };
+        };
+    };
+    changeWorkIntake: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkIntakeChange"];
+            };
+        };
+        responses: {
+            /** @description 已读取 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkIntakeEntry"];
+                };
+            };
+        };
+    };
+    listPartnerMeetings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 伙伴里的会议 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartnerMeetingsResponse"];
+                };
+            };
+            /** @description 读取失败 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    readUnmatchedPartnerMinute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 妙记正文 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartnerMeetingRecordResponse"];
+                };
+            };
+            /** @description 读取失败 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 读取失败 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 读取失败 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 读取失败 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 读取失败 */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 读取失败 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    readPartnerMeetingRecord: {
+        parameters: {
+            query?: {
+                source?: "tianshu" | "feishu";
+                recordingId?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 会议记录正文 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartnerMeetingRecordResponse"];
+                };
+            };
+            /** @description 读取失败 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 读取失败 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 读取失败 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 读取失败 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 读取失败 */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 读取失败 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listTeamDeliveries: {
+        parameters: {
+            query: {
+                box: "received" | "sent";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamDeliveryListResponse"];
+                };
+            };
+            /** @description 结果 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    sendTeamDelivery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SendTeamDeliveryRequest"];
+                "multipart/form-data": {
+                    /** @description 首先发送 JSON 字符串（SendTeamDeliveryRequest） */
+                    payload: string;
+                    files?: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description 结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamDeliveryResponse"];
+                };
+            };
+            /** @description 结果 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listTeamDeliverySources: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamDeliverySourcesResponse"];
+                };
+            };
+            /** @description 结果 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    readTeamDelivery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamDeliveryResponse"];
+                };
+            };
+            /** @description 结果 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    replyTeamDelivery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplyTeamDeliveryRequest"];
+                "multipart/form-data": {
+                    /** @description 首先发送 JSON 字符串（ReplyTeamDeliveryRequest） */
+                    payload: string;
+                    files?: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description 结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamDeliveryResponse"];
+                };
+            };
+            /** @description 结果 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    retryTeamDeliveryRecipient: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                personId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamDeliveryResponse"];
+                };
+            };
+            /** @description 结果 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    downloadTeamDeliveryAttachment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                attachmentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 文件原件 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            /** @description 结果 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    readTeamDeliveryAttachmentText: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                attachmentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamDeliveryTextResponse"];
+                };
+            };
+            /** @description 结果 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listMeetingWorkHandoffs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 当前确认版本 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingWorkHandoffs"];
+                };
+            };
+            /** @description ApiError */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listMeetingWorkTargets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 当前可选去向 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingWorkTargetList"];
+                };
+            };
+            /** @description ApiError */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    continueMeetingWork: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                confirmationRef: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContinueMeetingWork"];
+            };
+        };
+        responses: {
+            /** @description 各目标的递送回执 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingWorkResult"];
+                };
+            };
+            /** @description ApiError */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

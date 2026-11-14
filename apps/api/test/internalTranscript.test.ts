@@ -69,7 +69,7 @@ describe("给独立 Chat 代读逐字稿", () => {
       const draftVersion = await ready(t, host, meetingId);
       expect((await confirm(t, host, meetingId, { draftVersion, writeToWorld: false })).statusCode).toBe(200);
       // 实际参会只有主持人和 CEO：测试丙读不了这场会。
-      await t.sql("UPDATE meetings SET attendees_actual = $2::jsonb, minute_token = $3, transcript = jsonb_set(transcript, '{source}', $4::jsonb) WHERE id = $1",
+      await t.sql("UPDATE meetings SET attendees_actual = $2::jsonb, minute_token = $3, minute_binding='owner', transcript = jsonb_set(transcript, '{source}', $4::jsonb) WHERE id = $1",
         [meetingId, JSON.stringify([HOST, CEO]), MINUTE, JSON.stringify(STORED)]);
       await authorize(t, HOST);
       await authorize(t, OWNER);

@@ -20,10 +20,11 @@ import {
 import { enqueueJob } from "./jobs.js";
 import { confirmedView, currentConfirmation, draftChangeOf, MEETING_CARD_FREEZE_KIND, meetingRecordState, PENDING_REVIEW } from "./meetingCardConfirm.js";
 import { attendeesOf } from "./meetingDecisionView.js";
-import { getMeetingRow, type MeetingRow, type Query } from "./meetingStore.js";
+import { getMeetingRow, meetingTranscriptFormat, type MeetingRow, type Query } from "./meetingStore.js";
 import { appliedChanges, type AppliedChanges } from "./meetingObjectSync.js";
 import { meetingAnchorGroups } from "./meetingWorld.js";
 import { logEvent } from "./observability.js";
+import { canReadMeetingSource, type MinuteReader } from "./partnerMeetings.js";
 import { capturedAtOf, meetingTranscriptUrl, transcriptContentHash } from "./transcriptHash.js";
 import { projectPerson } from "./transcriptCandidate.js";
 import type { WorldClient } from "./worldClient.js";
@@ -41,6 +42,7 @@ import { anchorHead, recordedStart, type AnchorHeadClient } from "./worldMeeting
 /** 会议卡读本体用的接口：挂点解析加取对象（组件内容和版本）。 */
 export type CardWorld = AnchorHeadClient & Pick<WorldClient, "getObject">;
 export type MeetingCardDeps = {
+  minutes?: MinuteReader;
   /** 本体可写时才有；没有时挂点对象和修改目标都为空。 */
   world?: CardWorld;
   /** 没有飞书妙记的逐字稿，来源地址用天枢会议页。 */
@@ -291,7 +293,8 @@ export function createMeetingCardService(pool: Pool, deps: MeetingCardDeps) {
   /** 读卡见 canReadMeetingCard；编辑只给主持人和创建人。 */
   async function access(meetingId: string, viewer: Viewer) {
     const meeting = await getMeetingRow(q, meetingId);
-    return meeting && canReadMeetingCard(meeting, viewer) ? { meeting, viewer, canEdit: isHostOrCreator(meeting, viewer.personId) } : null;
+    return meeting && canReadMeetingCard(meeting, viewer) && await canReadMeetingSource(q,deps.minutes,meeting,{personId:viewer.personId,role:viewer.isCeo?"ceo":"member"})
+      ? { meeting, viewer, canEdit: isHostOrCreator(meeting, viewer.personId) } : null;
   }
   type Access = NonNullable<Awaited<ReturnType<typeof access>>>;
 
@@ -558,17 +561,25 @@ export function createMeetingCardService(pool: Pool, deps: MeetingCardDeps) {
    */
   async function pendingFor(personId: string): Promise<{ meetings: TMyMeetingCard[]; confirms: TMyMeetingConfirm[] }> {
     const rows = (await q(
-      `SELECT m.id, m.title, m.lead_dri_id, m.created_by, COALESCE(m.ended_at, m.ends_at) AS ended_at, k.decisions, k.action_items, k.current_revision
+      `SELECT m.id, m.title, m.lead_dri_id, m.created_by, ${meetingTranscriptFormat("m.")} AS source_format,
+         COALESCE(m.ended_at, m.ends_at) AS ended_at, k.decisions, k.action_items, k.current_revision
          FROM meetings m JOIN meeting_cards k ON k.meeting_id = m.id
-        WHERE k.draft_status = 'draft_ready' AND (m.lead_dri_id = $1 OR COALESCE(m.created_by, m.lead_dri_id) = $1
+        WHERE k.draft_status = 'draft_ready' AND m.status<>'cancelled'
+          AND (${meetingTranscriptFormat("m.")} IS DISTINCT FROM 'feishu_minutes' OR m.minute_binding IN ('source_id','owner'))
+          AND NOT EXISTS (SELECT 1 FROM thread_members t WHERE t.object_type='meeting' AND t.object_id=m.id::text AND t.person_id=$1 AND t.left_at IS NOT NULL)
+          AND (m.lead_dri_id = $1 OR COALESCE(m.created_by, m.lead_dri_id) = $1
           OR EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(k.decisions, '[]'::jsonb) || k.action_items) e WHERE e ->> 'ownerPersonId' = $1))
         ORDER BY COALESCE(m.ended_at, m.ends_at) DESC`,
       [personId],
-    )).rows as (Pick<MeetingRow, "id" | "title" | "lead_dri_id" | "created_by"> & { ended_at: Date; decisions: TMeetingCardDecision[] | null;
+    )).rows as (Pick<MeetingRow, "id" | "title" | "lead_dri_id" | "created_by"> & { source_format:string|null; ended_at: Date; decisions: TMeetingCardDecision[] | null;
       action_items: TMeetingActionItem[]; current_revision: number | null })[];
     const meetings: TMyMeetingCard[] = [];
     const confirms: TMyMeetingConfirm[] = [];
     for (const row of rows) {
+      if (row.source_format === "feishu_minutes") {
+        const meeting = await getMeetingRow(q,row.id);
+        if (!meeting || !await canReadMeetingSource(q,deps.minutes,meeting,{personId,role:"member"})) continue;
+      }
       const mine = (item: { ownerPersonId: string | null; review?: { status: string } }) => item.review?.status === "pending" && (item.ownerPersonId ?? row.lead_dri_id) === personId;
       const at = { meetingId: row.id, title: row.title };
       // 决策：有责任人的给责任人确认；没有的给主持人补归属。会议写本体关掉了（切到 Nexus）不再找人逐条确认。

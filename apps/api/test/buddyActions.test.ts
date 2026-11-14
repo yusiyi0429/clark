@@ -4,6 +4,7 @@ import type { FeishuClient } from "../src/feishu/client.js";
 import { BOARD_NOW, boardFixture, THIRD } from "./boardFixture.js";
 import { letterOf, seqOf } from "../src/subSessionLetters.js";
 import { actionList } from "../src/buddyActions.js";
+import { BUDDY_ACTION_NAMES } from "@warmap/contracts";
 import { buddyPersona } from "../src/buddyPersona.js";
 import { TEST_CEO, TEST_MEMBER } from "./helpers.js";
 
@@ -53,7 +54,8 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
       expect((await f.call("GET", "/api/me/buddy-authority")).json()).toEqual({ authority: "none", grantedAt: null });
       const list = async () => (await f.t.app.inject({ method: "GET", url: "/internal/me/buddy-actions",
         headers: { authorization: `Bearer ${TOKEN}`, "x-owner-id": TEST_MEMBER.personId } })).json();
-      expect((await list()).actions.map((action: { name: string }) => action.name)).toEqual(["read_work_home", "read_project", "find_people", "open_page", "update_plan", "ask_user"]);
+      expect((await list()).actions.map((action: { name: string }) => action.name)).toEqual(["read_work_home", "read_partner_inbox", "read_partner_item",
+        "read_project", "find_people", "open_page", "update_plan", "ask_user"]);
       const denied = await f.act("set_appearance", { appearance: "dark" });
       expect([denied.statusCode, denied.json().code]).toEqual([403, "BUDDY_NOT_AUTHORIZED"]);
       expect((await f.call("GET", "/api/me/appearance")).json()).toEqual({ appearance: "system" });
@@ -67,7 +69,7 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
       expect((await f.grant()).json()).toEqual(granted);
       const all = await list();
       expect(all.authority).toEqual(granted);
-      expect(all.actions).toHaveLength(28);
+      expect(all.actions.map((action: { name: string }) => action.name)).toEqual(BUDDY_ACTION_NAMES);
       expect(all.actions.find((action: { name: string }) => action.name === "send_message")).toMatchObject({ kind: "write", parameters: { type: "object" } });
 
       expect((await f.act("fly_away", {})).json().code).toBe("UNKNOWN_ACTION");

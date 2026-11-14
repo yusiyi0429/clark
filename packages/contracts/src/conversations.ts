@@ -188,6 +188,8 @@ export const LocalFallbackReason = Type.Union([Type.Literal("local_unavailable")
 export const ConversationMessageRequest = Type.Object(
   {
     message: Type.String({ minLength: 1, maxLength: 20_000 }),
+    /** 本人已提交的排队消息。同一标识重试保留正在运行的工作。 */
+    queuedInputId: Type.Optional(Type.String({ format: "uuid" })),
     /** 当前页面上聚焦的那张卡；不带时对象页聚焦页面对象本身，首页没有聚焦项。 */
     anchorSelection: Type.Optional(AnchorSelection),
     /** 回答 Agent 的提问：带了它，这一句的原文由服务端按提问卡和答案重写。 */

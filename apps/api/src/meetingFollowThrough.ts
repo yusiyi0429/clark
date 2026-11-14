@@ -93,14 +93,14 @@ export function createMeetingFollowThrough({ pool, env, peopleDirectory, world, 
   const anchorWorld = worldClient ? new WorldClient(q, env, undefined, { timeoutMs: WORLD_READ_TIMEOUT_MS }) : undefined;
   // 会议卡草稿：生成（会后整理按池取）和读写共用同一套依赖；挂点对象、修改目标读本体（同一条件下用读的超时）。
   const recordText = Boolean(env.meetingRecordText);
-  const cardDeps = { world: anchorWorld, publicOrigin: env.publicOrigin, names: () => personDisplayNames(peopleDirectory), people: () => peopleDirectory.searchPeople(undefined), recordText, writesOff };
+  const feishuMinutes = env.feishu ? { feishu: { env: env.feishu, api: minutesApi ?? createFeishuMinutesApi() } } : {};
+  const minutes = createMeetingMinutesService({ pool, peopleDirectory, outcomeAgent, secret: env.sessionSecret, now, feishuWebOrigin: env.feishuWebOrigin, ...feishuMinutes });
+  const cardDeps = { world: anchorWorld, publicOrigin: env.publicOrigin, names: () => personDisplayNames(peopleDirectory), people: () => peopleDirectory.searchPeople(undefined), recordText, writesOff, minutes };
   registerMeetingCardDeps(pool, cardDeps);
   const cards = createMeetingCardService(pool, cardDeps);
   const objectSync = worldClient && !writesOff ? createMeetingObjectSync({ q, world: worldClient, refreshDraft: cards.refreshDraft }) : undefined;
   const cardConfirm = createMeetingCardConfirmService({ pool, world: anchorWorld, meetingWorld, objectSync, names: cardDeps.names, view: cards.view, recordText, writesOff, now });
-  const decisions = createMeetingDecisionService({ pool, peopleDirectory, anchorWorld, onAnchorsChanged: cards.anchorsChanged });
-  const feishuMinutes = env.feishu ? { feishu: { env: env.feishu, api: minutesApi ?? createFeishuMinutesApi() } } : {};
-  const minutes = createMeetingMinutesService({ pool, peopleDirectory, outcomeAgent, secret: env.sessionSecret, now, feishuWebOrigin: env.feishuWebOrigin, ...feishuMinutes });
+  const decisions = createMeetingDecisionService({ pool, peopleDirectory, anchorWorld, minutes, onAnchorsChanged: cards.anchorsChanged });
   const minuteInbox = createFeishuMinuteInboxService({ pool, peopleDirectory, minutes, anchorChoicesFor: decisions.anchorChoicesFor, now, ...feishuMinutes });
   const feishuCalendar = env.feishu ? { feishu: { env: env.feishu, api: calendarApi ?? createFeishuCalendarApi() } } : {};
   const feishuEvents = createMeetingFeishuEventService({ pool, now, ...feishuCalendar });

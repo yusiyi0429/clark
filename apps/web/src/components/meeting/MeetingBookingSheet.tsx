@@ -16,6 +16,7 @@ import { useEffect, useState, type DragEvent } from "react";
 import { Upload } from "lucide-react";
 import type { TFeishuMinuteInboxItem, TPickedWorldAnchor, TWorldAnchor, TWorldAnchorOption } from "@warmap/contracts";
 import { COMPANY_TIMEZONE, companyMonth, dateSpan } from "@/lib/companyTime";
+import { SLOT_MS, defaultAnchor, defaultMeetingTitle } from "@/lib/home/meeting";
 import { feishuConnectHref, readFeishuConnection } from "@/lib/feishuLogin";
 import { refreshWorkspace, showWorkspaceToast } from "@/lib/toast";
 import { DetailFrame } from "@/components/shell/DetailFrame";
@@ -52,8 +53,10 @@ export type BookingDraft = { draftId: string; title: string; scheduledAt: string
 
 type Viewer = { personId: string; role: "ceo" | "member"; displayName: string };
 
-export function MeetingBookingSheet({ open, onClose, viewer, organize, initialParticipants = [], draft }: {
+export function MeetingBookingSheet({ open, onClose, viewer, organize, initialParticipants = [], draft, immediate = false }: {
   open: boolean; onClose(): void;
+  /** 即时远程会用同一预约和邀请链，开始时间为提交时刻。 */
+  immediate?: boolean;
   /** 打开时先填好的参会人（战场进展「约会议」）。 */
   initialParticipants?: string[];
   /** 对话里会议卡的草稿（卡上的「改」）。 */
@@ -68,7 +71,8 @@ export function MeetingBookingSheet({ open, onClose, viewer, organize, initialPa
   /** 登录的人（整理飞书会时没有 viewer，用工作台的）：挂点默认挂他的 Mission。 */
   const me = viewer?.personId ?? workspaceViewer ?? "";
   const role = viewer?.role;
-  const [title, setTitle] = useState(organize?.minute.title ?? draft?.title ?? "");
+  const [title, setTitle] = useState(() => organize?.minute.title ?? draft?.title ?? (immediate ? defaultMeetingTitle(new Date()) : ""));
+  const [instantDraftId] = useState(() => immediate ? crypto.randomUUID() : undefined);
   const [slot, setSlot] = useState(() => (draft ? slotOf(draft) : nextSlot()));
   const [leadDriId, setLeadDriId] = useState(viewer?.role === "member" ? viewer.personId : draft?.leadDriId ?? "");
   const [participants, setParticipants] = useState<string[]>(() => (draft?.participants ?? initialParticipants).filter((id) => id !== viewer?.personId));
@@ -89,16 +93,20 @@ export function MeetingBookingSheet({ open, onClose, viewer, organize, initialPa
   /** 约好后正在传第几份（按钮上显示）。 */
   const [uploadingAt, setUploadingAt] = useState(0);
   const [feishu, setFeishu] = useState<{ enabled: boolean; calendar: boolean } | null>(null);
-  const period = organize ? companyMonth(new Date(organize.minute.startsAt)) : slot.date.slice(0, 7);
+  const [revision, setRevision] = useState(0);
+  const [peopleError, setPeopleError] = useState(false);
+  const period = organize ? companyMonth(new Date(organize.minute.startsAt)) : immediate ? companyMonth(new Date()) : slot.date.slice(0, 7);
+  const heading = organize ? "整理会议" : immediate ? "现在开远程会议" : "约会议";
 
   // 整理会议不取人员名册（参会人取自妙记）。
   useEffect(() => {
     if (!open || !role) return;
     let live = true;
-    void listPersonDirectory().then((next) => { if (live) setPeople(next); }, () => undefined);
-    if (role === "ceo") void listPeople().then((next) => { if (live) setHosts(next.filter((person) => person.roles.includes("dri"))); }, () => undefined);
+    setPeopleError(false);
+    void listPersonDirectory().then((next) => { if (live) setPeople(next); }, () => { if (live) setPeopleError(true); });
+    if (role === "ceo") void listPeople().then((next) => { if (live) setHosts(next.filter((person) => person.roles.includes("dri"))); }, () => { if (live) setPeopleError(true); });
     return () => { live = false; };
-  }, [open, role]);
+  }, [open, role, revision]);
   // 本人的飞书能不能在日历约会：打开时读一次；在新标签页连完回来（窗口拿回焦点）再读。整理会议不在飞书约，不读。
   useEffect(() => {
     if (!open || organize) return;
@@ -107,7 +115,7 @@ export function MeetingBookingSheet({ open, onClose, viewer, organize, initialPa
     load();
     window.addEventListener("focus", load);
     return () => { live = false; window.removeEventListener("focus", load); };
-  }, [open, organize]);
+  }, [open, organize, revision]);
   // 挂点按开会那个月取：换了月份先收起旧选项再重取，已选的不在新选项里就去掉。
   useEffect(() => {
     if (!open) return;
@@ -120,18 +128,24 @@ export function MeetingBookingSheet({ open, onClose, viewer, organize, initialPa
       setAnchors((current) => {
         const kept = current.filter((anchor) => next.some((option) => option.kind === anchor.kind && option.id === anchor.id));
         if (kept.length) return kept;
+        if (immediate) {
+          const first = defaultAnchor(next, { me });
+          return first ? [first] : [];
+        }
         const mine = autoAnchor ? next.find((option) => option.kind === "mission" && option.ownerId === me) : undefined;
         return mine ? [{ kind: mine.kind, id: mine.id, title: mine.title }] : [];
       });
     }, () => { if (live) setOptionsError(true); });
     return () => { live = false; };
-  }, [open, period, me, autoAnchor]);
+  }, [open, period, me, autoAnchor, immediate, revision]);
 
   const nameOf = (personId: string) => people.find((person) => person.personId === personId)?.displayName ?? "";
   const anchorOption = (anchor: TWorldAnchor) => options?.find((option) => option.kind === anchor.kind && option.id === anchor.id);
   const valid = organize
     ? Boolean(title.trim() && options && anchors.length)
-    : Boolean(title.trim() && slot.date && slot.start && slot.end && slot.end > slot.start && leadDriId && options && anchors.length);
+    : Boolean(title.trim() && leadDriId && options && anchors.length && (immediate
+      ? feishu?.enabled && feishu.calendar && !peopleError && (participants.length || leadDriId !== me)
+      : slot.date && slot.start && slot.end && slot.end > slot.start));
   const submitOrganize = async ({ minute, meetingBase, onOrganized }: NonNullable<typeof organize>) => {
     setBusy(true); setError("");
     try {
@@ -163,16 +177,18 @@ export function MeetingBookingSheet({ open, onClose, viewer, organize, initialPa
     onDrop: (event: DragEvent<HTMLLabelElement>) => { event.preventDefault(); setDragging(false); addFiles([...event.dataTransfer.files]); },
   };
   const submit = async (viewer: Viewer) => {
+    if (!valid || busy) return;
     setBusy(true); setError("");
     try {
+      const at = Date.now();
       const result = await bookMeeting({
         title: title.trim(),
-        scheduledAt: `${slot.date}T${slot.start}:00+08:00`,
-        endsAt: `${slot.date}T${slot.end}:00+08:00`,
+        scheduledAt: immediate ? new Date(at).toISOString() : `${slot.date}T${slot.start}:00+08:00`,
+        endsAt: immediate ? new Date(at + SLOT_MS).toISOString() : `${slot.date}T${slot.end}:00+08:00`,
         ...(viewer.role === "ceo" ? { leadDriId } : {}),
         ...(participants.length ? { participants } : {}),
         anchors: anchors.map(({ kind, id }) => ({ kind: kind as TPickedWorldAnchor["kind"], id })),
-        ...(draft ? { draftId: draft.draftId } : {}),
+        ...(draft || instantDraftId ? { draftId: draft?.draftId ?? instantDraftId } : {}),
       });
       if ("code" in result) { setError(BOOK_ERROR[result.code] ?? "没有约成"); return; }
       // 会已经约好：材料一份一份传，传不上的不挡跳转，提示一句（会议页的材料区还能再传）。
@@ -194,11 +210,12 @@ export function MeetingBookingSheet({ open, onClose, viewer, organize, initialPa
     }
   };
 
-  const invitable = people.filter((person) => person.personId !== leadDriId && !participants.includes(person.personId));
+  const invitable = people.filter((person) => person.personId !== leadDriId && (!immediate || person.personId !== me) && !participants.includes(person.personId));
+  const retryRead = () => setRevision((value) => value + 1);
 
   return (
-    <SidePanel open={open} onClose={onClose} label={organize ? "整理会议" : "约会议"}>
-      <DetailFrame title={organize ? "整理会议" : "约会议"} onBack={onClose} backLabel="关闭">
+    <SidePanel open={open} onClose={onClose} label={heading}>
+      <DetailFrame title={heading} onBack={onClose} backLabel="关闭">
         <div className={d.booking}>
           <label className={d.bookField}>
             <span>名称</span>
@@ -209,7 +226,7 @@ export function MeetingBookingSheet({ open, onClose, viewer, organize, initialPa
               <span>时间</span>
               <output aria-label="时间" className={d.bookHost}>{dateSpan(organize.minute.startsAt, organize.minute.endsAt)}<small className={d.bookSource}>飞书</small></output>
             </div>
-          ) : <div className={d.bookField}>
+          ) : immediate ? null : <div className={d.bookField}>
             <span>时间</span>
             <div className={d.bookTime}>
               <DatePicker label="日期" value={slot.date} onChange={(date) => setSlot((current) => ({ ...current, date }))} />
@@ -248,6 +265,8 @@ export function MeetingBookingSheet({ open, onClose, viewer, organize, initialPa
             ) : null}
             {organize ? null : <Select aria-label="添加参会人" value="" placeholder="添加参会人" options={invitable.map((person) => ({ value: person.personId, label: person.displayName }))}
               onChange={(personId) => { if (personId) setParticipants((current) => [...current, personId]); }} />}
+            {peopleError ? <p className={d.worldError} role="alert">没有读到人员目录 <button type="button" onClick={retryRead}>重试</button></p>
+              : immediate && !participants.length && leadDriId === me ? <small>选择要邀请的同事</small> : null}
           </div>
           <div className={d.bookField}>
             <span>所属</span>
@@ -264,9 +283,9 @@ export function MeetingBookingSheet({ open, onClose, viewer, organize, initialPa
               <WorldAnchorPicker options={options} value={anchors} viewerId={me} nameOf={nameOf} company={role === "ceo"}
                 onChange={(next) => { setAnchors(next); if (next[0]?.kind !== "po") setPicking(false); }} />
             ) : null}
-            {optionsError ? <p className={d.worldError} role="alert">没有读到对象</p> : null}
+            {optionsError ? <div className={d.worldError}><span role="alert">没有读到对象</span> <button type="button" onClick={retryRead}>重试</button></div> : null}
           </div>
-          {organize ? null : <div className={d.bookField}>
+          {organize || immediate ? null : <div className={d.bookField}>
             <span>材料</span>
             {files.length ? (
               <ul className={d.bookPeople}>
@@ -289,13 +308,14 @@ export function MeetingBookingSheet({ open, onClose, viewer, organize, initialPa
           {error ? <p className={d.worldError} role="alert">{error}</p> : null}
           {!organize && feishu?.enabled && !feishu.calendar ? (
             <p className={d.bookFeishu} role="status">
-              没连飞书，会议不会进你的飞书日历
+              {immediate ? "先连接飞书日历，才能邀请同事加入远程会议" : "没连飞书，会议不会进你的飞书日历"}
               <a href={feishuConnectHref(window.location?.pathname ?? "/")} target="_blank" rel="noopener">连接飞书</a>
             </p>
           ) : null}
+          {immediate && !feishu?.enabled ? <p className={d.bookFeishu} role="status">{feishu ? <>飞书日历暂不可用 <button type="button" onClick={retryRead}>重试</button></> : "正在读取飞书连接…"} </p> : null}
           <div className={d.bookActions}>
             <button type="button" className={d.ghost} disabled={busy} onClick={onClose}>取消</button>
-            <button type="button" className={d.primary} disabled={busy || !valid} onClick={() => void (organize ? submitOrganize(organize) : submit(viewer))}>{organize ? "整理" : uploadingAt ? `上传材料 ${uploadingAt}/${files.length}` : "约好"}</button>
+            <button type="button" className={d.primary} disabled={busy || !valid} onClick={() => void (organize ? submitOrganize(organize) : submit(viewer))}>{organize ? "整理" : immediate ? busy ? "正在创建…" : "发起远程会议" : uploadingAt ? `上传材料 ${uploadingAt}/${files.length}` : "约好"}</button>
           </div>
         </div>
       </DetailFrame>

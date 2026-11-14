@@ -940,11 +940,13 @@ describe("项目对话走 Chat（project:<projectId>，新首页第 16 节）", 
 
       // 再转一句：项目对话还在回，不打断（不请 Chat 停），等它回完再发。
       await act({ projectId, text: "再加一条" });
-      await vi.waitFor(() => expect(chat.turns()).toHaveLength(2));
+      expect(await f.t.sql("SELECT state FROM work_intake WHERE scope=$1 AND message=$2",
+        [`project:${projectId}`, "【伙伴转来】再加一条"])).toEqual([{ state: "queued" }]);
+      expect(chat.turns()).toHaveLength(1);
       expect(chat.requests.some((request) => request.url.endsWith("/cancel"))).toBe(false);
       finish();
-      await vi.waitFor(() => expect(chat.turns()).toHaveLength(3), { timeout: 10_000 });
-      expect(JSON.parse(chat.turns()[2].body).message).toBe("【伙伴转来】再加一条");
+      await vi.waitFor(() => expect(chat.turns()).toHaveLength(2), { timeout: 10_000 });
+      expect(JSON.parse(chat.turns()[1].body).message).toBe("【伙伴转来】再加一条");
       finish();
 
       expect((await act({ projectId: randomUUID(), text: "别人的" })).statusCode).toBe(404);

@@ -1,0 +1,19 @@
+.panel, .entry, .picker { display: grid; min-width: 0; gap: var(--space-2); color: var(--ink); overflow-wrap: anywhere; }
+.panel { margin-block: var(--space-4); }
+.panel h2 { margin: 0; font-size: var(--text-base); }
+.entry { padding-block: var(--space-3); border-top: 1px solid var(--hairline); }
+.entry p, .picker p { margin: 0; }
+.value, .source blockquote { white-space: pre-wrap; }
+.meta, .source, .note { color: var(--ink-muted); font-size: var(--text-sm); }
+.source summary, .entry summary { cursor: pointer; width: fit-content; }
+.source blockquote { margin: var(--space-2) 0; padding-inline-start: var(--space-2); border-inline-start: 2px solid var(--hairline-strong); }
+.entry a { color: inherit; text-decoration: underline; }
+.actions, .receipts li { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; }
+.receipts { display: grid; gap: var(--space-1); list-style: none; margin: 0; padding: 0; }
+.picker fieldset { display: grid; gap: var(--space-2); border: 1px solid var(--hairline); border-radius: var(--r-control); min-width: 0; padding: var(--space-2); }
+.choice { display: flex; align-items: baseline; gap: var(--space-2); cursor: pointer; }
+.note { display: grid; gap: var(--space-1); margin-block: var(--space-1); }
+.note textarea { font: inherit; color: var(--ink); background: transparent; border: 1px solid var(--hairline-strong); border-radius: var(--r-control); padding: var(--space-1); resize: none; }
+.actions button, .entry button, .panel button { cursor: pointer; justify-self: start; width: fit-content; color: var(--ink); background: transparent; border: 1px solid var(--hairline-strong); border-radius: var(--r-control); padding: 4px 10px; font: inherit; }
+.actions button:disabled, .entry button:disabled { opacity: .55; cursor: default; }
+.actions button:focus-visible, .entry button:focus-visible, .source summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }

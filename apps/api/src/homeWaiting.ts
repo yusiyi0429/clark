@@ -5,6 +5,7 @@ import { FEISHU_NOTIFY_KIND } from "./feishu/notify.js";
 import type { Query } from "./meetingStore.js";
 import type { MissionRoundPerson } from "./missionRounds.js";
 import { monthReviewWaiting, reviewDeadline } from "./monthReview.js";
+import { listPendingTeamRequests } from "./teamDeliveryInbox.js";
 import { listProposals } from "./roles.js";
 import { CARD_PROJECT } from "./projects.js";
 import { openPlanTask, parseNotifyKey } from "./taskAgreements.js";
@@ -212,6 +213,9 @@ export async function assembleWaiting(input: WaitingInput): Promise<TWaitingItem
     source: [entry.confirms ? `${entry.confirms} 条待你确认` : null, entry.failed ? "会议记录没生成" : null].filter(Boolean).join(" · "),
     at: entry.endedAt, open: { kind: "meeting", id: meetingId }, answer: "open" });
   // 会后待定事项（Nexus 推来的，nexusDri.ts）：本人是负责人、没过期、没作废、还没处理的，一条一行，就地确认、拒绝或修改。截止是这一条作废的时间。
+  for (const request of await listPendingTeamRequests(q, ownerId))
+    add({ id: `team-request:${request.id}`, kind: "team_request", title: request.title, source: deps.names.get(request.source) ?? request.source,
+      at: request.at, open: { kind: "team_request", id: request.id }, answer: "open" });
   for (const item of await deps.nexusConfirmations(ownerId))
     add({ id: `nexus_confirmation:${item.id}`, kind: "nexus_confirmation", title: item.question, source: "会后确认", at: item.createdAt, dueAt: item.expiresAt,
       open: { kind: "nexus_confirmation", id: item.id }, answer: "inline",

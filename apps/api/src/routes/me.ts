@@ -31,6 +31,7 @@ import { createPersonalToken, listPersonalTokens, revokePersonalToken } from "..
 import { getIssueRow } from "../issues.js";
 import { getMeetingRow } from "../meetingStore.js";
 import { projectMemberIssueCard, projectMemberMeetingCard } from "../memberCards.js";
+import { isPartnerMeetingRecipient, leftPartnerMeeting, meetingForViewer } from "../partnerMeetings.js";
 import { isActiveMember, unreadThreads } from "../threads.js";
 import { AGENT_ROLES, anonUserId, randomTurnSuffix, stableThreadId, tracedTurn, withAgent } from "../tracing.js";
 
@@ -311,11 +312,11 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
   });
 
   app.get("/api/me/cards/meetings/:id", { preHandler: requireMember, schema: { params: idParams, response: { 200: Card } } }, async (req, reply) => {
-    if (!await isActiveMember(q, { objectType: "meeting", objectId: req.params.id }, req.person!.personId))
-      return fail(reply, 404, "CARD_NOT_FOUND", "会议不存在");
+    const person = req.person!;
     const row = await getMeetingRow(q, req.params.id);
-    if (!row) return fail(reply, 404, "CARD_NOT_FOUND", "会议不存在");
-    return projectMemberMeetingCard(row, ctx.env.sessionSecret, req.person!.personId);
+    if (!row || await leftPartnerMeeting(q,row.id,person.personId) || (!isPartnerMeetingRecipient(row,person.personId,true)
+      && !await isActiveMember(q,{ objectType:"meeting", objectId:row.id },person.personId))) return fail(reply, 404, "CARD_NOT_FOUND", "会议不存在");
+    return projectMemberMeetingCard(await meetingForViewer(q,app.meetingFollowThrough.minutes,row,person), ctx.env.sessionSecret,person.personId);
   });
 
   app.post(
