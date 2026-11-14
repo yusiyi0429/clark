@@ -141,12 +141,24 @@ try {
   announce('available_for_verification', status);
   await new Promise<void>(resolve => {
     const timer = setInterval(() => {
-      void access(join(runDir, 'stop')).then(finish, () => {});
+      void access(join(runDir, 'stop')).then(() => finish(true), () => {});
     }, 1_000);
-    function finish() { clearInterval(timer); resolve(); }
-    process.once('SIGINT', finish);
-    process.once('SIGTERM', finish);
-    nextProcess!.once('exit', finish);
+    let finished = false;
+    function finish(requested: boolean) {
+      if (finished) return;
+      finished = true;
+      clearInterval(timer);
+      if (!requested) {
+        status.state = 'failed';
+        status.error = { message: 'Next exited before the preview was stopped; inspect next.log', code: nextProcess?.exitCode };
+        process.exitCode = 1;
+      }
+      resolve();
+    }
+    process.once('SIGINT', () => finish(true));
+    process.once('SIGTERM', () => finish(true));
+    nextProcess!.once('exit', () => finish(false));
+    if (nextProcess!.exitCode !== null || nextProcess!.signalCode !== null) finish(false);
   });
 } catch (error) {
   const cause = error as Error & { code?: string; cause?: { code?: string; message?: string } };
