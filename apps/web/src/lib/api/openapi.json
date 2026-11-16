@@ -21826,6 +21826,77 @@
         }
       }
     },
+    "/api/me/waiting/{id}/ignore": {
+      "post": {
+        "operationId": "ignoreWaiting",
+        "summary": "忽略一件等你（id 是 WaitingItem.id）：只从本人的等你里收起，事情本身不动；原因必填，这一件之后变了又回来；原因为空或太长 400，等你里没有这一件 404",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IgnoreWaitingRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "收起了"
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/background": {
       "get": {
         "operationId": "getBackground",
@@ -122601,6 +122672,20 @@
           "count": {
             "minimum": 0,
             "type": "integer"
+          }
+        }
+      },
+      "IgnoreWaitingRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "properties": {
+          "reason": {
+            "minLength": 1,
+            "maxLength": 500,
+            "type": "string"
           }
         }
       },

@@ -11,7 +11,7 @@
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Dropdown, Header } from "@heroui/react";
-import { Check, ChevronDown } from "lucide-react";
+import { Check, ChevronDown, EyeOff } from "lucide-react";
 import { PersonAvatar } from "@/components/avatar/PersonAvatar";
 import type { Buddy } from "@/components/buddy/useBuddy";
 import { HeroButton } from "@/components/HeroButton";
@@ -23,7 +23,7 @@ import { focusList, visibleCount, type FocusRow } from "@/lib/home/focus";
 import type { HomeMeeting } from "./MeetingControl";
 import { usePartnerMeetings } from "@/lib/home/partnerMeetingFeed";
 import { ConfirmAndHandOff } from "@/components/meeting/MeetingWorkHandoffs";
-import { acceptDrafts, acceptProjectDrafts, decideAutoRelay, decideNexusConfirmation, planKey, type PlanTarget } from "@/lib/board/cloud";
+import { acceptDrafts, acceptProjectDrafts, decideAutoRelay, decideNexusConfirmation, ignoreWaiting, planKey, type PlanTarget } from "@/lib/board/cloud";
 import { useLocalRunner, type LocalRunnerState } from "@/lib/local/LocalRunnerProvider";
 import { decideProposal } from "@/lib/team/roles";
 import { canCommandHere, decide } from "@/lib/work/actions";
@@ -265,6 +265,45 @@ function ConfirmEdit({ value, quote, busy, requestId, onConfirmed, onSubmit, onC
   );
 }
 
+/** 忽略一件等你（方案 A）：带原因调接口，成了重读首页，这一行就不在等你里了。 */
+export async function ignoreItem(item: WaitingItem, reason: string, refresh: () => Promise<unknown>): Promise<void> {
+  await ignoreWaiting(item.id, reason);
+  await refresh();
+}
+
+/** 等你一行「忽略」展开的那一块：输入框「原因」和「忽略」，原因为空点不了，回车同「忽略」；Esc 或点这一行以外收起；没成写「失败」加「重试」。 */
+export function IgnoreBox({ onIgnore, onClose }: { onIgnore: (reason: string) => Promise<unknown>; onClose: () => void }) {
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState<{ reason?: string } | null>(null);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const away = (event: PointerEvent) => { if (!box.current?.closest("li")?.contains(event.target as Node)) onClose(); };
+    document.addEventListener("pointerdown", away);
+    return () => document.removeEventListener("pointerdown", away);
+  }, [onClose]);
+  const reason = text.trim();
+  const submit = async () => {
+    if (!reason || busy) return;
+    setBusy(true);
+    setFailed(null);
+    try { await onIgnore(reason); } catch (error) {
+      setFailed({ reason: error instanceof Error ? error.message : undefined });
+      setBusy(false);
+    }
+  };
+  return (
+    <div ref={box} className={h.waitEdit} onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); onClose(); } }}>
+      <input className={h.noteEdit} value={text} placeholder="原因" aria-label="原因" maxLength={500} autoFocus
+        onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.nativeEvent.isComposing) { event.preventDefault(); void submit(); } }} />
+      <div className={h.noteFoot}>
+        {failed ? <FailedLine inline reason={failed.reason} onRetry={() => void submit()} />
+          : <HeroButton variant="tertiary" size="sm" isDisabled={busy || !reason} onPress={() => void submit()}>忽略</HeroButton>}
+      </div>
+    </div>
+  );
+}
+
 /**
  * 等你的一行（5.4.4「等你行」）。有摘要（契约 WaitingItem.summary，主循环第 66 条：批准是那句人话，等你补、受阻是验收员那一句，提问是问题原文）的第二行写它，
  * 和第一行一样的不再写一遍；再下面一行（没摘要时是第二行）依次是对方（请你认可的：头像 16 和名字）、来源、截止；没有截止的不写时间，时间（5.6 相对时间）放在整行能点的那块的 title 里。
@@ -287,6 +326,8 @@ export function WaitingList({ items, rows: given, fold = false, meeting, api, go
   const [state, setState] = useState<Record<string, { busy?: boolean; done?: string; failed?: RunAction; reason?: string }>>({});
   // 会后确认展开着的那一行（一次只开一行）。
   const [editing, setEditing] = useState<string | null>(null);
+  // 「忽略」展开着的那一行（一次只开一行）。
+  const [ignoring, setIgnoring] = useState<string | null>(null);
   const timers = useRef<number[]>([]);
   useEffect(() => () => timers.current.forEach((timer) => window.clearTimeout(timer)), []);
   // 一行的状态按「这一次请求」记：同一个子会话接着又要批准、又问的，等你行的 id 不变，at（这次请求的时间）变了就是新的一行，不沿用「已批准」。
@@ -340,8 +381,9 @@ export function WaitingList({ items, rows: given, fold = false, meeting, api, go
         const open = canOpen && editing === keyOf(item);
         const toggle = () => setEditing(open ? null : keyOf(item));
         const summary = item.summary?.trim() && item.summary.trim() !== item.title.trim() ? item.summary.trim() : null;
+        const ignoreOpen = ignoring === keyOf(item);
         return (
-          <li key={item.id} className={h.wait} data-kind={item.kind} data-done={row?.done ? "" : undefined} data-editing={open ? "" : undefined}>
+          <li key={item.id} className={h.wait} data-kind={item.kind} data-done={row?.done ? "" : undefined} data-editing={open || ignoreOpen ? "" : undefined}>
             <button type="button" className={h.waitMain} aria-expanded={canOpen ? open : undefined} onClick={() => { if (!confirm) go(waitingHref(item)); else if (canOpen) toggle(); }}
               title={!waitTime(focus, now) && item.at ? relativeDayTime(item.at, new Date(now)) : undefined}>
               <span className={h.waitTitle}>{item.title}</span>
@@ -364,6 +406,14 @@ export function WaitingList({ items, rows: given, fold = false, meeting, api, go
                     onPress={() => { if ("href" in action) go(action.href); else if ("edit" in action) toggle(); else void run(item, action); }}>{action.label}</HeroButton>
                 ))}
             </span>
+            {!row?.done ? (
+              <span className={h.waitIgnore}>
+                <HeroButton variant="ghost" size="sm" isIconOnly title="忽略" aria-label="忽略" aria-expanded={ignoreOpen}
+                  onPress={() => setIgnoring(ignoreOpen ? null : keyOf(item))}><EyeOff {...ICON} /></HeroButton>
+              </span>
+            ) : null}
+            {ignoreOpen ? <IgnoreBox onClose={() => setIgnoring(null)}
+              onIgnore={async (reason) => { await ignoreItem(item, reason, api.refresh); setIgnoring(null); }} /> : null}
             {open && detail ? (
               <ConfirmEdit value={detail.value} quote={detail.quote} busy={!!row?.busy} requestId={detail.id}
                 onConfirmed={(ref) => {

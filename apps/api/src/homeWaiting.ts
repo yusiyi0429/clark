@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { TCardTaskView, TMissionRoundSummary, TWaitingItem, TWorkerResources } from "@warmap/contracts";
 import { openGoalChanges } from "./goalChanges.js";
 import { HOLD_STATES } from "./cardProjection.js";
@@ -56,6 +57,15 @@ export function reviewWindow(now: Date): { period: string; closesAt: string } | 
   // 下个月 7 号 23:59:59（公司时区比 UTC 早 8 小时）。
   const closesAt = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 7, 15, 59, 59));
   return { period: start.toISOString().slice(0, 7), closesAt: closesAt.toISOString() };
+}
+
+/**
+ * 一件等你的「这一版」（忽略用，表 waiting_ignores）：这一行的全部内容，变了就算有新变化、回到等你。
+ * 批准、提问的 at 是本机会话最后一次同步的时间，同一次请求也会变；本机报了是哪一次请求（question、permission 带 requestId）时不看它。
+ */
+export function waitingVersion(item: TWaitingItem): string {
+  const { at: _at, ...rest } = item;
+  return createHash("sha256").update(JSON.stringify(item.question || item.permission ? rest : item)).digest("hex");
 }
 
 /** 管线里那个框是哪一次提问或批准（老版本本机程序没报时为 null）。 */
@@ -311,5 +321,8 @@ export async function assembleWaiting(input: WaitingInput): Promise<TWaitingItem
     add({ id: `auto_relay:${row.id}`, kind: "auto_relay", title: `${row.name}：自动接力已连续 ${row.auto_relay_count} 轮，继续吗？`, source: null,
       at: row.auto_relay_paused_at.toISOString(), open: { kind: "project", id: row.id }, projectId: row.id, answer: "inline" });
 
-  return waiting.sort(byUrgency);
+  // 本人忽略过、之后没变的不出。
+  const ignored = new Set(((await q("SELECT item_id,version FROM waiting_ignores WHERE person_id=$1", [ownerId])).rows as { item_id: string; version: string }[])
+    .map((row) => `${row.item_id}\n${row.version}`));
+  return waiting.filter((item) => !ignored.has(`${item.id}\n${waitingVersion(item)}`)).sort(byUrgency);
 }
