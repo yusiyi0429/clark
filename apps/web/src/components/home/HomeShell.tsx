@@ -573,6 +573,7 @@ function HomeFrame({ account }: { account: Account }) {
       startFailed={startFailed} onManualStart={(id) => void manualStart(id)} onSpeaking={setSpeaking} trail={trail} blocks={projectBlocks(project)}
       onPulled={() => void projects.actions.reloadFolders()} onSetFolder={(folderId) => projects.actions.setFolder(project.id, folderId, project.name)}
       onPickFolder={() => projects.actions.pickFolder(project.id, project.name)} onCreateFolder={(name) => projects.actions.createFolder(project.id, project.name, name)}
+      onAddFolder={(projects.boundAll.get(project.id)?.length ?? 0) < projects.folderLimit ? () => projects.actions.addFolder(project.id, project.name) : undefined}
       bound={projects.bound.get(project.id) ?? null} />;
   };
   const projectInfo = (project: Project, inSide = false) => (

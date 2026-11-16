@@ -701,6 +701,11 @@ export const LocalFolderCreateRequest = Type.Object({
 }, strict);
 /** 新建好的文件夹（已在允许的列表里）；带了 projectId 时 project 是绑好以后的样子。 */
 export const LocalFolderCreateResponse = Type.Object({ folder: LocalFolder, project: Type.Optional(LocalProjectFolder) }, strict);
+/**
+ * POST /v1/folders/:id/open（「在资源管理器中显示」，11/16）：本机按 id 查出允许的文件夹的路径，用系统的文件管理器打开。体可以不带或是 {}，不收路径。
+ * 没有这个 id、或文件夹在磁盘上已经没了回 404 not_found；打开了回 { ok: true }。
+ */
+export const LocalFolderOpenRequest = Type.Object({}, strict);
 
 // ───────────────────────── 会话 ─────────────────────────
 
@@ -2022,6 +2027,7 @@ export type TLocalFolderPickResponse = Static<typeof LocalFolderPickResponse>;
 export type TLocalFolderPickRequest = Static<typeof LocalFolderPickRequest>;
 export type TLocalFolderCreateRequest = Static<typeof LocalFolderCreateRequest>;
 export type TLocalFolderCreateResponse = Static<typeof LocalFolderCreateResponse>;
+export type TLocalFolderOpenRequest = Static<typeof LocalFolderOpenRequest>;
 export type TLocalSessionModelRequest = Static<typeof LocalSessionModelRequest>;
 export type TLocalContextUsage = Static<typeof LocalContextUsage>;
 export type TLocalFileKind = Static<typeof LocalFileKind>;
@@ -2156,6 +2162,7 @@ export const LOCAL_RUNNER_ROUTES = {
   pickFolder: { method: "POST", path: "/v1/folders/pick", auth: true },
   createFolder: { method: "POST", path: "/v1/folders/create", auth: true },
   deleteFolder: { method: "DELETE", path: "/v1/folders/:id", auth: true },
+  openFolder: { method: "POST", path: "/v1/folders/:id/open", auth: true },
   listSessions: { method: "GET", path: "/v1/sessions", auth: true },
   createSession: { method: "POST", path: "/v1/sessions", auth: true },
   createSessionBatch: { method: "POST", path: "/v1/sessions/batch", auth: true },

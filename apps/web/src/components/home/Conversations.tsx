@@ -197,6 +197,8 @@ type PipelineProps = {
   /** 文件夹菜单里的「选择其他文件夹…」「新建文件夹…」：本机一步绑到这个项目上（32 条）。 */
   onPickFolder?: () => Promise<unknown>;
   onCreateFolder?: (name: string) => Promise<unknown>;
+  /** 文件夹菜单里的「添加文件夹…」（同项目详情「文件夹」一节）；绑满了不给。 */
+  onAddFolder?: () => Promise<unknown>;
   /** 这个项目在这台电脑上绑的文件夹（17.2 第 32 条）：派活单开工就在它里面开。 */
   bound?: { id: string; path: string; label: string } | null;
 };
@@ -263,7 +265,7 @@ function MockPipeline({ task, ...props }: PipelineProps & { task: THomePlanTask 
  * 只插还要本人处理的那一步——规划员在拆（一行）、拆卡失败、拆好的派活单（开工的选项框，开了就收起）、自动开工没开起来、
  * 子会话开着的问和批准、约定都达到、还没答的「Task 改了」、转交那几行。子会话列表、开工记录、报告、验收行都不进对话。
  */
-function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, onSpeaking, onSplit, splitFailed, startFailed, onManualStart, trail, blocks: own, onPulled, onSetFolder, onPickFolder, onCreateFolder, bound = null }: PipelineProps & { data: ConversationData }) {
+function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, onSpeaking, onSplit, splitFailed, startFailed, onManualStart, trail, blocks: own, onPulled, onSetFolder, onPickFolder, onCreateFolder, onAddFolder, bound = null }: PipelineProps & { data: ConversationData }) {
   const chrome = useViewChrome();
   const handheld = usePhone();
   const { work } = api;
@@ -291,10 +293,10 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
   // 交出去了（原负责人这边）：只读，不能发（输入框画成空的；不给 input 时 ChatColumn 会退回它自己的输入框）。
   const readOnly = project.transfer?.status === "accepted";
   // 输入框下面左边：这个项目绑的文件夹（照 Claude Code，开始以后不在这里改）。这台电脑上还没绑才给下拉（「此电脑」）；
-  // 绑了只写工作目录那个的名字、悬停出路径，加、换在项目详情；手机上、本机没连上只写名字。
+  // 绑了写工作目录那个的名字、悬停出路径，点开能在资源管理器中显示、复制路径、添加文件夹（没绑满时），换在项目详情；手机上、本机没连上只写名字。
   const pickFolder = onSetFolder ? (id: string | null) => onSetFolder(id).catch(() => showWorkspaceToast({ text: "没改成" })) : undefined;
   const here = !handheld && local.phase === "ready";
-  const folder = here && bound ? <FolderText name={bound.label} title={bound.path} />
+  const folder = here && bound ? <FolderText name={bound.label} title={bound.path} path={bound.path} onAdd={onAddFolder} />
     : here && pickFolder ? <FolderMenu folders={local.folders} onPick={(id) => void pickFolder(id)}
       onPickOther={onPickFolder} onCreate={onCreateFolder} />
     : project.folder ? <FootText>{project.folder}</FootText> : null;

@@ -91,6 +91,8 @@ export interface LocalRunner {
   /** 新建一个空文件夹（默认在桌面）并加进允许的；带 projectId 时一步绑上。重名 409，名字不合法 400（message 可直接给人看）。 */
   createFolder(body: TLocalFolderCreateRequest): Promise<TLocalFolderCreateResponse>;
   removeFolder(id: string): Promise<void>;
+  /** 在资源管理器中显示：本机按 id 查出路径用系统的文件管理器打开（只认允许的文件夹，没有回 404）。 */
+  openFolder(id: string): Promise<void>;
   listSessions(): Promise<TLocalSessionSummary[]>;
   createSession(body: TLocalCreateSessionRequest): Promise<TLocalSessionSummary>;
   /** 一次开工多件：结果按请求顺序，有空位的马上开，满了的是 queued。 */

@@ -3,11 +3,13 @@
 /**
  * 输入框下面那一行（照 Claude Code 桌面版）：左边是上下文（首页「发给」、项目和子会话的文件夹），右边是模型和权限档。首页、伙伴台、项目对话、子会话四处一样高、一样对齐。
  */
-import { useState, type ReactNode } from "react";
+import { useContext, useState, type ReactNode } from "react";
 import { Dropdown } from "@heroui/react";
 import { Check, ChevronDown, Folder } from "lucide-react";
 import { FailedLine } from "@/components/work/DecisionBox";
+import { LocalContext, type LocalRunnerState } from "@/lib/local/LocalRunnerProvider";
 import { LocalRunnerError } from "@/lib/local/runner";
+import { showWorkspaceToast } from "@/lib/toast";
 import { PICK_OTHER } from "./FolderAsk";
 import { useHoverTip } from "./NameTip";
 import { ICON } from "./StateIcon";
@@ -31,7 +33,7 @@ export function createFolderError(error: unknown): string {
 /**
  * 项目在这台电脑上还没绑文件夹时选一个（32 条）：按钮写「此电脑」；点开列这台电脑上的文件夹、「选择其他文件夹…」（本机弹选择框）、「新建文件夹…」（就地写名字，建在桌面）、「此电脑」（打勾）。
  * 选别的和新建都是本机一步绑到项目上，onPickOther / onCreate 不给就没有这两项。
- * 照 Claude Code「开始以后就不在输入框下面改」：只在这台电脑上项目还没绑文件夹时给；绑了以后调用方只写名字（FolderText），要加、换在项目详情的「文件夹」一节。
+ * 照 Claude Code「开始以后就不在输入框下面改」：只在这台电脑上项目还没绑文件夹时给；绑了以后调用方用 FolderText（不能换），换在项目详情的「文件夹」一节。
  */
 export function FolderMenu({ folders, onPick, onPickOther, onCreate }: {
   folders: readonly { id: string; label: string }[];
@@ -127,13 +129,56 @@ export function QuotaRing({ used }: { used: number }) {
   );
 }
 
-/** 在哪个文件夹里跑（只看）：子会话开着换不了地方；项目对话、派活单是项目在这台电脑上已经绑了（写工作目录那个）。悬停出完整路径（站内统一的提示）。 */
-export function FolderText({ name, title }: { name: string; title: string }) {
+/** 知道路径时文件夹菜单里有哪几项（照 Claude Code 桌面版，本人 11/16 定）：这台电脑上登记过的才能「在资源管理器中显示」（按系统叫法），复制路径总有，项目对话才能添加。 */
+export function folderActions({ reveal, add, userAgent }: { reveal: boolean; add: boolean; userAgent: string }): { id: "reveal" | "copy" | "add"; label: string }[] {
+  const show = /Mac/i.test(userAgent) ? "在访达中显示" : /Win/i.test(userAgent) ? "在资源管理器中显示" : "在文件管理器中显示";
+  return [...(reveal ? [{ id: "reveal" as const, label: show }] : []), { id: "copy", label: "复制路径" }, ...(add ? [{ id: "add" as const, label: "添加文件夹…" }] : [])];
+}
+
+/** 这个路径是不是这台电脑的本机程序登记过的文件夹（连着本机时）。 */
+export function registeredFolder(local: LocalRunnerState | null, path?: string) {
+  return (path && local?.phase === "ready" && local.folders.find((folder) => folder.path === path)) || null;
+}
+
+/**
+ * 在哪个文件夹里跑：子会话开着换不了地方；项目对话、派活单是项目在这台电脑上已经绑了（写工作目录那个）。悬停出完整说法（站内统一的提示）。
+ * 知道路径（path）时点开一个菜单：在资源管理器中显示、复制路径、添加文件夹…（onAdd，只项目对话给）；没成就地写一句。
+ */
+export function FolderText({ name, title, path, onAdd }: { name: string; title: string; path?: string; onAdd?: () => Promise<unknown> }) {
   const hover = useHoverTip(title, "top");
-  return (
+  const local = useContext(LocalContext);
+  const [failed, setFailed] = useState<string | null>(null);
+  if (!path) return (
     <>
       <span ref={hover.ref} className={h.footText} data-testid="footer-folder" {...hover.props}><Folder {...ICON} /><span className={h.ellipsis}>{name}</span></span>
       {hover.tip}
+    </>
+  );
+  const known = registeredFolder(local, path);
+  const actions = folderActions({ reveal: !!known, add: !!onAdd, userAgent: typeof navigator === "undefined" ? "" : navigator.userAgent });
+  const act = (key: string) => {
+    setFailed(null);
+    const fail = (note: string) => () => setFailed(note);
+    if (key === "reveal" && known) void local?.runner.openFolder(known.id).catch(fail("没打开"));
+    if (key === "copy") void navigator.clipboard.writeText(path).then(() => showWorkspaceToast({ text: "已复制" }), fail("没复制上"));
+    if (key === "add") void onAdd?.().catch(fail("没加上"));
+  };
+  return (
+    <>
+      <span ref={hover.ref} {...hover.props}>
+        <Dropdown>
+          <Dropdown.Trigger className={h.sendTo} aria-label={`文件夹：${name}`} data-testid="footer-folder">
+            <Folder {...ICON} /><b>{name}</b><ChevronDown {...ICON} />
+          </Dropdown.Trigger>
+          <Dropdown.Popover placement="top start" offset={8} className={h.pop}>
+            <Dropdown.Menu aria-label="文件夹" className={h.menuList} onAction={(key) => act(String(key))}>
+              {actions.map((entry) => <Dropdown.Item key={entry.id} id={entry.id} textValue={entry.label} className={h.menuItem}>{entry.label}</Dropdown.Item>)}
+            </Dropdown.Menu>
+          </Dropdown.Popover>
+        </Dropdown>
+      </span>
+      {hover.tip}
+      {failed ? <FailedLine inline note={failed} onRetry={() => undefined} /> : null}
     </>
   );
 }

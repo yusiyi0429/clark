@@ -80,6 +80,12 @@ export function useProjects(data: Pick<WorkHomeData, "projects" | "month" | "per
     setMulti(await bindProjectFolders(runner, multi, id, folderIds, name));
     await loadFolders();
   }, [runner, multi, loadFolders]);
+  /** 「添加文件夹」（项目详情「文件夹」一节、项目对话的文件夹菜单）：本机弹选择框，选中的接在这个项目的列表最后；已经在里面的不重复加。 */
+  const addFolder = useCallback(async (id: string, name: string) => {
+    const folder = await local.pickFolder();
+    const current = boundAll.get(id) ?? [];
+    if (folder && !current.some((entry) => entry.id === folder.id)) await setFolders(id, [...current.map((entry) => entry.id), folder.id], name);
+  }, [local, boundAll, setFolders]);
   /** 删掉项目（35 条，撤不回）：云端删成了，这台电脑上的绑定解掉（文件夹和文件不动）。 */
   const remove = useCallback(async (id: string) => {
     await deleteProject(id);
@@ -109,8 +115,8 @@ export function useProjects(data: Pick<WorkHomeData, "projects" | "month" | "per
     await refresh();
   }, [refresh]);
   const withdraw = useCallback(async (transferId: string) => { await withdrawTransfer(transferId); await refresh(); }, [refresh]);
-  const actions = useMemo(() => ({ create, rename, archive, remove, attach, setDue, setFolder, setFolders, pickFolder, createFolder, transfer, withdraw, renameSub, archiveSub, removeSub, reloadFolders: loadFolders }),
-    [create, rename, archive, remove, attach, setDue, setFolder, setFolders, pickFolder, createFolder, transfer, withdraw, renameSub, archiveSub, removeSub, loadFolders]);
+  const actions = useMemo(() => ({ create, rename, archive, remove, attach, setDue, setFolder, setFolders, addFolder, pickFolder, createFolder, transfer, withdraw, renameSub, archiveSub, removeSub, reloadFolders: loadFolders }),
+    [create, rename, archive, remove, attach, setDue, setFolder, setFolders, addFolder, pickFolder, createFolder, transfer, withdraw, renameSub, archiveSub, removeSub, loadFolders]);
   return { all, projects, archived, archivedSubs, bound, boundAll, folderLimit, actions };
 }
 

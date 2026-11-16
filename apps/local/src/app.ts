@@ -33,7 +33,7 @@ import { TokenHub } from "./tokenHub.js";
 import { Sources } from "./sources.js";
 import { Budgets } from "./budget.js";
 import { CodexQuota } from "./codexQuota.js";
-import { createDesktop, openUrl, type Desktop, type MenuAction } from "./desktop/index.js";
+import { createDesktop, openFolder, openUrl, type Desktop, type MenuAction } from "./desktop/index.js";
 import { AppWindow } from "./desktop/appWindow.js";
 
 export interface RunnerOptions {
@@ -67,6 +67,8 @@ export interface RunnerOptions {
   codexHome?: string | null;
   /** 测试用：替本人打开浏览器（登录 Codex 时），不去开真的。 */
   openUrl?: (url: string) => void;
+  /** 测试用：在资源管理器中显示，不去开真的窗口。 */
+  openFolder?: (path: string) => Promise<void>;
   onQuit?: () => void;
 }
 
@@ -176,6 +178,7 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
   const server = createServer({
     config, version: VERSION, tokens, pairings, sessions, log, drafts, models, folders, claude, cloud, settings, quota, codexQuota, codex, codexCatalog, claudeCatalog, tools, customTools, spend, tokenHub, sources,
     pickFolder: () => desktop.pickFolder(),
+    openFolder: opts.openFolder ?? openFolder,
     cloneRepo: opts.cloneRepo ?? cloneRepo,
     fetchImpl: cloudFetch,
     onSettingsChange: updateTray,
