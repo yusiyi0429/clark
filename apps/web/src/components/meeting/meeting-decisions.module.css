@@ -1,90 +1,92 @@
 /* 会议页挂点那一行（MeetingWorldBar、WorldAnchors）：挂点、「改」、改挂点的选择框；下面一行是进度线。 */
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-top: 2px; }
 .primary, .ghost, .link { display: inline-flex; align-items: center; justify-content: center; min-height: 34px; padding: 6px 14px; border-radius: 999px; font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; transition: background .14s ease, border-color .14s ease; }
-.primary { border: 0; background: #1f5fd6; color: #fff; }
-.primary:hover:not(:disabled) { background: #1a51b8; }
-.ghost { border: 1px solid #d9dde3; background: #fff; color: #1f2937; }
-.ghost:hover:not(:disabled) { border-color: #b8bfca; background: #f8f9fb; }
-.link { min-height: 28px; padding: 2px 4px; border: 0; background: transparent; color: #1f5fd6; font-weight: 500; }
+.primary { border: 0; background: var(--accent); color: var(--accent-foreground); }
+.primary:hover:not(:disabled) { background: var(--accent-hover); }
+.ghost { border: 1px solid transparent; background: var(--default); color: var(--ink); }
+.ghost:hover:not(:disabled) { background: var(--default-hover); }
+.link { min-height: 28px; padding: 2px 4px; border: 0; background: transparent; color: var(--tianshu-blue-secondary); font-weight: 500; }
 .primary:disabled, .ghost:disabled { opacity: .45; cursor: default; }
-.primary:focus-visible, .ghost:focus-visible, .link:focus-visible { outline: 2px solid #1f5fd6; outline-offset: 2px; }
+.primary:focus-visible, .ghost:focus-visible, .link:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
 
 /* 落点（回流设计稿 2）：类型 名称 + 写入状态点；样子同影响卡的「落到」一排。 */
 .anchors { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; margin: 0; padding: 0; list-style: none; }
-.anchor { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-width: 0; padding: 2px 10px 2px 8px; border: 1px solid #dfe3e8; border-radius: 12px; background: #fff; color: #4f5866; font-size: 13px; line-height: 20px; }
+.anchor { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-width: 0; padding: 2px 10px 2px 8px; border: 1px solid transparent; border-radius: 12px; background: var(--neutral-wash); color: var(--ink-muted); font-size: 13px; line-height: 20px; }
 .anchor svg { flex: none; }
-.anchorKind { flex: none; color: #8a93a2; }
-.anchorTitle { min-width: 0; color: #1f2937; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.anchorRemove { flex: none; margin-right: -4px; padding: 0 2px; border: 0; background: none; color: #8a93a2; font: inherit; font-size: 15px; line-height: 1; cursor: pointer; }
+.anchorKind { flex: none; color: var(--ink-faint); }
+.anchorTitle { min-width: 0; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.anchorRemove { flex: none; margin-right: -4px; padding: 0 2px; border: 0; background: none; color: var(--ink-faint); font: inherit; font-size: 15px; line-height: 1; cursor: pointer; }
 /* 「改」：紧跟在挂点后面的安静文字链接。 */
-.anchorEdit { min-height: 26px; padding: 0 2px; border: 0; background: none; color: #4c545e; font: inherit; font-size: 13px; cursor: pointer; text-decoration: underline; text-decoration-color: #c7ccd4; text-underline-offset: 3px; }
-.anchorEdit:hover { color: #1f2937; text-decoration-color: currentColor; }
+.anchorEdit { min-height: 26px; padding: 0 2px; border: 0; background: none; color: var(--ink-muted); font: inherit; font-size: 13px; cursor: pointer; text-decoration: underline; text-decoration-color: var(--hairline-strong); text-underline-offset: 3px; }
+.anchorEdit:hover { color: var(--ink); text-decoration-color: currentColor; }
 
 /* 会议页页头下面的挂到一行：没有底色和外框，像文档的题注。挂点写全文（不截断、放不下就折行），「改」跟在最后一个字后面。 */
 .worldBar { display: grid; gap: 8px; min-width: 0; }
-.worldLine { min-width: 0; color: var(--doc-ink-2, #535358); font-size: 14px; line-height: 24px; overflow-wrap: anywhere; }
-.worldLabel { margin-right: 8px; color: var(--doc-ink-3, #6b6b70); font-size: 13px; }
+.worldLine { min-width: 0; color: var(--doc-ink-2); font-size: 14px; line-height: 24px; overflow-wrap: anywhere; }
+.worldLabel { margin-right: 8px; color: var(--doc-ink-3); font-size: 13px; }
 .worldLine .anchors { display: inline; }
 .worldLine .anchor { display: inline; padding: 0; border: 0; border-radius: 0; background: none; color: inherit; font-size: inherit; line-height: inherit; }
 .worldLine .anchor + .anchor { margin-left: 14px; }
-.worldLine .anchor svg { display: inline-block; margin-right: 5px; vertical-align: -2px; color: var(--doc-ink-3, #6b6b70); }
-.worldLine .anchorKind { margin-right: 5px; color: var(--doc-ink-3, #6b6b70); }
-.worldLine .anchorTitle { overflow: visible; white-space: normal; text-overflow: clip; color: var(--doc-ink-1, #17171b); }
-.worldLine .anchorEdit { color: var(--doc-ink-3, #6b6b70); font-size: 13px; }
-/* 挑挂点（WorldAnchorPicker，样稿 anchor-picker-v1）：没有外框和分组框线；搜索框浅灰底，选中那行一个勾加浅底，草稿是灰字。 */
+.worldLine .anchor svg { display: inline-block; margin-right: 5px; vertical-align: -2px; color: var(--doc-ink-3); }
+.worldLine .anchorKind { margin-right: 5px; color: var(--doc-ink-3); }
+.worldLine .anchorTitle { overflow: visible; white-space: normal; text-overflow: clip; color: var(--doc-ink-1); }
+.worldLine .anchorEdit { color: var(--doc-ink-3); font-size: 13px; }
+/* 挑挂点（WorldAnchorPicker，样稿 anchor-picker-v1）：没有分组框线；搜索框用全站输入框那套变量，选中那行一个勾加浅底，草稿是灰字。颜色全读变量，深色也对。 */
 .picker { display: grid; gap: 6px; }
-.picker input { height: 36px; padding: 0 12px; border: 0; border-radius: 10px; background: #f4f5f7; font: inherit; font-size: 14px; }
+.picker input { height: 36px; padding: 0 12px; border: 1px solid var(--field-border); border-radius: 10px; background: var(--field-bg); color: var(--field-ink); font: inherit; font-size: 14px; }
+.picker input::placeholder { color: var(--field-placeholder); }
+.picker input:focus { border-color: var(--field-border-focus); outline: 0; }
 .pickList { display: grid; gap: 2px; max-height: 360px; overflow-y: auto; }
-.pickList h4 { margin: 8px 2px 2px; color: #8a8f98; font-size: 12px; font-weight: 400; }
+.pickList h4 { margin: 8px 2px 2px; color: var(--ink-faint); font-size: 12px; font-weight: 400; }
 .pickList ul { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
 .pickOption { display: flex; align-items: flex-start; gap: 8px; width: 100%; padding: 8px 10px; border: 0; border-radius: 10px; background: none; color: var(--ink); font: inherit; font-size: 14px; line-height: 1.45; text-align: left; cursor: pointer; }
 .pickCheck { display: grid; flex: none; place-items: center; width: 16px; height: 20px; }
 .pickText { flex: 1; min-width: 0; }
-.pickText small { display: block; color: #8a8f98; font-size: 12px; }
-.pickDraft { margin-left: 6px; color: #8a8f98; font-size: 12px; }
-.pickCount { flex: none; color: #b5bac2; font-size: 13px; }
+.pickText small { display: block; color: var(--ink-faint); font-size: 12px; }
+.pickDraft { margin-left: 6px; color: var(--ink-faint); font-size: 12px; }
+.pickCount { flex: none; color: var(--ink-faint); font-size: 13px; }
 .pickList .pickChildren { margin-left: 24px; }
-.pickBack { justify-self: start; margin: 2px 0 4px; padding: 4px 6px; border: 0; background: none; color: #535358; font: inherit; font-size: 13px; cursor: pointer; }
-.pickEmpty { margin: 8px 10px; color: #8a8f98; font-size: 13px; }
+.pickBack { justify-self: start; margin: 2px 0 4px; padding: 4px 6px; border: 0; background: none; color: var(--ink-muted); font: inherit; font-size: 13px; cursor: pointer; }
+.pickEmpty { margin: 8px 10px; color: var(--ink-faint); font-size: 13px; }
 .pickerPanel { display: grid; gap: 8px; }
-.worldError { margin: 0; color: #be123c; font-size: 13px; }
-.pickOption:hover { background: #f5f6f8; }
-.pickOption[aria-pressed='true'] { background: #f1f2f5; font-weight: 500; }
-.pickOption:focus-visible, .pickBack:focus-visible { outline: 2px solid #3a83f788; outline-offset: -2px; }
+.worldError { margin: 0; color: var(--danger); font-size: 13px; }
+.pickOption:hover { background: var(--default-soft); }
+.pickOption[aria-pressed='true'] { background: var(--default-soft-hover); font-weight: 500; }
+.pickOption:focus-visible, .pickBack:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .spacer { flex: 1; }
 
 /* 约会议：表单（外框是 components/ui/SidePanel，页头 DetailFrame）。 */
 .booking { display: grid; gap: 16px; padding: 16px 20px 24px; overflow-y: auto; }
 .bookField { display: grid; gap: 6px; min-width: 0; }
-.bookField > span:first-child { color: #4f5866; font-size: 13px; font-weight: 600; }
-.bookField > input { height: 40px; padding: 0 12px; border: 1px solid #dfe3e8; border-radius: 10px; font: inherit; font-size: 14px; }
+.bookField > span:first-child { color: var(--ink-muted); font-size: 13px; font-weight: 600; }
+.bookField > input { height: 40px; padding: 0 12px; border: 1px solid var(--field-border); border-radius: 10px; background: var(--field-bg); color: var(--field-ink); font: inherit; font-size: 14px; }
 .bookTime { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 /* 开始、横线、结束一行（手持也是）。 */
 .bookSpan { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 8px; width: 100%; }
-.bookHost { color: #1f2937; font-size: 14px; line-height: 40px; }
+.bookHost { color: var(--ink); font-size: 14px; line-height: 40px; }
 .bookPeople { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
-.bookPeople li { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 10px; border: 1px solid #dfe3e8; border-radius: 12px; font-size: 13px; }
-.bookPeople button { padding: 0 4px; border: 0; background: none; color: #8a93a2; font: inherit; font-size: 15px; cursor: pointer; }
+.bookPeople li { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 10px; border: 1px solid transparent; border-radius: 12px; background: var(--neutral-wash); color: var(--ink-muted); font-size: 13px; }
+.bookPeople button { padding: 0 4px; border: 0; background: none; color: var(--ink-faint); font: inherit; font-size: 15px; cursor: pointer; }
 /* 整理会议：参会人只读，对不上天枢人员的虚线置灰；时间旁注来源。 */
 .bookPeople[data-readonly] li { padding: 2px 10px; }
-.bookPeople li[data-off] { border-style: dashed; color: #8a93a2; }
-.bookSource { margin-left: 6px; color: #8a93a2; font-size: 12px; }
+.bookPeople li[data-off] { border-color: var(--hairline-strong); border-style: dashed; background: none; color: var(--ink-faint); }
+.bookSource { margin-left: 6px; color: var(--ink-faint); font-size: 12px; }
 .bookActions { display: flex; justify-content: flex-end; gap: 8px; }
 /* 材料放置区：低存在感的虚线框，拖进来时变蓝（同材料区拖放）；文件输入框藏起来，点框就是点选。 */
-.bookDrop { position: relative; display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; padding: 8px 12px; border: 1px dashed #dfe3e8; border-radius: 10px; color: #8a93a2; font-size: 13px; cursor: pointer; transition: border-color .14s ease, background .14s ease; }
-.bookDrop:hover, .bookDrop[data-dragging] { border-color: #a9c7f8; background: #f5f9ff; color: #535358; }
-.bookDrop:focus-within { outline: 2px solid #3a83f788; outline-offset: 2px; }
+.bookDrop { position: relative; display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; padding: 8px 12px; border: 1px dashed var(--hairline-strong); border-radius: 10px; color: var(--ink-faint); font-size: 13px; cursor: pointer; transition: border-color .14s ease, background .14s ease; }
+.bookDrop:hover, .bookDrop[data-dragging] { border-color: var(--field-border-focus); background: var(--default-soft); color: var(--ink-muted); }
+.bookDrop:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
 .bookFile { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 /* 没连飞书：按钮上方一行，右边「连接飞书」（同会议页的飞书入口按钮）。 */
-.bookFeishu { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin: 0; padding: 8px 12px; border-radius: 12px; background: #f4f5f7; color: #4c545e; font-size: 13px; line-height: 1.45; }
-.bookFeishu a { flex: none; display: inline-flex; align-items: center; min-height: 24px; padding: 0 10px; border: 1px solid #d9dde5; border-radius: 999px; background: #fff; color: #215ba1; font-size: 12px; text-decoration: none; }
-.bookFeishu a:hover { border-color: #215ba1; }
-.bookFeishu a:focus-visible { outline: 2px solid #96beff; outline-offset: 2px; }
+.bookFeishu { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin: 0; padding: 8px 12px; border-radius: 12px; background: var(--neutral-wash); color: var(--ink-muted); font-size: 13px; line-height: 1.45; }
+.bookFeishu a { flex: none; display: inline-flex; align-items: center; min-height: 24px; padding: 0 10px; border: 1px solid var(--hairline-strong); border-radius: 999px; background: var(--surface); color: var(--tianshu-blue-secondary); font-size: 12px; text-decoration: none; }
+.bookFeishu a:hover { border-color: var(--tianshu-blue-secondary); }
+.bookFeishu a:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 /* 挂到收起时那一行：挂点名称 + 灰字身份，右边「换」。 */
-.bookAnchor { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border-radius: 12px; background: #f4f5f7; font-size: 14px; line-height: 1.45; }
-.bookAnchor small { display: block; color: #8a8f98; font-size: 12px; }
-.bookAnchor button { flex: none; padding: 4px 6px; border: 0; background: none; color: #535358; font: inherit; font-size: 13px; cursor: pointer; }
+.bookAnchor { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--neutral-wash); font-size: 14px; line-height: 1.45; }
+.bookAnchor small { display: block; color: var(--ink-faint); font-size: 12px; }
+.bookAnchor button { flex: none; padding: 4px 6px; border: 0; background: none; color: var(--ink-muted); font: inherit; font-size: 13px; cursor: pointer; }
 
 @media (max-width: 959px), (pointer: coarse) {
   .pickOption, .anchorEdit, .bookPeople button, .primary, .ghost, .picker input { min-height: 44px; }

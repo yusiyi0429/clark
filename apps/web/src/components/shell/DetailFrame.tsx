@@ -6,7 +6,7 @@
  * 材料下拉单那一格 + actions）、`p.ts-eyebrow`、`h1`。页头的样子全在 header-capsule.module.css 的 scope 上，认的就是这几个类名。
  * 材料区（ObjectMaterialArea）的下拉单经 HeaderSlot 挂进 `data-header-tools` 那一格。
  *
- * 外面包一层 TianshuTheme（亮色）：字体、颜色和 HeroUI 的主题变量同源。宿主只管外框 —— 位置、圆角、和右列接上；
+ * 外面包一层 TianshuTheme：字体、颜色和 HeroUI 的主题变量同源。新首页外壳里跟外观（深色时套深色，见 frameScheme），老页面照旧亮色。宿主只管外框 —— 位置、圆角、和右列接上；
  * 阅读页铺满它、跟着它的圆角走。返回键带 `data-close-view`：打开时外壳把焦点放在这里。
  */
 
@@ -14,6 +14,7 @@ import { useId, useState, type ReactNode } from "react";
 import { TianshuTheme } from "ts-design";
 import { Button } from "ts-design/primitives";
 import { ArrowLeft } from "lucide-react";
+import { useFrameScheme } from "./frameScheme";
 import { HeaderSlot } from "./MaterialTabs";
 import capsule from "@/styles/header-capsule.module.css";
 import f from "@/styles/detail-frame.module.css";
@@ -48,7 +49,7 @@ export function DetailFrame({
   const heading = headingId ?? generated;
   const [tools, setTools] = useState<HTMLElement | null>(null);
   return (
-    <TianshuTheme theme="light" className={`${f.frame} ${capsule.scope}`}>
+    <TianshuTheme theme={useFrameScheme()} className={`${f.frame} ${capsule.scope}`}>
       <div className={`ts-detail ${f.reader}`}>
         <header className="ts-detail-header">
           <div className="ts-row ts-between">
