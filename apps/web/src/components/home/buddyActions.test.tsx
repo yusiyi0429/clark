@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { TBuddyAuditEntry, TBuddyMessageDraft } from "@warmap/contracts";
@@ -41,9 +42,13 @@ describe("伙伴代本人做事（17.4）", () => {
     expect(html).toMatch(/data-testid="conversation-via-buddy"[^>]*>伙伴转来<.*把评测集补上/);
   });
 
-  it("计划清单：做完的、在做的照状态画；被打断收起时一行「计划 n/m」", () => {
+  it("计划清单照 Claude Code：做完的打勾、在做的转圈、没开始的空圈，不划线；被打断收起时一行「计划 n/m」", () => {
     const entries = [{ content: "归档 Chat 服务", status: "completed" as const }, { content: "切深色", status: "in_progress" as const }, { content: "转达晨星", status: "pending" as const }];
-    expect(renderToStaticMarkup(<PlanChecklist entries={entries} />)).toMatch(/data-status="completed">归档 Chat 服务.*data-status="in_progress">切深色.*data-status="pending">转达晨星/);
+    expect(renderToStaticMarkup(<PlanChecklist entries={entries} />)).toMatch(new RegExp(
+      'data-status="completed"><span[^>]*data-state="done"[^>]*aria-label="已完成">.*?</span><span>归档 Chat 服务</span>'
+      + '.*data-status="in_progress"><span[^>]*data-state="running"[^>]*aria-label="进行中">.*?</span><span>切深色</span>'
+      + '.*data-status="pending"><span[^>]*data-state="queued"[^>]*aria-label="未开始">.*?</span><span>转达晨星</span>'));
+    expect(readFileSync(new URL("../../styles/v2-session.module.css", import.meta.url), "utf8")).not.toMatch(/\.plan li[^{]*\{[^}]*line-through/);
     expect(text(renderToStaticMarkup(<PlanChecklist entries={entries} collapsed />))).toBe("计划 1/3");
   });
 

@@ -138,7 +138,11 @@
 .wordIssues li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; }
 .wordIssues small { color: var(--ink-faint); font-size: 12px; }
 .issueTag { display: inline-flex; align-items: center; height: 19px; padding: 0 7px; border-radius: 999px; background: var(--neutral-wash); color: var(--ink-muted); font-size: 12px; }
-.plan li[data-status="completed"] { color: var(--ink-faint); text-decoration: line-through; text-decoration-color: var(--hairline-strong); }
+/* 计划清单照 Claude Code（本人 11/16）：不要序号，前面一颗状态图标（打勾 / 转圈 / 空圈），图标对齐第一行字的中线；做完的字变淡，不划线。 */
+.plan { padding-left: 0; list-style: none; }
+.plan li { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
+.plan li > [role="img"] { margin-top: calc((1lh - 16px) / 2); }
+.plan li[data-status="completed"] { color: var(--ink-faint); }
 .plan li[data-status="in_progress"] { font-weight: 600; }
 .planFold { justify-self: start; padding: 0; border: 0; background: none; color: var(--ink-faint); font: inherit; font-size: 12px; cursor: pointer; }
 .verdicts { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
