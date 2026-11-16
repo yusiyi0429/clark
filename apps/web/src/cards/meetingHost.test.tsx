@@ -217,7 +217,7 @@ describe("在飞书约上的会跟着飞书会议开始和结束", () => {
     expect(missed).not.toContain("会议中");
     expect(current(missed)).toContain('data-step="waiting" data-state="current" data-tone="fail"');
     expect(current(missed)).toContain("没开成");
-    expect(missed).toMatch(/data-step="record" data-state="todo"[^>]*>.*?等妙记</);
+    expect(missed).not.toContain('data-state="todo"');
     expect(headerEnd(missed)).toContain("重新安排会议");
     expect(missed).not.toContain("进入飞书会议");
     expect(missed).toContain("结束会议");

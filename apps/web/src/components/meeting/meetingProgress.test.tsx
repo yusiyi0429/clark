@@ -130,19 +130,17 @@ describe("会议页进度线：用时与样子", () => {
     expect(progressClock(since, after(2 * 3600), null)).toBe("2 小时");
   });
 
-  it("一行有序列表：这一步标 aria-current、带用时和入口，别的步骤没有入口", () => {
+  it("只画这一步（本人 11/16：不画整条链）：标 aria-current、带用时和入口，走过的和没到的都不画", () => {
     const value = model({ minutesStatus: "manual" }, { live: "ended", ended: true });
     const html = renderToStaticMarkup(<MeetingProgress model={value} actions={<button type="button">上传会议记录</button>} />);
     expect(html.startsWith('<ol class="')).toBe(true);
-    expect(html.match(/<li /g)).toHaveLength(6);
-    expect(html.match(/aria-current="step"/g)).toHaveLength(1);
-    expect(html).toMatch(/data-step="record" data-state="current" data-tone="breathe" aria-current="step">.*待交记录.*上传会议记录<\/button><\/span><svg[^>]*>.*?<\/svg><\/li>/);
-    // 箭头跟在一步后面（折行时新的一行不以箭头开头）：最后一步后面没有箭头。
-    expect(html).not.toMatch(/<li [^>]*>\s*<svg/);
-    expect(html).toMatch(/<\/span><\/li><\/ol>$/);
-    expect(html.match(/上传会议记录/g)).toHaveLength(1);
-    // 第一格前面没有箭头，后面每一格前面一个。
-    expect(html.match(/<svg/g)).toHaveLength(5);
+    expect(html.match(/<li /g)).toHaveLength(1);
+    expect(html).toMatch(/data-step="record" data-state="current" data-tone="breathe" aria-current="step">.*待交记录.*上传会议记录<\/button><\/span><\/li><\/ol>$/);
+    expect(html).not.toContain("<svg");
+    for (const label of ["等开会", "进行中", "生成会议卡", "待你确认"]) expect(html).not.toContain(label);
+    // 全部走完（已确认）：画最后一步。
+    const settled = { ...value, current: null, steps: value.steps.map((step) => ({ ...step, state: "done" as const })) };
+    expect(renderToStaticMarkup(<MeetingProgress model={settled} />)).toMatch(/<li [^>]*data-step="confirm" data-state="done"[^>]*>.*<\/li><\/ol>$/);
     const timed = renderToStaticMarkup(<MeetingProgress model={model({ minutesStatus: "waiting", minutesWaitingSince: new Date(Date.now() - 65_000).toISOString() }, { live: "ended", ended: true })} />);
     expect(timed).toMatch(/等妙记<\/span><time [^>]*role="timer"[^>]*>01:0\d · 约 3 分钟<\/time>/);
   });
