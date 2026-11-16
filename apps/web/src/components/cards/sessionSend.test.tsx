@@ -145,10 +145,10 @@ describe("子会话一按发送就先画出来", () => {
 });
 
 describe("启动中（本机在拉起执行方）", () => {
-  it("状态 starting：在跑那一行写「启动中 · N 秒」；running 以后照旧只写时长", () => {
+  it("状态 starting：在跑那一行写「启动中」和 N 秒；running 以后照旧只写时长", () => {
     const entries = foldEvents([user(1, "00000000-0000-4000-8000-0000000000a1")], EMPTY_VIEW).entries;
     const starting = text(render(entries, { live: true, starting: true }));
-    expect(starting).toMatch(/启动中 · \d/);
+    expect(starting).toMatch(/启动中 \d/);
     const running = text(render(entries, { live: true }));
     expect(running).not.toContain("启动中");
     expect(renderToStaticMarkup(<SessionTranscript entries={entries} agentName="Claude Code" canAct onDecide={vi.fn()} live starting />)).toContain('aria-label="启动中"');

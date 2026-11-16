@@ -148,6 +148,22 @@
 .plan { --type-size: 15px; --type-lh: 22px; }
 .plan li[data-status="in_progress"] { font-weight: 600; }
 .planFold { justify-self: start; padding: 0; border: 0; background: none; color: var(--ink-faint); font: inherit; font-size: 12px; cursor: pointer; }
+/* 「在做什么」那一行（照 Claude Code，本人 11/16，ActivityLine）：字同计划清单 15px；在做什么 --ink-muted，用时和 › --ink-faint。 */
+.activity { --type-size: 15px; --type-lh: 22px; }
+.activity :is(.stepsSummary, .stepText) { color: var(--ink-muted); }
+/* 字符动画：五个字竖排，一格一格往上推再推回来（同 Claude 桌面版 codeSpinnerSpin：1.2 秒、跳格、来回十拍）。 */
+.mark { display: inline-block; flex: none; width: 16px; height: 22px; overflow: hidden; color: var(--accent); text-align: center; line-height: 22px; user-select: none; }
+.mark > span { display: block; animation: markTurn 1.2s step-start infinite; }
+.mark i { display: block; height: 22px; font-style: normal; }
+@keyframes markTurn {
+  0%, 90% { transform: translateY(0); }
+  10%, 80% { transform: translateY(-22px); }
+  20%, 70% { transform: translateY(-44px); }
+  30%, 60% { transform: translateY(-66px); }
+  40%, 50% { transform: translateY(-88px); }
+}
+@media (prefers-reduced-motion: reduce) { .mark > span { animation: none; } }
+/* 「在做什么」完 */
 .verdicts { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .verdicts li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 8px; font-size: 12px; }
 .verdicts small { grid-column: 2; color: var(--ink-faint); font-size: 12px; }
