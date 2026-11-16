@@ -58,11 +58,11 @@ describe("「正在写」的草稿（流畅感第 1、2 条，契约 LocalSessio
     expect(seen.slice(0, lastText).filter((item) => item.startsWith("draft:")).length).toBe(drafts.length);
   });
 
-  it("页面：有草稿就在最后画「正在写」那段（不再出在跑那一行）；按草稿出过的那段换成真的时不再整段淡入", () => {
+  it("页面：有草稿就画「正在写」那段，「在做什么」那一行在它下面（这一轮还没完，11/16）；按草稿出过的那段换成真的时不再整段淡入", () => {
     const at = new Date().toISOString();
     const html = render([{ kind: "user", seq: 1, at, text: "删掉" }], { draft: "好，按你说的改，**两处**" });
     expect(html).toContain('data-testid="session-draft"');
-    expect(html).not.toContain('data-testid="session-working"');
+    expect(html.indexOf('data-testid="session-working"')).toBeGreaterThan(html.indexOf('data-testid="session-draft"'));
     expect(html).toContain("data-arrival");
     const entries: SessionEntry[] = [{ kind: "assistant", seq: 2, at, text: "好，按你说的改，**两处**：" }];
     expect(render(entries, { live: false })).toContain("data-arrival");

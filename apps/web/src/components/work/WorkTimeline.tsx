@@ -6,16 +6,31 @@
  * 伙伴的提问卡画成就地答的选项框（AskDecision），不再是「开始回答」弹窗。
  */
 import { useMemo, type ReactNode } from "react";
-import { ConversationStatusSlot, ConversationThinking, ConversationTurns, LocalTurnRow } from "@/conversation/Transcript";
+import type { TBuddyPlan } from "@warmap/contracts";
+import { ConversationStatusSlot, ConversationThinking, ConversationTurns, LocalTurnRow, STAGE_COPY } from "@/conversation/Transcript";
 import { AnswerOptions } from "@/conversation/AnswerOptionRow";
 import { EntryCards } from "@/conversation/EntryCards";
 import { PlanChecklist } from "@/components/cards/PlanChecklist";
+import { ActivityLine, planDoing } from "@/components/cards/ActivityLine";
+import { StepList, type Step } from "@/components/steps/StepList";
 import { AskContext, askAnswers } from "@/conversation/AskPanel";
 import { parseAnswerOptions } from "@/conversation/answerOptions";
 import { RescopeContext } from "@/conversation/ScopeChip";
 import { withoutSupersededCards } from "@/conversation/ConversationTimeline";
-import type { ConversationData } from "@/conversation/useConversation";
+import type { ConversationData, ThinkingStage, TurnProgress } from "@/conversation/useConversation";
 import { AskDecision, BuddyQuestionDecision } from "./decisions";
+
+/**
+ * 「在做什么」那一行写哪句（照 Claude Code 的先后：系统状态 > 正在跑的那一步 > 等着的阶段词）：连不上、等网络 > 在跑的那一步 >
+ * 在查什么（工具开始时报的）> 计划里在做的那条 > 阶段词（正在查资料、正在整理回答）；都没有就只有动画和用时，不写笼统的「正在思考」。
+ */
+export function conversationDoing({ stage, steps, progress, plan }: { stage: ThinkingStage; steps: readonly Step[]; progress?: TurnProgress; plan?: TBuddyPlan | null }): string | null {
+  if (stage === "connecting" || stage === "offline") return STAGE_COPY[stage];
+  return [...steps].reverse().find((step) => step.status === "active")?.label
+    ?? (stage === "researching" ? progress?.label ?? null : null)
+    ?? planDoing(plan?.entries)
+    ?? STAGE_COPY[stage];
+}
 
 /** afterSequence：按消息序号排的块（转交卡）——插在序号不超过它的最后一条后面，null 排最后；不带这个字段的按时间排。 */
 export type TimedBlock = { key: string; at: string; node: ReactNode; afterSequence?: number | null };
@@ -64,9 +79,11 @@ export function WorkTimeline({ data, blocks, modelRule }: { data: ConversationDa
   const ask = useMemo(() => ({ send: data.send, streaming: data.streaming, ...askAnswers(data.messages), inline: true }), [data.send, data.streaming, data.messages]);
   const status = data.streaming ? (
     <ConversationStatusSlot>
-      {data.thinking ? <ConversationThinking stage={data.stage} startedAt={data.startedAt} onStop={data.stop} route={data.route} progress={data.progress} steps={data.steps} thought={data.thought} readScope={data.readScope} /> : null}
+      {data.thinking ? <ConversationThinking stage={data.stage} startedAt={data.startedAt} onStop={data.stop} route={data.route} progress={data.progress} steps={data.steps} thought={data.thought} readScope={data.readScope} row={false} /> : null}
       {/* 伙伴这一轮的计划清单和出的卡（17.4，同 ConversationTimeline）：写完读回历史后挂在那条回答上。 */}
       {data.plan ? <PlanChecklist entries={data.plan.entries} collapsed={data.plan.collapsed} /> : null}
+      {/* 「在做什么」那一行（照 Claude Code，本人 11/16）：清单下面，没有清单就在这一轮最后；这一轮的步骤收在 › 里。 */}
+      <ActivityLine text={conversationDoing(data)} since={new Date(data.startedAt).toISOString()} detail={data.steps.length ? <StepList steps={data.steps} /> : null} />
       {data.turnCards?.length ? <EntryCards cards={data.turnCards} /> : null}
     </ConversationStatusSlot>
   ) : null;

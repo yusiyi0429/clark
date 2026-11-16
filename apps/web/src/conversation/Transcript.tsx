@@ -435,8 +435,10 @@ export function ThinkingStream({ text }: { text: string }) {
  * 非深度档中途升级（服务端给「预计还需约 X 秒」）不另起一行解释：阶段写「深入分析」，用时后面接「/ 约 N 秒」（升级那一刻的用时加 X）；
  * 正文开始后不再写预计，整行淡化。
  */
-export function ConversationThinking({ stage, startedAt, onStop, route, progress, steps = [], thought, readScope }: {
+export function ConversationThinking({ stage, startedAt, onStop, route, progress, steps = [], thought, readScope, row = true }: {
   stage: ThinkingStage; startedAt: number; onStop: () => void;
+  /** false：现场那一行和步骤由调用方画（新首页对话的「在做什么」那一行，WorkTimeline），这里只留思考摘要和读取范围。 */
+  row?: boolean;
   route?: { tier: "quick" | "grounded" | "deep"; expectSeconds: number } | null;
   progress?: TurnProgress;
   /** 服务端给的步骤：有步骤时替代进度行的单行文字和计数；正文开始后收成一个勾和步数。 */
@@ -470,7 +472,7 @@ export function ConversationThinking({ stage, startedAt, onStop, route, progress
   return (
     <div className={s.thinkingGroup} data-stage={stage} data-steps={stepped && !answering ? "" : undefined}>
       {thought?.text && thought.seconds === null && stage !== "answering" ? <ThinkingStream text={thought.text} /> : null}
-      <div className={s.thinking} data-testid="conversation-thinking" data-tier={route?.tier} data-stage={stage}>
+      {row ? <div className={s.thinking} data-testid="conversation-thinking" data-tier={route?.tier} data-stage={stage}>
         <span className={s.pulse} aria-hidden />
         {/* 状态区一直在（读屏才念得到后来出现的阶段）；没有阶段时视觉上藏起。 */}
         <span role="status">{phase ?? ""}</span>
@@ -479,9 +481,9 @@ export function ConversationThinking({ stage, startedAt, onStop, route, progress
         <HeroButton variant="ghost" size="sm" onPress={onStop} aria-label="停止本次回答">
           停止
         </HeroButton>
-      </div>
+      </div> : null}
       {readScope && !answering ? <div className={s.liveScope}><ScopeChip scope={readScope} /></div> : null}
-      {stepped && !answering ? <StepList steps={steps} /> : null}
+      {row && stepped && !answering ? <StepList steps={steps} /> : null}
     </div>
   );
 }

@@ -26,11 +26,12 @@ import { ModelPanel } from "@/components/home/ModelPanel";
 import { AUTO_EFFORT, QUOTA_RING_LEFT, localPanelRows, pickLocal, sourceQuota, type PanelRowKey } from "@/lib/local/modelPanel";
 import { usageCells } from "@/lib/home/quota";
 import { sizeText, uploadToSubSession } from "@/lib/home/attachments";
-import type { TLocalHold, TLocalAttachmentRef, TLocalEffort, TLocalPermissionMode, TLocalSessionModelRequest, TLocalStatusResponse, TSessionAttachment } from "@warmap/contracts";
+import type { TLocalHold, TLocalAttachmentRef, TLocalEffort, TLocalPermissionMode, TLocalPlanEntry, TLocalSessionModelRequest, TLocalStatusResponse, TSessionAttachment } from "@warmap/contracts";
 import { PermissionModeMenu } from "./PermissionMode";
 import { ApprovalDecision, DENY_MAX, awayChip } from "@/components/work/decisions";
 import { DecisionBox, FailedLine } from "@/components/work/DecisionBox";
 import { ICON, StateIcon, type IconState } from "@/components/home/StateIcon";
+import { Elapsed, WorkingMark, planDoing } from "./ActivityLine";
 import { MarkdownBody, ReceiptFailed, ReceiptSending, ReceiptTicks, type MarkdownParts } from "@/conversation/Transcript";
 import h from "@/styles/home.module.css";
 import s from "@/styles/v2-session.module.css";
@@ -193,20 +194,17 @@ export function roundStart(entries: SessionEntry[]): string | null {
 }
 
 /**
- * 「在跑」那一行（27 条，照 Claude Code 底部那行）：模型在两步之间想的时候界面也在动——转圈加这一轮跑了多久（每秒走一下）。
- * 只在会话在跑、最后不是一段过程、也没在等你批准或回答时出；最后那段过程在转圈时不重复出。不写解释句。
- * starting（本机在拉起执行方）：写「启动中 · N 秒」，running 以后照旧。
+ * 「在跑」那一行（27 条；11/16 起照 Claude Code 的「在做什么」那一行，ActivityLine）：模型在两步之间想、或在写回答的时候界面也在动——
+ * 字符动画、计划里在做的那条、这一轮跑了多久（每秒走一下）。只在会话在跑、最后不是正在跑的那段过程、也没在等你批准或回答时出。不写解释句。
+ * starting（本机在拉起执行方）：写「启动中」，running 以后照旧。
  */
-function WorkingRow({ since, starting = false }: { since: string | null; starting?: boolean }) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, []);
+function WorkingRow({ since, starting = false, doing }: { since: string | null; starting?: boolean; doing: string | null }) {
+  const text = starting ? "启动中" : doing;
   return (
-    <div className={s.step} data-testid="session-working">
-      <StateIcon state="running" label={starting ? "启动中" : "在跑"} />
-      {since || starting ? <span className={`${s.stepText} ${h.num}`}>{[starting ? "启动中" : null, since ? duration(since, now) : null].filter(Boolean).join(" · ")}</span> : null}
+    <div className={`${s.step} ${s.activity}`} data-testid="session-working">
+      <WorkingMark label={starting ? "启动中" : "在跑"} />
+      {text ? <span className={s.stepText}>{text}</span> : null}
+      {since ? <Elapsed since={since} /> : null}
     </div>
   );
 }
@@ -224,33 +222,38 @@ function StepRow({ row, live }: { row: ProcessRow; live: boolean }) {
 
 /**
  * 一段过程一行（28 条，照 Claude Code）：收着时写总结和这一段的用时，点开一步一行。
- * running（会话在跑、这一段在最后）：转圈加当前那一步的标题；做完了收成总结。
+ * running（会话在跑、这一段在最后、还没开始写回答）：这一段就是「在做什么」那一行（11/16，ActivityLine）——字符动画、当前那一步
+ * （执行方写的 description，没有就写标题）、这一轮的用时（since）、行尾 › 点开一步一行；做完了收成总结。
  */
-const ProcessGroup = memo(function ProcessGroup({ process, live, running }: { process: Process; live: boolean; running: boolean }) {
+const ProcessGroup = memo(function ProcessGroup({ process, live, running, since }: { process: Process; live: boolean; running: boolean; since: string | null }) {
   const [open, setOpen] = useState(false);
   const counted = process.rows.filter((row) => !row.note);
   const summary = counted.length ? processSummary(counted.map((row) => row.step.title)) : process.rows.map((row) => row.step.title).join(" · ");
   const current = [...process.rows].reverse().find((row) => !row.denied && !row.step.done) ?? process.rows[process.rows.length - 1]!;
+  const doing = current.step.description ?? current.step.title;
   const took = !running && Date.parse(process.end) - Date.parse(process.start) >= 1000 ? duration(process.start, process.end) : null;
-  const said = running ? current.step.title : [summary, took].filter(Boolean).join(" · ");
+  const said = running ? doing : [summary, took].filter(Boolean).join(" · ");
+  const chevron = <ChevronRight {...ICON} className={h.chevron} data-open={open ? "" : undefined} />;
   return (
-    <div className={s.steps} data-open={open ? "" : undefined}>
+    <div className={running ? `${s.steps} ${s.activity}` : s.steps} data-open={open ? "" : undefined}>
       <button type="button" className={s.stepsHead} aria-expanded={open} aria-label={`${said}，${open ? "收起" : "展开"}`} onClick={() => setOpen(!open)}>
-        {running ? <StateIcon state="running" /> : <ChevronRight {...ICON} className={h.chevron} data-open={open ? "" : undefined} />}
-        <span className={s.stepsSummary}>{running ? current.step.title : summary}</span>
+        {running ? <WorkingMark label="进行中" /> : chevron}
+        <span className={s.stepsSummary}>{running ? doing : summary}</span>
         {took ? <span className={s.stepsTook}>{took}</span> : null}
+        {running && since ? <Elapsed since={since} /> : null}
+        {running ? chevron : null}
       </button>
       <div className={s.stepsBody} inert={!open}>
         <div>{process.rows.map((row) => <StepRow key={row.step.seq} row={row} live={live} />)}</div>
       </div>
     </div>
   );
-}, (a, b) => a.live === b.live && a.running === b.running && sameProcess(a.process, b.process));
+}, (a, b) => a.live === b.live && a.running === b.running && a.since === b.since && sameProcess(a.process, b.process));
 
 /** 一段过程画出来一样不一样（每来一条事件都重新分组，对象是新的，按内容比）。 */
 function sameProcess(a: Process, b: Process): boolean {
   return a.seq === b.seq && a.start === b.start && a.end === b.end && a.rows.length === b.rows.length
-    && a.rows.every((row, index) => { const other = b.rows[index]!; return row.denied === other.denied && row.note === other.note && row.step.seq === other.step.seq && row.step.title === other.step.title && row.step.done === other.step.done && row.step.isError === other.step.isError; });
+    && a.rows.every((row, index) => { const other = b.rows[index]!; return row.denied === other.denied && row.note === other.note && row.step.seq === other.step.seq && row.step.title === other.step.title && row.step.description === other.step.description && row.step.done === other.step.done && row.step.isError === other.step.isError; });
 }
 
 const noop = () => undefined;
@@ -373,7 +376,7 @@ export function StopLine({ stopped, onResume }: { stopped: NonNullable<SessionVi
   );
 }
 
-export function SessionTranscript({ entries, agentName, canAct, device, onDecide, lead, tail, asking, live, starting = false, ended = false, pinned = false, onResend, onRetry, onFile, draft = null, drafted = NO_DRAFTED, stopped = null, onResume }: {
+export function SessionTranscript({ entries, agentName, canAct, device, onDecide, lead, tail, asking, live, starting = false, ended = false, pinned = false, onResend, onRetry, onFile, draft = null, drafted = NO_DRAFTED, stopped = null, onResume, plan }: {
   entries: SessionEntry[];
   agentName: string;
   canAct: boolean;
@@ -406,15 +409,18 @@ export function SessionTranscript({ entries, agentName, canAct, device, onDecide
   /** 执行方正在写的那一段（useSessionEvents 的草稿）；没有为 null。drafted：按草稿出过的那几段的编号。 */
   draft?: string | null;
   drafted?: ReadonlySet<number>;
+  /** 本机报的计划（view.plan）：两步之间「在跑」那一行写计划里在做的那条。 */
+  plan?: readonly TLocalPlanEntry[];
 }) {
   const pending = ended ? [] : entries.flatMap((entry) => (entry.kind === "permission" && !entry.decision ? [entry.request] : []));
   const firstPending = pending[0]?.requestId;
   const askingText = asking ? questionNotice(asking) : null;
   const lastAsk = askingText ? entries.map((entry) => entry.kind === "notice" && entry.text === askingText).lastIndexOf(true) : -1;
   const items = useMemo(() => groupEntries(entries.filter((_, index) => index !== lastAsk)), [entries, lastAsk]);
-  // 在跑、没在等你：最后一段过程就是正在做的（转圈加当前那一步）；最后不是过程（刚说完、在想）时出「在跑」那一行。
+  // 在跑、没在等你：最后一段过程就是「在做什么」那一行（当前那一步）；最后不是过程（刚说完、在想）或已经在写回答时，最下面出「在跑」那一行。
   const busy = live && !pending.length && !asking;
-  const tailProcess = items[items.length - 1]?.kind === "process";
+  const tailProcess = items[items.length - 1]?.kind === "process" && !draft;
+  const since = roundStart(entries);
   return (
     <OpenFileContext.Provider value={onFile ?? null}>
     <div className={s.feed}>
@@ -438,7 +444,7 @@ export function SessionTranscript({ entries, agentName, canAct, device, onDecide
               : entry.receipt ? <ReceiptTicks key={`${entry.seq}:receipt`} className={s.meReceipt} state={entry.receipt} /> : null,
           ];
           case "assistant": return <AssistantBubble key={entry.seq} entry={entry} agentName={agentName} drafted={drafted.has(entry.seq)} />;
-          case "process": return <ProcessGroup key={entry.seq} process={entry} live={live} running={busy && index === items.length - 1} />;
+          case "process": return <ProcessGroup key={entry.seq} process={entry} live={live} running={busy && tailProcess && index === items.length - 1} since={since} />;
           case "asked": return <DecisionBox key={entry.seq} kind="question" title={entry.question} options={[]} onPick={noop} resolved={entry.answer ?? undefined} expired={entry.answer === null} />;
           case "permission":
             if (ended) return <DecisionBox key={entry.seq} kind="approval" title={entry.request.title} options={[]} onPick={noop} expired />;
@@ -455,7 +461,7 @@ export function SessionTranscript({ entries, agentName, canAct, device, onDecide
         }
       })}
       {draft ? <DraftBubble text={draft} agentName={agentName} /> : null}
-      {busy && !tailProcess && !draft ? <WorkingRow since={roundStart(entries)} starting={starting} /> : null}
+      {busy && !tailProcess ? <WorkingRow since={since} starting={starting} doing={planDoing(plan)} /> : null}
       {stopped && !live ? <StopLine stopped={stopped} onResume={onResume} /> : null}
       {tail}
     </div>

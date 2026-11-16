@@ -15,7 +15,8 @@ export type SessionEntry =
       /** 开工那句（派活时交给会话的交代，user_message 的 source = initial）：按 Markdown 画。 */
       initial?: true }
   | { kind: "assistant"; seq: number; at: string; text: string }
-  | { kind: "step"; seq: number; at: string; toolUseId: string; title: string; done: boolean; isError: boolean }
+  /** description：执行方写给人看的那句（Bash、Agent 等入参里的 description），「在做什么」那一行先用它。 */
+  | { kind: "step"; seq: number; at: string; toolUseId: string; title: string; done: boolean; isError: boolean; description?: string }
   /** voided：本机程序重启时作废的（不是本人拒的），那一步行尾写「已作废」。 */
   | { kind: "permission"; seq: number; at: string; request: TLocalPermissionRequestView; decision: "allow" | "deny" | null; voided?: true }
   | { kind: "artifact"; seq: number; at: string; title: string; fileName: string }
@@ -82,6 +83,9 @@ const addUsage = (a: TLocalUsage, b: TLocalUsage): TLocalUsage => ({
   costUsd: a.costUsd === null && b.costUsd === null ? null : (a.costUsd ?? 0) + (b.costUsd ?? 0),
 });
 
+/** 工具入参里的 description（本机 tool_call 原样带着入参）：是一句话才要。 */
+const said = (description: unknown) => (typeof description === "string" && description.trim() ? { description: description.trim() } : {});
+
 export function foldEvent(view: SessionView, event: TLocalSessionEvent): SessionView {
   if (event.seq <= view.lastSeq) return view;
   const next: SessionView = { ...view, lastSeq: event.seq, startedAt: view.startedAt ?? event.at };
@@ -128,7 +132,7 @@ export function foldEvent(view: SessionView, event: TLocalSessionEvent): Session
       next.lastActivity = { at: event.at, text: event.text };
       return next;
     case "tool_call":
-      next.entries = [...view.entries, { kind: "step", ...base, toolUseId: event.toolUseId, title: event.title, done: false, isError: false }];
+      next.entries = [...view.entries, { kind: "step", ...base, toolUseId: event.toolUseId, title: event.title, done: false, isError: false, ...said(event.input.description) }];
       next.lastActivity = { at: event.at, text: event.title };
       return next;
     case "tool_result":

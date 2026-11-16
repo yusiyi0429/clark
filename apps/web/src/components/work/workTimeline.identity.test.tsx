@@ -27,7 +27,7 @@ function locate(value: ReactNode, found: Located[] = [], path: string[] = []): L
   return found;
 }
 const data = (messages: Message[], extra: Partial<ConversationData> = {}) => ({
-  scope: "global", messages, partial: "", streaming: false, thinking: false, stage: "answering", steps: [], send: vi.fn(), rescope: vi.fn(), ...extra,
+  scope: "global", messages, partial: "", streaming: false, thinking: false, stage: "answering", startedAt: 0, steps: [], send: vi.fn(), rescope: vi.fn(), ...extra,
 }) as unknown as ConversationData;
 const message = (sequence: number, createdAt?: string): Message => ({ sequence, role: "user", content: `message-${sequence}`, ...(createdAt ? { createdAt } : {}) });
 const HandoffPicker = () => <textarea defaultValue="keep this instruction" />;
