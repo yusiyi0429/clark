@@ -377,6 +377,8 @@ export const WorkHomeResponse = Type.Object({
   month: Type.Object({ missions: Type.Array(HomeMonthMission) }, strict),
   other: Type.Object({ subSessions: Type.Array(SubSession), items: Type.Array(HomeItem) }, strict),
   waiting: Type.Array(WaitingItem),
+  /** 本人忽略过的会议行（等你里从会议来的那几行不在 waiting 里，网页自己合进等你）：id 是会议行的 id，version 是忽略时那一场的样子；网页照它不再列，变了又列。 */
+  ignoredMeetings: Type.Optional(Type.Array(Type.Object({ id: Type.String({ minLength: 1 }), version: Type.String({ minLength: 1 }) }, strict))),
 }, strict);
 
 /**
@@ -389,8 +391,11 @@ export const WorkWaitingCountResponse = Type.Object({ count: Type.Integer({ mini
  * POST /api/me/waiting/:id/ignore（204）：本人把一件等你忽略（id 是 WaitingItem.id）。只从本人的等你里收起，事情本身不动；
  * 原因必填（去掉首尾空白后 1 到 500 字），连同这一件当时的样子存下。这一件之后变了（新的请求、状态或内容变了）又回到等你。不能撤销。
  * 原因为空或太长 400；本人现在的等你里没有这一件 404。
+ * 会议行（id 是 partner-meeting:<会议行 id>，本人 11/16）不在服务端的等你里：网页带上那一场当时的样子（version），不带 400；不核对这一场在不在。
  */
-export const IgnoreWaitingRequest = Type.Object({ reason: Type.String({ minLength: 1, maxLength: 500 }) }, strict);
+export const IgnoreWaitingRequest = Type.Object({ reason: Type.String({ minLength: 1, maxLength: 500 }), version: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })) }, strict);
+/** 会议行在忽略接口里的 id 前缀。 */
+export const MEETING_ROW_PREFIX = "partner-meeting:";
 
 /**
  * 项目对话（原 Task 管线）里网页按时间插的一行（第 4.5 节，从卡和交回现算，不另存事件）。id 稳定，网页按它去重；at 是这件事发生的时间。

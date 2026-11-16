@@ -122659,6 +122659,27 @@
                 }
               }
             }
+          },
+          "ignoredMeetings": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "version"
+              ],
+              "properties": {
+                "id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "version": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       },
@@ -122685,6 +122706,11 @@
           "reason": {
             "minLength": 1,
             "maxLength": 500,
+            "type": "string"
+          },
+          "version": {
+            "minLength": 1,
+            "maxLength": 200,
             "type": "string"
           }
         }

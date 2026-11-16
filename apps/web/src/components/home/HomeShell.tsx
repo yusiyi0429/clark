@@ -535,7 +535,7 @@ function HomeFrame({ account }: { account: Account }) {
   const { items: meetingItems } = usePartnerMeetings();
   const monthExtras = useMonthExtras({ data, api, projects, go });
   const focusNow = Date.now();
-  const focus = focusList({ waiting: data.waiting, meetings: meetingItems, offline: machine.disconnected, recordingMeetingId, now: focusNow });
+  const focus = focusList({ waiting: data.waiting, meetings: meetingItems, offline: machine.disconnected, recordingMeetingId, now: focusNow, ignoredMeetings: data.ignoredMeetings });
   const waitingCount = focus.length;
   useTabTitle(waitingCount, meeting.live);
   // 左栏「会议」「本月」两行的行尾（设计第 3 节）：下一场还没进等你的会；这个月还没完成的 Task 里最早的验收时间点。

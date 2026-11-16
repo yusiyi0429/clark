@@ -97,4 +97,17 @@ describe("等你：忽略", { timeout: 30_000 }, () => {
       expect(await ids(f)).toContain(id);
     } finally { await f.close(); }
   });
+  it("会议行（等你里从会议来的那几行，id 是 partner-meeting:<会议行 id>）：带当时的样子才能忽略，首页数据回 ignoredMeetings；只是本人的", async () => {
+    const f = await boardFixture({}, { boardCloudAgents: false });
+    try {
+      const home = async (cookie = f.member) => (await f.call("GET", "/api/me/work-home", undefined, cookie)).json().ignoredMeetings;
+      expect(await home()).toEqual([]);
+      const id = encodeURIComponent("partner-meeting:pm1");
+      expect((await f.call("POST", `/api/me/waiting/${id}/ignore`, { reason: "这场不用管" })).statusCode).toBe(400);
+      expect((await f.call("POST", `/api/me/waiting/${id}/ignore`, { reason: "  ", version: "attention|录音转写失败|2026-11-16T00:46:00.000Z" })).statusCode).toBe(400);
+      expect((await f.call("POST", `/api/me/waiting/${id}/ignore`, { reason: "这场不用管", version: "attention|录音转写失败|2026-11-16T00:46:00.000Z" })).statusCode).toBe(204);
+      expect(await home()).toEqual([{ id: "pm1", version: "attention|录音转写失败|2026-11-16T00:46:00.000Z" }]);
+      expect(await home(await login(f))).toEqual([]);
+    } finally { await f.close(); }
+  });
 });

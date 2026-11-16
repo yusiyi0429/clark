@@ -12,7 +12,9 @@ import type { WorkHomeApi } from "@/lib/home/useWorkHome";
 import { LocalContext, type LocalRunnerState } from "@/lib/local/LocalRunnerProvider";
 import { createMockRunner } from "@/lib/local/mock";
 import type { Worker } from "@/lib/work/workers";
-import { IgnoreBox, WaitingList, confirmationLine, dueText, ignoreItem, waitingAnswer } from "./HomeView";
+import { IgnoreBox, WaitingList, confirmationLine, dueText, ignoreItem, ignoreMeeting, waitingAnswer } from "./HomeView";
+import { meetingVersion } from "@/lib/home/focus";
+import type { PartnerMeeting } from "@/lib/home/partnerMeetingFeed";
 
 const HERE = "00000000-0000-4000-8000-00000000d001";
 const THERE = "00000000-0000-4000-8000-00000000d002";
@@ -237,5 +239,16 @@ describe("等你行的「忽略」（方案 A）", () => {
     refresh.mockClear();
     await expect(ignoreItem(wait({}), "不急", refresh)).rejects.toThrow("网络断了");
     expect(refresh).not.toHaveBeenCalled();
+  });
+  it("会议行也有「忽略」（本人 11/16）：带会议行的 id 和这一场当时的样子调同一个接口，成了重读首页", async () => {
+    const meeting = { id: "pm1", meetingId: "m1", title: "11月16日 11:41 的会", at: "2026-11-16T03:41:00Z", endsAt: "2026-11-16T04:00:00Z", stage: "attention",
+      statusText: "录音转写失败", href: "/me/work/meetings/m1", joinUrl: null, needsAction: true, source: "tianshu" } as unknown as PartnerMeeting;
+    const html = renderToStaticMarkup(<LocalContext.Provider value={local("ready")}>
+      <WaitingList items={[]} rows={[{ kind: "meeting", item: meeting, when: "after" }]} api={api()} go={() => undefined} /></LocalContext.Provider>);
+    expect(html).toMatch(/data-kind="meeting"[\s\S]*<button[^>]*aria-label="忽略"/);
+    const refresh = vi.fn(async () => undefined);
+    await ignoreMeeting(meeting, "转写失败不用管", refresh);
+    expect(ignoreWaiting).toHaveBeenLastCalledWith("partner-meeting:pm1", "转写失败不用管", meetingVersion(meeting));
+    expect(refresh).toHaveBeenCalledTimes(1);
   });
 });

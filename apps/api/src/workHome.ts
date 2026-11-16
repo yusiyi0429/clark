@@ -1,6 +1,7 @@
 import type { Pool } from "pg";
 import type { TBackgroundItem, TBackgroundResponse, TBackgroundState, TCard, TCardMerge, TCardTaskView, THomeItem, THomeProject, THomeProjectGoal,
   TLocalFolderHolder, TLocalStopReason, TLocalTaskBudgetView, TMyMeetingCard, TMyMeetingConfirm, TNexusConfirmationItem, TSubSession, TSubSessionState, TWorkerQueueReason, TWorkHomeResponse } from "@warmap/contracts";
+import { MEETING_ROW_PREFIX } from "@warmap/contracts";
 import { assembleWaiting, HELD } from "./homeWaiting.js";
 import { planTaskMissions, type MissionRow } from "./homePlan.js";
 import { failStreak, type HandbackRow } from "./cardProjection.js";
@@ -366,7 +367,14 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
 
   return { period, projects: homeProjects, archivedCount: projectRows.length - active.length + handed.size, month,
     other: { subSessions: subs.filter((sub) => !onProject(sub.projectId) && !(sub.projectId && handed.has(sub.projectId))).sort(order).map(view), items: loose.map(homeItem) },
-    waiting };
+    waiting, ignoredMeetings: await ignoredMeetings(q, ownerId) };
+}
+
+/** 本人忽略过的会议行（同一场同一个样子只回一条）。 */
+async function ignoredMeetings(q: Query, ownerId: string): Promise<{ id: string; version: string }[]> {
+  const rows = (await q("SELECT DISTINCT item_id,version FROM waiting_ignores WHERE person_id=$1 AND starts_with(item_id,$2) ORDER BY item_id,version",
+    [ownerId, MEETING_ROW_PREFIX])).rows as { item_id: string; version: string }[];
+  return rows.map((row) => ({ id: row.item_id.slice(MEETING_ROW_PREFIX.length), version: row.version }));
 }
 
 /**

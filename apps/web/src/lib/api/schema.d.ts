@@ -20128,12 +20128,17 @@ export interface components {
                 };
                 summary?: string | null;
             }[];
+            ignoredMeetings?: {
+                id: string;
+                version: string;
+            }[];
         };
         WorkWaitingCountResponse: {
             count: number;
         };
         IgnoreWaitingRequest: {
             reason: string;
+            version?: string;
         };
         BackgroundItem: {
             id: string;

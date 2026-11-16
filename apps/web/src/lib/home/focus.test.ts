@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { PartnerMeeting } from "./partnerMeetingFeed";
 import type { WaitingItem } from "./types";
-import { AFTER_MEETING_MS, FOCUS_VISIBLE, focusList, visibleCount, type FocusRow } from "./focus";
+import { AFTER_MEETING_MS, FOCUS_VISIBLE, focusList, meetingVersion, visibleCount, type FocusRow } from "./focus";
 
 // 此刻：北京时间 11 月 16 日 11:46。
 const NOW = Date.parse("2026-11-16T03:46:00Z");
@@ -117,5 +117,16 @@ describe("首页露几件", () => {
   it("露 5 件，正好 6 件时全露", () => {
     expect(FOCUS_VISIBLE).toBe(5);
     expect([visibleCount(0), visibleCount(5), visibleCount(6), visibleCount(7), visibleCount(12)]).toEqual([0, 5, 6, 5, 5]);
+  });
+});
+
+describe("focusList：会议行也能忽略（本人 11/16 方案 A）", () => {
+  it("忽略时记下这一场当时的样子（阶段、状态、时间）；一样就不进等你，变了又回来", () => {
+    const after = meet({ id: "done", meetingId: "m5", at: iso(-3 * HOUR), endsAt: iso(-2 * HOUR), stage: "attention", statusText: "录音转写失败", needsAction: true });
+    const ignored = [{ id: "done", version: meetingVersion(after) }];
+    expect(ids(run({ meetings: [after] }))).toEqual(["after:done"]);
+    expect(ids(run({ meetings: [after], ignoredMeetings: ignored }))).toEqual([]);
+    expect(ids(run({ meetings: [{ ...after, stage: "ready", statusText: "会议记录已到" }], ignoredMeetings: ignored }))).toEqual(["after:done"]);
+    expect(meetingVersion(after)).toBe(`attention|录音转写失败|${after.at}`);
   });
 });

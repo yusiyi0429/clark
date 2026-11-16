@@ -45,8 +45,10 @@ function meetingTime(item: PartnerMeeting, now: number) {
  * 「等你」里的一场会（设计 4.7）：快开始的第二行「会议 · 11:44–12:44」，行尾「加入会议」（有入会地址）或「开始录音」（本人能在这台电脑录）；
  * 开完要处理的第二行「会议 · 今天 11:41 · 状态」，整行点进会议页，不放按钮。时间位由调用方算好传进来。
  */
-export function FocusMeetingRow({ item, when, time, go, meeting }: {
+export function FocusMeetingRow({ item, when, time, go, meeting, ignore = null }: {
   item: PartnerMeeting; when: "soon" | "after"; time: ReactNode; go: Navigate; meeting: Pick<HomeMeeting, "start">;
+  /** 行尾「忽略」和展开的原因框（等你那边给，本人 11/16）。 */
+  ignore?: ReactNode;
 }) {
   const span = meetingSpan(item.at, item.endsAt ?? null);
   return (
@@ -67,6 +69,7 @@ export function FocusMeetingRow({ item, when, time, go, meeting }: {
           <HeroButton variant="tertiary" size="sm" onPress={() => void meeting.start({ meetingId: item.meetingId!, title: item.title })}>开始录音</HeroButton>
         ) : null}
       </span>
+      {ignore}
     </li>
   );
 }

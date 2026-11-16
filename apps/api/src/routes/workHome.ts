@@ -1,7 +1,7 @@
 import { markWorkSeen } from "../workSeen.js";
 import type { FastifyReply } from "fastify";
 import { Type } from "@sinclair/typebox";
-import { ArchivedSubSessionListResponse, BackgroundQuery, BackgroundResponse, IgnoreWaitingRequest, MarkWorkSeenRequest, RouteRequest, RouteResponse, SubSessionKind, UpdateSubSessionRequest,
+import { ArchivedSubSessionListResponse, BackgroundQuery, BackgroundResponse, IgnoreWaitingRequest, MEETING_ROW_PREFIX, MarkWorkSeenRequest, RouteRequest, RouteResponse, SubSessionKind, UpdateSubSessionRequest,
   WorkHomeResponse, WorkWaitingCountResponse } from "@warmap/contracts";
 import { waitingVersion } from "../homeWaiting.js";
 import { deleteSubSession, listArchivedSubSessions, updateSubSession } from "../subSessionAdmin.js";
@@ -53,6 +53,13 @@ export function registerWorkHomeRoutes(app: AppInstance, ctx: RouteContext): voi
     async (req, reply) => {
       const reason = req.body.reason.trim();
       if (!reason) return fail(reply, 400, "REASON_REQUIRED", "要写原因");
+      // 会议行不在服务端的等你里（网页从会议合进来）：存网页带来的那一场当时的样子，网页照 ignoredMeetings 不再列。
+      if (req.params.id.startsWith(MEETING_ROW_PREFIX)) {
+        if (!req.body.version) return fail(reply, 400, "VERSION_REQUIRED", "会议行要带这一场当时的样子");
+        await q("INSERT INTO waiting_ignores(person_id,item_id,version,reason,ignored_at) VALUES($1,$2,$3,$4,$5)",
+          [req.person!.personId, req.params.id, req.body.version, reason, ctx.now()]);
+        return reply.status(204).send();
+      }
       const item = (await workHome(req.person!)).waiting.find((entry) => entry.id === req.params.id);
       if (!item) return fail(reply, 404, "WAITING_NOT_FOUND", "等你里没有这一件");
       await q("INSERT INTO waiting_ignores(person_id,item_id,version,reason,ignored_at) VALUES($1,$2,$3,$4,$5)",

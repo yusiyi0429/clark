@@ -19,11 +19,13 @@ import { FailedLine } from "@/components/work/DecisionBox";
 import { localOptions, oneTap } from "@/components/work/decisions";
 import { InputBar } from "./InputBar";
 import { FocusMeetingRow, ReadError } from "./PartnerMeetings";
-import { focusList, visibleCount, type FocusRow } from "@/lib/home/focus";
+import { focusList, meetingVersion, visibleCount, type FocusRow } from "@/lib/home/focus";
+import type { PartnerMeeting } from "@/lib/home/partnerMeetingFeed";
 import type { HomeMeeting } from "./MeetingControl";
 import { usePartnerMeetings } from "@/lib/home/partnerMeetingFeed";
 import { ConfirmAndHandOff } from "@/components/meeting/MeetingWorkHandoffs";
 import { acceptDrafts, acceptProjectDrafts, decideAutoRelay, decideNexusConfirmation, ignoreWaiting, planKey, type PlanTarget } from "@/lib/board/cloud";
+import { MEETING_ROW_PREFIX } from "@warmap/contracts";
 import { useLocalRunner, type LocalRunnerState } from "@/lib/local/LocalRunnerProvider";
 import { decideProposal } from "@/lib/team/roles";
 import { canCommandHere, decide } from "@/lib/work/actions";
@@ -95,7 +97,7 @@ export function HomeWaiting({ data, api, go, offline = false, phone = false, rec
     const timer = window.setTimeout(() => setWaited(true), MEETINGS_WAIT_MS);
     return () => window.clearTimeout(timer);
   }, [loaded]);
-  const rows = focusList({ waiting: data.waiting, meetings: items, offline, recordingMeetingId, now: Date.now() });
+  const rows = focusList({ waiting: data.waiting, meetings: items, offline, recordingMeetingId, now: Date.now(), ignoredMeetings: data.ignoredMeetings });
   const className = phone ? h.phoneWaiting : h.section;
   if (!loaded && !waited) return <section aria-label="等你" aria-busy="true" className={className} />;
   return <section aria-label="等你" className={className}>
@@ -271,6 +273,12 @@ export async function ignoreItem(item: WaitingItem, reason: string, refresh: () 
   await refresh();
 }
 
+/** 忽略一行会议（本人 11/16）：会议行不在服务端的等你里，带这一场当时的样子存下，重读首页后不再列；那一场有了新变化又回来。 */
+export async function ignoreMeeting(item: PartnerMeeting, reason: string, refresh: () => Promise<unknown>): Promise<void> {
+  await ignoreWaiting(`${MEETING_ROW_PREFIX}${item.id}`, reason, meetingVersion(item));
+  await refresh();
+}
+
 /** 等你一行「忽略」展开的那一块：输入框「原因」和「忽略」，原因为空点不了，回车同「忽略」；Esc 或点这一行以外收起；没成写「失败」加「重试」。 */
 export function IgnoreBox({ onIgnore, onClose }: { onIgnore: (reason: string) => Promise<unknown>; onClose: () => void }) {
   const [text, setText] = useState("");
@@ -365,9 +373,20 @@ export function WaitingList({ items, rows: given, fold = false, meeting, api, go
             <button type="button" className={h.waitMain} onClick={() => go(pageHref("connections"))} data-testid="wait-machine"><span className={h.waitTitle}>这台电脑没连上</span></button>
           </li>
         );
-        if (focus.kind === "meeting") return (
-          <FocusMeetingRow key={`meeting:${focus.item.id}`} item={focus.item} when={focus.when} time={timeSlot(focus)} go={go} meeting={meeting ?? { start: async () => null }} />
-        );
+        if (focus.kind === "meeting") {
+          const key = `meeting:${focus.item.id}`;
+          const ignoreOpen = ignoring === key;
+          return (
+            <FocusMeetingRow key={key} item={focus.item} when={focus.when} time={timeSlot(focus)} go={go} meeting={meeting ?? { start: async () => null }} ignore={<>
+              <span className={h.waitIgnore}>
+                <HeroButton variant="ghost" size="sm" isIconOnly title="忽略" aria-label="忽略" aria-expanded={ignoreOpen}
+                  onPress={() => setIgnoring(ignoreOpen ? null : key)}><EyeOff {...ICON} /></HeroButton>
+              </span>
+              {ignoreOpen ? <IgnoreBox onClose={() => setIgnoring(null)}
+                onIgnore={async (reason) => { await ignoreMeeting(focus.item, reason, api.refresh); setIgnoring(null); }} /> : null}
+            </>} />
+          );
+        }
         const { item } = focus;
         const { actions, away } = answer(item);
         const row = state[keyOf(item)];
