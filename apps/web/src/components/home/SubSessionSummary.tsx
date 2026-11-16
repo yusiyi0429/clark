@@ -11,11 +11,13 @@ import s from "@/styles/sub-session-summary.module.css";
 type ProjectSessions = Pick<Project, "id" | "name" | "subSessions">;
 
 /** 复用首页每轮刷新的状态；这里只展示，不把停下一轮当作验收完成。 */
-export function SubSessionSummary({ projects, other = [], grouped = true, go }: {
+export function SubSessionSummary({ projects, other = [], grouped = true, go, open = false }: {
   projects: readonly ProjectSessions[];
   other?: readonly SubSession[];
   grouped?: boolean;
   go: (href: string) => void;
+  /** 一打开就展开（项目详情里）。 */
+  open?: boolean;
 }) {
   const groups = projects.filter((project) => project.subSessions.length);
   const all = [...groups.flatMap((project) => project.subSessions), ...other];
@@ -37,7 +39,7 @@ export function SubSessionSummary({ projects, other = [], grouped = true, go }: 
     ))}</ul>;
   };
   return (
-    <details className={s.root} data-testid="sub-session-summary">
+    <details className={s.root} data-testid="sub-session-summary" open={open || undefined}>
       <summary className={s.toggle}>
         <ChevronRight size={14} aria-hidden className={s.chevron} />
         <span>子会话 {all.length}</span>

@@ -10,7 +10,7 @@ import { createMockRunner } from "@/lib/local/mock";
 import type { TLocalSessionSummary } from "@/lib/local/runner";
 import { toWorker, type Worker } from "@/lib/work/workers";
 import type { FeedItem } from "@/lib/home/types";
-import { GoalChangeDecision, SubSessionReport, feedBlocks } from "./TaskFeed";
+import { GoalChangeDecision, feedBlocks } from "./TaskFeed";
 
 const ROLE = { id: "00000000-0000-4000-8000-000000000001", name: "开发", kind: "worker" as const };
 const CARD = "00000000-0000-4000-8000-0000000000c1";
@@ -86,6 +86,15 @@ describe("Task 管线里的验收行（第 4.5 条）", () => {
     expect(raw).toContain('placeholder="自己说…"');
   });
 
+  it("约定都达到答过了：项目对话里不再留这一块（本人 11/16：项目对话只留对话本身）", () => {
+    vi.stubGlobal("localStorage", { getItem: () => JSON.stringify({ c1: "交给认可人" }), setItem: () => undefined });
+    try {
+      expect(render([{ kind: "criteria_met", id: "c1", at: "2026-11-07T06:00:00Z", taskId: "t1", met: 3, total: 3 }], []).html).not.toContain("约定 3 条都达到了");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("合回以后被推翻：一行「推翻了，开了返工「greet 返工」」，带理由", () => {
     const html = text(render([{ kind: "rework_opened", id: "r1", at: "2026-11-07T07:00:00Z", cardId: CARD, title: "greet 返工", fromCardId: CARD, reason: "返回值不对" }], []).html);
     expect(html).toContain("推翻了，开了返工「greet 返工」");
@@ -109,19 +118,6 @@ describe("子会话的提问由 Task 管线转达（14.3）", () => {
 
 describe("子会话停了、要人介入，报给项目主管线（18.10）", () => {
   const sub = { kind: "card" as const, id: CARD, letter: "B", title: "greet" };
-  it("停了：小字「B greet · 做完一轮」，下面做成了什么、卡在哪和「看结果」；产出物收下的能直接打开，没收到的只写标题", () => {
-    const OUT = "00000000-0000-4000-8000-0000000000b1";
-    const report = { kind: "sub_session_report" as const, id: "r1", at: "2026-11-07T05:00:00Z", afterSequence: 4, sub, why: "turn_done" as const, summary: "接口写好了，测试过了 12 条",
-      blocker: null, outputs: [{ outputId: OUT, title: "接口说明", fileName: "api.md" }, { outputId: null, title: "截图", fileName: "shot.png" }] };
-    const html = renderToStaticMarkup(<SubSessionReport item={report} go={vi.fn()} />);
-    expect(html).toMatch(/data-testid="sub-letter">B<.*greet · 做完一轮.*接口写好了，测试过了 12 条.*看结果/);
-    expect(html).toContain(`href="/api/me/local-outputs/${OUT}"`);
-    expect(text(html)).toContain("接口说明 · 截图");
-    expect(html.match(/<a /g)).toHaveLength(1);
-    expect(text(renderToStaticMarkup(<SubSessionReport item={{ ...report, why: "held", summary: null, blocker: "订阅额度用完了", outputs: [] }} go={vi.fn()} />)))
-      .toMatch(/greet · 停着等 订阅额度用完了 看结果/);
-  });
-
   it("要介入：决定卡排在云端记下的位置，标字母；本机那块不再重复出；答过的（closed）不画", () => {
     const here = session({ status: "idle", pendingQuestion: { requestId: "q1", askedAt: "2026-11-07T04:09:00Z", questions: [{ question: "用哪个库？", header: "", multiSelect: false, options: [{ label: "zod", description: "" }] }] } });
     const decision = { kind: "sub_session_decision" as const, id: "d1", at: "2026-11-07T04:09:30Z", afterSequence: 7, sub, sessionId: here.id, deviceId: "00000000-0000-4000-8000-0000000000d1",

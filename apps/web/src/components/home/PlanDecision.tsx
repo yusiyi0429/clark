@@ -32,7 +32,7 @@ import { SLOT_CAP, startBatch, type StartPlan } from "@/lib/work/queue";
 import { QUEUE_LABEL, liveSessions, type Worker } from "@/lib/work/workers";
 import type { SubSession } from "@/lib/home/types";
 import { ICON as STATE_ICON, StateIcon } from "./StateIcon";
-import { stoppedLabel, subIcon } from "./LeftColumn";
+import { stoppedLabel } from "./LeftColumn";
 import { subQueueText } from "@/lib/home/derive";
 import h from "@/styles/home.module.css";
 import x from "@/styles/decision-box.module.css";
@@ -440,11 +440,6 @@ export function PlanningLine({ planner }: { planner: Worker }) {
   );
 }
 
-/** 派活单选了「不要了」：收成一行（勾 · 问题 · 不要了）。 */
-export function DroppedRecord({ task }: { task: string }) {
-  return <p className={h.resolvedLine} data-testid="plan-dropped"><Check {...ICON} /><span className={h.resolvedQ}>{task}：这样开工？</span><span className={h.resolvedA}>{DROP_LABEL}</span></p>;
-}
-
 const WAIT_TEXT: Record<NonNullable<SubSession["waiting"]>, string> = { approval: "等你批准", question: "等你回复", verdict: "受阻", merge: "等你合回", needs_person: "等你补" };
 /** 事件行的阶段（5.6 状态词）。 */
 export function subStage(sub: SubSession): string {
@@ -458,23 +453,3 @@ export function subStage(sub: SubSession): string {
   }
 }
 
-/**
- * 开了以后（5.4.3「事件行」）：开工的选项框收成一行（勾 · 问题 · 就按这个开始），下面是开出的子会话，一行一个（和左栏同样式、带竖线）：
- * 状态图标 · 名字 · 阶段，原地跟着状态变；子会话要批准、提问时这一行写「等你批准」，点了进子会话去答（选项框不在两处各画一遍）。
- */
-export function StartedRecord({ task, subs, onOpen }: { task: string; subs: SubSession[]; onOpen: (sub: SubSession) => void }) {
-  return (
-    <div className={h.started} data-testid="started-record">
-      <p className={h.resolvedLine}><Check {...ICON} /><span className={h.resolvedQ}>{task}：这样开工？</span><span className={h.resolvedA}>{START_LABEL}</span></p>
-      <ul className={h.eventList}>
-        {subs.map((sub) => (
-          <li key={sub.id}>
-            <button type="button" className={h.event} onClick={() => onOpen(sub)} data-state={sub.state}>
-              <StateIcon {...subIcon(sub)} /><span className={h.eventName}>{sub.title}</span><span className={h.eventStage}> · {subStage(sub)}</span>
-            </button>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}

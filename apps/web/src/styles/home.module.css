@@ -597,18 +597,6 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .lineAct:hover { color: var(--ink-muted); }
 .lineMore { min-width: 0; overflow: hidden; color: var(--ink-faint); text-overflow: ellipsis; white-space: nowrap; }
 /* 开了以后：答完那一行（勾 · 问题 · 答案，12/16），下面是子会话事件行（带竖线，和左栏子会话行同一个样子）。 */
-.started { margin: var(--space-2) 0 var(--space-4); }
-.resolvedLine { display: flex; align-items: center; gap: var(--space-1); margin: 0 0 var(--space-1); color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; }
-.resolvedLine svg { flex: none; }
-.resolvedQ { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.resolvedA { flex: none; color: var(--ink-muted); font-weight: 600; }
-.resolvedA::before { content: "· "; color: var(--ink-faint); font-weight: 400; }
-.eventList { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; margin: 0 0 0 7px; padding: 0 0 0 var(--space-2); list-style: none; box-shadow: inset 1px 0 0 var(--hairline-strong); }
-.event { display: flex; align-items: center; gap: var(--space-2); min-width: 0; max-width: 100%; height: var(--row-32); padding: 0 var(--space-2); border: 0; border-radius: var(--r-control); background: none; color: var(--ink); font: inherit; font-size: var(--text-base); line-height: var(--lh-row); text-align: left; cursor: pointer; }
-.event:hover { background: var(--default-soft); }
-.event:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
-.eventName { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.eventStage { flex: none; color: var(--ink-muted); white-space: pre; }
 
 /* ---------- Task 详情 ---------- */
 .infoView { display: grid; grid-template-rows: auto minmax(0, 1fr); grid-template-columns: minmax(0, 1fr); min-height: 0; }

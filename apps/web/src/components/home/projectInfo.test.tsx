@@ -10,6 +10,15 @@ const local = { phase: "ready", folders: [], sessions: [] } as unknown as Parame
 const project = { id: "p1", name: "首页改版", archived: false, folder: null, transfer: null, goals: [], current: [], subSessions: [], items: [] } as unknown as Project;
 const actions = { rename: vi.fn(), archive: vi.fn(), setFolders: vi.fn(), setDue: vi.fn(), transfer: vi.fn(), withdraw: vi.fn() };
 
+describe("项目详情：子会话（本人 11/16：子会话状态从项目对话挪到这里）", () => {
+  it("有子会话时有一节「子会话」，列出这个项目的子会话和状态", () => {
+    const subs = [{ id: "c1", kind: "card", title: "改标题", state: "waiting", waiting: null, letter: "A", updatedAt: "2026-11-16T06:00:00Z" }];
+    const html = renderToStaticMarkup(<LocalContext.Provider value={local}><ProjectInfo project={{ ...project, subSessions: subs } as unknown as Project} period="2026-11" go={vi.fn()} actions={actions} doneDefinitionOf={() => null} me={{ personId: "me", name: "我" }} /></LocalContext.Provider>);
+    expect(html).toMatch(/aria-label="子会话".*data-testid="sub-session-summary".*改标题/);
+    expect(renderToStaticMarkup(<LocalContext.Provider value={local}><ProjectInfo project={project} period="2026-11" go={vi.fn()} actions={actions} doneDefinitionOf={() => null} me={{ personId: "me", name: "我" }} /></LocalContext.Provider>)).not.toContain("sub-session-summary");
+  });
+});
+
 describe("项目详情：自动接力上限（18.12）", () => {
   it("有一行「自动接力上限」，没读到项目详情时写缺省的 20 轮", () => {
     const html = renderToStaticMarkup(<LocalContext.Provider value={local}><ProjectInfo project={project} period="2026-11" go={vi.fn()} actions={actions} doneDefinitionOf={() => null} me={{ personId: "me", name: "我" }} /></LocalContext.Provider>);

@@ -25,12 +25,11 @@ import { InputBar } from "./InputBar";
 import type { Project } from "@/lib/home/projects";
 import type { FeedItem, ProjectFeedItem, SubSession, WaitingItem } from "@/lib/home/types";
 import type { WorkHomeApi } from "@/lib/home/useWorkHome";
-import { DroppedRecord, PlanDecision, PlanningLine, StartedRecord } from "./PlanDecision";
-import { GoalChangeDecision, SubSessionReport, feedBlocks, useProjectFeed } from "./TaskFeed";
-import { MonthRule } from "./ProjectParts";
+import { PlanDecision, PlanningLine } from "./PlanDecision";
+import { GoalChangeDecision, feedBlocks, useProjectFeed } from "./TaskFeed";
 import { HandoverRule, HandoverSummary, ProjectPull, TransferHistory, useReceived } from "./Transfer";
 import { noteSeenSequence } from "@/lib/home/transfer";
-import { subHref, subIcon, subLetters } from "./LeftColumn";
+import { subLetters } from "./LeftColumn";
 import { useViewChrome } from "./view";
 import { usePhone } from "./usePhone";
 import h from "@/styles/home.module.css";
@@ -46,7 +45,7 @@ import { SubSessionSummary } from "./SubSessionSummary";
 import { usePartnerWorkEvents } from "./PartnerWorkEvents";
 import { usePartnerTeam } from "./PartnerTeam";
 import { usePartnerMeetingFeed } from "./PartnerMeetings";
-import { useMeetingWorkHandoffFeed, MeetingWorkFeedEntry } from "../meeting/MeetingWorkHandoffs";
+import { useMeetingWorkHandoffFeed } from "../meeting/MeetingWorkHandoffs";
 
 /** 首页输入框发来、等着进对话的一句。 */
 /** files：首页输入框带的附件，到了那条对话再传（14.5）。 */
@@ -211,6 +210,15 @@ type PipelineProps = {
  * 拆卡那几块插在哪条消息后面（17.2 第 29 条，项目对话的消息不带时间，按序号插；null 放最后）：
  * 规划员在拆——登记了还没开的用登记时记的，开起来以后用这次（排着、在拆的）计划记的；派活单是开拆那一下的；开了哪几个子会话是开工那一下的。
  */
+/**
+ * 项目对话里留哪些项目动态（本人 11/16 定 A：只留对话本身）：转交那几行、还没答的「Task 改了」、子会话还开着的问和批准、约定都达到（答过就收起）。
+ * 挂上 Task 的分隔线、子会话报告、验收行、会议交接不进对话：子会话状态在左栏和项目详情，结果在子会话页，要处理的在「等你」。
+ */
+const CONVERSATION_FEED = new Set<ProjectFeedItem["kind"]>(["handover", "handover_summary", "transfer_declined", "goal_changed", "sub_session_decision", "criteria_met"]);
+export function conversationFeed(feed: readonly ProjectFeedItem[]): ProjectFeedItem[] {
+  return feed.filter((item) => CONVERSATION_FEED.has(item.kind) && !(item.kind === "goal_changed" && item.answer));
+}
+
 export function planAnchors(planner: Pick<Worker, "afterSequence"> | undefined, plan: Pick<TCardPlanView, "status" | "afterSequence" | "startedAfterSequence"> | null) {
   return {
     planning: planner?.afterSequence ?? (plan && (plan.status === "queued" || plan.status === "running") ? plan.afterSequence : null),
@@ -252,8 +260,9 @@ function MockPipeline({ task, ...props }: PipelineProps & { task: THomePlanTask 
 }
 
 /**
- * 项目对话，网页按时间插进去的几块：挂上一件 Task 的分隔线「{月} 月目标：{Task}」、每件 Task 的规划员在拆（一行）、拆好的派活单（开工的选项框）、
- * 开了哪几个子会话，项目里开出的专题，验收行（过了、受阻、约定都达到、返工，TaskFeed）。
+ * 项目对话（本人 11/16 定 A：像跟 Claude Code 对话，只留对话本身）：本人的话、它的回复、它这一轮的步骤清单和选项框之外，
+ * 只插还要本人处理的那一步——规划员在拆（一行）、拆卡失败、拆好的派活单（开工的选项框，开了就收起）、自动开工没开起来、
+ * 子会话开着的问和批准、约定都达到、还没答的「Task 改了」、转交那几行。子会话列表、开工记录、报告、验收行都不进对话。
  */
 function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, onSpeaking, onSplit, splitFailed, startFailed, onManualStart, trail, blocks: own, onPulled, onSetFolder, onPickFolder, onCreateFolder, bound = null }: PipelineProps & { data: ConversationData }) {
   const chrome = useViewChrome();
@@ -296,27 +305,21 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
   const mode = useProjectMode(project.id);
   const changed = api.refresh;
   const waiting = api.data.waiting;
-  // 专题行排在第一次看到它的时候（契约没有开出时间；updatedAt 会跟着动，用它排这一行会在对话里跳）。
-  const seen = useRef(new Map<string, string>());
-  const firstSeen = (id: string, at: string) => { if (!seen.current.has(id)) seen.current.set(id, at); return seen.current.get(id)!; };
   const [dropped, setDropped] = useState<{ key: string; id: string; at: string; afterSequence: number | null }[]>([]);
   const blocks = useMemo<TimedBlock[]>(() => {
     const list: TimedBlock[] = [];
-    // 挂上一件 Task：动态里的 goal_linked 按挂上的时间画分隔线；接口没上时本月那件排在对话最前面。
-    const linked = feed.filter((item): item is Extract<ProjectFeedItem, { kind: "goal_linked" }> => item.kind === "goal_linked");
-    if (api.live) for (const item of linked) list.push({ key: item.id, at: item.at, node: <MonthRule goal={{ period: item.period, name: item.taskName }} /> });
-    else if (project.current[0]) list.push({ key: `month:${project.current[0].taskId}`, at: "0000-01-01T00:00:00.000Z", node: <MonthRule goal={project.current[0]} /> });
+    const kept = conversationFeed(feed);
     if (own) list.push(...own);
-    // 转交那几行（16.7）：换人的分隔线（两边都有）、接手人那边的交接说明、原负责人那边「X没接」。
-    for (const item of feed) {
+    // 转交那几行（16.7）：换人的分隔线（两边都有）、接手人那边的交接说明、原负责人那边「X没接」；还没答的「Task 改了」。
+    for (const item of kept) {
       if (item.kind === "handover") list.push({ key: item.id, at: item.at, node: <HandoverRule item={item} /> });
       else if (item.kind === "handover_summary") list.push({ key: item.id, at: item.at, node: <HandoverSummary item={item} onSay={(text) => data.send(text, [])} /> });
       else if (item.kind === "goal_changed") list.push({ key: item.id, at: item.at, node: <GoalChangeDecision projectId={project.id} item={item} onChanged={() => void changed()} /> });
       else if (item.kind === "transfer_declined") list.push({ key: item.id, at: item.at, node: <p className={h.line} data-testid="transfer-declined"><StateIcon state="stopped" />{item.by.name}没接</p> });
     }
     if (summary && received.history) list.push({ key: `history:${summary.transferId}`, at: "0000-01-01T00:00:00.000Z", node: <TransferHistory history={received.history} from={summary.from} /> });
-    // 拆卡的几块，每件挂着的 Task 一组，项目本身（不挂 Task 的卡和派活单，16.3）一组：规划员在拆、拆卡失败、派活单、开了哪几个子会话。
-    // 按序号插（17.2 第 29 条，项目对话的消息不带时间）：前三块在开拆那一下的序号后面，开了哪几个子会话在开工那一下的后面；为 null 放最后。
+    // 拆卡的几块，每件挂着的 Task 一组，项目本身（不挂 Task 的卡和派活单，16.3）一组：规划员在拆、拆卡失败、派活单（开了就收起）。
+    // 按序号插（17.2 第 29 条，项目对话的消息不带时间）：在开拆那一下的序号后面；为 null 放最后。
     const projectBoard = work.boards[planKey({ projectId: project.id })] ?? null;
     const projectCards = new Set((projectBoard?.cards ?? []).map((card) => card.id));
     const groups: { target: PlanTarget; name: string; of: (worker: Worker) => boolean }[] = [
@@ -337,9 +340,8 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
           <p className={h.line} data-testid="plan-failed"><StateIcon state="failed" />拆卡失败<HeroButton variant="ghost" size="sm" onPress={() => onSplit(target)}>重试</HeroButton></p>
         ) });
       }
-      // 选了「不要了」的派活单：收成一行留在原处（云端不记撤掉的单子，只在这个标签页里留着）。
+      // 选了「不要了」的派活单：对话里不再画（本人 11/16：只留还要处理的那一步）。
       const gone = dropped.filter((entry) => entry.key === key);
-      for (const entry of gone) list.push({ key: `plan-dropped:${entry.id}`, at: entry.at, afterSequence: entry.afterSequence, node: <DroppedRecord task={name} /> });
       if (board?.drafts.length && !gone.some((entry) => entry.id === board.drafts[0]!.id)) {
         // 拆好的时候（规划员拆完同步上来那一刻）；没有记录时当作现在，放在最后。
         const first = { key, id: board.drafts[0]!.id, at: board.plan?.finishedAt ?? board.plan?.createdAt ?? new Date().toISOString(), afterSequence: anchors.drafts };
@@ -350,20 +352,6 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
             onSay={(text) => data.send(text, [])} />
         ) });
       }
-      // 开了以后：从最早那张卡开工的时候起，写开了哪几个子会话（按开工时间排在对话里）。
-      const cards = ofTarget.filter((worker) => worker.kind === "card" && worker.item);
-      const first = cards.map((worker) => worker.item!.createdAt).sort()[0];
-      const ids = new Set([...(board?.cards ?? []).map((card) => card.id), ...cards.map((worker) => worker.cardId)]);
-      const cardSubs = subs.filter((sub) => sub.kind === "card" && ids.has(sub.id));
-      if (first && cardSubs.length) {
-        list.push({ key: `started:${key}`, at: first, afterSequence: anchors.started, node: <StartedRecord task={name} subs={[...cardSubs].sort(byTitle(cards))} onOpen={(sub: SubSession) => go(subHref(sub))} /> });
-      }
-    }
-    // 对话或伙伴开的探索子会话（专题）：开出时一行（5.4.3 事件行），按开出的时间排；点了进那个子会话。
-    for (const sub of subs.filter((entry) => entry.kind === "topic")) {
-      list.push({ key: `topic:${sub.id}`, at: firstSeen(sub.id, sub.updatedAt), node: (
-        <p className={h.line} data-testid="topic-opened"><StateIcon {...subIcon(sub)} /><button type="button" className={h.lineLink} onClick={() => go(subHref(sub))}>{sub.title}</button></p>
-      ) });
     }
     // 自动开工没开起来的（这个标签页里试过的）：那一行「失败」加「手动开始」（弱按钮，5.4.3、9.8：手动开始只有这一处）。
     for (const sub of subs.filter((entry) => startFailed?.has(entry.id) && entry.state === "queued")) {
@@ -377,17 +365,12 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
       const item = sub.sessionId ? waiting.find((entry) => entry.sessionId === sub.sessionId && (entry.kind === "approval" || entry.kind === "question")) : undefined;
       return item ? [[sub.id, item] as const] : [];
     }));
-    // 子会话停了的报告（18.10）：按记下的位置插进对话。
-    for (const item of feed) {
-      if (item.kind === "sub_session_report") list.push({ key: item.id, at: item.at, afterSequence: item.afterSequence, node: <SubSessionReport item={item} go={go} /> });
-      if (item.kind === "meeting_handoff") list.push({ key: item.id, at: item.at, node: <MeetingWorkFeedEntry item={item} /> });
-    }
-    const decisions = feed.filter((item): item is Extract<ProjectFeedItem, { kind: "sub_session_decision" }> => item.kind === "sub_session_decision");
+    const decisions = kept.filter((item): item is Extract<ProjectFeedItem, { kind: "sub_session_decision" }> => item.kind === "sub_session_decision");
     const PROJECT_ONLY = new Set<ProjectFeedItem["kind"]>(["goal_linked", "handover", "handover_summary", "transfer_declined", "goal_changed", "sub_session_report", "sub_session_decision","meeting_handoff"]);
-    const checks = feed.filter((item): item is FeedItem => !PROJECT_ONLY.has(item.kind));
+    const checks = kept.filter((item): item is FeedItem => !PROJECT_ONLY.has(item.kind));
     list.push(...feedBlocks({ items: checks, workers: mine, go, onSay: (text) => data.send(text, []), onChanged: () => void changed(), remoteAsks, decisions, letters }));
     return list;
-  }, [mine, tasks, work.boards, work.roles, handheld, changed, data, subs, go, feed, onSplit, splitFailed, startFailed, onManualStart, waiting, own, api.live, project, summary, received.history, letters, lastSequence, dropped]);
+  }, [mine, tasks, work.boards, work.roles, handheld, changed, data, subs, go, feed, onSplit, splitFailed, startFailed, onManualStart, waiting, own, project, summary, received.history, letters, lastSequence, dropped]);
   return (
     <ProjectModeContext.Provider value={mode?.value ?? null}>
     <PendingBoxes>
@@ -402,7 +385,6 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
                 {trail}
                 {chrome.trail}
               </header>
-              <SubSessionSummary projects={[project]} grouped={false} go={go} />
             </>
           )}
           timeline={(current) => <WorkTimeline data={current} blocks={blocks} modelRule={modelRule} />}
@@ -417,8 +399,3 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
   );
 }
 
-/** 开了哪几个子会话：按卡在看板里的先后。 */
-const byTitle = (cards: { cardId: string | null; item: { createdAt: string } | null }[]) => (a: SubSession, b: SubSession) => {
-  const at = (sub: SubSession) => cards.find((card) => card.cardId === sub.id)?.item?.createdAt ?? "";
-  return at(a).localeCompare(at(b));
-};

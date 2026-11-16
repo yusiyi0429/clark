@@ -12,7 +12,7 @@ import { groupWorkers, isWaiting, plannerWorkers, toWorker, type Worker } from "
 import { commitText, mergeBlockedText, mergeCard, shortPlace } from "@/lib/work/merge";
 import { reply } from "@/lib/work/actions";
 import { EMPTY_VIEW, foldEvents } from "@/lib/local/sessionView";
-import { DroppedRecord, PlanDecision, PlanningLine, dropDrafts, plannerText } from "@/components/home/PlanDecision";
+import { PlanDecision, PlanningLine, dropDrafts, plannerText } from "@/components/home/PlanDecision";
 import { splitBody, WORDS_MAX } from "@/lib/board/cloud";
 import { viewOf, scopeOf } from "@/components/home/view";
 import { placeBlocks } from "./WorkTimeline";
@@ -252,16 +252,13 @@ describe("开工（Task 管线里的选项框）", () => {
     }
   });
 
-  it("点了「不要了」：每件都撤掉；没撤完重试时跳过撤过的；撤完收成一行「勾 · 这样开工？ · 不要了」", async () => {
+  it("点了「不要了」：每件都撤掉；没撤完重试时跳过撤过的", async () => {
     const ids = ["d1", "d2", "d3"].map((id) => ({ id }));
     const dismiss = vi.fn(async (id: string) => { if (id === "d2" && dismiss.mock.calls.length === 2) throw new Error("断网"); });
     const done = new Set<string>();
     await expect(dropDrafts(ids, done, dismiss)).rejects.toThrow("断网");
     await dropDrafts(ids, done, dismiss);
     expect(dismiss.mock.calls.map(([id]) => id)).toEqual(["d1", "d2", "d2", "d3"]);
-    const line = renderToStaticMarkup(<DroppedRecord task={task.name} />);
-    expect(line).toContain("<svg");
-    expect(line.replace(/<[^>]+>/g, "|").replace(/\|+/g, "|")).toBe("|派活单与 worker 链路：这样开工？|不要了|");
   });
 
   it("没挂 Task 的项目的派活单：框顶写项目名；没有预算那一栏（开工用本人的缺省预算）", () => {

@@ -75,7 +75,3 @@ export function ProjectTrail({ project, go }: { project: Project; go: (href: str
   );
 }
 
-/** 对话里换月份的分隔线：「11 月目标：{Task 名}」（居中，两边发丝线）。 */
-export function MonthRule({ goal }: { goal: Pick<ProjectGoal, "period" | "name"> }) {
-  return <p className={h.monthRule} role="separator" data-testid="month-rule">{Number(goal.period.slice(5))} 月目标：{goal.name}</p>;
-}
