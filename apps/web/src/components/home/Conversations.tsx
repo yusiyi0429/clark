@@ -24,7 +24,7 @@ import { useAnswerOptionFill } from "@/conversation/answerOptions";
 import { ReactionsProvider } from "@/conversation/Reactions";
 import { InputBar } from "./InputBar";
 import type { Project } from "@/lib/home/projects";
-import type { FeedItem, ProjectFeedItem, SubSession, WaitingItem } from "@/lib/home/types";
+import type { FeedItem, ProjectFeedItem, WaitingItem } from "@/lib/home/types";
 import type { WorkHomeApi } from "@/lib/home/useWorkHome";
 import { PlanDecision, PlanningLine } from "./PlanDecision";
 import { GoalChangeDecision, feedBlocks, useProjectFeed } from "./TaskFeed";
@@ -41,7 +41,6 @@ import { PermissionModeMenu, ProjectModeContext, useProjectMode } from "@/compon
 import { showWorkspaceToast } from "@/lib/toast";
 import { FolderMenu, FolderText, FootText } from "./InputFooter";
 import { PipelineModelMenu } from "./PipelineModel";
-import { SubSessionSummary } from "./SubSessionSummary";
 import { usePartnerWorkEvents } from "./PartnerWorkEvents";
 import { usePartnerTeam } from "./PartnerTeam";
 import { usePartnerMeetingFeed } from "./PartnerMeetings";
@@ -132,9 +131,9 @@ function useEscStopsReply(data: ConversationData) {
 /**
  * context：从 Mission 详情「问伙伴」带来的「关于：{Mission}」，输入框左上角一枚胶囊（14.5），去掉调 onClearContext。
  */
-export function BuddyView({ buddy, outbox, consume, onSpeaking, projects, other, waiting, go, context = null, onClearContext }: {
+export function BuddyView({ buddy, outbox, consume, onSpeaking, waiting, go, context = null, onClearContext }: {
   buddy: Buddy | null; outbox: Outbox; consume: (id: number) => void; onSpeaking: (speaking: boolean) => void; context?: string | null; onClearContext?: () => void;
-  projects: Project[]; other: SubSession[]; waiting: WaitingItem[]; go: (href: string) => void;
+  waiting: WaitingItem[]; go: (href: string) => void;
 }) {
   const data = useConversation("global");
   const chrome = useViewChrome();
@@ -157,8 +156,6 @@ export function BuddyView({ buddy, outbox, consume, onSpeaking, projects, other,
                 <h1 className={h.viewTitle} tabIndex={-1}>{name}</h1>
                 {chrome.trail}
               </header>
-              <SubSessionSummary projects={projects} other={other} go={go} />
-              {meetingFeed.scheduled}
             </>
           )}
           timeline={(current) => <>{meetingFeed.notice}{handoffFeed.notice}<ReactionsProvider scope={current.scope}><WorkTimeline data={current} blocks={[...team.blocks, ...events, ...meetingFeed.blocks, ...handoffFeed.blocks]} modelRule={modelRule} /></ReactionsProvider></>}
