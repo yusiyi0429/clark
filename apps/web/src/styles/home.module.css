@@ -140,9 +140,9 @@
   .meetPill i { animation: none; }
   .stage [data-place="stage"]:is([data-skin="miles"], [data-skin="cmei"]) { transition: none; }
 }
-/* 点开的那一小块：全站那一种弹层，宽 300；已约的会在上，「新的一场」在下。 */
-.meetPop { width: min(300px, calc(100vw - 32px)); }
-.meetDialog { display: grid; gap: var(--space-2); padding: var(--space-2); outline: none; }
+/* 点开的那一小块：全站那一种弹层，宽 320；已约的会在上，「新的一场」（现场 | 远程）在下。列写成 minmax(0, 1fr)：长 Mission 名省略，不撑框。 */
+.meetPop { width: min(320px, calc(100vw - 32px)); }
+.meetDialog { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); padding: var(--space-2); outline: none; }
 .meetTitle { display: block; margin: 0; overflow: hidden; color: var(--ink); font-size: var(--text-base); font-weight: 600; line-height: var(--lh-row); text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
 a.meetTitle:hover { text-decoration: underline; text-underline-offset: 3px; }
 a.meetTitle:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-control); }
@@ -153,12 +153,22 @@ a.meetTitle:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px
 .meetBooked .menuItem:hover, .meetBooked .menuItem:focus-visible { background: var(--default-soft); }
 .meetBooked .menuItem:disabled { cursor: default; opacity: .5; }
 .meetRowTitle { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.meetField { display: flex; align-items: center; gap: var(--space-2); min-height: var(--row-32); }
+.meetField { display: flex; align-items: center; gap: var(--space-2); min-width: 0; min-height: var(--row-32); }
 .meetField > :first-child { flex: none; width: 3em; }
 .meetAnchor { flex: 1; min-width: 0; height: var(--row-32); padding: 0 var(--space-2); overflow: hidden; border: 0; border-radius: var(--r-control); background: none; color: var(--ink); font: inherit; font-size: var(--text-base); text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
 .meetAnchor:hover { background: var(--default-soft); }
 .meetAnchor:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .meetError { margin: 0; color: var(--danger); font-size: var(--text-xs); line-height: 16px; }
+/* 远程的参会人：选了的一颗颗 chip（× 去掉），后面接着选人下拉；飞书日历没连时这一行是一句话加「去连接」。 */
+.meetPeople { display: flex; flex: 1; flex-wrap: wrap; align-items: center; gap: var(--space-1); min-width: 0; }
+.meetChip { display: inline-flex; align-items: center; gap: 2px; height: var(--row-28); padding: 0 2px 0 var(--space-2); border-radius: var(--r-control); background: var(--default-soft); color: var(--ink); font-size: var(--text-xs); }
+.meetChip button { width: 20px; height: 20px; padding: 0; border: 0; border-radius: var(--r-control); background: none; color: var(--ink-faint); font: inherit; cursor: pointer; }
+.meetChip button:hover { background: var(--default-soft-hover); color: var(--ink); }
+.meetNote { flex: 1; min-width: 0; color: var(--ink-muted); font-size: var(--text-xs); line-height: 16px; }
+.meetNote a { color: var(--accent); text-decoration: none; }
+.meetNote a:hover { text-decoration: underline; text-underline-offset: 3px; }
+/* 左下「预约会议」（以后开的会），右边主按钮跟着分段变（开始录音 / 发起会议）。 */
+.meetActions { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
 /* 弹层里的挂点选择（约会议那一份 WorldAnchorPicker，颜色写死浅色）：换成这里的变量，深色也对。 */
 .meetDialog input[type="search"] { height: var(--row-32); border: 1px solid var(--field-border); border-radius: var(--r-control); background: var(--field-bg); color: var(--field-ink); font-size: var(--text-base); }
 .meetDialog input[type="search"]::placeholder { color: var(--field-placeholder); }

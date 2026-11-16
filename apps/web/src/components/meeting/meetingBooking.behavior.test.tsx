@@ -188,41 +188,6 @@ describe("约会议", () => {
     await vi.waitFor(() => expect(workspace.navigate).toHaveBeenCalledWith("/me/meetings/m-new"));
   });
 
-  it("即时远程会核对飞书授权并选择实际同事；失败重试沿用同一预约，成功后进原会议", async () => {
-    const base = api.get.getMockImplementation()!;
-    let calendar = false;
-    api.get.mockImplementation(async (path: string, init?: unknown) => path === "/api/me/feishu"
-      ? { data: { enabled: true, calendar }, response: { ok: true, status: 200 } } : base(path, init));
-    const instant = () => {
-      hooks.index = 0; hooks.effectIndex = 0;
-      return nodes(expand(MeetingBookingSheet({ open: true, immediate: true, viewer: MEMBER, onClose: vi.fn() })));
-    };
-    await vi.waitFor(() => expect(anchorsReady(instant())).toBe(true));
-    expect(instant().some((node) => node.type === DatePicker)).toBe(false);
-    const picker = field(instant(), "添加参会人");
-    expect((picker.props!.options as { value: string }[]).map((option) => option.value)).not.toContain(MEMBER.personId);
-    change(picker, "p-third");
-    expect(button(instant(), "发起远程会议").props!.disabled).toBe(true);
-    expect(instant().some((node) => node.type === "a" && text(node) === "连接飞书")).toBe(true);
-    calendar = true;
-    window.dispatchEvent(new Event("focus"));
-    await vi.waitFor(() => expect(button(instant(), "发起远程会议").props!.disabled).toBe(false));
-    api.post.mockRejectedValueOnce(new Error("网络中断")).mockResolvedValueOnce({
-      data: { card: { objectRef: { id: "m-now" }, navigation: [{ href: "/me/work/meetings/m-now" }] } }, response: { ok: true, status: 200 },
-    });
-    const started = Date.now();
-    click(button(instant(), "发起远程会议"));
-    await vi.waitFor(() => expect(instant().some((node) => node.props?.role === "alert" && text(node).includes("没有约成"))).toBe(true));
-    click(button(instant(), "发起远程会议"));
-    await vi.waitFor(() => expect(workspace.navigate).toHaveBeenCalledWith("/me/work/meetings/m-now"));
-    const [first, retry] = api.post.mock.calls.map((call) => call[1].body);
-    expect(first).toMatchObject({ draftId: expect.any(String), participants: ["p-third"], anchors: [{ kind: "mission", id: MISSION.id }] });
-    expect(retry.draftId).toBe(first.draftId);
-    expect(Date.parse(first.scheduledAt)).toBeGreaterThanOrEqual(started);
-    expect(Date.parse(first.endsAt) - Date.parse(first.scheduledAt)).toBe(3_600_000);
-    expect(api.post.mock.calls.map((call) => call[0])).toEqual(["/api/meetings", "/api/meetings"]);
-  });
-
   it("对话里会议卡的「改」：草稿整份填好，CEO 草稿没挂就空着不默认挂，约好带 draftId", async () => {
     const draft = { draftId: "8f9c2c55-6d3c-4a51-9a7e-3d9a3c1e0001", title: "新 Chat 切换", scheduledAt: "2026-10-27T15:00:00+08:00",
       endsAt: "2026-10-27T15:30:00+08:00", leadDriId: "p-third", participants: ["p-member"], anchors: [] };
