@@ -4,7 +4,8 @@
  * 约会议（FR-4.1）：顶栏或首页「约会议」打开的右侧浮出面板（SidePanel，形状同通知栏），页头和二级页同一个（DetailFrame）。
  * 外壳一直挂着它、每次打开换一个 key：表单从空白开始，关时面板能原路滑出。
  * 名称、日期 + 起止、主持人（成员只能是本人，CEO 从 DRI 里选）、参会人（可空）、挂到（一个）。
- * 挂到：选项到了就默认挂上自己本月的第一个 Mission（没有就空着、直接展开去挑），收起时一行写着挂点和「我的 Mission / PO …」，右边「换」；
+ * 挂到：约会议默认不挂（本人 11/16，同开会弹层）：一行「不挂」，右边「选择」；挂上后一行写着挂点和「我的 Mission / PO …」，右边「更换」「不挂」。
+ * 整理会议照旧：选项到了就默认挂上自己本月的第一个 Mission（没有就空着、直接展开去挑）。
  * 换的时候是 WorldAnchorPicker，挑了 Mission、LTO 就收起，挑了 PO 不收（下面展开它的 Mission 可以再往下挑）。
  * 「约好」建会（只存天枢，不写本体），成功后跳到会议页。
  * 材料（可不传）：拖进来或点选，可多份；约好拿到会议 id 后一份一份传进这场会的群材料，传不上的提示一句，会照样约好。
@@ -73,8 +74,8 @@ export function MeetingBookingSheet({ open, onClose, viewer, organize, initialPa
   const [leadDriId, setLeadDriId] = useState(viewer?.role === "member" ? viewer.personId : draft?.leadDriId ?? "");
   const [participants, setParticipants] = useState<string[]>(() => (draft?.participants ?? initialParticipants).filter((id) => id !== viewer?.personId));
   const [anchors, setAnchors] = useState<TWorldAnchor[]>(draft?.anchors ?? []);
-  /** 草稿没挂（CEO 的会议卡默认不挂）：不替他默认挂自己的 Mission。 */
-  const autoAnchor = !draft || draft.anchors.length > 0;
+  /** 只有整理会议默认挂自己的 Mission；约会议（含会议卡的「改」）默认不挂。 */
+  const autoAnchor = Boolean(organize);
   const [options, setOptions] = useState<TWorldAnchorOption[] | null>(null);
   /** 人员名册（选参会人）；CEO 另取带角色的目录选主持人。 */
   const [people, setPeople] = useState<{ personId: string; displayName: string }[]>([]);
@@ -135,7 +136,7 @@ export function MeetingBookingSheet({ open, onClose, viewer, organize, initialPa
   const anchorOption = (anchor: TWorldAnchor) => options?.find((option) => option.kind === anchor.kind && option.id === anchor.id);
   const valid = organize
     ? Boolean(title.trim() && options && anchors.length)
-    : Boolean(title.trim() && leadDriId && options && anchors.length && slot.date && slot.start && slot.end && slot.end > slot.start);
+    : Boolean(title.trim() && leadDriId && options && slot.date && slot.start && slot.end && slot.end > slot.start);
   const submitOrganize = async ({ minute, meetingBase, onOrganized }: NonNullable<typeof organize>) => {
     setBusy(true); setError("");
     try {
@@ -265,9 +266,16 @@ export function MeetingBookingSheet({ open, onClose, viewer, organize, initialPa
                   <small>{anchorOption(anchors[0]) ? anchorRole(anchorOption(anchors[0])!, me, nameOf) : ""}</small>
                 </span>
                 <button type="button" onClick={() => setPicking(true)}>更换</button>
+                {organize ? null : <button type="button" onClick={() => setAnchors([])}>不挂</button>}
               </div>
             ) : null}
-            {options && (picking || !anchors.length) ? (
+            {options && !anchors.length && !picking && !organize ? (
+              <div className={d.bookAnchor} data-anchor-row>
+                <span>不挂</span>
+                <button type="button" onClick={() => setPicking(true)}>选择</button>
+              </div>
+            ) : null}
+            {options && (picking || (organize && !anchors.length)) ? (
               <WorldAnchorPicker options={options} value={anchors} viewerId={me} nameOf={nameOf} company={role === "ceo"}
                 onChange={(next) => { setAnchors(next); if (next[0]?.kind !== "po") setPicking(false); }} />
             ) : null}
