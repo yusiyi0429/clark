@@ -41,7 +41,7 @@ describe("左栏行尾「…」菜单（17.2 第 35 条，B 契约 c3366f28）",
   it("「已归档」也列归档了的子会话：数上算进去，带字母和原来的项目，「…」里能恢复", () => {
     const archivedSubs = [{ kind: "topic" as const, id: "00000000-0000-4000-8000-0000000000t1", title: "选型", letter: "B", projectId: "p1", projectName: "首页改版", archivedAt: "2026-11-09T02:00:00.000Z" }];
     const html = render({ actions, archivedSubs });
-    expect(html).toMatch(/data-testid="tree-archived">[\s\S]*?已归档 (<!-- -->)?1<\/button>/);
+    expect(html).toMatch(/aria-label="已归档 1"[^>]*data-testid="tree-archived"/);
     expect(render({ actions })).not.toContain("tree-archived");
   });
 });

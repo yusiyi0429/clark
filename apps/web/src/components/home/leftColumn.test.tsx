@@ -137,9 +137,10 @@ describe("左栏：项目（16.2）", () => {
     expect(subsSummary(list, new Map([["sub:4", "2026-11-09T03:00:00Z"]]))).toEqual({ total: 6, blocked: 1, unread: 1 });
   });
 
-  it("有已归档的：一行「已归档 N」，默认收起", () => {
+  it("有已归档的（本人 11/16 藏起来）：树里不占一行，「项目」组头「+」左边一个图标「已归档 N」，默认不列", () => {
     const html = render({ data: withTask([]), projects: [], archived: projectsOf(withTask([])).map((project) => ({ ...project, archived: true })) });
-    expect(html).toMatch(/aria-expanded="false"[^>]*data-testid="tree-archived".*已归档 1/);
+    expect(html).toMatch(/aria-label="项目".*<span>项目<\/span><button[^>]*aria-label="已归档 1"[^>]*aria-pressed="false"[^>]*data-testid="tree-archived".*data-testid="project-add"/);
+    expect(html).not.toContain('aria-label="已归档"');
     expect(html).not.toContain('data-testid="tree-project"');
   });
 

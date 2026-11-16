@@ -5,7 +5,7 @@
  * 1. 伙伴台：5:3（高 = 宽 × 0.6），伙伴居中；点了进总管线。伙伴不飞走：在总管线时台子铺选中底、伙伴换成「在听」；任何管线里伙伴在说话时是「在说」。
  *    鼠标移上去右上角出「⋯」，点开「伙伴」二级页。
  * 2. 「今天」行：House +「11 月 7 日 周六」，就是首页（Esc 也回这里）；不在首页时行尾是等你的计数。
- * 3. 「项目」组头（右边「+」就地新建）→ 项目行（16.2，有等你的在前、本月有目标的按截止、其余按最近活动）→「已归档 N」（折起）→「其他」。
+ * 3. 「项目」组头（右边「+」就地新建，左边一个归档图标「已归档 N」，点了在项目后面列出已归档的，本人 11/16）→ 项目行（16.2，有等你的在前、本月有目标的按截止、其余按最近活动）→「其他」。
  *    项目行 48 高两行，左边 16 宽的状态位，右边信息按钮（进项目详情）；会话默认收成一行「会话 N」加一排小方块（一格一个、按状态上色），
  *    点开才一行一行列出来（28 高、12 字），会话上不画蓝点；本人自己做的事项（9.10）排在后面，行首是本人 16 的头像，做完的变淡；
  *    待归位的事项（和以前留下的、不归项目的会话）进「其他」。
@@ -13,7 +13,7 @@
  * 树的键盘：↑↓ 移动，回车打开，→ 展开折叠，← 收起。
  */
 import { createContext, useContext, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
-import { CalendarDays, ChevronRight, Ellipsis, House, Info, Plus, Target } from "lucide-react";
+import { Archive, CalendarDays, ChevronRight, Ellipsis, House, Info, Plus, Target } from "lucide-react";
 import { HeroButton } from "@/components/HeroButton";
 import type { Account } from "@/components/AccountMenu";
 import { BuddyMark } from "@/components/buddy/BuddyMark";
@@ -211,6 +211,7 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, account, to
   const tree = useRef<HTMLDivElement>(null);
   const [naming, setNaming] = useState(false);
   const [archivedOpen, setArchivedOpen] = useState(false);
+  const archivedCount = archived.length + archivedSubs.length;
   // 新建项目的弹窗里有没有文件夹那一块：这台电脑连着本机程序才有（手机、没装的没有）。
   const localReady = useContext(LocalContext)?.phase === "ready";
   return (
@@ -246,6 +247,10 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, account, to
         <section aria-label="项目" className={h.group}>
           <div className={h.groupHead}>
             <span>项目</span>
+            {archivedCount ? (
+              <button type="button" className={h.groupAdd} title={`已归档 ${archivedCount}`} aria-label={`已归档 ${archivedCount}`} aria-pressed={archivedOpen}
+                onClick={() => setArchivedOpen(!archivedOpen)} data-testid="tree-archived"><Archive size={14} strokeWidth={1.8} aria-hidden /></button>
+            ) : null}
             <button type="button" className={h.groupAdd} title="新建项目" aria-label="新建项目" onClick={() => setNaming(true)} data-testid="project-add"><Plus size={14} strokeWidth={1.8} aria-hidden /></button>
           </div>
           {naming ? (
@@ -253,18 +258,14 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, account, to
               onCreate={(name, folderIds) => onCreate(name, folderIds).then((id) => go(projectHref(id)))} />
           ) : null}
           {projects.map((project) => <ProjectNode key={project.id} project={project} view={view} go={go} personId={account.personId} cardAt={cardAt} working={!!working?.has(project.id)} />)}
-          {archived.length || archivedSubs.length ? (
-            <>
-              <button type="button" className={h.foldToggle} data-flat="" aria-expanded={archivedOpen} onClick={() => setArchivedOpen(!archivedOpen)} data-tree-row="" data-testid="tree-archived">
-                <ChevronRight size={14} strokeWidth={1.8} aria-hidden className={h.chevron} data-open={archivedOpen ? "" : undefined} />已归档 {archived.length + archivedSubs.length}
-              </button>
-              {archivedOpen ? archived.map((project) => <ProjectNode key={project.id} project={project} view={view} go={go} personId={account.personId} cardAt={cardAt} />) : null}
-              {archivedOpen && archivedSubs.length ? (
-                <ul className={h.subs} data-flat="">{archivedSubs.map((sub) => <ArchivedSubRow key={`${sub.kind}:${sub.id}`} sub={sub} go={go} />)}</ul>
-              ) : null}
-            </>
-          ) : null}
         </section>
+        {archivedOpen && archivedCount ? (
+          <section aria-label="已归档" className={h.group}>
+            <p className={h.groupTitle}>已归档</p>
+            {archived.map((project) => <ProjectNode key={project.id} project={project} view={view} go={go} personId={account.personId} cardAt={cardAt} />)}
+            {archivedSubs.length ? <ul className={h.subs} data-flat="">{archivedSubs.map((sub) => <ArchivedSubRow key={`${sub.kind}:${sub.id}`} sub={sub} go={go} />)}</ul> : null}
+          </section>
+        ) : null}
         {data.other.subSessions.length || data.other.items.length ? (
           <section aria-label="其他" className={h.group}>
             <p className={h.groupTitle}>其他</p>
@@ -281,7 +282,7 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, account, to
 }
 
 /**
- * 树的键盘：在树里的可聚焦行之间 ↑↓；→ / ← 展开、收起「已归档 N」、项目的子会话（焦点在项目名、收起时那一行或项目名后面的箭头上，49 条）。
+ * 树的键盘：在树里的可聚焦行之间 ↑↓；→ / ← 展开、收起项目的子会话（焦点在项目名、收起时那一行或项目名后面的箭头上，49 条）。
  * 回车由按钮自己打开。
  */
 function treeKeys(event: KeyboardEvent<HTMLDivElement>, root: HTMLDivElement | null) {

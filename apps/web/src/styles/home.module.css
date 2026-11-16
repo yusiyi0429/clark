@@ -206,6 +206,9 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
   --type-size: 13px; --type-lh: 16px; }
 .groupAdd { display: grid; place-items: center; width: 20px; height: 20px; margin-left: auto; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--ink-faint); cursor: pointer; }
 .groupAdd:hover { background: var(--default-soft); color: var(--ink-muted); }
+/* 「已归档」图标（本人 11/16）排在「+」左边：只有第一个顶到右边；打开时同悬停的底。 */
+.groupAdd + .groupAdd { margin-left: 2px; }
+.groupAdd[aria-pressed="true"] { background: var(--default-soft); color: var(--ink-muted); }
 .groupAdd:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .projectName { height: var(--row-36); margin: 0; padding: 0 var(--space-2); border: 1px solid var(--field-border-focus); border-radius: var(--r-control); outline: 0; background: var(--field-bg); color: var(--field-ink); font: inherit; font-size: var(--text-base); line-height: var(--lh-row); }
 .projectName::placeholder { color: var(--field-placeholder); }
