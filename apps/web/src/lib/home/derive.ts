@@ -85,21 +85,21 @@ export function waitingHref(item: Pick<WaitingItem, "open"> & Partial<Pick<Waiti
 
 /**
  * 已排队的原因（子会话行、事件行）：等额度恢复带恢复的时刻「等额度恢复 · 08:00」；
- * 等文件夹空出来（第 68 条）带占着它的那个「等 B 改登录页 这一轮做完」（heldBy，没有字母只写标题；云端没报是谁时「等文件夹空出来」）。
+ * 等文件夹空出来（第 68 条）带占着它的那个「等「改登录页」这一轮做完」（heldBy，只写名字不写字母，本人 11/16；云端没报是谁时「等文件夹空出来」）。
  */
 const QUEUE_TEXT: Record<TWorkerQueueReason, string> = { not_dispatched: "等开工", slot: "等空位", device_offline: "等本机上线", prior_cards: "等前面的卡", quota: "等额度恢复", folder_busy: "等文件夹空出来" };
 export function queueText(reason: TWorkerQueueReason, holdUntil: string | null, heldBy?: SubSession["heldBy"]): string {
-  if (reason === "folder_busy" && heldBy) return `等 ${[heldBy.letter, heldBy.title].filter(Boolean).join(" ")} 这一轮做完`;
+  if (reason === "folder_busy" && heldBy) return `等「${heldBy.title}」这一轮做完`;
   return reason === "quota" && holdUntil ? `${QUEUE_TEXT.quota} · ${clock(holdUntil, Date.now())}` : QUEUE_TEXT[reason];
 }
 
 /**
- * 排着的子会话的状态词（页头、事件行）：「已排队 · 等 B 改登录页 这一轮做完」；不在排队为 null。
- * short（手机页头，放不下一整句）：在等文件夹的只写「已排队 · 等 B」（没有字母写标题）。
+ * 排着的子会话的状态词（页头、事件行）：「已排队 · 等「改登录页」这一轮做完」；不在排队为 null。
+ * short（手机页头，放不下一整句）：在等文件夹的只写「已排队 · 等「改登录页」」。
  */
 export const subQueueText = (sub: Pick<SubSession, "state" | "queueReason" | "holdUntil" | "heldBy">, short = false): string | null => {
   if (sub.state !== "queued") return null;
-  if (short && sub.queueReason === "folder_busy" && sub.heldBy) return `已排队 · 等 ${sub.heldBy.letter ?? sub.heldBy.title}`;
+  if (short && sub.queueReason === "folder_busy" && sub.heldBy) return `已排队 · 等「${sub.heldBy.title}」`;
   return `已排队${sub.queueReason ? ` · ${queueText(sub.queueReason, sub.holdUntil, sub.heldBy)}` : ""}`;
 };
 

@@ -54,7 +54,7 @@ describe("主管线的子会话摘要", () => {
 
   it("排队显示实际原因和占着文件夹的会话，不冒充正在运行", () => {
     const html = render({ projects: [project("天枢", [sub("下一件", { state: "queued", queueReason: "folder_busy", heldBy: { id: "prior", kind: "card", letter: "B", title: "改登录页" } })])] });
-    expect(html).toContain("已排队 · 等 B 改登录页 这一轮做完");
+    expect(html).toContain("已排队 · 等「改登录页」这一轮做完");
     expect(html).not.toContain("进行中");
   });
 

@@ -53,12 +53,12 @@ describe("项目下的「+」开自由子会话（第 68 条）", () => {
     expect(createSession.mock.calls[2]![0]).not.toHaveProperty("free");
   });
 
-  it("排队写清在等谁：「已排队 · 等 B 改登录页 这一轮做完」；不知道是谁时「等文件夹空出来」", () => {
-    expect(queueText("folder_busy", null, HOLDER)).toBe("等 B 改登录页 这一轮做完");
-    expect(queueText("folder_busy", null, { ...HOLDER, letter: null })).toBe("等 改登录页 这一轮做完");
+  it("排队写清在等谁（只写名字，本人 11/16）：「已排队 · 等 改登录页 这一轮做完」；不知道是谁时「等文件夹空出来」", () => {
+    expect(queueText("folder_busy", null, HOLDER)).toBe("等「改登录页」这一轮做完");
+    expect(queueText("folder_busy", null, { ...HOLDER, letter: null })).toBe("等「改登录页」这一轮做完");
     expect(queueText("folder_busy", null)).toBe("等文件夹空出来");
-    expect(subQueueText({ state: "queued", queueReason: "folder_busy", holdUntil: null, heldBy: HOLDER })).toBe("已排队 · 等 B 改登录页 这一轮做完");
-    expect(subQueueText({ state: "queued", queueReason: "folder_busy", holdUntil: null, heldBy: HOLDER }, true)).toBe("已排队 · 等 B");
+    expect(subQueueText({ state: "queued", queueReason: "folder_busy", holdUntil: null, heldBy: HOLDER })).toBe("已排队 · 等「改登录页」这一轮做完");
+    expect(subQueueText({ state: "queued", queueReason: "folder_busy", holdUntil: null, heldBy: HOLDER }, true)).toBe("已排队 · 等「改登录页」");
     expect(subQueueText({ state: "queued", queueReason: "slot", holdUntil: null }, true)).toBe("已排队 · 等空位");
     expect(subQueueText({ state: "running", queueReason: null, holdUntil: null })).toBeNull();
   });
@@ -101,10 +101,10 @@ describe("左栏的「+」和排队行（第 68 条）", () => {
     expect(left(home(), { phase: "offline", runner: {} as never })).toContain("project-new-sub");
   });
 
-  it("排着队在等文件夹的子会话：行尾写在等哪个字母", () => {
+  it("排着队在等文件夹的子会话：行尾写在等哪一个（名字，本人 11/16 不再写字母）", () => {
     const other = (extra: Record<string, unknown>) => ({ ...home(), other: { subSessions: [sub(extra)], items: [] } }) as unknown as WorkHomeData;
     const html = left(other({ state: "queued", queueReason: "folder_busy", heldBy: HOLDER }));
-    expect(html).toMatch(/把按钮改圆<\/span><span[^>]*data-testid="sub-held">等 B<\/span>/);
+    expect(html).toMatch(/把按钮改圆<\/span><span[^>]*data-testid="sub-held">等「改登录页」<\/span>/);
     expect(left(other({ state: "queued", queueReason: "slot" }))).not.toContain("sub-held");
   });
 });

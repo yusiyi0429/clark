@@ -62,5 +62,5 @@ export function scopeOf(view: View): BackgroundScope {
  * parent 是子会话标题前面那一段上一级「Task 名 / 」（12 淡色，点了回到 Task 管线），层级一眼看得出；letter 是标题前面的字母方块（18.10）。
  * 页头由各内容自己画（标题就是左栏当前那一行的字），这样手机上不多一行。
  */
-export const ViewChrome = createContext<{ lead: ReactNode; trail: ReactNode; parent?: ReactNode; letter?: ReactNode }>({ lead: null, trail: null });
+export const ViewChrome = createContext<{ lead: ReactNode; trail: ReactNode; parent?: ReactNode }>({ lead: null, trail: null });
 export const useViewChrome = () => useContext(ViewChrome);

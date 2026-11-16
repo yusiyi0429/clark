@@ -269,7 +269,7 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, account, to
         {data.other.subSessions.length || data.other.items.length ? (
           <section aria-label="其他" className={h.group}>
             <p className={h.groupTitle}>其他</p>
-            {data.other.subSessions.length ? <Subs subs={data.other.subSessions} letters={subLetters(data.other.subSessions, cardAt)} view={view} go={go} flat /> : null}
+            {data.other.subSessions.length ? <Subs subs={data.other.subSessions} view={view} go={go} flat /> : null}
             {data.other.items.length ? <Items items={data.other.items} personId={account.personId} go={go} /> : null}
           </section>
         ) : null}
@@ -340,7 +340,6 @@ function ProjectNode({ project, view, go, personId, cardAt, working = false }: {
   const page = here && (view.kind === "project" || view.kind === "task");
   const [open, setOpen] = useState(false);
   const subs = planOrder(project.subSessions, cardAt);
-  const letters = subLetters(project.subSessions, cardAt);
   const items = [...project.items].sort((a, b) => Number(a.status === "done") - Number(b.status === "done"));
   const viewing = subs.some((sub) => (view.kind === "card" || view.kind === "topic") && view.kind === sub.kind && view.id === sub.id);
   // 正在看其中一个会话时自动展开一次；之后本人收起就收起（不强开着）。
@@ -415,7 +414,7 @@ function ProjectNode({ project, view, go, personId, cardAt, working = false }: {
       )}
       {subs.length || items.length ? (
         <div className={h.branch}>
-          {open ? <Subs subs={subs} letters={letters} view={view} go={go} /> : null}
+          {open ? <Subs subs={subs} view={view} go={go} /> : null}
           {summary ? (
             // 点了展开，焦点交回项目名（这一行展开后就没了）。
             <button type="button" className={h.subsSummary} onClick={() => { setOpen(true); main.current?.focus({ preventScroll: true }); }} data-tree-row="" data-fold-summary="" data-testid="tree-subs">
@@ -433,29 +432,8 @@ function ProjectNode({ project, view, go, personId, cardAt, working = false }: {
   );
 }
 
-/** 0 → A … 25 → Z，26 → AA、AB……（同表格列名）。 */
-export function letterOf(index: number): string {
-  let n = index + 1, out = "";
-  while (n > 0) { n -= 1; out = String.fromCharCode(65 + (n % 26)) + out; n = Math.floor(n / 26); }
-  return out;
-}
-
-/**
- * 子会话的字母（18.10）：照云端的 SubSession.letter（项目里按建立先后，建了不变、不复用；「其他」里的为 null，不画）。
- * 云端还没带这个字段（undefined，B 的实现没到）时先照派活单的先后算（卡按建出来的时间，专题按最近动静排在卡后面）。键是「kind:id」。
- */
-export function subLetters(subs: SubSession[], cardAt?: ReadonlyMap<string, string>): Map<string, string> {
-  return new Map(planOrder(subs, cardAt).flatMap((sub, index): [string, string][] => {
-    const letter = sub.letter === undefined ? letterOf(index) : sub.letter;
-    return letter ? [[subKey(sub), letter]] : [];
-  }));
-}
 export const subKey = (sub: Pick<SubSession, "kind" | "id">) => `${sub.kind}:${sub.id}`;
 
-/** 字母方块：小的实心圆角方块，左栏子会话行、子会话页头共用。 */
-export const SubLetter = ({ letter, inline = false }: { letter: string; inline?: boolean }) => (
-  <span className={h.letter} data-inline={inline ? "" : undefined} data-testid="sub-letter">{letter}</span>
-);
 
 /**
  * 子会话行最右边的状态点（18.10）：在跑灰点闪（同项目标题的呼吸点）；停了（一轮做完、被停下、做完了）、本人还没看过的蓝点（26 条，看过就不画）；
@@ -502,15 +480,15 @@ export function subIcon(sub: Pick<SubSession, "state" | "waiting" | "stopWhy">):
 export const stoppedLabel = (sub: Pick<SubSession, "stopWhy">) => (sub.stopWhy === "turn_done" ? "做完一轮" : "已停下");
 
 /** flat：「其他」组里的，没有上一级，不缩进、不画竖线（状态位在 x=16，名字在 x=40）。 */
-function Subs({ subs, letters, view, go, flat = false }: { subs: SubSession[]; letters: ReadonlyMap<string, string>; view: View; go: (href: string) => void; flat?: boolean }) {
+function Subs({ subs, view, go, flat = false }: { subs: SubSession[]; view: View; go: (href: string) => void; flat?: boolean }) {
   return (
     <ul className={h.subs} data-flat={flat ? "" : undefined}>
-      {subs.map((sub) => <SubRow key={subKey(sub)} sub={sub} letter={letters.get(subKey(sub)) ?? null} view={view} go={go} />)}
+      {subs.map((sub) => <SubRow key={subKey(sub)} sub={sub} view={view} go={go} />)}
     </ul>
   );
 }
 
-function SubRow({ sub, letter, view, go }: { sub: SubSession; letter: string | null; view: View; go: (href: string) => void }) {
+function SubRow({ sub, view, go }: { sub: SubSession; view: View; go: (href: string) => void }) {
   const current = (view.kind === "card" || view.kind === "topic") && view.kind === sub.kind && view.id === sub.id;
   // 悬停全名的提示里带一行「来源 · 模型」（这台电脑上跑着、报了来源的才有；左栏行里不放，太挤）。
   const local = useContext(LocalContext);
@@ -545,8 +523,8 @@ function SubRow({ sub, letter, view, go }: { sub: SubSession; letter: string | n
   return (
     <li className={h.subItem} {...press}>
       <button type="button" className={h.sub} data-state={sub.state} aria-current={current ? "page" : undefined} onClick={() => { opened.onOpen?.("sub", sub.id, sub.updatedAt); go(subHref(sub)); }} data-tree-row="" data-testid="tree-sub" {...name.rowProps}>
-        {letter ? <SubLetter letter={letter} /> : null}<span ref={name.textRef} className={h.subName}>{sub.title}</span>
-        {heldBy ? <span className={h.subReason} data-testid="sub-held">等 {heldBy.letter ?? heldBy.title}</span> : null}
+        <span ref={name.textRef} className={h.subName}>{sub.title}</span>
+        {heldBy ? <span className={h.subReason} data-testid="sub-held">等「{heldBy.title}」</span> : null}
         {dot ? <span className={h.subDot} data-tone={dot.tone} role="img" aria-label={dot.label} data-testid="sub-dot"><i aria-hidden /></span> : null}
       </button>
       {name.tip}
@@ -563,7 +541,7 @@ function ArchivedSubRow({ sub, go }: { sub: TArchivedSubSession; go: (href: stri
   return (
     <li className={h.subItem} {...press} data-testid="tree-archived-sub">
       <button type="button" className={h.sub} data-state="done" onClick={() => go(subHref(sub))} data-tree-row="">
-        {sub.letter ? <SubLetter letter={sub.letter} /> : null}<span className={h.subName}>{sub.title}{sub.projectName ? <span className={h.menuFaint}> · {sub.projectName}</span> : null}</span>
+        <span className={h.subName}>{sub.title}{sub.projectName ? <span className={h.menuFaint}> · {sub.projectName}</span> : null}</span>
       </button>
       {actions ? <RowMenu label={sub.title} open={menu} onOpenChange={setMenu}
         items={[{ id: "restore", label: "恢复", run: () => actions.archiveSub(sub.kind, sub.id, false), failText: () => "没恢复成" }]} /> : null}

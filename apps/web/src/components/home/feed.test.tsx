@@ -118,7 +118,7 @@ describe("子会话的提问由 Task 管线转达（14.3）", () => {
 
 describe("子会话停了、要人介入，报给项目主管线（18.10）", () => {
   const sub = { kind: "card" as const, id: CARD, letter: "B", title: "greet" };
-  it("要介入：决定卡排在云端记下的位置，标字母；本机那块不再重复出；答过的（closed）不画", () => {
+  it("要介入：决定卡排在云端记下的位置，只写名字不标字母（本人 11/16）；本机那块不再重复出；答过的（closed）不画", () => {
     const here = session({ status: "idle", pendingQuestion: { requestId: "q1", askedAt: "2026-11-07T04:09:00Z", questions: [{ question: "用哪个库？", header: "", multiSelect: false, options: [{ label: "zod", description: "" }] }] } });
     const decision = { kind: "sub_session_decision" as const, id: "d1", at: "2026-11-07T04:09:30Z", afterSequence: 7, sub, sessionId: here.id, deviceId: "00000000-0000-4000-8000-0000000000d1",
       question: here.pendingQuestion!, permission: null, status: "open" as const, closedAt: null };
@@ -126,7 +126,8 @@ describe("子会话停了、要人介入，报给项目主管线（18.10）", ()
     const blocks = feedBlocks({ items: [], workers, go: vi.fn(), onSay: vi.fn(), onChanged: vi.fn(), decisions: [decision] });
     expect(blocks.map((block) => [block.key, block.afterSequence])).toEqual([["d1", 7]]);
     const html = renderToStaticMarkup(<LocalContext.Provider value={local([here])}>{blocks[0]!.node}</LocalContext.Provider>);
-    expect(html).toMatch(/data-testid="sub-letter">B<.*greet.*用哪个库？/);
+    expect(html).toMatch(/greet.*用哪个库？/);
+    expect(html).not.toContain("sub-letter");
     const closed = feedBlocks({ items: [], workers, go: vi.fn(), onSay: vi.fn(), onChanged: vi.fn(), decisions: [{ ...decision, status: "closed", closedAt: "2026-11-07T04:20:00Z" }] });
     expect(closed.map((block) => block.key)).toEqual([`ask:card:${CARD}`]);
   });

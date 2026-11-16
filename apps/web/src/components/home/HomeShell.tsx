@@ -48,7 +48,7 @@ import { usePartnerMeetings } from "@/lib/home/partnerMeetingFeed";
 import { focusList } from "@/lib/home/focus";
 import { isTeamDraft } from "./PartnerTeam";
 import { TEAM_DELIVERY_CHANGED } from "@/lib/home/teamDelivery";
-import { LeftColumn, SubLetter, subKey, subLetters, type RowActions } from "./LeftColumn";
+import { LeftColumn, type RowActions } from "./LeftColumn";
 import { ForeignTaskInfo, TaskInfo } from "./TaskInfo";
 import { MissionInfo } from "./MissionInfo";
 import { MeetingView } from "./MeetingView";
@@ -523,15 +523,11 @@ function HomeFrame({ account }: { account: Account }) {
   const parent = useMemo(() => (owner ? (
     <button type="button" className={h.crumb} onClick={() => go(projectHref(owner.id))}>{owner.name} / </button>
   ) : null), [owner, go]);
-  // 标题前面的字母方块（18.10），和左栏那一行同一个字母（照云端 SubSession.letter）。
-  const siblings = subId ? owner?.subSessions ?? (data.other.subSessions.some((sub) => sub.id === subId) ? data.other.subSessions : null) : null;
-  const letterText = siblings && (view.kind === "card" || view.kind === "topic") ? subLetters(siblings, cardAt).get(subKey({ kind: view.kind, id: view.id })) ?? null : null;
-  const letter = useMemo(() => (letterText ? <SubLetter letter={letterText} inline /> : null), [letterText]);
   const chrome = useMemo(() => (handheld ? {
     lead: <button type="button" className={h.icon} aria-label="返回" title="返回" onClick={() => go(HOME_HREF)} data-testid="phone-back"><ArrowLeft {...ICON} /></button>,
-    // 手机上页头不写上一级（左边已经有返回），只留字母和子会话标题（排查清单第 3 条）。
-    trail: backgroundButton, parent: null, letter,
-  } : { lead: null, trail: backgroundButton, parent, letter }), [handheld, go, backgroundButton, parent, letter]);
+    // 手机上页头不写上一级（左边已经有返回），只留子会话标题（排查清单第 3 条）。
+    trail: backgroundButton, parent: null,
+  } : { lead: null, trail: backgroundButton, parent }), [handheld, go, backgroundButton, parent]);
   // 开会（设计 2026-11-12）：录音挂在外壳上，切项目、切子会话、开设置都不断。在项目页里新的一场默认挂这个项目本月目标的 Mission。
   const meeting = useHomeMeeting({ account, go });
   // 首页「等你」的件数（11/16 重新设计 4.5）：和首页同一份 focusList，左栏「今天」行、标签页标题写全部件数。

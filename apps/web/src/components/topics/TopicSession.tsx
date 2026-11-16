@@ -237,7 +237,7 @@ export function TopicSession({ topicId, embedded = false, waiting = null, queued
       <div className={s.page} data-embedded="" data-testid="topic-session">
         <header className={s.embedHead}>
           {chrome.lead}
-          <b className={s.embedTitle}>{chrome.parent}{chrome.letter}<span className={s.embedName}>{topic.title}</span></b>
+          <b className={s.embedTitle}>{chrome.parent}<span className={s.embedName}>{topic.title}</span></b>
           <span className={s.stateChip} data-tone={chipOf.tone}>{chipOf.tone === "wait" ? <i aria-hidden /> : null}{chipOf.text}</span>
           <span className={s.exec} />
           {free ? null : <HeroButton variant="ghost" size="sm" isIconOnly aria-label="当前版本" title="当前版本" data-pressed={showDoc || undefined} onPress={() => (side ? side.toggle() : setReading(!showDoc))} data-testid="session-details"><Info {...ICON} aria-hidden /></HeroButton>}

@@ -4,7 +4,7 @@ import { ChevronRight } from "lucide-react";
 import type { Project } from "@/lib/home/projects";
 import type { SubSession } from "@/lib/home/types";
 import { StateIcon } from "./StateIcon";
-import { subHref, subIcon, subKey, subLetters, SubLetter } from "./LeftColumn";
+import { subHref, subIcon, subKey } from "./LeftColumn";
 import { subStage } from "./PlanDecision";
 import s from "@/styles/sub-session-summary.module.css";
 
@@ -26,12 +26,10 @@ export function SubSessionSummary({ projects, other = [], grouped = true, go, op
   const reworking = all.filter((sub) => sub.state === "failed").length;
   const waiting = all.filter((sub) => sub.state === "waiting" && sub.waiting).length;
   const rows = (subs: readonly SubSession[]) => {
-    const letters = subLetters([...subs]);
     return <ul className={s.list}>{subs.map((sub) => (
       <li key={subKey(sub)}>
         <button type="button" className={s.row} onClick={() => go(subHref(sub))} data-state={sub.state}>
           <StateIcon {...subIcon(sub)} {...(sub.state === "failed" ? { label: "重做中" } : {})} />
-          {letters.has(subKey(sub)) ? <SubLetter letter={letters.get(subKey(sub))!} /> : <span />}
           <span className={s.title}>{sub.title}</span>
           <span className={s.stage} data-attention={sub.state === "waiting" && sub.waiting ? "" : undefined}>{subStage(sub)}</span>
         </button>

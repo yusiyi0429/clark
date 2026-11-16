@@ -29,7 +29,7 @@ import { askAnchor, cardHref, deriveFeed, goalAnchor, infoHref } from "@/lib/hom
 import type { FeedItem, ProjectFeedItem, WaitingItem } from "@/lib/home/types";
 import type { WorkHomeApi } from "@/lib/home/useWorkHome";
 import { BlockedDecision, MergeDecision, answeredOf, markAnswered } from "./TaskDecisions";
-import { SubLetter, subKey } from "./LeftColumn";
+import { subKey } from "./LeftColumn";
 import f from "@/styles/task-feed.module.css";
 
 const POLL_MS = 5000;
@@ -66,13 +66,12 @@ export { askAnchor } from "@/lib/home/derive";
  * 验收行变成对话里按时间插的几块；合不合回的选项框接在「过了」那一句后面。子会话在问、在等批准的，也在这里出选项框（14.3）。
  * onSay：「自己说」发进项目对话；发不出去（对话正在回话）时回 false。
  */
-export function feedBlocks({ items, workers, go, onSay, onChanged, remoteAsks, decisions = [], letters }: {
+export function feedBlocks({ items, workers, go, onSay, onChanged, remoteAsks, decisions = [] }: {
   items: FeedItem[];
   workers: Worker[];
   /** 项目动态里子会话要人介入的那几条（18.10）：按它记下的位置出决定卡，标字母；还开着的才画，答过、失效的不画（同本机那边答过就收起）。 */
   decisions?: TProjectSubSessionDecisionItem[];
   /** 子会话的字母（subKey → 字母，同左栏），决定卡上标「B · 标题」。 */
-  letters?: ReadonlyMap<string, string>;
   /** 别的电脑上跑的子会话在问、在等批准：卡或专题的 id → 等你里那一条（带原话 question、要批准的那一步 permission，契约 aa6aba9e）。 */
   remoteAsks?: ReadonlyMap<string, WaitingItem>;
   go: (href: string) => void;
@@ -113,7 +112,7 @@ export function feedBlocks({ items, workers, go, onSay, onChanged, remoteAsks, d
     if (!worker || placed.has(worker.key)) return [];
     placed.add(worker.key);
     const remote = { kind: item.question ? "question" as const : "approval" as const, question: item.question, permission: item.permission };
-    return [{ key: item.id, at: item.at, afterSequence: item.afterSequence, node: <SubSessionAsk worker={worker} remote={remote} letter={item.sub.letter} /> }];
+    return [{ key: item.id, at: item.at, afterSequence: item.afterSequence, node: <SubSessionAsk worker={worker} remote={remote} /> }];
   });
   // 子会话在问、在等批准（这台电脑上跑的看本机会话；别的电脑上跑的只知道在等批准）。
   const asking = workers.flatMap((worker): TimedBlock[] => {
@@ -122,7 +121,7 @@ export function feedBlocks({ items, workers, go, onSay, onChanged, remoteAsks, d
     // 本机上正在跑的会话都挂一块（没在问时什么都不画），这样一问就出，不等会话列表刷新；停着的看摘要里有没有挂着的。
     const remote = session ? undefined : remoteAsks?.get(worker.cardId ?? worker.topicId ?? "");
     if (session ? !(running(session.status) || session.pendingPermissions > 0 || session.pendingQuestion) : worker.mark !== "approval" && !remote) return [];
-    return [{ key: `ask:${worker.key}`, at: session?.updatedAt ?? worker.startedAt ?? new Date().toISOString(), node: <SubSessionAsk worker={worker} remote={remote} letter={letters?.get(subKey({ kind: worker.kind, id: subOf(worker) }))} /> }];
+    return [{ key: `ask:${worker.key}`, at: session?.updatedAt ?? worker.startedAt ?? new Date().toISOString(), node: <SubSessionAsk worker={worker} remote={remote} /> }];
   });
   return [...feed, ...recorded, ...asking];
 }
@@ -231,7 +230,7 @@ export function GoalChangeDecision({ projectId, item, onChanged }: { projectId: 
  * 子会话的提问和批准，由项目对话转达（14.3）：框顶上一行 12 淡色写子会话名，下面是问题和选项，答案直接回给那个子会话。
  * 只有跑它的这台电脑上能答；别处只留问题和「等你 · {电脑名}」。从子会话页「去回答」跳来（地址带 #ask-会话）时滚到这里。
  */
-function SubSessionAsk({ worker, remote: item, letter }: { worker: Worker; remote?: Pick<WaitingItem, "kind" | "question" | "permission">; letter?: string | null }) {
+function SubSessionAsk({ worker, remote: item }: { worker: Worker; remote?: Pick<WaitingItem, "kind" | "question" | "permission"> }) {
   const local = useLocalRunner();
   const handheld = useHandheld();
   const session = worker.session;
@@ -259,7 +258,7 @@ function SubSessionAsk({ worker, remote: item, letter }: { worker: Worker; remot
   if (!question && !pending.length && !remote && !remoteQuestion) return null;
   return (
     <div ref={ref} id={session ? askAnchor(session.id) : undefined} className={f.ask} data-testid="sub-ask">
-      <p className={f.askFrom}>{letter ? <SubLetter letter={letter} inline /> : null}{worker.title}</p>
+      <p className={f.askFrom}>{worker.title}</p>
       {pending.length && session ? (
         <ApprovalDecision requests={pending} blocked={blocked} inWorktree={session.workspace?.kind === "worktree"} onDecide={(request, decision, { forSession, message }) => local.runner.decidePermission(session.id, request.requestId,
           { decision, ...(forSession ? { allowForSession: true } : {}), ...(message ? { message } : {}) }).then(() => local.refresh())} />
