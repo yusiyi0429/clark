@@ -4,7 +4,8 @@ import { readFileSync } from "node:fs";
 import type { PartnerMeeting } from "@/lib/home/partnerMeetingFeed";
 import type { WaitingItem } from "@/lib/home/types";
 import type { HomeMeeting } from "./MeetingControl";
-import { PartnerHomeMeetings, PartnerMeetingInbox, homeMeetingGroups, meetingWaitingItems, usePartnerMeetingFeed } from "./PartnerMeetings";
+import { PartnerHomeMeetings, PartnerMeetingInbox, homeMeetingGroups, usePartnerMeetingFeed } from "./PartnerMeetings";
+import { focusList } from "@/lib/home/focus";
 
 // Run production row effects without introducing a DOM/browser dependency. SSR keeps real React hooks.
 const hooks = vi.hoisted(() => ({
@@ -224,7 +225,9 @@ describe("首页会议和伙伴收件使用同一条记录", () => {
     const readOnly = meeting("reader", { preflightText: "预审失败" });
     feed.items = [known, minute, readOnly];
     const waiting = [{ open: { kind: "meeting", id: "known" } }] as WaitingItem[];
-    expect(meetingWaitingItems(feed.items, waiting)).toEqual([minute]);
+    const meetingRows = focusList({ waiting, meetings: feed.items, offline: false, recordingMeetingId: null, now }).flatMap((row) => (row.kind === "meeting" ? [row] : []));
+    expect(meetingRows.filter((row) => row.when === "after").map((row) => row.item)).toEqual([minute]);
+    expect(meetingRows.some((row) => row.item.id === known.id)).toBe(false);
     const html = renderToStaticMarkup(<PartnerMeetingInbox />);
     expect(html).toContain('id="minute-token"');
     expect(html).toContain("整理妙记");

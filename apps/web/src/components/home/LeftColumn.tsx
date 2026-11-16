@@ -156,8 +156,10 @@ function BuddyStage({ buddy, name, view, speaking, go, phone, meeting }: {
   );
 }
 
-export function LeftColumn({ data, view, buddy, speaking, go, phone, account, today, machine = null, trail, top, month, onRetryPlan, projects, archived, archivedSubs = [], actions = null, onCreate, folderLimit = LOCAL_PROJECT_FOLDER_LIMIT, cardAt, working, seen, onOpen, meeting = null }: {
+export function LeftColumn({ data, view, buddy, speaking, go, phone, account, today, machine = null, trail, top, month, onRetryPlan, projects, archived, archivedSubs = [], actions = null, onCreate, folderLimit = LOCAL_PROJECT_FOLDER_LIMIT, cardAt, working, seen, onOpen, meeting = null, waitingCount = data.waiting.length }: {
   data: WorkHomeData;
+  /** 「今天」行行尾等你的件数：和首页同一份清单（focusList）的全部件数，不是露出来的 5 件。 */
+  waitingCount?: number;
   /** 伙伴台右下角的「开会」（MeetingControl）和开着会时伙伴在听；不给就没有。 */
   meeting?: StageMeeting | null;
   view: View;
@@ -223,7 +225,7 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, account, to
           <span className={h.todayIcon}><House {...ICON} /></span><span className={h.todayText}>{today}</span>
           {/* 行尾的月份 chip：整行是一个按钮，chip 点了单独进月份页（键盘从「等你」那一行进）。 */}
           {month ? <span className={h.statusChip} data-testid="month-chip" onClick={(event) => { event.stopPropagation(); go(month.href); }}>{month.label}</span> : null}
-          {showCount && data.waiting.length ? <span className={h.count}><i aria-hidden />{data.waiting.length}</span> : null}
+          {showCount && waitingCount ? <span className={h.count}><i aria-hidden />{waitingCount}</span> : null}
         </button>
       )}
       {top}

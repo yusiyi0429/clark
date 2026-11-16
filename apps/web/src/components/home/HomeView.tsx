@@ -19,7 +19,8 @@ import { HeroButton } from "@/components/HeroButton";
 import { FailedLine, failureOf, type Failure } from "@/components/work/DecisionBox";
 import { localOptions, oneTap } from "@/components/work/decisions";
 import { InputBar } from "./InputBar";
-import { MeetingWaitingRows, PartnerHomeMeetings, meetingWaitingItems } from "./PartnerMeetings";
+import { FocusMeetingRow, ReadError } from "./PartnerMeetings";
+import { focusList, visibleCount, type FocusRow } from "@/lib/home/focus";
 import type { HomeMeeting } from "./MeetingControl";
 import { usePartnerMeetings } from "@/lib/home/partnerMeetingFeed";
 import { ConfirmAndHandOff } from "@/components/meeting/MeetingWorkHandoffs";
@@ -31,7 +32,7 @@ import { mergeCard } from "@/lib/work/merge";
 import { missionHref, monthStatus, monthTaskSubs, taskGateLabel, taskHref, waitingHref } from "@/lib/home/derive";
 import { projectHref, type Project } from "@/lib/home/projects";
 import type { ProjectsApi } from "./useProjects";
-import { monthDayTime, relativeDayTime } from "@/lib/companyTime";
+import { clock, monthDayTime, relativeDayTime } from "@/lib/companyTime";
 import type { HomeMonthMission, RouteTarget, WaitingItem, WorkHomeData } from "@/lib/home/types";
 import type { WorkHomeApi } from "@/lib/home/useWorkHome";
 import { ICON } from "./StateIcon";
@@ -44,7 +45,7 @@ import m from "./partner-meetings.module.css";
 export type SendTarget = "auto" | RouteTarget;
 type HomeSend = (text: string, target: SendTarget, files: File[]) => Promise<void> | void;
 
-export function HomeView({ data, api, buddy, today, go, route, onSend, projects, meeting, trail, offline = false }: {
+export function HomeView({ data, api, buddy, today, go, route, onSend, projects, meeting, trail, offline = false, recordingMeetingId }: {
   data: WorkHomeData;
   api: WorkHomeApi;
   buddy: Buddy | null;
@@ -58,22 +59,17 @@ export function HomeView({ data, api, buddy, today, go, route, onSend, projects,
   meeting: HomeMeeting;
   /** 页头右上角（后台任务按钮）。 */
   trail?: ReactNode;
-  /** 这台电脑没连上、没配对（第 73 条）：「等你」最前面一行，点了去连接页。 */
+  /** 这台电脑没连上、没配对（第 73 条）：「等你」里一行，点了去连接页。 */
   offline?: boolean;
+  /** 这台电脑正在录的那场会（在伙伴台胶囊上，不进等你）。 */
+  recordingMeetingId: string | null;
 }) {
   return (
     <div className={h.homeView} data-testid="home-view">
       <header className={h.viewHead}><h1 className={h.viewTitle} tabIndex={-1}>{today}</h1>{trail}</header>
       <div className={h.homeScroll}>
         <div className={h.homeInner}>
-          <HomeWaiting data={data} api={api} go={go} offline={offline} />
-          <PartnerHomeMeetings meeting={meeting} />
-          {api.planFailed ? (
-            <section aria-label="Task" className={h.section}>
-              <p className={h.planFailed} data-testid="plan-read-failed">本体读取失败<HeroButton variant="ghost" size="sm" onPress={() => void api.retryPlan()}>重试</HeroButton></p>
-            </section>
-          ) : null}
-          <HomeMonth data={data} api={api} projects={projects} go={go} />
+          <HomeWaiting data={data} api={api} go={go} offline={offline} recordingMeetingId={recordingMeetingId} meeting={meeting} />
         </div>
       </div>
       <HomeComposer buddy={buddy} projects={projects.projects} route={route} onSend={onSend} />
@@ -81,26 +77,56 @@ export function HomeView({ data, api, buddy, today, go, route, onSend, projects,
   );
 }
 
-export function HomeWaiting({ data, api, go, offline = false, phone = false }: {
+/** 首页最多等会议数据这么久再画清单（设计 4.9）。 */
+const MEETINGS_WAIT_MS = 800;
+
+/**
+ * 首页「等你」（设计第 4 节）：focusList 合成、排好的一份清单，露 5 件，其余收进「还有 N 件」；
+ * 空的时候一行「没有等你的事」。首次打开等会议数据到了（最多 800ms）再画，等的时候空着（aria-busy），不闪空态。
+ */
+export function HomeWaiting({ data, api, go, offline = false, phone = false, recordingMeetingId, meeting }: {
   data: WorkHomeData; api: WorkHomeApi; go: (href: string) => void; offline?: boolean; phone?: boolean;
+  recordingMeetingId: string | null; meeting: Pick<HomeMeeting, "start">;
 }) {
-  const { items } = usePartnerMeetings();
-  const meetings = meetingWaitingItems(items, data.waiting);
+  const { items, error, loaded, reload } = usePartnerMeetings();
   const [confirmed, setConfirmed] = useState<ConfirmedReceipt | null>(null);
-  const count = data.waiting.length + meetings.length + Number(offline);
-  if (!count && !confirmed) return null;
-  return <section aria-label="等你" className={phone ? h.phoneWaiting : h.section}>
-    {count ? <p className={h.sectionTitle}>等你 <span>{count}</span></p> : null}
+  const [waited, setWaited] = useState(false);
+  useEffect(() => {
+    if (loaded) return;
+    const timer = window.setTimeout(() => setWaited(true), MEETINGS_WAIT_MS);
+    return () => window.clearTimeout(timer);
+  }, [loaded]);
+  const rows = focusList({ waiting: data.waiting, meetings: items, offline, recordingMeetingId, now: Date.now() });
+  const className = phone ? h.phoneWaiting : h.section;
+  if (!loaded && !waited) return <section aria-label="等你" aria-busy="true" className={className} />;
+  return <section aria-label="等你" className={className}>
+    {rows.length ? <p className={h.sectionTitle}>等你 <span>{rows.length}</span></p> : null}
     {confirmed ? <p className={m.receipt} role="status">{confirmed.title} · {confirmed.done}
       <HeroButton variant="ghost" size="sm" onPress={() => go(confirmed.href)}>{confirmed.showReceipts ? "查看递送回执" : "选择工作去向"}</HeroButton>
       <HeroButton variant="ghost" size="sm" aria-label="收起确认回执" onPress={() => setConfirmed(null)}>收起</HeroButton>
     </p> : null}
-    {offline ? <ul className={h.waiting}><li className={h.wait} data-kind="machine">
-      <button type="button" className={h.waitMain} onClick={() => go(pageHref("connections"))} data-testid="wait-machine"><span className={h.waitTitle}>这台电脑没连上</span></button>
-    </li></ul> : null}
-    {data.waiting.length ? <WaitingList items={data.waiting} api={api} go={go} onConfirmed={setConfirmed} /> : null}
-    {meetings.length ? <MeetingWaitingRows items={meetings} go={go} /> : null}
+    {rows.length ? <WaitingList items={[]} rows={rows} fold meeting={meeting} api={api} go={go} onConfirmed={setConfirmed} />
+      : !error ? <p className={h.waitEmpty} data-testid="wait-empty">没有等你的事</p> : null}
+    {error ? <ReadError message={error} retry={reload} /> : null}
   </section>;
+}
+
+/**
+ * 等你一行行尾的时间位（设计 4.7）：只写钟点事实。会议「11:44 开始」「已到时间」「进行中」；截止照原来的写法（「剩 5 小时」「已过截止」，
+ * 会后确认写时刻）；额度那条的 dueAt 是恢复时刻，不写；开完的会日期在第二行，不写。
+ */
+export function waitTime(row: FocusRow, now: number): { text: string; warn: boolean } | null {
+  if (row.kind === "machine") return null;
+  if (row.kind === "meeting") {
+    if (row.when !== "soon") return null;
+    if (row.item.stage === "live") return { text: "进行中", warn: true };
+    const start = Date.parse(row.item.at);
+    return { text: now < start ? `${clock(new Date(start))} 开始` : "已到时间", warn: true };
+  }
+  const { item } = row;
+  const confirm = confirmationLine(item, now);
+  if (confirm) return confirm.due;
+  return item.dueAt && item.kind !== "quota" ? dueText(item.dueAt, now) : null;
 }
 
 export function HomeMonth({ data, api, projects, go }: { data: WorkHomeData; api: WorkHomeApi; projects: ProjectsApi; go: (href: string) => void }) {
@@ -313,9 +339,19 @@ function ConfirmEdit({ value, quote, busy, requestId, onConfirmed, onSubmit, onC
  * 额度那条的 dueAt 是恢复的时刻（原话里已经写了），不当截止写。
  * 答完先在原处写状态词，停 2 秒再刷新（收走）；失败在原处写「失败」加「重试」，不弹 toast。
  */
-export function WaitingList({ items, api, go, onConfirmed }: { items: WaitingItem[]; api: WorkHomeApi; go: (href: string) => void; onConfirmed?: (receipt: ConfirmedReceipt) => void }) {
+export function WaitingList({ items, rows: given, fold = false, meeting, api, go, onConfirmed }: {
+  items: WaitingItem[];
+  /** 首页：focusList 排好的一份（等你行、会议、这台电脑没连上混排）；不给就只画 items。 */
+  rows?: FocusRow[];
+  /** 露 5 件，其余收进「还有 N 件」（就地展开，不换页）。 */
+  fold?: boolean;
+  /** 会议行「开始录音」。 */
+  meeting?: Pick<HomeMeeting, "start">;
+  api: WorkHomeApi; go: (href: string) => void; onConfirmed?: (receipt: ConfirmedReceipt) => void;
+}) {
   const answer = useActions(api);
   const local = useLocalRunner();
+  const [expanded, setExpanded] = useState(false);
   const [state, setState] = useState<Record<string, { busy?: boolean; done?: string; failed?: RunAction; reason?: string }>>({});
   // 会后确认展开着的那一行（一次只开一行）。
   const [editing, setEditing] = useState<string | null>(null);
@@ -342,13 +378,27 @@ export function WaitingList({ items, api, go, onConfirmed }: { items: WaitingIte
     }
   };
   const now = Date.now();
+  const all: FocusRow[] = given ?? items.map((item) => ({ kind: "waiting", item }));
+  const shown = fold && !expanded ? all.slice(0, visibleCount(all.length)) : all;
+  const timeSlot = (row: FocusRow) => {
+    const time = waitTime(row, now);
+    return time ? <span className={h.waitTime} data-warn={time.warn ? "" : undefined} data-testid="wait-due">{time.text}</span> : null;
+  };
   return (
     <ul className={h.waiting} data-testid="waiting-list">
-      {items.map((item) => {
+      {shown.map((focus) => {
+        if (focus.kind === "machine") return (
+          <li key="machine" className={h.wait} data-kind="machine">
+            <button type="button" className={h.waitMain} onClick={() => go(pageHref("connections"))} data-testid="wait-machine"><span className={h.waitTitle}>这台电脑没连上</span></button>
+          </li>
+        );
+        if (focus.kind === "meeting") return (
+          <FocusMeetingRow key={`meeting:${focus.item.id}`} item={focus.item} when={focus.when} time={timeSlot(focus)} go={go} meeting={meeting ?? { start: async () => null }} />
+        );
+        const { item } = focus;
         const { actions, away } = answer(item);
         const row = state[keyOf(item)];
         const confirm = confirmationLine(item, now);
-        const due = confirm ? confirm.due : item.dueAt && item.kind !== "quota" ? dueText(item.dueAt, now) : null;
         // 批准那一行：越界路径写在来源后面（9.6、契约 permission.outsidePaths）。
         const outside = item.permission?.outsidePaths.length ? `越界：${item.permission.outsidePaths.join("、")}` : null;
         const from = confirm ? confirm.from : [item.person?.name, item.source, outside].filter(Boolean).join(" · ");
@@ -361,18 +411,17 @@ export function WaitingList({ items, api, go, onConfirmed }: { items: WaitingIte
         return (
           <li key={item.id} className={h.wait} data-kind={item.kind} data-done={row?.done ? "" : undefined} data-editing={open ? "" : undefined}>
             <button type="button" className={h.waitMain} aria-expanded={canOpen ? open : undefined} onClick={() => { if (!confirm) go(waitingHref(item)); else if (canOpen) toggle(); }}
-              title={!due && item.at ? relativeDayTime(item.at, new Date(now)) : undefined}>
+              title={!waitTime(focus, now) && item.at ? relativeDayTime(item.at, new Date(now)) : undefined}>
               <span className={h.waitTitle}>{item.title}</span>
               {summary ? <span className={h.waitSummary} title={summary} data-testid="wait-summary">{summary}</span> : null}
-              {from || due ? (
+              {from ? (
                 <span className={h.waitSource}>
                   {item.person ? <PersonAvatar personId={item.person.personId} className={h.waitAvatar}>{null}</PersonAvatar> : null}
-                  {from ? <span className={h.waitFrom}>{from}</span> : null}
-                  {from && due ? <span aria-hidden>·</span> : null}
-                  {due ? <span className={h.waitDue} data-warn={due.warn ? "" : undefined} data-testid="wait-due">{due.text}</span> : null}
+                  <span className={h.waitFrom}>{from}</span>
                 </span>
               ) : null}
             </button>
+            {timeSlot(focus)}
             <span className={h.waitActs}>
               {row?.done ? <span className={h.waitDone}>{row.done}</span>
                 : row?.failed ? <FailedLine inline reason={row.reason} onRetry={() => void run(item, row.failed!)} />
@@ -395,6 +444,11 @@ export function WaitingList({ items, api, go, onConfirmed }: { items: WaitingIte
           </li>
         );
       })}
+      {shown.length < all.length ? (
+        <li className={h.wait} data-kind="more">
+          <button type="button" className={h.waitMain} onClick={() => setExpanded(true)} data-testid="wait-more"><span className={h.waitMore}>还有 {all.length - shown.length} 件</span></button>
+        </li>
+      ) : null}
     </ul>
   );
 }

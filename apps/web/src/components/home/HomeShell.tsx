@@ -42,8 +42,10 @@ import { useBackground } from "@/lib/home/useBackground";
 import { useWorkHome } from "@/lib/home/useWorkHome";
 import { BackgroundPanel, BackgroundTasks, useMachine } from "./BackgroundPanel";
 import { BuddyView, PipelineView, type Outbox, type OutboxEntry } from "./Conversations";
-import { HomeComposer, HomeView, HomeWaiting, HomeMonth, type SendTarget } from "./HomeView";
-import { PartnerMeetingsProvider, PartnerHomeMeetings } from "./PartnerMeetings";
+import { HomeComposer, HomeView, HomeWaiting, type SendTarget } from "./HomeView";
+import { PartnerMeetingsProvider } from "./PartnerMeetings";
+import { usePartnerMeetings } from "@/lib/home/partnerMeetingFeed";
+import { focusList } from "@/lib/home/focus";
 import { isTeamDraft } from "./PartnerTeam";
 import { TEAM_DELIVERY_CHANGED } from "@/lib/home/teamDelivery";
 import { useViewerQueueWorkInput } from "./WorkIntake";
@@ -537,7 +539,11 @@ function HomeFrame({ account }: { account: Account }) {
   // 开会（设计 2026-11-12）：录音挂在外壳上，切项目、切子会话、开设置都不断。在项目页里新的一场默认挂这个项目本月目标的 Mission。
   const meeting = useHomeMeeting({ account, go });
   const meetingMission = view.kind === "project" ? projects.all.find((entry) => entry.id === view.id)?.current[0]?.missionId ?? null : null;
-  useTabTitle(data.waiting.length, meeting.live);
+  // 首页「等你」的件数（11/16 重新设计 4.5）：和首页同一份 focusList，左栏「今天」行、标签页标题写全部件数。
+  const recordingMeetingId = meeting.phase.kind === "live" ? meeting.phase.meeting.id : null;
+  const { items: meetingItems } = usePartnerMeetings();
+  const waitingCount = focusList({ waiting: data.waiting, meetings: meetingItems, offline: machine.disconnected, recordingMeetingId, now: Date.now() }).length;
+  useTabTitle(waitingCount, meeting.live);
   /** 转交时选了「停掉」：这台电脑上在跑的经本机程序停，云端还排着、没有电脑接下的撤掉登记（别的电脑上在跑的只能在那台电脑上停）。 */
   const stopForTransfer = async (subs: Project["subSessions"]) => {
     const here = new Set(local.sessions.map((session) => session.id));
@@ -575,7 +581,7 @@ function HomeFrame({ account }: { account: Account }) {
   );
   const display = (current: View) => {
     switch (current.kind) {
-      case "home": return <HomeView data={data} api={api} buddy={buddy} today={todayLabel(work.plan?.today ?? null)} go={go} route={route} onSend={send} projects={projects} meeting={meeting} trail={backgroundButton} offline={machine.disconnected} />;
+      case "home": return <HomeView data={data} api={api} buddy={buddy} today={todayLabel(work.plan?.today ?? null)} go={go} route={route} onSend={send} projects={projects} meeting={meeting} trail={backgroundButton} offline={machine.disconnected} recordingMeetingId={recordingMeetingId} />;
       case "project": {
         const project = projects.all.find((entry) => entry.id === current.id);
         if (!project) return <Missing loading={!api.ready} onRetry={api.planFailed ? () => void api.retryPlan() : undefined} />;
@@ -657,11 +663,8 @@ function HomeFrame({ account }: { account: Account }) {
       }} cardAt={cardAt} working={working} seen={seenMarks} onOpen={markSeen}
       meeting={{ slot: <MeetingControl meeting={meeting} missionId={meetingMission} />, listening: meeting.listening }}
       today={todayLabel(work.plan?.today ?? null)} machine={machineDot} trail={handheld ? backgroundButton : null}
-      top={handheld ? <>
-        <HomeWaiting data={data} api={api} go={go} phone />
-        <PartnerHomeMeetings meeting={meeting} />
-        <HomeMonth data={data} api={api} projects={projects} go={go} />
-      </> : null} />
+      waitingCount={waitingCount}
+      top={handheld ? <HomeWaiting data={data} api={api} go={go} phone offline={machine.disconnected} recordingMeetingId={recordingMeetingId} meeting={meeting} /> : null} />
   );
 
   if (handheld) {

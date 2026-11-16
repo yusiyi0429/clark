@@ -448,15 +448,20 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .wait { display: flex; align-items: center; gap: var(--space-2); min-height: var(--row-48); border-radius: var(--r-control); }
 .wait:hover { background: var(--default-soft); }
 .waitMain { display: grid; flex: 1; align-content: center; min-width: 0; min-height: var(--row-48); padding: 6px var(--space-2); border: 0; border-radius: var(--r-control); background: none; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
-.waitTitle { overflow: hidden; font-size: var(--text-base); line-height: var(--lh-row); text-overflow: ellipsis; white-space: nowrap; }
+/* 首页只剩这一份清单，它就是正文（11/16 重新设计 4.7）：第一行 16/24，和左栏主字、对话正文一样。 */
+.waitTitle { overflow: hidden; font-size: var(--text-md); line-height: 24px; text-overflow: ellipsis; white-space: nowrap; }
 /* 摘要（主循环第 66 条）：第一行下面，12/16 次一级的墨色，放不下省略。 */
 .waitSummary { overflow: hidden; color: var(--ink-muted); font-size: var(--text-xs); line-height: 16px; text-overflow: ellipsis; white-space: nowrap; }
 /* 第二行（9.6、9.10）：请你认可的先是对方 16 的头像和名字，再来源，再截止「剩 2 天」；不到 24 小时、已过截止用 --warning。来源放不下省略，截止不省略。 */
 .waitSource { display: flex; align-items: center; gap: var(--space-1); min-width: 0; color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; white-space: nowrap; }
 .waitAvatar { margin-right: var(--space-1); }
 .waitFrom { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.waitDue { flex: none; font-variant-numeric: tabular-nums; }
-.waitDue[data-warn] { color: var(--warning); }
+.waitFrom[data-tone="danger"] { color: var(--danger); }
+/* 行尾时间位（4.7）：只写钟点事实，12/16 等宽数字淡色；24 小时内、已到点用 --warning。桌面在按钮左边。 */
+.waitTime { flex: none; color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.waitTime[data-warn] { color: var(--warning); }
+.waitMore { color: var(--ink-muted); font-size: var(--text-base); line-height: var(--lh-row); }
+.waitEmpty { margin: 0; padding: 6px var(--space-2); color: var(--ink-faint); font-size: var(--text-base); line-height: var(--lh-row); }
 .waitActs { display: flex; flex: none; align-items: center; gap: var(--space-2); padding-right: var(--space-2); }
 .waitActs button { min-height: var(--touch-hit, var(--row-32)); }
 /* 悬停的行底和次按钮、弱按钮悬停、chip、无照片头像的底同是 4%：行悬停时这些换 --default-hover（5.2「颜色怎么用」、5.4.6）。 */
@@ -469,10 +474,10 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .wait[data-editing] { flex-wrap: wrap; }
 .waitActs:empty { display: none; }
 .wait[data-editing] .waitTitle { white-space: normal; overflow-wrap: anywhere; }
-/* 手机上三个按钮和字挤不下一行：会后确认这一种，按钮换到字下面一排。 */
-.app[data-phone] .wait[data-kind="nexus_confirmation"] { flex-wrap: wrap; }
-.app[data-phone] .wait[data-kind="nexus_confirmation"] .waitMain { flex-basis: 100%; }
-.app[data-phone] .wait[data-kind="nexus_confirmation"] .waitActs { padding: 0 var(--space-2) var(--space-1); }
+/* 手机上两个以上按钮和字挤不下一行（4.7、第 8 节）：按钮换到字下面一排；时间位跟在字后面。 */
+.app[data-phone] .wait:has(.waitActs > :nth-child(2)) { flex-wrap: wrap; }
+.app[data-phone] .wait:has(.waitActs > :nth-child(2)) .waitMain { flex-basis: calc(100% - 96px); }
+.app[data-phone] .wait:has(.waitActs > :nth-child(2)) .waitActs { padding: 0 var(--space-2) var(--space-1); }
 .waitEdit { display: grid; flex: 0 0 100%; gap: var(--space-2); min-width: 0; padding: 0 var(--space-2) var(--space-2); }
 .waitQuote { margin: 0; padding-left: var(--space-3); box-shadow: inset 2px 0 0 var(--hairline-strong); color: var(--ink-muted); font-size: var(--text-base); line-height: var(--lh-row); white-space: pre-wrap; overflow-wrap: anywhere; }
 

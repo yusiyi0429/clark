@@ -53,6 +53,11 @@ describe("focusList：会议什么时候进等你", () => {
     expect(AFTER_MEETING_MS).toBe(72 * HOUR);
   });
 
+  it("已经不在开会阶段的（妙记待选场次、转写中出事的）要处理就进，不看预约的结束时间", () => {
+    const rows = run({ meetings: [meet({ id: "minute", meetingId: null, stage: "unmatched", needsAction: true, at: iso(-5 * MIN), source: "feishu" })] });
+    expect(ids(rows)).toEqual(["after:minute"]);
+  });
+
   it("这台电脑正在录的那场不进", () => {
     expect(ids(run({ meetings: [meet({ id: "rec", stage: "live", at: iso(-5 * MIN) })], recordingMeetingId: "m1" }))).toEqual([]);
   });

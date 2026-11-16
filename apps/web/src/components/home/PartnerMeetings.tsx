@@ -9,9 +9,8 @@ import { Select } from "@/components/ui/Select";
 import { browserApi } from "@/lib/api/client";
 import type { components } from "@/lib/api/schema";
 import { calendarDate, COMPANY_TIMEZONE } from "@/lib/companyTime";
-import { meetingHref } from "@/lib/home/meeting";
+import { meetingHref, meetingSpan } from "@/lib/home/meeting";
 import { usePartnerMeetings, type PartnerMeeting } from "@/lib/home/partnerMeetingFeed";
-import type { WaitingItem } from "@/lib/home/types";
 import type { TimedBlock } from "@/components/work/WorkTimeline";
 import { MeetingControl, type HomeMeeting } from "./MeetingControl";
 import h from "@/styles/home.module.css";
@@ -51,11 +50,6 @@ export function homeMeetingGroups(items: PartnerMeeting[], now: number) {
   return { current: current.sort(byTime), later: later.sort(byTime) };
 }
 
-export function meetingWaitingItems(items: PartnerMeeting[], waiting: WaitingItem[]) {
-  const shown = new Set(waiting.flatMap(({ open }) => open.kind === "meeting" ? [open.id] : []));
-  return items.filter((item) => item.needsAction && !(item.meetingId && shown.has(item.meetingId)));
-}
-
 function meetingTime(item: PartnerMeeting, now: number) {
   const at = new Date(item.at);
   const day = calendarDate(item.at);
@@ -66,14 +60,33 @@ function meetingTime(item: PartnerMeeting, now: number) {
   return label + " " + (item.allDay ? "全天" : clock);
 }
 
-export function MeetingWaitingRows({ items, go }: { items: PartnerMeeting[]; go: Navigate }) {
-  return <ul className={h.waiting}>{items.map((item) => (
-    <li key={item.id} className={h.wait} data-kind="meeting">
+/**
+ * 「等你」里的一场会（设计 4.7）：快开始的第二行「会议 · 11:44–12:44」，行尾「加入会议」（有入会地址）或「开始录音」（本人能在这台电脑录）；
+ * 开完要处理的第二行「会议 · 今天 11:41 · 状态」，整行点进会议页，不放按钮。时间位由调用方算好传进来。
+ */
+export function FocusMeetingRow({ item, when, time, go, meeting }: {
+  item: PartnerMeeting; when: "soon" | "after"; time: ReactNode; go: Navigate; meeting: Pick<HomeMeeting, "start">;
+}) {
+  const span = meetingSpan(item.at, item.endsAt ?? null);
+  return (
+    <li className={h.wait} data-kind="meeting" data-when={when}>
       <a className={h.waitMain} href={item.href} onClick={(event) => follow(event, item.href, go)}>
-        <span className={h.waitTitle}>{item.title}</span><span className={h.waitSource}>{item.statusText}</span>
+        <span className={h.waitTitle}>{item.title}</span>
+        <span className={h.waitSource}>
+          <span className={h.waitFrom}>{when === "soon" ? `会议 · ${span}` : `会议 · ${meetingTime(item, Date.now())}`}</span>
+          {when === "after" ? <><span aria-hidden>·</span><span className={h.waitFrom} data-tone={item.stage === "attention" ? "danger" : undefined}>{item.statusText}</span></> : null}
+        </span>
       </a>
+      {time}
+      <span className={h.waitActs}>
+        {when === "soon" && item.joinUrl ? (
+          <HeroButton variant="tertiary" size="sm" onPress={() => window.open(item.joinUrl!, "_blank", "noopener,noreferrer")}>加入会议</HeroButton>
+        ) : when === "soon" && item.canStartRecording && item.meetingId ? (
+          <HeroButton variant="tertiary" size="sm" onPress={() => void meeting.start({ meetingId: item.meetingId!, title: item.title })}>开始录音</HeroButton>
+        ) : null}
+      </span>
     </li>
-  ))}</ul>;
+  );
 }
 
 export function PartnerHomeMeetings({ meeting }: { meeting: HomeMeeting }) {
@@ -129,7 +142,7 @@ export function PartnerMeetingInbox() {
   </section>;
 }
 
-function ReadError({ message, retry }: { message: string; retry(): void }) {
+export function ReadError({ message, retry }: { message: string; retry(): void }) {
   return <p role="alert" className={s.error}>{message}<button type="button" className={s.link} onClick={retry}>重试</button></p>;
 }
 

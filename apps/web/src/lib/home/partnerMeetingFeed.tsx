@@ -7,14 +7,15 @@ import { MEETING_CARD_COMMITTED } from "@/lib/meetingSync";
 import { MEETING_CHANGED } from "./meeting";
 
 export type PartnerMeeting = components["schemas"]["PartnerMeetingsResponse"]["items"][number];
-type MeetingFeed = { items: PartnerMeeting[]; error: string | null; reload(): void };
+/** loaded：第一次请求结束了（成功或失败）；首页等它（最多 800ms）再画「等你」，免得会议行晚到把已画的行顶下去。 */
+type MeetingFeed = { items: PartnerMeeting[]; error: string | null; loaded: boolean; reload(): void };
 
 const MeetingContext = createContext<MeetingFeed | null>(null);
 const events = [MEETING_CHANGED, "meeting-changed", "meeting-card-reviewed", MEETING_CARD_COMMITTED, "focus"];
 
 /** 同一个登录人的首页、开会弹层和伙伴对话共享列表。变更发生在请求途中时，等这一趟结束再取一次。 */
 export function PartnerMeetingsProvider({ children }: { children: ReactNode }) {
-  const [feed, setFeed] = useState<Omit<MeetingFeed, "reload">>({ items: [], error: null });
+  const [feed, setFeed] = useState<Omit<MeetingFeed, "reload">>({ items: [], error: null, loaded: false });
   const refresh = useRef<() => void>(() => {});
   const reload = useCallback(() => refresh.current(), []);
 
@@ -31,9 +32,9 @@ export function PartnerMeetingsProvider({ children }: { children: ReactNode }) {
         const { response, data } = await browserApi.GET("/api/me/partner-meetings", { signal: controller.signal, cache: "no-store" });
         if (controller.signal.aborted) return;
         if (!response.ok || !data) throw new Error(response.status === 401 ? "登录已过期" : "没有读到会议");
-        setFeed({ items: data.items, error: null });
+        setFeed({ items: data.items, error: null, loaded: true });
       } catch (cause) {
-        if (!controller.signal.aborted) setFeed({ items: [], error: cause instanceof Error && cause.message === "登录已过期" ? cause.message : "没有读到会议" });
+        if (!controller.signal.aborted) setFeed({ items: [], error: cause instanceof Error && cause.message === "登录已过期" ? cause.message : "没有读到会议", loaded: true });
       } finally {
         reading = false;
         if (!controller.signal.aborted) {

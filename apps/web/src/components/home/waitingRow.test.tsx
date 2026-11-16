@@ -68,10 +68,10 @@ describe("等你行的截止（5.4.4「时间只写截止」）", () => {
     expect(dueText(at(-HOUR), NOW)).toEqual({ text: "已过截止", warn: true });
   });
 
-  it("第二行：请你认可的先是对方的头像和名字，再来源，再截止；没截止的不写时间，时间在这一行的 title 里", () => {
+  it("第二行：请你认可的先是对方的头像和名字，再来源；截止在行尾时间位（11/16 重新设计 4.7）；没截止的不写时间，时间在这一行的 title 里", () => {
     const html = render([wait({ id: "c1", kind: "acceptance", title: "请你认可「首页改版」", source: "首页改版", person: { personId: "p-wang", name: "王明" },
       open: { kind: "task_detail", id: "t9" }, dueAt: at(49 * HOUR) })]);
-    expect(text(html)).toMatch(/请你认可「首页改版」 王明 · 首页改版 · 剩 2 天/);
+    expect(text(html)).toMatch(/请你认可「首页改版」 王明 · 首页改版 剩 2 天/);
     expect(html).toMatch(/<span[^>]*data-testid="wait-due"[^>]*>剩 2 天</);
     expect(html).not.toContain("data-warn");
     expect(html).not.toMatch(/<li[^>]*title=/);
@@ -184,7 +184,7 @@ describe("会后确认（17.2 第 43 条，B 契约 f2f4253f）", () => {
     expect(confirmationLine(nexus({ id: CONFIRMATION, value: null, quote: null }, { dueAt: at(5 * HOUR) }), NOW)).toMatchObject({ from: "会后确认", due: { warn: true } });
     expect(confirmationLine(wait({ dueAt: at(HOUR) }), NOW)).toBeNull();
     const html = render([full]);
-    expect(text(html)).toMatch(/灯塔试点的验收时间点要不要顺延到 11\/20？ 会后确认 · 验收时间点顺延到 11\/20， 由王明负责通知客户 · 截止 11\/12 18:00/);
+    expect(text(html)).toMatch(/灯塔试点的验收时间点要不要顺延到 11\/20？ 会后确认 · 验收时间点顺延到 11\/20， 由王明负责通知客户 截止 11\/12 18:00/);
     expect(html).toContain('data-kind="nexus_confirmation"');
     expect(html).not.toContain("剩 ");
   });

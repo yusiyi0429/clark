@@ -36,8 +36,11 @@ export function meetingEnd(item: Pick<PartnerMeeting, "at" | "endsAt">): number 
 
 function meetingWhen(item: PartnerMeeting, now: number): "soon" | "after" | null {
   const end = meetingEnd(item);
-  if (!item.allDay && (item.stage === "scheduled" || item.stage === "live") && now >= instant(item.at) - EARLY_MS && now < end) return "soon";
-  if (item.needsAction && end <= now && now - end <= AFTER_MEETING_MS) return "after";
+  const upcoming = item.stage === "scheduled" || item.stage === "live";
+  if (!item.allDay && upcoming && now >= instant(item.at) - EARLY_MS && now < end) return "soon";
+  // 开完了：预约的过了结束时间；已经不在开会阶段的（转写、出事、妙记待选场次）不看预约的结束时间。
+  const over = !upcoming || end <= now;
+  if (item.needsAction && over && now - Math.min(end, now) <= AFTER_MEETING_MS) return "after";
   return null;
 }
 
