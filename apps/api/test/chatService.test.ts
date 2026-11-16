@@ -966,7 +966,10 @@ describe("项目对话走 Chat（project:<projectId>，新首页第 16 节）", 
     const chat = await fakeChat({ conversations: ["main-segment"], segments });
     const f = await pipelineFixture(chat);
     try {
-      const projectId = await newProject(f);
+      // 这个月没挂 Task 的项目才按项目拆（本人 11/16 方案 A：挂了 Task 的按 Task 拆）。
+      const created = await f.call("POST", "/api/me/projects", { name: "验收1112" });
+      expect(created.statusCode).toBe(201);
+      const projectId = created.json().projectId as string;
       const pipeline = (await open(f, projectId)).json().conversationId as string;
       await f.call("PUT", "/api/me/buddy-authority", { authority: "full" });
       // 这个项目之前登记过一次拆卡（开了规划员，登记去掉了）。
