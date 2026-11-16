@@ -439,6 +439,10 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
     for (const word of ["words 只能原样摘本人在项目对话里说过的话，不改写、不加自己的交代", "拿不准就不带，云端取本人最近说的话"])
       expect(description("split_cards")).toContain(word);
     expect(description("ask_user")).toContain("建项目、拆卡之前一定先用它把现实问清楚");
+    // 本人 11/16（少开子会话）：能自己办的不拆、能接着用的先接着用、一件 Task 默认一张卡；同一项目同时在跑不超过 2 个（只写进规矩）。
+    for (const word of ["先想总管线自己能不能办完", "能接着用的子会话", "一件 Task 默认拆一张卡"]) expect(description("split_cards")).toContain(word);
+    for (const name of ["split_cards", "start_sub_session", "sub_session_restart"])
+      expect(description(name)).toContain("同一个项目同时在跑的子会话不超过 2 个");
     for (const personality of ["steady", "direct", "warm", "coach"] as const)
       expect(buddyPersona({ name: "团团", personality }, "测试乙")).toContain("# 先从现实出发（哪种性格都一样）");
   });

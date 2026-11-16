@@ -135,7 +135,7 @@ export async function planBrief(q: Query, own: CardPlanTask): Promise<TCardPlanB
     ...(words.length ? ["", ...briefWords(words)] : []),
     "", ...roleLines,
     "", "## 派活单的要求", "",
-    "1 到 8 件，每件能独立交回：" + CARD_TITLE_RULE + "；交代写清做什么；完成标准每行一条、能核对；写对约定第几条（对不上写 null）；技能从上面的技能清单里挑；模型档位 strong / normal / light；一句为什么这么拆。"
+    SPLIT_COUNT_RULE + "每件能独立交回：" + CARD_TITLE_RULE + "；交代写清做什么；完成标准每行一条、能核对；写对约定第几条（对不上写 null）；技能从上面的技能清单里挑；模型档位 strong / normal / light；一句为什么这么拆。"
       + (words.length ? "每件带 sourceWords：从上面「本人原话」里原样摘的相关片段。" : ""),
   ];
   return { markdown: lines.join("\n").slice(0, 20_000), role: planner ? roleBrief(planner) : null,
@@ -144,6 +144,10 @@ export async function planBrief(q: Query, own: CardPlanTask): Promise<TCardPlanB
 }
 
 const VERDICT = { open: "进行中", completed: "确认完成", stopped: "到此为止", continued: "已延续" } as const;
+
+/** 拆几件（本人 11/16，少开子会话）：一件派活单就是一个子会话，大的活由执行方在会话里并行。 */
+const SPLIT_COUNT_RULE = "默认 1 件。只有这几种情况才多拆一件，最多 3 件：要在不同的文件夹或仓库里做；彼此独立、又都很大（各要几个小时）；要不同的执行方或权限；本人明说要分开。"
+  + "多拆的每件在「为什么这么拆」里写是哪一条。";
 
 /**
  * GET /api/me/projects/:projectId/plan-brief（16.3，项目负责人，调用方核对过）：拆一个项目的交代。没有 Task 的验收标准：
@@ -171,7 +175,7 @@ export async function projectPlanBrief(q: Query, project: ProjectRow): Promise<T
     ...(words.length ? ["", ...briefWords(words)] : []),
     "", ...roleLines,
     "", "## 派活单的要求", "",
-    "1 到 8 件，每件能独立交回：" + CARD_TITLE_RULE + "；交代写清做什么；完成标准每行一条、能核对（没有 Task 的验收标准，验收员只照这几条验）；对约定第几条一律写 null；技能从上面的技能清单里挑；模型档位 strong / normal / light；一句为什么这么拆。"
+    SPLIT_COUNT_RULE + "每件能独立交回：" + CARD_TITLE_RULE + "；交代写清做什么；完成标准每行一条、能核对（没有 Task 的验收标准，验收员只照这几条验）；对约定第几条一律写 null；技能从上面的技能清单里挑；模型档位 strong / normal / light；一句为什么这么拆。"
       + (words.length ? "每件带 sourceWords：从上面「本人原话」里原样摘的相关片段。" : ""),
   ];
   return { markdown: lines.join("\n").slice(0, 20_000), role: planner ? roleBrief(planner) : null, task: null,

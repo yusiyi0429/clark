@@ -130,10 +130,10 @@ describe("拆卡和验收在本机（第 21 节）", { timeout: 30_000 }, () => 
       for (const text of ["# 拆卡：对话质量达标", "propose_plan", "get_task_context", "1. 有题库打分结果", "卡：已有的一张", "- 开发（轻档）：写代码", "- 执行员（预设 executor，",
         // 标题的规矩（短的动宾短语，细节进交代和完成标准）照样交代给本机规划员。
         "中文 12 个字以内", "不重复项目名",
-        // 一个 worker 一次能做完的只出一件：派活单下限是 1 件，不硬拆成 3 件。
-        "1 到 8 件"])
+        // 本人 11/16（少开子会话）：默认 1 件，只有四种情况才多拆，最多 3 件，多拆的写是哪一条。
+        "默认 1 件", "最多 3 件", "要在不同的文件夹或仓库里做", "本人明说要分开", "写是哪一条"])
         expect(body.markdown).toContain(text);
-      expect(body.markdown).not.toContain("3 到 8 件");
+      expect(body.markdown).not.toContain("1 到 8 件");
       expect((await f.call("GET", "/api/plan-tasks/task-theirs/plan-brief")).statusCode).toBe(403);
     } finally { await f.close(); }
   });

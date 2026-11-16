@@ -56,6 +56,8 @@ const KIND: Record<BuddyActionName, Kind> = {
 const IRREVERSIBLE = "这一步撤不回：只在动手前请本人点头时说一次，做完以后和别的回话里不再提。";
 /** 本人 11/16：界面上不再显示子会话的字母，读到的 letter 只用来调动作。 */
 const SAY_NAMES = "子会话的 letter 只是调动作用的编号，界面上不显示；跟本人说话时叫子会话的名字，不说字母。";
+/** 本人 11/16（少开子会话）：只写进规矩，不做硬限制。 */
+const RUNNING_LIMIT = "同一个项目同时在跑的子会话不超过 2 个（本机最多同时跑 3 个，留一个给本人）；已经有 2 个在跑就等一个停下再开，急的先问本人。";
 const DESCRIPTION: Record<BuddyActionName, string> = {
   read_partner_inbox: "读本人伙伴的会议 meetings、同事来件 received、发件进度 sent 或关键工作事件 events。每页默认20条，nextOffset 可取下一页；按需打开原文。",
   read_partner_item: "以本人身份读会议正文 meeting、本人待整理的妙记 minute、团队请求及答复 delivery、请求附件文字 attachment。id 取自收件列表。会议有多个来源时可选 source（feishu 或 tianshu）；附件须带 attachmentId。没有内容或权限时如实说明。",
@@ -67,7 +69,7 @@ const DESCRIPTION: Record<BuddyActionName, string> = {
   open_page: "让本人的网页打开某一处：home 首页、preferences 偏好，或某个项目、子会话（同「等你」的 open）。只动界面。",
   set_appearance: "切外观：system 跟随系统、light 浅色、dark 深色。",
   set_feishu_push: "打开或关掉飞书推送（feishu: true 开）。",
-  start_sub_session: "让一个卡或专题开工：登记要开工，本人电脑上开着的网页接下后交给本机。已经在跑的不用再开。",
+  start_sub_session: "让一个卡或专题开工：登记要开工，本人电脑上开着的网页接下后交给本机。已经在跑的不用再开。" + RUNNING_LIMIT,
   stop_sub_session: `停掉一个子会话：还没被电脑接下的撤掉开工登记；在跑的请它所在的那台电脑停掉。${IRREVERSIBLE}`,
   archive_sub_session: "归档一个子会话（卡或专题），从首页收起。在跑的要先停掉。",
   delete_sub_session: "删掉一个子会话：先进回收站，30 天内能恢复。在跑的要先停掉。",
@@ -83,7 +85,9 @@ const DESCRIPTION: Record<BuddyActionName, string> = {
     + "modelWords 只放本人关于用哪个来源、哪个模型、思考开到多少的原话（比如「用 Opus」「思考开到最高」），原样摘那一截，不翻译成型号；"
     + "本人没说这些就不带。拆哪几张、范围、怎么做的话放 words，不放 modelWords。"
     + "拆之前先用 ask_user 问清现实：在哪个文件夹、哪个目录开工，本机有没有、要不要新建，是不是从别处（比如 Codex）迁过来的，要不要连 GitHub，拆完做成的样子和本人要的是不是一回事。"
-    + "这几件没问清，不拆、不开工，拆了只会更糟。",
+    + "这几件没问清，不拆、不开工，拆了只会更糟。"
+    + "拆之前还要先想总管线自己能不能办完：回答问题、看进度、改约定、给子会话转话、整理计划都自己做，不拆。这件 Task 已经有能接着用的子会话，就接着用它（项目对话里用 sub_session_tell 或 sub_session_restart），不另拆。"
+    + "要动文件的新活才拆，一件 Task 默认拆一张卡，大的活由执行方在会话里并行。" + RUNNING_LIMIT,
   set_task_due_date: "给挂在项目上的一件 Task 存验收截止日（YYYY-MM-DD；null 不存了，退回 Mission 的节点）。本人说了哪天交、或者 Task 的截止和 Mission 节点对不上时用。",
   set_budget: "改预算：带 taskId 改这件 Task 的，不带改本人新 Task 的缺省预算。",
   message_project: "把本人关于某个项目的话转给这个项目的对话，由项目对话去派活、问子会话（伙伴不直接和子会话对话；凡是要改子会话手上的活的都用它）。"
@@ -104,7 +108,7 @@ const DESCRIPTION: Record<BuddyActionName, string> = {
     + "细节留在卡的交代和完成标准里，不放进名字。本人让你改名、或名字太长在左栏看不全时用；一次改一个，几个要改就调几次。",
   sub_session_link: "只在项目对话里用：按字母把这个项目里的一个子会话挂到这个项目上的一件 Task（taskId），写明它对的是这件 Task 验收标准的第几条（criterion，从 1 起；标准看 read_work_home 里这个项目 goals 的 criteria，第一条是 1；对不上任何一条写 null，专题一律 null）。本月页照它算这件 Task 的进度：对某一条的卡验收通过，这一条算达到。"
     + "以前按项目拆出来、没挂 Task 的子会话，一个一个挂上；拿不准挂哪件、对哪条就问本人，不要硬挂。",
-  sub_session_restart: "只在项目对话里用：按字母重开这个项目里的一个子会话。还没开过工的登记开工；停着的（做完一轮、被停下、出错停住）往里说一句 text 续上，不给 text 是「接着做」。",
+  sub_session_restart: "只在项目对话里用：按字母重开这个项目里的一个子会话。还没开过工的登记开工；停着的（做完一轮、被停下、出错停住）往里说一句 text 续上，不给 text 是「接着做」。" + RUNNING_LIMIT,
   sub_session_answer: "只在项目对话里用：替本人回答一个子会话在问的问题（本人说了「C 的问题选第二个」这类话时用）。choices 每题选中的选项 label（照它问的原样，条数和题数一样），"
     + "text 是另外要说的话。本人没表态的不要替本人选。",
   sub_session_approve: "只在项目对话里用：批准（decision = allow）或拒绝（deny）一个子会话在等批准的那一步。硬规矩：只有本人在这次对话里明说了"
