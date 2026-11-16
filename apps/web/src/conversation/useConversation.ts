@@ -58,6 +58,8 @@ export type Message = { sequence: number; role: "user" | "assistant"; content: s
   /** 只在项目对话的回答上（17.2 第 38 条，B 契约 7d6a62b3）：这一轮在哪跑；fallback 是本该在本机、没跑成改在云端。 */
   ranOn?: "cloud" | "local";
   fallback?: TLocalFallbackReason;
+  /** 本人挂在这条消息上的表情（伙伴台、项目对话，Reactions.tsx）。 */
+  reactions?: string[];
   meta?: { issueId?: string; title?: string; href?: string } };
 export type Attachment = { id: string; fileName: string; mimeType: string };
 export type ConversationStatus = "idle" | "streaming" | "complete" | "failed" | "aborted";

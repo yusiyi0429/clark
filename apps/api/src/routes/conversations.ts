@@ -8,6 +8,7 @@ import {
   ATTACHMENT_MAX_COUNT,
   attachmentKind,
   ConversationMessageRequest,
+  ConversationReaction,
   ConversationScope,
   ConversationTurnParams,
   IssueDraftResponse,
@@ -16,6 +17,7 @@ import {
   type TConversationAttachment,
   type TConversationCard,
   type TConversationMessageRequest,
+  type TConversationReaction,
   type TConversationScope,
   type TReadScope,
   type TReferenceSnapshot,
@@ -44,6 +46,7 @@ import { withNotice } from "../conversationRouting.js";
 import { ConversationTurnError, recoveryNote, resumeInstruction, shortFailureReason, turnFailureCopy, type TurnFailureKind, type TurnRecoverySummary } from "../conversationRecovery.js";
 import { personalMemoryToolsFor, unknownMemoryMarks } from "../personalMemory.js";
 import { searchOwnConversationHistory } from "../conversationHistorySearch.js";
+import { saveReaction, withReactions } from "../conversationReactions.js";
 import { createStepTracker } from "../conversationSteps.js";
 import { createConversationEntries, openTodoContext } from "../conversationEntries.js";
 import { loadAsk, readAnswers, type AskUser, type QuestionsCard } from "../askUser.js";
@@ -189,10 +192,27 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
     throw error;
   };
 
+  // 伙伴台、项目对话的历史带上本人挂的表情（conversationReactions.ts）。
+  const reactable = (scope: TConversationScope) => scope === "global" || isProject(scope);
   app.get(
     "/api/conversations/:scope/messages",
     { preHandler: requirePerson, schema: { params: conversationParams } },
     async (req, reply) => {
+      const history = await conversationHistory(req, reply);
+      return reactable(req.params.scope) && history && typeof history === "object" && "messages" in history
+        ? withReactions(q, req.person!.personId, req.params.scope, history) : history;
+    },
+  );
+  app.put(
+    "/api/conversations/:scope/reactions",
+    { preHandler: requirePerson, schema: { params: conversationParams, body: ConversationReaction } },
+    async (req: FastifyRequest<{ Params: { scope: TConversationScope }; Body: TConversationReaction }>, reply) => {
+      if (!reactable(req.params.scope)) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
+      if (await pipelineDenied(reply, req.person!, req.params.scope, false)) return reply;
+      return saveReaction(q, req.person!.personId, req.params.scope, req.body);
+    },
+  );
+  const conversationHistory = async (req: Pick<FastifyRequest, "person" | "id"> & { params: { scope: TConversationScope } }, reply: FastifyReply) => {
       if (await pipelineDenied(reply, req.person!, req.params.scope, false)) return reply;
       // 项目对话走 Chat：还没开过就是空的，不建。
       if (chat && isProject(req.params.scope)) {
@@ -215,8 +235,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
       const object = await scopeObjectFor(req.person!, req.params.scope);
       if (!object.visible) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
       return getConversationHistory(q, req.person!.personId, req.params.scope, conversationTurnTimeoutMs);
-    },
-  );
+  };
 
   /** 一轮对话的完整流程：读写这个人在这个页面的当前对话。 */
   const sendConversationTurn = async (

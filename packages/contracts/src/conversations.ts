@@ -351,6 +351,23 @@ export const ConversationMessage = Type.Object(
       { issueId: Type.Optional(Type.String()), title: Type.Optional(Type.String()), href: Type.Optional(Type.String()) },
       { additionalProperties: false },
     )),
+    /** 本人挂在这条消息上的表情（只在伙伴台和项目对话；见 ConversationReaction）；没挂的没有这个字段。 */
+    reactions: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 16 }), { maxItems: 3 })),
+  },
+  { additionalProperties: false },
+);
+
+/** 一条消息上本人最多挂几个表情。 */
+export const MESSAGE_REACTION_MAX = 3;
+/**
+ * 本人给伙伴台、项目对话里的一条消息挂的表情（写的时候整组替换，空数组是全取消；返回存下的那组）。只是本人自己的标记：不送给模型、不通知别人。
+ * 消息按 runId + role 认（一轮里本人一句、回答一句；序号读历史时会重排，不拿它认）。同一个表情只算一个。
+ */
+export const ConversationReaction = Type.Object(
+  {
+    runId: Type.String({ minLength: 1, maxLength: 200 }),
+    role: Type.Union([Type.Literal("user"), Type.Literal("assistant")]),
+    emojis: Type.Array(Type.String({ minLength: 1, maxLength: 16 }), { maxItems: MESSAGE_REACTION_MAX }),
   },
   { additionalProperties: false },
 );
@@ -581,3 +598,4 @@ export type TConversationModel = Static<typeof ConversationModel>;
 export type TLocalFallbackReason = Static<typeof LocalFallbackReason>;
 export type TConversationLocalTurn = Static<typeof ConversationLocalTurn>;
 export type TConversationSseEvent = Static<typeof ConversationSseEvent>;
+export type TConversationReaction = Static<typeof ConversationReaction>;

@@ -24,6 +24,7 @@ import { CONVERSATION_REHYPE_PLUGINS, CONVERSATION_REMARK_PLUGINS, holdOpenMath 
 import { RichStreamProvider } from "./richBlocks/surface";
 import { afterResize, resizing } from "./resizeGate";
 import { modelLine } from "@/lib/local/runModel";
+import { useMessageReaction } from "./Reactions";
 import s from "@/styles/conversation-transcript.module.css";
 import c from "@/styles/card-references.module.css";
 
@@ -139,7 +140,7 @@ export function sameTurn(previous: TurnProps, next: TurnProps): boolean {
     && a.role === b.role && a.content === b.content
     && (a.memoryUsed ?? []).join("|") === (b.memoryUsed ?? []).join("|")
     && a.readScope?.label === b.readScope?.label && a.kind === b.kind && a.via === b.via && a.meta?.href === b.meta?.href && a.answers?.askId === b.answers?.askId
-    && a.receipt === b.receipt
+    && a.receipt === b.receipt && (a.reactions ?? []).join("|") === (b.reactions ?? []).join("|")
     && sameList(a.attachments, b.attachments, (item) => item.id)
     && sameList(a.referencesSnapshot, b.referencesSnapshot, (item) => `${item.cardId}@${item.version}`);
 }
@@ -255,10 +256,11 @@ function ConversationTurnBody({ message, ms, streaming = false, thought, steps }
   const memoryUsed = useMemo(() => (memoryKey ? memoryKey.split("|") : NO_MEMORY), [memoryKey]);
   // 新首页的对话里回答提问的那一句不另画：提问卡原处收成了一行（AskContext.inline）。
   const ask = useContext(AskContext);
+  const reaction = useMessageReaction(streaming ? null : message);
   if (user && message.answers && ask?.inline) return null;
   return (
     <article className={user ? s.user : s.assistant} data-chat-role={message.role} aria-label={user ? "你" : "天枢"}
-      data-testid={streaming ? "conversation-streaming-turn" : undefined} aria-busy={streaming || undefined}>
+      data-testid={streaming ? "conversation-streaming-turn" : undefined} aria-busy={streaming || undefined} {...reaction?.target}>
       {!user && ms !== undefined ? (
         <div className={s.meta}>
           <span className={s.time}>用时 {seconds(ms)}</span>
@@ -313,6 +315,7 @@ function ConversationTurnBody({ message, ms, streaming = false, thought, steps }
       )}
       {/* 伙伴对话的回执（17.4）：两个小勾，送达亮第一个，读到亮第二个。 */}
       {user && message.receipt ? (message.receipt === "failed" ? <ResendLine message={message} /> : <ReceiptTicks state={message.receipt} />) : null}
+      {reaction?.view}
     </article>
   );
 }
