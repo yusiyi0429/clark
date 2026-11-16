@@ -44,6 +44,9 @@ function meetingWhen(item: PartnerMeeting, now: number): "soon" | "after" | null
   return null;
 }
 
+/** 会议行在忽略接口里的 id 前缀（同契约 MEETING_ROW_PREFIX；网页只能从契约包取类型，取不了值）。 */
+export const MEETING_ROW_PREFIX = "partner-meeting:";
+
 /** 会议行「这一版」（忽略用，本人 11/16）：阶段、状态那句话、开始时间；变了就回到等你。 */
 export const meetingVersion = (item: Pick<PartnerMeeting, "stage" | "statusText" | "at">) => [item.stage, item.statusText ?? "", item.at].join("|");
 
