@@ -490,7 +490,7 @@ export function emptyMonth(today: string | null, missions: Pick<HomeMonthMission
 }
 
 /** 「等你」的顺序（9.6）：卡住正在跑的活的（批准、回答、额度）在前，再是有截止的（早的在前），其余按时间新的在前。 */
-const BLOCKING = new Set<WaitingItem["kind"]>(["approval", "question", "quota"]);
+export const BLOCKING = new Set<WaitingItem["kind"]>(["approval", "question", "quota"]);
 export function sortWaiting(items: WaitingItem[]): WaitingItem[] {
   const rank = (item: WaitingItem) => (BLOCKING.has(item.kind) ? 0 : item.dueAt ? 1 : 2);
   return [...items].sort((a, b) => rank(a) - rank(b)
