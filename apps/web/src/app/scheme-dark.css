@@ -11,17 +11,11 @@
   --paper: oklch(12% 0.0015 217.71);
   --morning-start: oklch(12% 0.0015 217.71);
   --surface: oklch(21.03% 0.003 217.71);
-  --field-bg: oklch(21.03% 0.003 217.71);
   --ink: oklch(99.11% 0.0015 217.71);
-  --field-ink: oklch(99.11% 0.0015 217.71);
   /* 深色只有两级字色：层级靠字号和字重分。 */
   --ink-muted: oklch(70.5% 0.003 217.71);
   --ink-faint: oklch(70.5% 0.003 217.71);
-  --field-placeholder: oklch(70.5% 0.003 217.71);
-  --field-border-focus: oklch(70.5% 0.003 217.71);
   --rule: oklch(28% 0.0015 217.71);
-  --field-border: oklch(28% 0.0015 217.71);
-  --field-border-hover: var(--hairline-strong);
   --confirmed: #6ad8bd;
   --judgment: #f5c36b;
   --counter: #ff91a9;
@@ -32,7 +26,6 @@
   --mark-strong: color-mix(in oklab, var(--judgment) 38%, var(--surface));
   --accent-soft: color-mix(in oklab, var(--accent) 12%, transparent);
   --tianshu-blue-secondary: #80adff;
-  --field-caret: #80adff;
   --brand-deep: #3a83f7;
   --sh-1: transparent;
   --sh-2: transparent;
@@ -40,4 +33,15 @@
   --sheet-shadow: none;
   --overlay-shadow: 0 0 1px 0 rgba(255, 255, 255, 0.3) inset;
   --backdrop: rgba(0, 0, 0, 0.6);
+}
+/* 输入框那一套：globals.css 在主题外框（TianshuTheme 的 [data-ts-theme]）里把它们重设成浅色，所以深色值同时挂在外框上（约会议侧栏的表单就在外框里）。 */
+:root[data-theme="tianshu"][data-color-scheme="dark"]:has([data-scheme="auto"]),
+:root[data-theme="tianshu"][data-color-scheme="dark"]:has([data-scheme="auto"]) [data-ts-theme] {
+  --field-bg: oklch(21.03% 0.003 217.71);
+  --field-ink: oklch(99.11% 0.0015 217.71);
+  --field-placeholder: oklch(70.5% 0.003 217.71);
+  --field-border-focus: oklch(70.5% 0.003 217.71);
+  --field-border: oklch(28% 0.0015 217.71);
+  --field-border-hover: var(--hairline-strong);
+  --field-caret: #80adff;
 }
