@@ -35,6 +35,11 @@ export function commitText(git: TCardGit): string {
   return `交回 ${git.commit.slice(0, 7)}${git.verifiedCommit ? ` · 验过 ${git.verifiedCommit.slice(0, 7)}` : ""}`;
 }
 
+/** 会话真正在做的那个文件夹的完整路径（复制路径用）：工作树是它自己的目录，普通文件夹就是那个文件夹。 */
+export function placePath(workspace: TLocalWorkspace): string {
+  return workspace.kind === "worktree" ? workspace.path : workspace.folder;
+}
+
 /** 行里放得下的：分支名，或文件夹的最后一段。 */
 export function shortPlace(workspace: TLocalWorkspace): string {
   return workspace.kind === "worktree" ? workspace.branch : workspace.folder.split(/[\\/]/).filter(Boolean).pop() ?? workspace.folder;

@@ -41,7 +41,7 @@ import { useViewChrome } from "@/components/home/view";
 import { SideContent, useSideDetail } from "@/components/home/SideDetail";
 import { ICON } from "@/components/home/StateIcon";
 import { useConversationScroll } from "@/conversation/useConversationScroll";
-import { commitText, placeText, shortPlace } from "@/lib/work/merge";
+import { commitText, placePath, placeText, shortPlace } from "@/lib/work/merge";
 import type { LocalRunner, TLocalSessionSummary } from "@/lib/local/runner";
 import s from "@/styles/v2-session.module.css";
 import { PlanChecklist } from "./PlanChecklist";
@@ -253,7 +253,7 @@ export function CardSession({ cardId, embedded = false, waiting, queued = null }
   // 新首页里输入框只在这台电脑上跑着这张卡时出（别处看摘要）；老页面照旧灰着。
   // 输入框下面一行的右边写「执行方 · 模型」（21 条），来源在悬停里：这台电脑上的会话报的（实际跑的优先），没有时退回「来源 · 模型」、再退回云端记的。文件夹在左边。
   const model = (session ? sessionModelText(session, local.models.find((entry) => entry.id === session.modelProfileId)?.efforts) : null) ?? ((label) => (label ? { label, title: null } : null))(runLabel(session?.run) ?? run?.modelLabel ?? item.card?.model?.label ?? null);
-  const place = session?.workspace ? { name: shortPlace(session.workspace), title: placeText(session.workspace) } : null;
+  const place = session?.workspace ? { name: shortPlace(session.workspace), title: placeText(session.workspace), path: placePath(session.workspace) } : null;
   const composer = agent && (session || !embedded)
     ? <SessionComposer label={`给${item.title}插话`} disabled={!canAct} onSend={onSend} mode={mode} dock={dock} context={contextUsage(view.context ?? session?.context)} subject={{ kind: "card", id: cardId }} place={place} model={model ? { label: model.label, title: model.title ?? undefined } : null}
       models={models} pinned={pinned} fill={supply ? { text: supply.text, nonce: supply.nonce } : null}

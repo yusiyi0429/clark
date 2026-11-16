@@ -25,6 +25,15 @@ export function openUrl(url: string): void {
   else execFile("xdg-open", [url], () => {});
 }
 
+/** 用系统的文件管理器打开一个文件夹（不经 shell）。explorer.exe 打开了也常回退出码 1：Windows 上只把起不来算失败。 */
+export function openFolder(path: string): Promise<void> {
+  const command = process.platform === "win32" ? "explorer.exe" : process.platform === "darwin" ? "/usr/bin/open" : "xdg-open";
+  return new Promise((resolve, reject) => execFile(command, [path], { windowsHide: true }, (error) => {
+    if (error && (process.platform !== "win32" || typeof error.code === "string")) reject(error);
+    else resolve();
+  }));
+}
+
 /** 没有托盘的环境（Linux、测试、--headless）：配对只在设了 TIANSHU_LOCAL_AUTO_APPROVE=1 时自动通过，只给开发和测试用。 */
 export class HeadlessDesktop implements Desktop {
   async start() {}

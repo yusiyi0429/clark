@@ -313,7 +313,7 @@ export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onC
   );
   const footer = ready ? <>
     {/* 同输入框下面：项目在这台电脑上绑了只写名字，没绑才给下拉。 */}
-    {folder ? <FolderText name={folder.label} title={folder.path} /> : onSetFolder ? <FolderMenu folders={local.folders} onPick={(id) => void onSetFolder(id)} onPickOther={onPickFolder} onCreate={onCreateFolder} /> : null}
+    {folder ? <FolderText name={folder.label} title={folder.path} path={folder.path} /> : onSetFolder ? <FolderMenu folders={local.folders} onPick={(id) => void onSetFolder(id)} onPickOther={onPickFolder} onCreate={onCreateFolder} /> : null}
     <span className={h.grow} />
     <span className={h.slotsLine}>本机 <Slots used={used} cap={SLOT_CAP} /> {used}/{SLOT_CAP}</span>
   </> : null;

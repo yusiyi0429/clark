@@ -644,6 +644,10 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
         if (entry.folders?.some((ref) => ref.id === id)) bindAll(projectId, entry.folders.flatMap((ref) => folders.filter((known) => known.id === ref.id)), entry.name ?? undefined);
       }
     },
+    // 在资源管理器中显示：假程序不开窗口，只认允许的文件夹。
+    openFolder: async (id) => {
+      if (!folders.some((entry) => entry.id === id)) throw new LocalRunnerError("not_found", "没有这个文件夹", 404);
+    },
     listProjects: async () => [...projects.values()],
     putProjectFolder: async (projectId, body) => {
       if (body.folderIds) {

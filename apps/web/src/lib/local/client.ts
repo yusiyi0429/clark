@@ -140,6 +140,7 @@ export function createHttpRunner(base = localRunnerBase(), token: () => string =
     pickFolder: (body = {}) => call("pickFolder", {}, body),
     createFolder: (body) => call("createFolder", {}, body),
     removeFolder: async (id) => { await call("deleteFolder", { id }); },
+    openFolder: async (id) => { await call("openFolder", { id }); },
     listSessions: async () => (await call<{ sessions: Awaited<ReturnType<LocalRunner["listSessions"]>> }>("listSessions")).sessions,
     createSession: (body) => call("createSession", {}, body),
     createSessionBatch: async (items) => (await call<TLocalCreateSessionBatchResponse>("createSessionBatch", {}, { items })).results,

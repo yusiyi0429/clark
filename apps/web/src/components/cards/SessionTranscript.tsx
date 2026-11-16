@@ -533,7 +533,7 @@ export function SessionComposer({ label, disabled, onSend, dock, pinned, subject
   label: string; disabled: boolean; onSend: (text: string, files: File[]) => Promise<boolean>; dock?: ReactNode;
   subject: TSessionAttachment["subject"];
   mode?: { modes: readonly TLocalPermissionMode[]; value: TLocalPermissionMode; set: (mode: TLocalPermissionMode) => void } | null;
-  place?: { name: string; title: string } | null;
+  place?: { name: string; title: string; path?: string } | null;
   model?: { label: string; title?: string } | null;
   /** 能换的模型（32、40 条，这台电脑上跑着的子会话才给）：右边的模型成胶囊，点开三行面板，选了 onPick。 */
   models?: ReturnType<typeof useSessionModels>;
@@ -552,7 +552,7 @@ export function SessionComposer({ label, disabled, onSend, dock, pinned, subject
       {pinned ? <div className={s.pinned} data-testid="pinned">{pinned}</div> : null}
       <InputBar placeholder="" label={label} disabled={disabled} dock={dock} busy={busy} interruptible onStop={onStop} draftKey={`tianshu-home-draft-v1:${subject.kind}:${subject.id}`} fill={fill}
         footer={{
-          left: place ? <FolderText name={place.name} title={place.title} /> : null,
+          left: place ? <FolderText name={place.name} title={place.title} path={place.path} /> : null,
           right: <>{context ? <ContextRing {...context} /> : null}{models?.quota && models.quota.percent !== null && models.quota.percent <= QUOTA_RING_LEFT ? <QuotaRing used={100 - models.quota.percent} /> : null}{model && models?.rows.length && !disabled ? <ModelPanel label={model.label} title={model.title} rows={models.rows} onPick={models.onPick} busy={models.busy} testId="session-model" />
             : model ? <FootText title={model.title} testId="session-model">{model.label}</FootText> : null}{mode ? <PermissionModeMenu modes={mode.modes} value={mode.value} disabled={disabled} onChange={mode.set} /> : null}</>,
         }}

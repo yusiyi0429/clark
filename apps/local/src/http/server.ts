@@ -5,7 +5,7 @@ import type { TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import {
   LOCAL_RUNNER_PROTOCOL, LOCAL_RUNNER_ROUTES, LOCAL_RUNNER_TOKEN_HEADER,
-  LocalSessionFileReadRequest, LocalSessionRestoreRequest, LocalFileChangesRequest, LocalFileChangesRestoreRequest, LocalPairingStartRequest, LocalAgentLoginCodeRequest, LocalCloudLinkRequest, LocalSettingsPatch, LocalModelProfileUpsert, LocalTokenHubConnectRequest, LocalSourceCheckRequest, LocalSourceAddRequest, LocalToolUpsert, LocalFolderPickRequest, LocalFolderCreateRequest, LocalSessionModelRequest,
+  LocalSessionFileReadRequest, LocalSessionRestoreRequest, LocalFileChangesRequest, LocalFileChangesRestoreRequest, LocalPairingStartRequest, LocalAgentLoginCodeRequest, LocalCloudLinkRequest, LocalSettingsPatch, LocalModelProfileUpsert, LocalTokenHubConnectRequest, LocalSourceCheckRequest, LocalSourceAddRequest, LocalToolUpsert, LocalFolderPickRequest, LocalFolderCreateRequest, LocalFolderOpenRequest, LocalSessionModelRequest,
   LocalCreateSessionRequest, LocalCreateSessionBatchRequest, LocalSendMessageRequest, LocalPermissionDecisionRequest, LocalQuestionAnswerRequest, LocalBudgetUpdateRequest, LocalProjectFolderRequest, LocalProjectCloneRequest, LocalRunPreviewRequest, LocalPermissionModeRequest,
   type TLocalRunnerErrorCode, type TLocalStatusResponse, type TLocalHealthResponse,
 } from "@warmap/contracts";
@@ -64,6 +64,8 @@ export interface ServerDeps {
   tokenHub: TokenHub;
   sources: Sources;
   pickFolder: () => Promise<string | null>;
+  /** 用系统的文件管理器打开（在资源管理器中显示；测试里换成记录）。 */
+  openFolder: (path: string) => Promise<void>;
   /** 接手项目时 clone 仓库（16.7；测试里换成从本地仓库 clone）。 */
   cloneRepo: typeof cloneRepo;
   onSettingsChange?: () => void;
@@ -281,6 +283,14 @@ export function createServer(d: ServerDeps): http.Server {
       }
       const project = b.projectId ? d.folders.bindProject(b.projectId, folder.id, b.projectName) ?? undefined : undefined;
       return { folder, ...(project ? { project } : {}) };
+    },
+    // 在资源管理器中显示：只认允许的文件夹 id，路径本机自己查，不收网页给的路径
+    openFolder: async (c) => {
+      validate(LocalFolderOpenRequest, c.body ?? {});
+      const folder = d.folders.list().find((f) => f.id === c.params.id);
+      if (!folder || !existsSync(folder.path)) throw new HttpError(404, "not_found", "没有这个文件夹");
+      await d.openFolder(folder.path);
+      return { ok: true };
     },
     deleteFolder: (c) => { if (!d.folders.remove(c.params.id!)) throw new HttpError(404, "not_found", "没有这个文件夹"); return { ok: true }; },
     listSessions: () => ({ sessions: d.sessions.list() }),
