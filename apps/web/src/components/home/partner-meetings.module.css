@@ -71,7 +71,8 @@ a.lineTitle:hover { text-decoration: underline; text-underline-offset: 3px; }
 .out:hover { background: var(--default-soft); }
 .liveDot { width: 6px; height: 6px; border-radius: 50%; background: var(--danger); }
 /* 状态点骑在竖线的位置（钟点栏右沿）：待处理 6px --warning，转写中转圈，有记录打勾，其余 4px 淡点。 */
-.line[data-row="done"] .clock { justify-content: flex-end; padding-right: 0; transform: translateX(50%); }
+.line[data-row="done"] .clock { justify-content: flex-end; padding-right: 0; }
+.line[data-row="done"] .mark { transform: translateX(50%); }
 .mark { display: inline-flex; align-items: center; justify-content: center; width: 4px; height: 4px; border-radius: 50%; background: var(--ink-faint); color: var(--ink-muted); }
 .mark[data-tone="attention"] { width: 6px; height: 6px; background: var(--warning); }
 .mark[data-tone="ready"] { width: 12px; height: 12px; background: none; }
