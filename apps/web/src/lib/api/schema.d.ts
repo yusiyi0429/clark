@@ -1947,6 +1947,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/conversations/{scope}/reactions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 本人给伙伴台（global）、项目对话（project:<id>）里的一条消息挂表情：整组替换，同一个只算一个，最多 3 个，空数组是全取消。只是本人的标记，读历史时随消息带回 reactions */
+        put: operations["putConversationReaction"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/issue-drafts/{id}": {
         parameters: {
             query?: never;
@@ -7368,6 +7385,7 @@ export interface components {
                     title?: string;
                     href?: string;
                 };
+                reactions?: string[];
             }[];
             localTurn?: {
                 /** Format: uuid */
@@ -7747,6 +7765,11 @@ export interface components {
         ConversationTurnStopResponse: {
             runId: string;
             status: string;
+        };
+        ConversationReaction: {
+            runId: string;
+            role: "user" | "assistant";
+            emojis: string[];
         };
         IssueDraftResponse: {
             draft: {
@@ -29375,6 +29398,68 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    putConversationReaction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scope: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConversationReaction"];
+            };
+        };
+        responses: {
+            /** @description 存下的那组表情 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationReaction"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

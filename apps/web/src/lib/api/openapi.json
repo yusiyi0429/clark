@@ -7156,6 +7156,84 @@
         }
       }
     },
+    "/api/conversations/{scope}/reactions": {
+      "put": {
+        "operationId": "putConversationReaction",
+        "parameters": [
+          {
+            "name": "scope",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "本人给伙伴台（global）、项目对话（project:<id>）里的一条消息挂表情：整组替换，同一个只算一个，最多 3 个，空数组是全取消。只是本人的标记，读历史时随消息带回 reactions",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversationReaction"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "存下的那组表情",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationReaction"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/issue-drafts/{id}": {
       "get": {
         "operationId": "getIssueDraft",
@@ -33650,6 +33728,15 @@
                       "type": "string"
                     }
                   }
+                },
+                "reactions": {
+                  "maxItems": 3,
+                  "type": "array",
+                  "items": {
+                    "minLength": 1,
+                    "maxLength": 16,
+                    "type": "string"
+                  }
                 }
               }
             }
@@ -35637,6 +35724,43 @@
           },
           "status": {
             "type": "string"
+          }
+        }
+      },
+      "ConversationReaction": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "runId",
+          "role",
+          "emojis"
+        ],
+        "properties": {
+          "runId": {
+            "minLength": 1,
+            "maxLength": 200,
+            "type": "string"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "const": "user",
+                "type": "string"
+              },
+              {
+                "const": "assistant",
+                "type": "string"
+              }
+            ]
+          },
+          "emojis": {
+            "maxItems": 3,
+            "type": "array",
+            "items": {
+              "minLength": 1,
+              "maxLength": 16,
+              "type": "string"
+            }
           }
         }
       },

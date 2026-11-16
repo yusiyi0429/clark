@@ -21,6 +21,7 @@ import { usePipelineConversation } from "@/lib/home/pipeline";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { uploadToConversation } from "@/lib/home/attachments";
 import { useAnswerOptionFill } from "@/conversation/answerOptions";
+import { ReactionsProvider } from "@/conversation/Reactions";
 import { InputBar } from "./InputBar";
 import type { Project } from "@/lib/home/projects";
 import type { FeedItem, ProjectFeedItem, SubSession, WaitingItem } from "@/lib/home/types";
@@ -95,7 +96,7 @@ function ChatInput({ data, placeholder, onHeight, context, footer, intercept }: 
   const [fill, setFill] = useState<{ text: string; nonce: number } | null>(null);
   useAnswerOptionFill(data.scope, (text) => setFill({ text, nonce: Date.now() }));
   return (
-    <InputBar placeholder={placeholder} busy={data.streaming} interruptible={data.interruptible} onStop={data.stop} textRequired={!intercept} onHeight={onHeight} fill={fill} context={context} footer={footer}
+    <InputBar placeholder={placeholder} busy={data.streaming} interruptible={data.interruptible} onStop={data.stop} textRequired={!intercept} onHeight={onHeight} fill={fill} context={context} footer={footer} emoji
       draftKey={`tianshu-home-draft-v1:${data.scope}`}
       onSend={async (text, files) => {
         if (intercept && await intercept(text,files)) return true;
@@ -160,7 +161,7 @@ export function BuddyView({ buddy, outbox, consume, onSpeaking, projects, other,
               {meetingFeed.scheduled}
             </>
           )}
-          timeline={(current) => <>{meetingFeed.notice}{handoffFeed.notice}<WorkTimeline data={current} blocks={[...team.blocks, ...events, ...meetingFeed.blocks, ...handoffFeed.blocks]} modelRule={modelRule} /></>}
+          timeline={(current) => <>{meetingFeed.notice}{handoffFeed.notice}<ReactionsProvider scope={current.scope}><WorkTimeline data={current} blocks={[...team.blocks, ...events, ...meetingFeed.blocks, ...handoffFeed.blocks]} modelRule={modelRule} /></ReactionsProvider></>}
           dock={(latest) => <>{team.composer}<PendingDock latest={latest} /></>}
           input={(onHeight) => <ChatInput data={data} placeholder={`与${name}讨论…`} onHeight={onHeight} intercept={team.intercept} footer={{ left: team.launcher, right: <ModelText data={data} /> }}
             context={context ? { label: context, onClear: () => onClearContext?.() } : null} />} />
@@ -386,7 +387,7 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
               </header>
             </>
           )}
-          timeline={(current) => <WorkTimeline data={current} blocks={blocks} modelRule={modelRule} />}
+          timeline={(current) => <ReactionsProvider scope={current.scope}><WorkTimeline data={current} blocks={blocks} modelRule={modelRule} /></ReactionsProvider>}
           dock={(latest) => <PendingDock latest={latest} />}
           input={readOnly ? () => null : (onHeight) => <ChatInput data={data} placeholder={handheld ? "说点什么…" : `与${project.name}讨论…`} onHeight={onHeight} footer={{
             left: folder,

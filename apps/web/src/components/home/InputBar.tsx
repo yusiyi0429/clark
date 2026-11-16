@@ -16,13 +16,14 @@ import { FailedLine } from "@/components/work/DecisionBox";
 import { DictationControls } from "@/conversation/DictationControls";
 import { DictationMirror } from "@/conversation/DictationMirror";
 import { useDictation } from "@/conversation/useDictation";
+import { EmojiButton, insertEmoji } from "@/conversation/Reactions";
 import { ATTACHMENT_ACCEPT, admit, attachmentKind, fileNameOf, sizeText } from "@/lib/home/attachments";
 import h from "@/styles/home.module.css";
 
 type Draft = { key: number; file: File; url: string | null };
 const MAX_HEIGHT = 168;
 
-export function InputBar({ placeholder, label, onSend, busy = false, interruptible = false, onStop, disabled = false, textRequired = false, context, footer, dock, draftKey, fill, onText, onHeight }: {
+export function InputBar({ placeholder, label, onSend, busy = false, interruptible = false, onStop, disabled = false, textRequired = false, context, footer, emoji = false, dock, draftKey, fill, onText, onHeight }: {
   placeholder: string;
   /** 读屏念的名字；不给时念占位字（子会话不放占位字，名字从这里给）。 */
   label?: string;
@@ -39,6 +40,8 @@ export function InputBar({ placeholder, label, onSend, busy = false, interruptib
   context?: { label: string; onClear: () => void } | null;
   /** 框下面那一行：left 上下文（发给、文件夹），right 模型和权限档。 */
   footer?: { left?: ReactNode; right?: ReactNode };
+  /** 框下面那一行左边先放表情按钮（伙伴台、项目对话）：选的表情插到光标处。 */
+  emoji?: boolean;
   /** 框上面那一条（「N 个问题等你 / 回到最新」）。 */
   dock?: ReactNode;
   /** 草稿按这个键存在本机浏览器里（切走再回来不丢）；不给不存。 */
@@ -136,6 +139,12 @@ export function InputBar({ placeholder, label, onSend, busy = false, interruptib
     setDrafts((current) => [...kept, ...current]);
     setFailed((now) => now ?? { reason: "" });
   }
+  const addEmoji = (value: string) => {
+    const element = field.current;
+    const next = insertEmoji(text, element?.selectionStart ?? text.length, element?.selectionEnd ?? text.length, value);
+    setText(next.text);
+    requestAnimationFrame(() => { element?.focus({ preventScroll: true }); element?.setSelectionRange(next.caret, next.caret); });
+  };
   async function sendDictation() {
     const next = await dictation.finish();
     if (next !== null) await submit(next);
@@ -220,7 +229,7 @@ export function InputBar({ placeholder, label, onSend, busy = false, interruptib
         </div>
       </div>
       <div className={h.barFoot} data-testid="input-footer">
-        <span className={h.barFootSide}>{footer?.left}</span>
+        <span className={h.barFootSide}>{emoji ? <EmojiButton onPick={addEmoji} disabled={disabled} /> : null}{footer?.left}</span>
         <span className={h.barFootSide}>{footer?.right}</span>
       </div>
     </div>
