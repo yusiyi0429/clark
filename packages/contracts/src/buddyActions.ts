@@ -99,6 +99,7 @@ export const BuddyAskQuestion = Type.Object({
  *   存了就生效，记一条修改记录（by pipeline），这张卡有本机会话时登记一条转话把新的完成标准告诉执行方。
  *   不是卡（是专题）400 NOT_A_CARD；卡已完成 409 CARD_DONE；完成标准一条超过 300 字、合起来超过 2000 字 400 TOO_LONG。不可撤（要改回就再改一次）。
  * - sub_session_stop：停下它（同 stop_sub_session）。
+ * - sub_session_rename：改它的名字（title，左栏、子会话页上显示的那个；同子会话「…」菜单的改名）。
  * - sub_session_restart：重开。还没开过工、或开工登记已了结的，登记开工（同 start_sub_session）；本机会话停着的（做完一轮、被停下、出错停住），
  *   往里说一句 text（不给是「接着做」）续上。在跑 409 ALREADY_RUNNING。
  * - sub_session_answer：回答它在问的那一次（同本机的 LocalQuestionAnswerRequest：choices 每题选中的选项 label，条数和题数一样；text 另外的话）。
@@ -154,13 +155,14 @@ export const BuddyActionParams = {
   ask_user: Type.Object({ questions: Type.Array(BuddyAskQuestion, { minItems: 1, maxItems: 4 }) }, strict),
   sub_session_tell: Type.Object({ letter: SubSessionLetter, text: Type.String({ minLength: 1, maxLength: 4000 }) }, strict),
   sub_session_stop: Type.Object({ letter: SubSessionLetter }, strict),
+  sub_session_rename: Type.Object({ letter: SubSessionLetter, title: Type.String({ minLength: 1, maxLength: 120 }) }, strict),
   sub_session_restart: Type.Object({ letter: SubSessionLetter, text: Type.Optional(Type.String({ minLength: 1, maxLength: 4000 })) }, strict),
   sub_session_answer: Type.Object({ letter: SubSessionLetter, ...LocalQuestionAnswerRequest.properties }, strict),
   sub_session_approve: Type.Object({ letter: SubSessionLetter, ...LocalPermissionDecisionRequest.properties }, strict),
   update_card: UpdateCardActionParams,
 } as const;
 /** 只在项目对话里能用的动作（18 节第 10 条；update_card 是主循环第 60 条）。 */
-export const PROJECT_ONLY_ACTIONS = ["sub_session_tell", "sub_session_stop", "sub_session_restart", "sub_session_answer", "sub_session_approve", "update_card"] as const;
+export const PROJECT_ONLY_ACTIONS = ["sub_session_tell", "sub_session_stop", "sub_session_rename", "sub_session_restart", "sub_session_answer", "sub_session_approve", "update_card"] as const;
 
 export type BuddyActionName = keyof typeof BuddyActionParams;
 export type TBuddyAskQuestion = Static<typeof BuddyAskQuestion>;

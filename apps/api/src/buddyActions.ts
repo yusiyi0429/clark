@@ -45,7 +45,7 @@ const KIND: Record<BuddyActionName, Kind> = {
   set_appearance: "write", set_feishu_push: "write", start_sub_session: "write", stop_sub_session: "write", archive_sub_session: "write",
   delete_sub_session: "write", create_project: "write", rename_project: "write", archive_project: "write", link_task_to_project: "write",
   transfer_project: "write", split_cards: "write", set_budget: "write", set_task_due_date: "write", message_project: "write", send_message: "write",
-  sub_session_tell: "write", sub_session_stop: "write", sub_session_restart: "write", sub_session_answer: "write", sub_session_approve: "write",
+  sub_session_tell: "write", sub_session_stop: "write", sub_session_rename: "write", sub_session_restart: "write", sub_session_answer: "write", sub_session_approve: "write",
   update_card: "write",
 };
 /**
@@ -97,6 +97,8 @@ const DESCRIPTION: Record<BuddyActionName, string> = {
     + "字母见 read_work_home 里子会话的 letter。由本人电脑上开着的网页交给本机，立即返回。"
     + "这句话如果改变了「做成什么样算完」（加了要做的事、改了交付物、去掉某条标准），先用 update_card 改卡的约定，再转话。",
   sub_session_stop: `只在项目对话里用：按字母停下这个项目里的一个子会话（同 stop_sub_session）。${IRREVERSIBLE}`,
+  sub_session_rename: "只在项目对话里用：按字母给这个项目里的一个子会话改名（左栏、子会话页上显示的名字）。名字照 Claude Code 给会话起名：一个短的动宾短语，十来个字，"
+    + "细节留在卡的交代和完成标准里，不放进名字。本人让你改名、或名字太长在左栏看不全时用；一次改一个，几个要改就调几次。",
   sub_session_restart: "只在项目对话里用：按字母重开这个项目里的一个子会话。还没开过工的登记开工；停着的（做完一轮、被停下、出错停住）往里说一句 text 续上，不给 text 是「接着做」。",
   sub_session_answer: "只在项目对话里用：替本人回答一个子会话在问的问题（本人说了「C 的问题选第二个」这类话时用）。choices 每题选中的选项 label（照它问的原样，条数和题数一样），"
     + "text 是另外要说的话。本人没表态的不要替本人选。",
@@ -160,6 +162,7 @@ type Undo =
   | { kind: "restore"; sub: SubKind; id: string }
   | { kind: "project_archived"; projectId: string; archived: boolean }
   | { kind: "project_name"; projectId: string; previous: string; set: string }
+  | { kind: "sub_title"; sub: SubKind; id: string; previous: string; set: string }
   | { kind: "goal"; projectId: string; taskId: string; previousProjectId: string | null }
   | { kind: "transfer"; transferId: string }
   | { kind: "split"; requestId: string }
@@ -505,6 +508,13 @@ const handlers: Handlers = {
     const outcome = await handlers.stop_sub_session(deps, call, { kind: sub.kind, id: sub.id });
     return { ...outcome, summary: outcome.summary.replace(`「${sub.title}」`, `「${sub.label}」`), result: { letter: args.letter, kind: sub.kind, id: sub.id, title: sub.title } };
   },
+  sub_session_rename: async (deps, call, args) => {
+    const sub = await lettered(deps, call, args.letter);
+    const title = args.title.trim();
+    await web(deps, call.personId, "PATCH", `/api/me/sub-sessions/${sub.kind}/${encodeURIComponent(sub.id)}`, { title });
+    return { summary: `把「${sub.label}」改名为「${title}」`, result: { letter: args.letter, kind: sub.kind, id: sub.id, title },
+      undo: sub.title === title ? null : { kind: "sub_title", sub: sub.kind, id: sub.id, previous: sub.title, set: title }, ui: [subRefresh(sub.id)] };
+  },
   sub_session_restart: async (deps, call, args) => {
     const sub = await lettered(deps, call, args.letter);
     const run = await lastRun(deps.q, sub.kind, sub.id);
@@ -720,6 +730,12 @@ export async function undoAction(deps: BuddyDeps, ownerId: string, id: string): 
     case "project_name": {
       if ((await projectName(deps, ownerId, undo.projectId)) !== undo.set) throw changed("项目后来又改过名，照现在的样子撤不了");
       await web(deps, ownerId, "PATCH", `/api/me/projects/${encodeURIComponent(undo.projectId)}`, { name: undo.previous });
+      break;
+    }
+    case "sub_title": {
+      const row = await ownSub(q, ownerId, undo.sub, undo.id);
+      if (row.trashed_at || row.title !== undo.set) throw changed("子会话后来又改过名，照现在的样子撤不了");
+      await web(deps, ownerId, "PATCH", `/api/me/sub-sessions/${undo.sub}/${encodeURIComponent(undo.id)}`, { title: undo.previous });
       break;
     }
     case "goal": {

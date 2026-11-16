@@ -588,4 +588,34 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
       expect((await f.call("POST", "/api/me/work-seen", { kind: "card", id: card })).statusCode).toBe(400);
     } finally { await f.close(); }
   });
+
+  it("项目主管线按字母给子会话改名（本人 11/16：总管线自己能改，不用本人去左栏改）；只在项目对话里能用，能撤回", async () => {
+    const f = await fixture();
+    try {
+      await f.grant();
+      const project = (await f.call("POST", "/api/me/projects", { name: "新版天枢应用" })).json().projectId as string;
+      const long = "本机程序能按岗位拉起规划员、执行 worker、验收员三种 Claude Code 会话";
+      const card = await f.agentCard(long);
+      await f.t.sql("UPDATE tasks SET project_id=$2,plan_task_id=NULL WHERE id=$1", [card, project]);
+      // 字母在读首页时排上（同上一条用例的 letters()）。
+      expect((await f.call("GET", `/api/me/cards/${card}`)).json().letter ?? (await f.call("GET", "/api/me/work-home"), (await f.call("GET", `/api/me/cards/${card}`)).json().letter)).toBe("A");
+      const conversation = randomUUID(), desk = randomUUID();
+      await f.t.sql("INSERT INTO project_pipelines(project_id,owner_id,conversation_id) VALUES($1,$2,$3)", [project, TEST_MEMBER.personId, conversation]);
+      const headers = { authorization: `Bearer ${TOKEN}`, "x-owner-id": TEST_MEMBER.personId };
+      const listed = async (conversationId: string) => ((await f.t.app.inject({ method: "GET", url: `/internal/me/buddy-actions?conversationId=${conversationId}`, headers }))
+        .json().actions as { name: string }[]).map((action) => action.name);
+      expect(await listed(conversation)).toContain("sub_session_rename");
+      expect(await listed(desk)).not.toContain("sub_session_rename");
+      const act = (args: unknown, conversationId: string) => f.t.app.inject({ method: "POST", url: "/internal/me/buddy-actions/sub_session_rename", headers,
+        payload: { args, conversationId, runId: randomUUID() } });
+      expect((await act({ letter: "A", title: "本机拉起三种会话" }, desk)).json().code).toBe("PROJECT_ONLY");
+      expect((await act({ letter: "Z", title: "随便" }, conversation)).json().code).toBe("LETTER_NOT_FOUND");
+      const renamed = await act({ letter: "A", title: "本机拉起三种会话" }, conversation);
+      expect(renamed.statusCode, renamed.body).toBe(200);
+      expect(renamed.json()).toMatchObject({ summary: `把「A · ${long}」改名为「本机拉起三种会话」`, undoable: true });
+      expect((await f.t.sql("SELECT title FROM tasks WHERE id=$1", [card]))[0].title).toBe("本机拉起三种会话");
+      expect((await f.undo(renamed.json().auditId)).statusCode).toBe(200);
+      expect((await f.t.sql("SELECT title FROM tasks WHERE id=$1", [card]))[0].title).toBe(long);
+    } finally { await f.close(); }
+  });
 });
