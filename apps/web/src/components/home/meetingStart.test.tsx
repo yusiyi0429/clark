@@ -138,6 +138,8 @@ describe("开会弹层：新的一场", () => {
     api.post.mockRejectedValueOnce(new Error("网络中断")).mockResolvedValueOnce({
       data: { card: { objectRef: { id: "m-now" }, navigation: [{ href: "/me/work/meetings/m-now" }] } }, response: { ok: true, status: 200 },
     });
+    const changed = vi.fn();
+    window.addEventListener("meeting-changed", changed);
     const started = Date.now();
     press(primary(render()));
     await vi.waitFor(() => expect(render().some((node) => node.props?.role === "alert" && text(node).includes("没有约成"))).toBe(true));
@@ -145,6 +147,8 @@ describe("开会弹层：新的一场", () => {
     await vi.waitFor(() => expect(meeting.navigate).toHaveBeenCalledWith("/me/work/meetings/m-now"));
     expect(onStarted).toHaveBeenCalled();
     expect(meeting.start).not.toHaveBeenCalled();
+    // 约成后照现场那条路通知会议卡、通知栏和对话里的草稿卡重取（它们只听 meeting-changed）。
+    expect(changed).toHaveBeenCalledTimes(1);
     const [first, retry] = api.post.mock.calls.map((call) => call[1].body);
     expect(first).toMatchObject({ draftId: expect.any(String), participants: ["p-third"], anchors: [{ kind: "mission", id: "m-mine" }] });
     expect(retry.draftId).toBe(first.draftId);

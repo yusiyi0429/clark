@@ -699,6 +699,8 @@ button.bgLabel:hover { background: var(--default-soft); }
 .app[data-phone] .leftInner { overflow-y: auto; padding: calc(var(--space-2) + env(safe-area-inset-top, 0px)) var(--space-4) env(safe-area-inset-bottom, 0px); }
 .app[data-phone] .stage { height: 160px; }
 .app[data-phone] .today { cursor: default; }
+/* 手机上左栏的「会议」「本月」两行能点：触控高度 44（设计第 8 节）。 */
+.app[data-phone] button.today { height: var(--touch-hit, 44px); cursor: pointer; }
 .app[data-phone] .tree { flex: none; overflow: visible; }
 .app[data-phone] .me { margin: 0 calc(-1 * var(--space-4)); padding: var(--space-1) var(--space-4) calc(var(--space-1) + env(safe-area-inset-bottom, 0px)); }
 .app[data-phone] :is(.sub, .meRow) { height: var(--touch-hit, 44px); }

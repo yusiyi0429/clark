@@ -51,7 +51,8 @@ export function FocusMeetingRow({ item, when, time, go, meeting }: {
   const span = meetingSpan(item.at, item.endsAt ?? null);
   return (
     <li className={h.wait} data-kind="meeting" data-when={when}>
-      <a className={h.waitMain} href={item.href} onClick={(event) => follow(event, item.href, go)}>
+      {/* 只在飞书日历里的会（没有会议页，href 是飞书）：新标签页开，不把新首页和正在录的会换走。 */}
+      <a className={h.waitMain} href={item.href} {...(external(item.href) ? { target: "_blank", rel: "noopener noreferrer" } : { onClick: (event: MouseEvent) => follow(event, item.href, go) })}>
         <span className={h.waitTitle}>{item.title}</span>
         <span className={h.waitSource}>
           <span className={h.waitFrom}>{when === "soon" ? `会议 · ${span}` : `会议 · ${meetingTime(item, Date.now())}`}</span>

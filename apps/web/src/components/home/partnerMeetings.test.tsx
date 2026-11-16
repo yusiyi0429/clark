@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import type { PartnerMeeting } from "@/lib/home/partnerMeetingFeed";
 import type { WaitingItem } from "@/lib/home/types";
-import { PartnerMeetingInbox, usePartnerMeetingFeed } from "./PartnerMeetings";
+import { FocusMeetingRow, PartnerMeetingInbox, usePartnerMeetingFeed } from "./PartnerMeetings";
 import { focusList } from "@/lib/home/focus";
 
 // Run production row effects without introducing a DOM/browser dependency. SSR keeps real React hooks.
@@ -239,5 +239,13 @@ describe("首页会议和伙伴收件使用同一条记录", () => {
     const html = renderToStaticMarkup(<PartnerMeetingInbox />);
     expect(html).toContain('role="alert"');
     expect(html).toContain("重试");
+  });
+});
+
+describe("等你里只在飞书日历里的会", () => {
+  it("点了在新标签页开飞书，不把新首页（和正在录的会）换走", () => {
+    const item = meeting("fs", { meetingId: null, source: "feishu", href: "https://example.feishu.cn/calendar/event/fs", sourceUrl: "https://example.feishu.cn/calendar/event/fs" });
+    const html = renderToStaticMarkup(<FocusMeetingRow item={item} when="soon" time={null} go={vi.fn()} meeting={{ start: vi.fn() }} />);
+    expect(html).toContain('href="https://example.feishu.cn/calendar/event/fs" target="_blank" rel="noopener noreferrer"');
   });
 });

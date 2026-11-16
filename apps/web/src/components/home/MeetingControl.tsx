@@ -33,6 +33,7 @@ import { bookMeeting, listPeople, listPersonDirectory, listWorldAnchorOptions, t
 import { WorldAnchorPicker } from "@/components/meeting/WorldAnchorPicker";
 import { companyMonth } from "@/lib/companyTime";
 import { feishuConnectHref, readFeishuConnection, type FeishuConnection } from "@/lib/feishuLogin";
+import { refreshWorkspace } from "@/lib/toast";
 import { announceMeeting, defaultAnchor, defaultMeetingTitle, elapsed, meetingHref, meetingSpan, startableMeetings } from "@/lib/home/meeting";
 import { usePartnerMeetings } from "@/lib/home/partnerMeetingFeed";
 import { ICON } from "./StateIcon";
@@ -456,6 +457,8 @@ export function StartForm({ meeting, missionId, onStarted, onBook }: { meeting: 
     try {
       const result = await bookMeeting(book);
       if ("code" in result) { setError(BOOK_ERROR[result.code] ?? "没有约成"); return; }
+      window.dispatchEvent(new Event("meeting-changed"));
+      refreshWorkspace();
       announceMeeting(result.card.objectRef.id);
       onStarted();
       meeting.navigate(result.card.navigation?.[0]?.href ?? meetingHref(result.card.objectRef.id));
