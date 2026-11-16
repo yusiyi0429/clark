@@ -13,12 +13,12 @@
  * 树的键盘：↑↓ 移动，回车打开，→ 展开折叠，← 收起。
  */
 import { createContext, useContext, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
-import { ChevronRight, Ellipsis, House, Info, Plus } from "lucide-react";
+import { CalendarDays, ChevronRight, Ellipsis, House, Info, Plus, Target } from "lucide-react";
 import { HeroButton } from "@/components/HeroButton";
 import type { Account } from "@/components/AccountMenu";
 import { BuddyMark } from "@/components/buddy/BuddyMark";
 import type { Buddy } from "@/components/buddy/useBuddy";
-import { BUDDY_HREF, HOME_HREF, cardHref, subQueueText, topicHref } from "@/lib/home/derive";
+import { BUDDY_HREF, HOME_HREF, MEETINGS_HREF, cardHref, subQueueText, topicHref } from "@/lib/home/derive";
 import { newSubHref, projectHref, projectInfoHref, projectLine, type Project } from "@/lib/home/projects";
 import type { THomeItem as HomeItem } from "@warmap/contracts";
 import type { SubSession, WorkHomeData } from "@/lib/home/types";
@@ -32,7 +32,7 @@ import { LocalContext, latestSessionFor } from "@/lib/local/LocalRunnerProvider"
 import { runLabel } from "@/lib/local/runModel";
 import { running } from "@/lib/local/sessionView";
 import { ICON, type IconState } from "./StateIcon";
-import { pageHref, type View } from "./view";
+import { monthHref, pageHref, type View } from "./view";
 import { showUnseen, type SeenKind, type SeenMarks } from "@/lib/home/seen";
 import type { TArchivedSubSession, TSubSessionKind } from "@warmap/contracts";
 import { LOCAL_PROJECT_FOLDER_LIMIT } from "@/lib/local/routes";
@@ -156,7 +156,7 @@ function BuddyStage({ buddy, name, view, speaking, go, phone, meeting }: {
   );
 }
 
-export function LeftColumn({ data, view, buddy, speaking, go, phone, account, today, machine = null, trail, top, month, onRetryPlan, projects, archived, archivedSubs = [], actions = null, onCreate, folderLimit = LOCAL_PROJECT_FOLDER_LIMIT, cardAt, working, seen, onOpen, meeting = null, waitingCount = data.waiting.length }: {
+export function LeftColumn({ data, view, buddy, speaking, go, phone, account, today, machine = null, trail, top, month, onRetryPlan, projects, archived, archivedSubs = [], actions = null, onCreate, folderLimit = LOCAL_PROJECT_FOLDER_LIMIT, cardAt, working, seen, onOpen, meeting = null, waitingCount = data.waiting.length, meetingsTrail = null, monthTrail = null }: {
   data: WorkHomeData;
   /** 「今天」行行尾等你的件数：和首页同一份清单（focusList）的全部件数，不是露出来的 5 件。 */
   waitingCount?: number;
@@ -177,8 +177,12 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, account, to
   trail?: ReactNode;
   /** 手机首屏：「今天」行下面先放「等你」。 */
   top?: ReactNode;
-  /** 月份 chip（「11 月待敲定」）：点了进月份页。 */
+  /** 月份 chip（「复盘」「11 月待敲定」）：画在「本月」行行尾，点了进那个月份页。 */
   month?: { href: string; label: string } | null;
+  /** 「会议」行行尾：下一场还没进等你的会（「14:30」「明天 09:30」「11/18」）。 */
+  meetingsTrail?: string | null;
+  /** 「本月」行行尾：下一个验收时间点（「11/18 验收」）；有 chip 时不画。 */
+  monthTrail?: string | null;
   /** 计划读不到：树最上面一行「本体读取失败」加「重试」。 */
   onRetryPlan?: (() => void) | null;
   /** 项目（已排好序，16.2）和已归档的。 */
@@ -201,7 +205,7 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, account, to
   working?: ReadonlySet<string>;
 }) {
   const name = buddy?.name?.trim() || "伙伴";
-  const atHome = view.kind === "home" || view.kind === "month";
+  const atHome = view.kind === "home";
   // 等你的计数只在首页不写（首页下面就是等你那一块）；月份页上照写。
   const showCount = view.kind !== "home";
   const tree = useRef<HTMLDivElement>(null);
@@ -215,20 +219,28 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, account, to
     <nav className={h.leftInner} aria-label="导航">
       <BuddyStage buddy={buddy} name={name} view={view} speaking={speaking} go={go} phone={phone} meeting={meeting} />
       {phone ? (
-        <div className={h.today} data-phone="">
+        <div className={h.today} data-phone="" data-testid="today-row">
           <span className={h.todayIcon}><House {...ICON} /></span><span className={h.todayText}>{today}</span>
-          {month ? <button type="button" className={h.statusChip} onClick={() => go(month.href)}>{month.label}</button> : null}
           {trail ? <span className={h.todayTrail}>{trail}</span> : null}
         </div>
       ) : (
         <button type="button" className={h.today} aria-current={atHome ? "page" : undefined} onClick={() => go(HOME_HREF)} data-testid="today-row">
           <span className={h.todayIcon}><House {...ICON} /></span><span className={h.todayText}>{today}</span>
-          {/* 行尾的月份 chip：整行是一个按钮，chip 点了单独进月份页（键盘从「等你」那一行进）。 */}
-          {month ? <span className={h.statusChip} data-testid="month-chip" onClick={(event) => { event.stopPropagation(); go(month.href); }}>{month.label}</span> : null}
           {showCount && waitingCount ? <span className={h.count}><i aria-hidden />{waitingCount}</span> : null}
         </button>
       )}
       {top}
+      {/* 会议、本月（11/16 重新设计第 3 节）：和「今天」行同一种行；行尾是下一场会、下一个验收时间点。手机上接在「等你」下面。 */}
+      <button type="button" className={h.today} aria-current={view.kind === "meetings" ? "page" : undefined} onClick={() => go(MEETINGS_HREF)} data-testid="meetings-row">
+        <span className={h.todayIcon}><CalendarDays {...ICON} /></span><span className={h.todayText}>会议</span>
+        {meetingsTrail ? <span className={h.rowTrail}>{meetingsTrail}</span> : null}
+      </button>
+      <button type="button" className={h.today} aria-current={view.kind === "month" ? "page" : undefined} onClick={() => go(monthHref(data.period))} data-testid="month-row">
+        <span className={h.todayIcon}><Target {...ICON} /></span><span className={h.todayText}>本月</span>
+        {/* 月份的事（复盘、敲定）有 chip 时只画 chip；chip 点了单独进那个月份（整行进当月）。 */}
+        {month ? <span className={h.statusChip} data-testid="month-chip" onClick={(event) => { event.stopPropagation(); go(month.href); }}>{month.label}</span>
+          : monthTrail ? <span className={h.rowTrail}>{monthTrail}</span> : null}
+      </button>
       <div className={h.tree} ref={tree} onKeyDown={(event) => treeKeys(event, tree.current)}>
         {onRetryPlan ? <p className={h.planFailed} data-testid="plan-read-failed">本体读取失败<HeroButton variant="ghost" size="sm" onPress={onRetryPlan}>重试</HeroButton></p> : null}
         <section aria-label="项目" className={h.group}>

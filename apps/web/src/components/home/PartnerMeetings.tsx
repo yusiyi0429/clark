@@ -12,42 +12,23 @@ import { calendarDate, COMPANY_TIMEZONE } from "@/lib/companyTime";
 import { meetingHref, meetingSpan } from "@/lib/home/meeting";
 import { usePartnerMeetings, type PartnerMeeting } from "@/lib/home/partnerMeetingFeed";
 import type { TimedBlock } from "@/components/work/WorkTimeline";
-import { MeetingControl, type HomeMeeting } from "./MeetingControl";
+import type { HomeMeeting } from "./MeetingControl";
 import h from "@/styles/home.module.css";
 import s from "./partner-meetings.module.css";
 
 export { PartnerMeetingsProvider } from "@/lib/home/partnerMeetingFeed";
 
-const WEEK = 7 * 86_400_000;
-const tokenOf = (item: PartnerMeeting) => item.id.slice("feishu-minute:".length);
+export const tokenOf = (item: PartnerMeeting) => item.id.slice("feishu-minute:".length);
 const active = (item: PartnerMeeting) => item.stage === "scheduled" || item.stage === "live";
-const external = (href: string | null | undefined) => Boolean(href && /^https?:\/\//i.test(href));
+export const external = (href: string | null | undefined) => Boolean(href && /^https?:\/\//i.test(href));
 const internal = (href: string) => href.startsWith("/") && !href.startsWith("//");
 type Navigate = (href: string) => void;
 
-function follow(event: MouseEvent, href: string, navigate: Navigate) {
+export function follow(event: MouseEvent, href: string, navigate: Navigate) {
   if (internal(href) && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
     event.preventDefault();
     navigate(href);
   }
-}
-
-/** 展示按公司日历的今天起七天。更早只留还需要跟进的场次；归档的可从伙伴收件再读。 */
-export function homeMeetingGroups(items: PartnerMeeting[], now: number) {
-  const today = calendarDate(new Date(now).toISOString());
-  const boundary = calendarDate(new Date(now + WEEK).toISOString());
-  const current: PartnerMeeting[] = [];
-  const later: PartnerMeeting[] = [];
-  for (const item of items) {
-    const day = calendarDate(item.at);
-    if (item.stage === "scheduled" && day > boundary) {
-      if (item.meetingId) later.push(item);
-    } else if (day >= today || item.needsAction || item.stage === "live" || item.stage === "processing" || item.stage === "unmatched") {
-      current.push(item);
-    }
-  }
-  const byTime = (a: PartnerMeeting, b: PartnerMeeting) => Date.parse(a.at) - Date.parse(b.at);
-  return { current: current.sort(byTime), later: later.sort(byTime) };
 }
 
 function meetingTime(item: PartnerMeeting, now: number) {
@@ -87,29 +68,6 @@ export function FocusMeetingRow({ item, when, time, go, meeting }: {
       </span>
     </li>
   );
-}
-
-export function PartnerHomeMeetings({ meeting }: { meeting: HomeMeeting }) {
-  const { items, error, reload } = usePartnerMeetings();
-  const [booking, setBooking] = useState(false);
-  const { current, later } = homeMeetingGroups(items, Date.now());
-  const viewer = meeting.account;
-  return <section aria-label="会议" className={h.section}>
-    <div className={s.heading}>
-      <h2 className={h.sectionTitle}>会议</h2>
-      <div className={s.actions}>
-        <MeetingControl meeting={meeting} inline />
-        {viewer.personId ? <HeroButton variant="ghost" size="sm" onPress={() => setBooking(true)}>预约会议</HeroButton> : null}
-      </div>
-    </div>
-    {error ? <ReadError message={error} retry={reload} /> : null}
-    {current.length ? <MeetingRows items={current} /> : null}
-    {later.length ? <details className={s.later}>
-      <summary>后续预约 <span>{later.length}</span></summary>
-      <MeetingRows items={later} />
-    </details> : null}
-    {booking && viewer.personId ? <MeetingBookingSheet open viewer={{ ...viewer, personId: viewer.personId }} onClose={() => setBooking(false)} /> : null}
-  </section>;
 }
 
 /** 时间是会议本身的时间；预约独立展示，不伪装成伙伴已经收到的事件。 */
@@ -229,7 +187,7 @@ function MeetingRow({ item, navigate, inbox, timeline }: { item: PartnerMeeting;
   </li>;
 }
 
-function RecordText({ href, sourceUrl }: { href: string; sourceUrl: string | null }) {
+export function RecordText({ href, sourceUrl }: { href: string; sourceUrl: string | null }) {
   const [text, setText] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
@@ -264,7 +222,7 @@ function RecordText({ href, sourceUrl }: { href: string; sourceUrl: string | nul
 type Minute = components["schemas"]["FeishuMinuteInboxResponse"]["minutes"][number];
 const attachErrors: Record<string, string> = { MINUTE_TAKEN: "已经记入另一场会议", MINUTE_NOT_PENDING: "妙记已经处理过了", SUGGESTION_CHANGED: "候选场次已更新，请重新选择" };
 
-function OrganizeMinute({ token, navigate }: { token: string; navigate: Navigate }) {
+export function OrganizeMinute({ token, navigate }: { token: string; navigate: Navigate }) {
   const { reload } = usePartnerMeetings();
   const [minute, setMinute] = useState<Minute | null>(null);
   const [error, setError] = useState("");

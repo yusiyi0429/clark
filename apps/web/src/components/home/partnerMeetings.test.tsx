@@ -3,8 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import type { PartnerMeeting } from "@/lib/home/partnerMeetingFeed";
 import type { WaitingItem } from "@/lib/home/types";
-import type { HomeMeeting } from "./MeetingControl";
-import { PartnerHomeMeetings, PartnerMeetingInbox, homeMeetingGroups, usePartnerMeetingFeed } from "./PartnerMeetings";
+import { PartnerMeetingInbox, usePartnerMeetingFeed } from "./PartnerMeetings";
 import { focusList } from "@/lib/home/focus";
 
 // Run production row effects without introducing a DOM/browser dependency. SSR keeps real React hooks.
@@ -40,7 +39,6 @@ const meeting = (id: string, overrides: Partial<PartnerMeeting> = {}): PartnerMe
   id: "meeting:" + id, meetingId: id, title: id, at: new Date(now).toISOString(), stage: "scheduled",
   statusText: "已预约", needsAction: false, source: "tianshu", href: "/me/work/meetings/" + id, joinUrl: null, ...overrides,
 });
-const model = { account: { personId: "owner", displayName: "主持人", role: "member" } } as HomeMeeting;
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(now); feed.items = []; feed.error = null; hooks.active = false; hooks.position = 0; hooks.values = []; hooks.effects = []; vi.clearAllMocks(); });
 afterEach(() => { hooks.active = false; vi.useRealTimers(); vi.unstubAllGlobals(); });
 
@@ -178,26 +176,9 @@ describe("伙伴会议的统一时间线", () => {
 });
 
 describe("首页会议和伙伴收件使用同一条记录", () => {
-  it("按公司日历展示近期、过去未处理以及更远的天枢预约；同标题的不同场次独立", () => {
-    const historic = "2026-11-01T02:00:00Z", future = "2026-11-22T02:00:00Z";
-    const old = meeting("old", { at: historic, stage: "ready" });
-    const pending = meeting("pending", { at: historic, stage: "processing", statusText: "等飞书生成妙记" });
-    const action = meeting("action", { at: historic, needsAction: true, stage: "attention" });
-    const same = meeting("same", { title: pending.title });
-    const last = meeting("last", { at: "2026-11-20T15:59:59.000Z" });
-    const later = meeting("later", { at: future });
-    const calendar = meeting("external", { meetingId: null, at: future, source: "feishu" });
-    feed.items = [later, last, same, action, old, pending, calendar];
-    const groups = homeMeetingGroups(feed.items, now);
-    expect(groups.current.map(item => item.meetingId)).toEqual(["action", "pending", "same", "last"]);
-    expect(groups.later).toEqual([later]);
-    const html = renderToStaticMarkup(<PartnerHomeMeetings meeting={model} />);
-    expect(html).toContain('aria-label="会议"');
-    expect(html).toContain("现在开会");
-    expect(html).toContain("预约会议");
-    expect(html).toMatch(/<details[^>]*><summary>后续预约/);
-    expect(html).not.toContain('href="/me/work/meetings/old"');
-    expect(html).not.toContain("external");
+  // 首页的会议区（homeMeetingGroups、PartnerHomeMeetings）11/16 退役，分组和页头入口改由会议页覆盖（meetingsPage.test.tsx）。
+  it("伙伴收件里过去的会照样可读", () => {
+    feed.items = [meeting("old", { at: "2026-11-01T02:00:00Z", stage: "ready" })];
     expect(renderToStaticMarkup(<PartnerMeetingInbox />)).toContain('href="/me/work/meetings/old"');
   });
   it("只在真实可加入的阶段展示入会地址，外部全天日程保留原链接", () => {
@@ -252,13 +233,11 @@ describe("首页会议和伙伴收件使用同一条记录", () => {
     expect(mobile).toMatch(/\.row \.link,[^{]*\.heading button,[^{]*\{[^}]*min-height:\s*44px/);
     expect(css).toMatch(/:focus-visible[^{]*\{[^}]*outline:/);
   });
-  it("空首页只保留入口，收件为空不占位，读取失败给重试", () => {
+  it("收件为空不占位，读取失败给重试", () => {
     expect(renderToStaticMarkup(<PartnerMeetingInbox />)).toBe("");
-    const html = renderToStaticMarkup(<PartnerHomeMeetings meeting={model} />);
-    expect(html).not.toContain("<ul");
-    expect(html).toContain("现在开会");
     feed.error = "没有读到会议";
-    expect(renderToStaticMarkup(<PartnerMeetingInbox />)).toContain('role="alert"');
-    expect(renderToStaticMarkup(<PartnerHomeMeetings meeting={model} />)).toContain("重试");
+    const html = renderToStaticMarkup(<PartnerMeetingInbox />);
+    expect(html).toContain('role="alert"');
+    expect(html).toContain("重试");
   });
 });

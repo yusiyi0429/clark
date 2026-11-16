@@ -49,6 +49,41 @@ a.title:hover, .preflight:hover, .link:hover { text-decoration: underline; text-
 .row:focus-visible, .row :focus-visible, .later summary:focus-visible, .error button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-control); }
 .inlineSlot { display: inline-flex; align-items: center; }
 .modeHead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+/* 会议页（11/16 重新设计第 5 节）：两种行共用一套列（钟点栏 64 | 内容 | 行尾），标题左沿对齐。
+   接下来：钟点 14/600 等宽，内容左边一条竖线贯穿当天；已开完：钟点栏空着，状态点骑在竖线的位置上。差别放在结构和字重上，不靠字色。 */
+.day + .day { margin-top: var(--space-2); }
+.dayLabel { margin: var(--space-2) 0 var(--space-1); padding: 0 var(--space-2); color: var(--ink-faint); font-size: var(--text-sm); line-height: 16px; }
+.timeline { margin: 0; padding: 0; list-style: none; }
+.line { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; align-items: stretch; min-height: var(--row-48); border-radius: var(--r-control); }
+.line:hover { background: var(--default-soft); }
+.clock { display: flex; align-items: center; justify-content: flex-end; padding-right: var(--space-3); font-size: var(--text-base); font-weight: 600; font-variant-numeric: tabular-nums; }
+.lineBody { display: grid; align-content: center; min-width: 0; padding: 6px var(--space-3); }
+.line[data-row="upcoming"] .lineBody { border-left: 1px solid var(--hairline); }
+.lineTitle { overflow: hidden; color: var(--ink); font-size: var(--text-base); font-weight: 600; line-height: var(--lh-row); text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
+.line[data-row="done"] .lineTitle { font-weight: 400; }
+a.lineTitle:hover { text-decoration: underline; text-underline-offset: 3px; }
+.lineMeta { overflow: hidden; color: var(--ink-faint); font-size: var(--text-sm); line-height: 16px; text-overflow: ellipsis; white-space: nowrap; }
+.lineMeta [data-tone="danger"] { color: var(--danger); }
+.lineActs { display: flex; align-items: center; gap: var(--space-1); padding-right: var(--space-2); }
+.lineActs:empty { display: none; }
+.lineDetail { grid-column: 2 / -1; padding: 0 var(--space-2) var(--space-2) var(--space-3); }
+.out { display: inline-flex; align-items: center; justify-content: center; width: var(--row-32); height: var(--row-32); border-radius: var(--r-control); color: var(--ink-muted); }
+.out:hover { background: var(--default-soft); }
+.liveDot { width: 6px; height: 6px; border-radius: 50%; background: var(--danger); }
+/* 状态点骑在竖线的位置（钟点栏右沿）：待处理 6px --warning，转写中转圈，有记录打勾，其余 4px 淡点。 */
+.line[data-row="done"] .clock { justify-content: flex-end; padding-right: 0; transform: translateX(50%); }
+.mark { display: inline-flex; align-items: center; justify-content: center; width: 4px; height: 4px; border-radius: 50%; background: var(--ink-faint); color: var(--ink-muted); }
+.mark[data-tone="attention"] { width: 6px; height: 6px; background: var(--warning); }
+.mark[data-tone="ready"] { width: 12px; height: 12px; background: none; }
+.mark[data-tone="processing"] { width: 10px; height: 10px; border: 1.5px solid var(--hairline-strong); border-top-color: var(--ink-muted); background: none; animation: meeting-spin 1s linear infinite; }
+@keyframes meeting-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .mark[data-tone="processing"] { animation: none; } }
+.line :focus-visible, .out:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-control); }
+@media (max-width: 959px), (pointer: coarse) {
+  .line { grid-template-columns: 56px minmax(0, 1fr) auto; }
+  .lineTitle { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; white-space: normal; overflow-wrap: anywhere; }
+  .lineActs button, .out { min-height: 44px; min-width: 44px; }
+}
 @media (max-width: 959px), (pointer: coarse) {
   .inbox { margin-block: var(--space-2); }
   .row .link, .row a.title, .preflight, .later summary, .heading button, .modeHead button { min-height: 44px; }

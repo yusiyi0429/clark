@@ -6,6 +6,7 @@ import type { THomeItem } from "@warmap/contracts";
 import type { HomeProject, SubSession, WorkHomeData } from "@/lib/home/types";
 import { fromHome, projectWorking } from "@/lib/home/projects";
 import { LeftColumn, STAGE_BASE, STAGE_RATIO, letterOf, planOrder, stageScale, subDot, subIcon, subLetters, subsSummary } from "./LeftColumn";
+import { scopeOf, viewOf } from "./view";
 
 const data = { period: "2026-11", projects: [], archivedCount: 0, month: { missions: [] }, waiting: [], other: { subSessions: [], items: [] } } as unknown as WorkHomeData;
 const projectsOf = (used: WorkHomeData) => used.projects.map((project) => fromHome(project, used, new Map()));
@@ -26,10 +27,47 @@ describe("左栏：计划读不到、空月份（5.4.2、5.4.4）", () => {
     expect(render({})).not.toContain("本体读取失败");
   });
 
-  it("空月份：「今天」行行尾出「11 月待敲定」chip", () => {
+  it("空月份：「本月」行行尾出「11 月待敲定」chip（11/16 从「今天」行挪过来）", () => {
     const html = render({ month: { href: "/me/work/month/2026-11", label: "11 月待敲定" } });
-    expect(html).toMatch(/11 月 7 日 周六.*11 月待敲定/);
+    expect(html).toMatch(/data-testid="month-row"[^]*11 月待敲定/);
+    expect(html).not.toMatch(/data-testid="today-row"[^]*?11 月待敲定[^]*data-testid="meetings-row"/);
     expect(render({})).not.toContain("待敲定");
+  });
+});
+
+describe("左栏：今天、会议、本月三行（11/16 重新设计第 3 节）", () => {
+  it("「今天」下面是「会议」「本月」两行，各有自己的地址", () => {
+    const html = render({});
+    const order = ["today-row", "meetings-row", "month-row"].map((id) => html.indexOf(`data-testid="${id}"`));
+    expect(order.every((at) => at >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    expect(html).not.toContain('data-testid="month-chip"');
+  });
+
+  it("「会议」行行尾写下一场还没进等你的会；没有就不写", () => {
+    expect(render({ meetingsTrail: "11/18" })).toMatch(/data-testid="meetings-row"[^]*?>11\/18</);
+    expect(render({})).not.toMatch(/data-testid="meetings-row"[^>]*>[^]*?\d+\/\d+[^]*data-testid="month-row"/);
+  });
+
+  it("「本月」行平时写下一个验收时间点；有月份 chip 时只画 chip", () => {
+    expect(render({ monthTrail: "11/18 验收" })).toMatch(/data-testid="month-row"[^]*11\/18 验收/);
+    const both = render({ monthTrail: "11/18 验收", month: { href: "/me/work/month/2026-11", label: "复盘" } });
+    expect(both).toContain("复盘");
+    expect(both).not.toContain("11/18 验收");
+  });
+
+  it("在月份页时亮的是「本月」行，不是「今天」行；在会议页亮「会议」行", () => {
+    const month = render({ view: { kind: "month", period: "2026-11" } });
+    expect(month).toMatch(/data-testid="month-row"[^>]*aria-current="page"|aria-current="page"[^>]*data-testid="month-row"/);
+    expect(month).not.toMatch(/aria-current="page"[^>]*data-testid="today-row"|data-testid="today-row"[^>]*aria-current="page"/);
+    const meetings = render({ view: { kind: "meetings" } });
+    expect(meetings).toMatch(/data-testid="meetings-row"[^>]*aria-current="page"|aria-current="page"[^>]*data-testid="meetings-row"/);
+  });
+
+  it("地址：/me/work/meetings 是会议页，/me/work/meetings/<id> 还是会议详情", () => {
+    expect(viewOf("/me/work/meetings")).toEqual({ kind: "meetings" });
+    expect(viewOf("/me/work/meetings/m1")).toEqual({ kind: "meeting", id: "m1" });
+    expect(scopeOf({ kind: "meetings" })).toBe("main");
   });
 });
 

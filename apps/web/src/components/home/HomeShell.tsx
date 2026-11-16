@@ -34,7 +34,7 @@ import { showWorkspaceToast } from "@/lib/toast";
 import { modelForTier } from "@/lib/team/roles";
 import { startBatch, type StartPlan } from "@/lib/work/queue";
 import type { Worker } from "@/lib/work/workers";
-import { HOME_HREF, buddyTargetHref, emptyMonth, goalDueDate, monthLabel, routeText, subQueueText, todayLabel, topicHref } from "@/lib/home/derive";
+import { HOME_HREF, buddyTargetHref, emptyMonth, goalDueDate, monthLabel, routeText, subQueueText, taskGateLabel, todayLabel, topicHref } from "@/lib/home/derive";
 import { NewSubView } from "./NewSub";
 import { HeroButton } from "@/components/HeroButton";
 import type { BackgroundItem, RouteTarget } from "@/lib/home/types";
@@ -53,6 +53,7 @@ import { LeftColumn, SubLetter, subKey, subLetters, type RowActions } from "./Le
 import { ForeignTaskInfo, TaskInfo } from "./TaskInfo";
 import { MissionInfo } from "./MissionInfo";
 import { MeetingView } from "./MeetingView";
+import { MeetingsPage, meetingSections, nextMeetingTrail } from "./MeetingsPage";
 import { ProjectInfo } from "./ProjectInfo";
 import { ProjectTrail } from "./ProjectParts";
 import { LeftResize, RightResize, useFileWidth, useLeftWidth, useRightWidth } from "./LeftResize";
@@ -542,8 +543,16 @@ function HomeFrame({ account }: { account: Account }) {
   // 首页「等你」的件数（11/16 重新设计 4.5）：和首页同一份 focusList，左栏「今天」行、标签页标题写全部件数。
   const recordingMeetingId = meeting.phase.kind === "live" ? meeting.phase.meeting.id : null;
   const { items: meetingItems } = usePartnerMeetings();
-  const waitingCount = focusList({ waiting: data.waiting, meetings: meetingItems, offline: machine.disconnected, recordingMeetingId, now: Date.now() }).length;
+  const focusNow = Date.now();
+  const focus = focusList({ waiting: data.waiting, meetings: meetingItems, offline: machine.disconnected, recordingMeetingId, now: focusNow });
+  const waitingCount = focus.length;
   useTabTitle(waitingCount, meeting.live);
+  // 左栏「会议」「本月」两行的行尾（设计第 3 节）：下一场还没进等你的会；这个月还没完成的 Task 里最早的验收时间点。
+  const focusMeetingIds = new Set(focus.flatMap((row) => (row.kind === "meeting" ? [row.item.id] : [])));
+  const meetingsTrail = nextMeetingTrail(meetingSections(meetingItems, focusNow), focusMeetingIds, focusNow);
+  const monthTrail = data.month.missions.filter((mission) => mission.period === data.period)
+    .flatMap((mission) => mission.tasks.filter((task) => !task.completedAt).map((task) => taskGateLabel(projects.all, work.plan, { taskId: task.taskId, missionId: mission.missionId })))
+    .filter((label): label is string => Boolean(label)).sort()[0] ?? null;
   /** 转交时选了「停掉」：这台电脑上在跑的经本机程序停，云端还排着、没有电脑接下的撤掉登记（别的电脑上在跑的只能在那台电脑上停）。 */
   const stopForTransfer = async (subs: Project["subSessions"]) => {
     const here = new Set(local.sessions.map((session) => session.id));
@@ -598,6 +607,7 @@ function HomeFrame({ account }: { account: Account }) {
         return <NewSubView key={project.id} project={project} onCreate={(text) => createFree(project.id, text)} />;
       }
       case "transfer": return <TransferView key={current.id} id={current.id} go={go} onChanged={api.refresh} />;
+      case "meetings": return <MeetingsPage meeting={meeting} go={go} />;
       case "meeting": return <MeetingView key={current.id} id={current.id} go={go} />;
       case "buddy": return <BuddyView buddy={buddy} outbox={outbox} consume={consume} onSpeaking={setSpeaking} projects={projects.projects} other={data.other.subSessions} waiting={data.waiting} go={go} context={buddyContext} onClearContext={() => setBuddyContext(null)} />;
       case "mission": {
@@ -663,7 +673,7 @@ function HomeFrame({ account }: { account: Account }) {
       }} cardAt={cardAt} working={working} seen={seenMarks} onOpen={markSeen}
       meeting={{ slot: <MeetingControl meeting={meeting} missionId={meetingMission} />, listening: meeting.listening }}
       today={todayLabel(work.plan?.today ?? null)} machine={machineDot} trail={handheld ? backgroundButton : null}
-      waitingCount={waitingCount}
+      waitingCount={waitingCount} meetingsTrail={meetingsTrail} monthTrail={monthTrail}
       top={handheld ? <HomeWaiting data={data} api={api} go={go} phone offline={machine.disconnected} recordingMeetingId={recordingMeetingId} meeting={meeting} /> : null} />
   );
 

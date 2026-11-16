@@ -36,6 +36,8 @@ export const goalAnchor = (changeId: string) => `goal-${changeId}`;
 export const BUDDY_HREF = "/me/work/buddy";
 export const missionHref = (missionId: string) => `/me/work/missions/${encodeURIComponent(missionId)}`;
 export const HOME_HREF = "/me/work";
+/** 会议页（11/16）：接下来、已开完。 */
+export const MEETINGS_HREF = "/me/work/meetings";
 export const projectHref = (id: string) => `/me/work/projects/${encodeURIComponent(id)}`;
 export const projectInfoHref = (id: string) => `${projectHref(id)}/info`;
 /** 在项目里开一个子会话（第 68 条，项目行的「+」）。 */
