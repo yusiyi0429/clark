@@ -252,6 +252,9 @@ export const decideAutoRelay = (projectId: string, decision: "continue" | "stop"
  */
 export const decideNexusConfirmation = (id: string, decision: "confirmed" | "amended" | "rejected", value?: string) =>
   unwrap<unknown>(browserApi.POST("/api/me/nexus-confirmations/{id}/decision", { params: { path: { id } }, body: value === undefined ? { decision } : { decision, value } }) as Promise<Result<unknown>>);
+/** 忽略一件等你（方案 A，id 是 WaitingItem.id，204）：只从等你里收起，事情本身不动；原因必填，这一件之后变了又回来。 */
+export const ignoreWaiting = (id: string, reason: string) =>
+  noContent(unwrap<unknown>(browserApi.POST("/api/me/waiting/{id}/ignore", { params: { path: { id } }, body: { reason } }) as Promise<Result<unknown>>));
 export const answerGoalChange = (projectId: string, changeId: string, answer: "stop" | "keep") =>
   unwrap<TProjectGoalChangedItem>(browserApi.POST("/api/me/projects/{projectId}/goal-changes/{id}", { params: { path: { projectId, id: changeId } }, body: { answer } }) as Promise<Result<TProjectGoalChangedItem>>)
     .then(() => undefined, (error: unknown) => { if (!(error instanceof CloudError && error.code === "ALREADY_ANSWERED")) throw error; });

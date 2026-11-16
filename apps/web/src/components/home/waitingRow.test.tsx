@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }), usePathname: () => "/me/work" }));
-vi.mock("@/lib/board/cloud", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/board/cloud")>()), acceptDrafts: vi.fn(async () => []), decideNexusConfirmation: vi.fn(async () => undefined) }));
+vi.mock("@/lib/board/cloud", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/board/cloud")>()), acceptDrafts: vi.fn(async () => []), decideNexusConfirmation: vi.fn(async () => undefined), ignoreWaiting: vi.fn(async () => undefined) }));
 
-import { acceptDrafts, decideNexusConfirmation } from "@/lib/board/cloud";
+import { acceptDrafts, decideNexusConfirmation, ignoreWaiting } from "@/lib/board/cloud";
 import { relativeDayTime } from "@/lib/companyTime";
 import { waitingHref } from "@/lib/home/derive";
 import type { WaitingItem } from "@/lib/home/types";
@@ -12,7 +12,7 @@ import type { WorkHomeApi } from "@/lib/home/useWorkHome";
 import { LocalContext, type LocalRunnerState } from "@/lib/local/LocalRunnerProvider";
 import { createMockRunner } from "@/lib/local/mock";
 import type { Worker } from "@/lib/work/workers";
-import { WaitingList, confirmationLine, dueText, waitingAnswer } from "./HomeView";
+import { IgnoreBox, WaitingList, confirmationLine, dueText, ignoreItem, waitingAnswer } from "./HomeView";
 
 const HERE = "00000000-0000-4000-8000-00000000d001";
 const THERE = "00000000-0000-4000-8000-00000000d002";
@@ -210,5 +210,32 @@ describe("会后确认（17.2 第 43 条，B 契约 f2f4253f）", () => {
     await (confirm as { run: () => Promise<unknown> }).run();
     await (reject as { run: () => Promise<unknown> }).run();
     expect(vi.mocked(decideNexusConfirmation).mock.calls).toEqual([[CONFIRMATION, "confirmed"], [CONFIRMATION, "rejected"]]);
+  });
+});
+
+describe("等你行的「忽略」（方案 A）", () => {
+  it("每一行行尾一个「忽略」图标按钮（收着）；展开是输入框「原因」和「忽略」，原因为空时点不了，不加说明句", () => {
+    const html = render([wait({}), approval()], { home: api({ workers: [approvalWorker] }) });
+    expect(html.match(/<button[^>]*aria-label="忽略"[^>]*>/g)).toHaveLength(2);
+    expect(html).toMatch(/<button[^>]*aria-expanded="false"[^>]*aria-label="忽略"|<button[^>]*aria-label="忽略"[^>]*aria-expanded="false"/);
+    expect(html).not.toContain('placeholder="原因"');
+
+    const box = renderToStaticMarkup(<IgnoreBox onIgnore={vi.fn()} onClose={vi.fn()} />);
+    expect(box).toMatch(/<input[^>]*placeholder="原因"/);
+    expect(box).toContain('aria-label="原因"');
+    expect(text(box).trim()).toBe("忽略");
+    expect(box).toMatch(/<button[^>]*disabled=""[^>]*>忽略<\/button>|<button[^>]*data-disabled="true"[^>]*>忽略<\/button>/);
+  });
+
+  it("提交：带这一件的 id 和原因调忽略接口，成了重读首页（这一行随之消失）；没成不重读", async () => {
+    const refresh = vi.fn(async () => undefined);
+    await ignoreItem(wait({ id: "device:this_computer" }), "先不配电脑", refresh);
+    expect(ignoreWaiting).toHaveBeenCalledWith("device:this_computer", "先不配电脑");
+    expect(refresh).toHaveBeenCalledTimes(1);
+
+    vi.mocked(ignoreWaiting).mockRejectedValueOnce(new Error("网络断了"));
+    refresh.mockClear();
+    await expect(ignoreItem(wait({}), "不急", refresh)).rejects.toThrow("网络断了");
+    expect(refresh).not.toHaveBeenCalled();
   });
 });

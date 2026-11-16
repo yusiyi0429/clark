@@ -1,8 +1,9 @@
 import { markWorkSeen } from "../workSeen.js";
 import type { FastifyReply } from "fastify";
 import { Type } from "@sinclair/typebox";
-import { ArchivedSubSessionListResponse, BackgroundQuery, BackgroundResponse, MarkWorkSeenRequest, RouteRequest, RouteResponse, SubSessionKind, UpdateSubSessionRequest,
+import { ArchivedSubSessionListResponse, BackgroundQuery, BackgroundResponse, IgnoreWaitingRequest, MarkWorkSeenRequest, RouteRequest, RouteResponse, SubSessionKind, UpdateSubSessionRequest,
   WorkHomeResponse, WorkWaitingCountResponse } from "@warmap/contracts";
+import { waitingVersion } from "../homeWaiting.js";
 import { deleteSubSession, listArchivedSubSessions, updateSubSession } from "../subSessionAdmin.js";
 import { routeMessage } from "../messageRoute.js";
 import { listMissionRoundCards, type MissionRoundPerson } from "../missionRounds.js";
@@ -46,6 +47,18 @@ export function registerWorkHomeRoutes(app: AppInstance, ctx: RouteContext): voi
   // 本人有几件等你的事：管理模式（CEO 视角）也能读，菜单里「工作模式」后面的数字用（17.2 第 45 条）。按成员视角算，就是工作模式里看到的那一份。
   app.get("/api/me/work-home/waiting-count", { preHandler: requirePerson, schema: { response: { 200: WorkWaitingCountResponse } } },
     async (req) => ({ count: (await workHome({ personId: req.person!.personId, role: "member" })).waiting.length }));
+
+  // 忽略一件等你（方案 A）：只从本人的等你里收起，存下原因和这一件当时的样子；变了又回来（homeWaiting.ts）。
+  app.post("/api/me/waiting/:id/ignore", { preHandler: requireMember, schema: { params: Type.Object({ id: Type.String({ minLength: 1 }) }), body: IgnoreWaitingRequest } },
+    async (req, reply) => {
+      const reason = req.body.reason.trim();
+      if (!reason) return fail(reply, 400, "REASON_REQUIRED", "要写原因");
+      const item = (await workHome(req.person!)).waiting.find((entry) => entry.id === req.params.id);
+      if (!item) return fail(reply, 404, "WAITING_NOT_FOUND", "等你里没有这一件");
+      await q("INSERT INTO waiting_ignores(person_id,item_id,version,reason,ignored_at) VALUES($1,$2,$3,$4,$5)",
+        [req.person!.personId, item.id, waitingVersion(item), reason, ctx.now()]);
+      return reply.status(204).send();
+    });
 
   // 蓝点（17.2 第 25 条）：本人打开了一个子会话或项目对话。
   app.post("/api/me/work-seen", { preHandler: requireMember, schema: { body: MarkWorkSeenRequest } }, async (req, reply) => {

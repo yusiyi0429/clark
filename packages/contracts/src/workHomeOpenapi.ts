@@ -4,7 +4,7 @@ import {
   HomeTaskSummary, RouteRequest, RouteResponse, SessionStartView, SubSession, WaitingItem, WaitingTarget, WorkHomeResponse, WorkWaitingCountResponse, CardMerge, TaskFeedItem, HomeItem,
   ReleaseSessionStartRequest, NotificationSettings, ClaimedSessionStart, AppearanceSettings, SessionStopView, ClaimSessionStopsRequest, ClaimSessionStopsResponse,
   SessionStopDoneRequest, SessionCommand, SessionCommandView, ClaimSessionCommandsRequest, ClaimSessionCommandsResponse, SessionCommandDoneRequest,
-  MarkWorkSeenRequest, SubSessionKind, UpdateSubSessionRequest, ArchivedSubSession, ArchivedSubSessionListResponse,
+  MarkWorkSeenRequest, SubSessionKind, UpdateSubSessionRequest, ArchivedSubSession, ArchivedSubSessionListResponse, IgnoreWaitingRequest,
 } from "./workHome.js";
 import { CreateProjectRequest, Project, ProjectDetailResponse, ProjectFeedItem, ProjectFeedResponse, ProjectGoal, ProjectGoalLinkedItem, ProjectHandoverItem,
   ProjectHandoverSummaryItem, ProjectListResponse, ProjectPipelineResponse, ProjectTransferDeclinedItem, UpdateProjectRequest, ProjectBoardResponse, ProjectGoalChangedItem,
@@ -23,7 +23,7 @@ import { SessionAttachment, SessionAttachmentUploadResponse } from "./attachment
 
 export const workHomeSchemas: Record<string, JsonSchema> = {
   SubSession, HomeTaskSummary, HomeProjectGoal, HomeProject, HomeMonthTask, HomeMonthMission, WaitingTarget, WaitingItem, WorkHomeResponse, WorkWaitingCountResponse,
-  BackgroundItem, BackgroundResponse, RouteRequest, RouteResponse,
+  IgnoreWaitingRequest, BackgroundItem, BackgroundResponse, RouteRequest, RouteResponse,
   SessionStartView, ClaimSessionStartsRequest, ClaimSessionStartsResponse, CardMerge, TaskFeedItem, HomeItem, ReleaseSessionStartRequest,
   Project, ProjectListResponse, CreateProjectRequest, UpdateProjectRequest, ProjectGoal, ProjectDetailResponse, ProjectPipelineResponse, ProjectGoalLinkedItem,
   ProjectFeedItem, ProjectFeedResponse, ProjectBoardResponse, ProjectGoalChangedItem, AnswerGoalChangeRequest, SubSessionFeedRef, ProjectSubSessionReportItem, ProjectSubSessionDecisionItem, AutoRelayDecisionRequest, SetGoalDueDateRequest, ProjectHandoverItem, ProjectHandoverSummaryItem, ProjectTransferDeclinedItem,
@@ -274,6 +274,15 @@ export const workHomePaths: OpenAPIV3.Document["paths"] = {
       operationId: "getWorkWaitingCount",
       summary: "本人有几件「等你」的事（同 work-home 的 waiting 的条数）；管理模式（CEO 视角）和工作模式都能读，给个人菜单里「工作模式」后面的数字用",
       responses: { "200": json("等你的条数", "WorkWaitingCountResponse"), ...errors(401) },
+    },
+  },
+  "/api/me/waiting/{id}/ignore": {
+    post: {
+      operationId: "ignoreWaiting",
+      summary: "忽略一件等你（id 是 WaitingItem.id）：只从本人的等你里收起，事情本身不动；原因必填，这一件之后变了又回来；原因为空或太长 400，等你里没有这一件 404",
+      parameters: path("id"),
+      requestBody: body("IgnoreWaitingRequest"),
+      responses: { "204": { description: "收起了" }, ...errors(400, 401, 403, 404) },
     },
   },
   "/api/me/background": {

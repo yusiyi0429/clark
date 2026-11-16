@@ -5322,6 +5322,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/waiting/{id}/ignore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 忽略一件等你（id 是 WaitingItem.id）：只从本人的等你里收起，事情本身不动；原因必填，这一件之后变了又回来；原因为空或太长 400，等你里没有这一件 404 */
+        post: operations["ignoreWaiting"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/background": {
         parameters: {
             query?: never;
@@ -20114,6 +20131,9 @@ export interface components {
         };
         WorkWaitingCountResponse: {
             count: number;
+        };
+        IgnoreWaitingRequest: {
+            reason: string;
         };
         BackgroundItem: {
             id: string;
@@ -41455,6 +41475,66 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    ignoreWaiting: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IgnoreWaitingRequest"];
+            };
+        };
+        responses: {
+            /** @description 收起了 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -386,6 +386,13 @@ export const WorkHomeResponse = Type.Object({
 export const WorkWaitingCountResponse = Type.Object({ count: Type.Integer({ minimum: 0 }) }, strict);
 
 /**
+ * POST /api/me/waiting/:id/ignore（204）：本人把一件等你忽略（id 是 WaitingItem.id）。只从本人的等你里收起，事情本身不动；
+ * 原因必填（去掉首尾空白后 1 到 500 字），连同这一件当时的样子存下。这一件之后变了（新的请求、状态或内容变了）又回到等你。不能撤销。
+ * 原因为空或太长 400；本人现在的等你里没有这一件 404。
+ */
+export const IgnoreWaitingRequest = Type.Object({ reason: Type.String({ minLength: 1, maxLength: 500 }) }, strict);
+
+/**
  * 项目对话（原 Task 管线）里网页按时间插的一行（第 4.5 节，从卡和交回现算，不另存事件）。id 稳定，网页按它去重；at 是这件事发生的时间。
  * - card_passed：一张卡验收过了（含本人「就到这里」），met / total 几条达到，merge 是合回结果（「已合进 main」，或要你合的原因）。
  *   gap（主循环第 62 条）：本人「就到这里」的写的原因（有缺口通过，界面写出来）；正常通过为 null 或不带。
