@@ -123,7 +123,13 @@ label.row:hover { background: var(--default-soft); }
 /* ---------- 月份页（10.4、10.5）：上半是这个月的 Task（行和左栏 Task 行同一个样子），没完成的接一个选项框；下半是草稿 ---------- */
 .monthTask { display: grid; gap: var(--space-2); }
 .monthTask + .monthTask { margin-top: var(--space-2); }
-.monthTask[data-done] > button { color: var(--ink-faint); }
+.monthTask[data-done] .monthTaskLine > button { color: var(--ink-faint); }
+/* 当月（11/16 重新设计第 6 节）：Task 行尾项目那一格；标题下一行小字；Mission 里按验收时间点分段的段头；页头翻月。 */
+.monthTaskLine { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.monthTaskLine > button { flex: 1; min-width: 0; }
+.monthSummary { margin: 0 0 var(--space-2); padding: 0 var(--space-2); color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; font-variant-numeric: tabular-nums; }
+.segmentTitle { margin: var(--space-1) 0 0; padding: 4px var(--space-2); color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; font-variant-numeric: tabular-nums; }
+.monthNav { display: inline-flex; align-items: center; gap: var(--space-1); }
 .groupTitle { margin: var(--space-2) 0 0; padding: 6px var(--space-2); overflow: hidden; color: var(--ink-faint); font-size: var(--text-xs); font-weight: 600; line-height: 16px; text-overflow: ellipsis; white-space: nowrap; }
 .groupTitle:first-child { margin-top: 0; }
 .draftRow { display: flex; align-items: center; gap: var(--space-2); min-height: var(--row-48); padding: 6px var(--space-2); }

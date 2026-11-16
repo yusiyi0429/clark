@@ -69,6 +69,7 @@ import { projectHref, projectWorking, type Project } from "@/lib/home/projects";
 import { usePhone } from "./usePhone";
 import { ViewChrome, PAGE_TITLE, monthHref, scopeOf, viewOf, type View } from "./view";
 import { MONTH_PAGE, SECONDARY_PAGES, type MonthHead, type SecondaryPageProps } from "./pages";
+import { useMonthExtras } from "./pages/monthLive";
 import { useHomeArrival } from "@/components/onboarding/useHomeArrival";
 import { ICON } from "./StateIcon";
 import { useTabTitle } from "./useTabTitle";
@@ -543,6 +544,7 @@ function HomeFrame({ account }: { account: Account }) {
   // 首页「等你」的件数（11/16 重新设计 4.5）：和首页同一份 focusList，左栏「今天」行、标签页标题写全部件数。
   const recordingMeetingId = meeting.phase.kind === "live" ? meeting.phase.meeting.id : null;
   const { items: meetingItems } = usePartnerMeetings();
+  const monthExtras = useMonthExtras({ data, api, projects, go });
   const focusNow = Date.now();
   const focus = focusList({ waiting: data.waiting, meetings: meetingItems, offline: machine.disconnected, recordingMeetingId, now: focusNow });
   const waitingCount = focus.length;
@@ -651,7 +653,11 @@ function HomeFrame({ account }: { account: Account }) {
       }
       case "month": {
         const Month = MONTH_PAGE;
-        return <SecondaryFrame key={current.period} title={monthHead?.title ?? `${Number(current.period.slice(5))} 月`} trail={monthHead?.trail} go={go}>{Month ? <Month go={go} period={current.period} today={work.plan?.today ?? null} onHead={setMonthHead} /> : null}</SecondaryFrame>;
+        // 当月就是「本月」（11/16 重新设计第 6 节）：带上首页数据里的现状；桌面上和首页、会议并列，不画返回。
+        const thisMonth = current.period === data.period;
+        return <SecondaryFrame key={current.period} title={monthHead?.title ?? `${Number(current.period.slice(5))} 月`} trail={monthHead?.trail} go={go} back={handheld || !thisMonth}>
+          {Month ? <Month go={go} period={current.period} today={work.plan?.today ?? null} onHead={setMonthHead} extras={thisMonth ? monthExtras : undefined} /> : null}
+        </SecondaryFrame>;
       }
     }
   };
@@ -741,11 +747,11 @@ function HomeFrame({ account }: { account: Account }) {
 const PANEL_LABEL: Record<PanelKind, string> = { detail: "详情", file: "文件", tasks: "后台任务" };
 
 /** 二级页、月份页的壳（5.4.7）：页头（返回、标题）+ 文档类阅读尺，内容是挂进来的组件。 */
-function SecondaryFrame({ title, trail, go, children }: { title: string; trail?: React.ReactNode; go: (href: string) => void; children: React.ReactNode }) {
+function SecondaryFrame({ title, trail, go, back = true, children }: { title: string; trail?: React.ReactNode; go: (href: string) => void; back?: boolean; children: React.ReactNode }) {
   return (
     <div className={h.page} data-type-scale="doc" data-testid="secondary-page">
       <header className={h.viewHead}>
-        <button type="button" className={h.icon} aria-label="返回" title="返回" onClick={() => (window.history.length > 1 ? window.history.back() : go(HOME_HREF))}><ArrowLeft {...ICON} /></button>
+        {back ? <button type="button" className={h.icon} aria-label="返回" title="返回" onClick={() => (window.history.length > 1 ? window.history.back() : go(HOME_HREF))}><ArrowLeft {...ICON} /></button> : null}
         <h1 className={h.viewTitle} tabIndex={-1}>{title}</h1>
         {trail}
       </header>

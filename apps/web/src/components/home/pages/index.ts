@@ -13,6 +13,7 @@ import { BuddyPage } from "./BuddyPage";
 import { ConnectionsTabPage, SkillsTabPage } from "./CustomizePage";
 import { MemoryPage } from "./MemoryPage";
 import { MonthPage } from "./MonthPage";
+import type { MonthExtras } from "./monthLive";
 import { PreferencesPage } from "./PreferencesPage";
 import { ProfilePage } from "./ProfilePage";
 
@@ -20,7 +21,8 @@ export type SecondaryPageProps = { go: (href: string) => void };
 /** onHead：月份页在复盘期间换页头（标题「11 月复盘」、右边淡色小字和「与伙伴讨论」），null 换回默认。 */
 export type MonthHead = { title: string; trail: ReactNode };
 /** today：服务端的今天（YYYY-MM-DD，计划里的 today），判这个月在不在复盘；没有用这台电脑的钟。 */
-export type MonthPageProps = SecondaryPageProps & { period: string; today?: string | null; onHead?: (head: MonthHead | null) => void };
+/** extras：只有当月有（来自首页数据），见 monthLive.tsx。 */
+export type MonthPageProps = SecondaryPageProps & { period: string; today?: string | null; onHead?: (head: MonthHead | null) => void; extras?: (task: { taskId: string; missionId: string }) => MonthExtras };
 
 export const SECONDARY_PAGES: Record<PageKey, ComponentType<SecondaryPageProps>> = {
   profile: ProfilePage,

@@ -1,22 +1,21 @@
 "use client";
 
 /**
- * 首页：等你、会议、本月 Mission 下的 Task、输入框。
+ * 首页（11/16 重新设计）：只有「等你」和输入框；会议、本月各是一页（MeetingsPage、月份页），从左栏进。
+ * - 等你：focusList（lib/home/focus）合成、排好的一份，露 5 件，其余「还有 N 件」；会议行、「这台电脑没连上」和等你行混排。
  * - 等你：一件两行（原话；来源 · 哪件 Task · 截止）。短的（批准、单选、合回、开工、岗位建议）在行尾就地答，推荐的那个是次按钮、另一个弱按钮；
  *   答完这一行变成状态词（「已批准」）停 2 秒再收走，不弹 toast。行首不放强调色点（组头已经写了「等你」）。
  *   会后确认（Nexus 推来的会上待定事项，17.2 第 43 条）：第二行「会后确认 · 待确认的内容 · 截止 11/12 18:00」，行尾「确认」「修改」「拒绝」；
  *   点「修改」（或点这一行）就地展开：有会上原话的先写原话，下面输入框预填原内容，改完「提交」。
- * - 本月（16.4、主循环第 66 条）：按 Mission 分组列这个月的 Task，名字下面小字「11/20 验收」，行尾写现状（「1 件等你 · 2 个在跑」，monthStatus），
- *   有等你的排最前，其次有新结果的、在跑的；本月的 Task 不止挂在一个项目上时最后是项目名 chip（点了进项目）；没挂上的是「挂到…」（选现有项目或新建）。
  * - 输入框：InputBar（14.5）；框下面「发给」默认自动（打字停下 300ms 后问一次分发接口，只认最后一次），也能选伙伴或某个项目；发出去以后跳进那条对话。
  */
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Dropdown, Header } from "@heroui/react";
-import { Check, ChevronDown, Plus } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
 import { PersonAvatar } from "@/components/avatar/PersonAvatar";
 import type { Buddy } from "@/components/buddy/useBuddy";
 import { HeroButton } from "@/components/HeroButton";
-import { FailedLine, failureOf, type Failure } from "@/components/work/DecisionBox";
+import { FailedLine } from "@/components/work/DecisionBox";
 import { localOptions, oneTap } from "@/components/work/decisions";
 import { InputBar } from "./InputBar";
 import { FocusMeetingRow, ReadError } from "./PartnerMeetings";
@@ -29,11 +28,11 @@ import { useLocalRunner, type LocalRunnerState } from "@/lib/local/LocalRunnerPr
 import { decideProposal } from "@/lib/team/roles";
 import { canCommandHere, decide } from "@/lib/work/actions";
 import { mergeCard } from "@/lib/work/merge";
-import { missionHref, monthStatus, monthTaskSubs, taskGateLabel, taskHref, waitingHref } from "@/lib/home/derive";
-import { projectHref, type Project } from "@/lib/home/projects";
+import { waitingHref } from "@/lib/home/derive";
+import type { Project } from "@/lib/home/projects";
 import type { ProjectsApi } from "./useProjects";
 import { clock, monthDayTime, relativeDayTime } from "@/lib/companyTime";
-import type { HomeMonthMission, RouteTarget, WaitingItem, WorkHomeData } from "@/lib/home/types";
+import type { RouteTarget, WaitingItem, WorkHomeData } from "@/lib/home/types";
 import type { WorkHomeApi } from "@/lib/home/useWorkHome";
 import { ICON } from "./StateIcon";
 import { usePhone } from "./usePhone";
@@ -127,73 +126,6 @@ export function waitTime(row: FocusRow, now: number): { text: string; warn: bool
   const confirm = confirmationLine(item, now);
   if (confirm) return confirm.due;
   return item.dueAt && item.kind !== "quota" ? dueText(item.dueAt, now) : null;
-}
-
-export function HomeMonth({ data, api, projects, go }: { data: WorkHomeData; api: WorkHomeApi; projects: ProjectsApi; go: (href: string) => void }) {
-  const missions = data.month.missions.filter((mission) => mission.tasks.length && mission.period === data.period);
-  const status = useMonthStatus(data, api);
-  const manyProjects = new Set(missions.flatMap((mission) => mission.tasks.flatMap((task) => task.project ? [task.project.projectId] : []))).size > 1;
-  if (!missions.length) return null;
-  return <section aria-label="本月" className={h.section}>
-    <p className={h.sectionTitle}>本月</p>
-    {missions.map((mission) => <div key={mission.missionId} className={h.taskList}>
-      <button type="button" className={h.missionTitle} onClick={() => go(missionHref(mission.missionId))} data-testid="month-mission" title={mission.title}><span className={h.ellipsis}>{mission.title}</span></button>
-      {[...mission.tasks].sort((a, b) => (status(a)?.rank ?? 3) - (status(b)?.rank ?? 3)).map((task) => (
-        <MonthRow key={task.taskId} task={task} gate={taskGateLabel(projects.all, api.work.plan, { taskId: task.taskId, missionId: mission.missionId })}
-          status={status(task)} showProject={manyProjects} projects={projects} go={go} />
-      ))}
-    </div>)}
-  </section>;
-}
-
-/** 「本月」每件 Task 的现状（monthStatus）：子会话从首页数据里取，按看板的卡和 worker 认是哪件 Task 的；做完了的为 null，不写。 */
-function useMonthStatus(data: WorkHomeData, api: WorkHomeApi) {
-  const { workers, boards } = api.work;
-  const subs = useMemo(() => [...data.projects.flatMap((project) => project.subSessions), ...data.other.subSessions], [data.projects, data.other.subSessions]);
-  return useMemo(() => {
-    const cache = new Map<string, ReturnType<typeof monthStatus> | null>();
-    return (task: HomeMonthMission["tasks"][number]) => {
-      if (!cache.has(task.taskId)) {
-        const board = boards[task.taskId];
-        const planning = workers.some((worker) => worker.kind === "plan" && worker.taskId === task.taskId && worker.state !== "done")
-          || board?.plan?.status === "queued" || board?.plan?.status === "running";
-        cache.set(task.taskId, task.completedAt ? null
-          : monthStatus(monthTaskSubs(task.taskId, subs, workers, board?.cards), data.waiting.filter((item) => item.taskId === task.taskId).length, planning));
-      }
-      return cache.get(task.taskId)!;
-    };
-  }, [subs, workers, boards, data.waiting]);
-}
-
-/**
- * 「本月」一行：Task 名，下面小字验收截止（挂着的项目目标的截止日，没挂的退回这个 Mission 下一个验收时间点；做完了先写「已完成」）；
- * 行尾现状（有等你的前面一个橙点），本月不止一个项目时再是项目名 chip；
- * 没挂上的「挂到…」：选现有项目（PUT 挂接）或用 Task 名新建一个挂上（POST 带 taskId）；没成在行尾写「失败 · 重试」。
- */
-function MonthRow({ task, gate, status, showProject, projects, go }: {
-  task: HomeMonthMission["tasks"][number]; gate: string | null; status: ReturnType<typeof monthStatus> | null; showProject: boolean; projects: ProjectsApi; go: (href: string) => void;
-}) {
-  const [failed, setFailed] = useState<Failure | null>(null);
-  const attempt = (run: () => Promise<unknown>) => {
-    const once = () => { setFailed(null); void run().catch((error) => setFailed(failureOf(error, once))); };
-    once();
-  };
-  const { project } = task;
-  return (
-    <div className={h.monthRow}>
-      <button type="button" className={h.taskLine} onClick={() => go(project ? projectHref(project.projectId) : taskHref(task.taskId))} data-testid="home-task">
-        <span className={h.taskText}>
-          <span className={h.taskName}>{task.name}</span>
-          {task.completedAt || gate ? <span className={h.taskSub}>{[task.completedAt ? "已完成" : null, gate].filter(Boolean).join(" · ")}</span> : null}
-        </span>
-        {status?.text ? <span className={h.taskGate} title={status.text} data-testid="task-status">{status.waiting ? <span className={h.count}><i aria-hidden /></span> : null}{status.text}</span> : null}
-      </button>
-      {failed ? <FailedLine inline {...failed} />
-        : project ? (showProject ? <button type="button" className={h.statusChip} onClick={() => go(projectHref(project.projectId))} data-testid="task-project" title={project.name}><span className={h.ellipsis}>{project.name}</span></button> : null)
-        : <AttachMenu taskName={task.name} projects={projects.projects} onPick={(projectId) => attempt(() => projects.actions.attach(task.taskId, projectId))}
-          onCreate={() => attempt(() => projects.actions.create(task.name, task.taskId))} />}
-    </div>
-  );
 }
 
 type RunAction = { label: string; done: string; primary?: boolean; run: () => Promise<unknown> };
@@ -450,25 +382,6 @@ export function WaitingList({ items, rows: given, fold = false, meeting, api, go
         </li>
       ) : null}
     </ul>
-  );
-}
-
-/** 没挂项目的 Task 后面「挂到…」（16.4）：点开选现有项目，或者用 Task 名新建一个挂上。 */
-function AttachMenu({ taskName, projects, onPick, onCreate }: { taskName: string; projects: Project[]; onPick: (projectId: string) => void; onCreate: () => void }) {
-  return (
-    <Dropdown>
-      <Dropdown.Trigger className={h.statusChip} data-testid="task-attach">挂到…</Dropdown.Trigger>
-      <Dropdown.Popover placement="bottom end" offset={8} className={h.pop}>
-        <Dropdown.Menu aria-label="挂到" className={h.menuList} onAction={(key) => (key === "new" ? onCreate() : onPick(String(key)))}>
-          <Dropdown.Section className={h.menuSection}>
-            {projects.map((project) => <Dropdown.Item key={project.id} id={project.id} textValue={project.name} className={h.menuItem}>{project.name}</Dropdown.Item>)}
-          </Dropdown.Section>
-          <Dropdown.Section className={h.menuSection}>
-            <Dropdown.Item key="new" id="new" textValue={`新建「${taskName}」`} className={h.menuItem}><Plus {...ICON} />新建「{taskName}」</Dropdown.Item>
-          </Dropdown.Section>
-        </Dropdown.Menu>
-      </Dropdown.Popover>
-    </Dropdown>
   );
 }
 

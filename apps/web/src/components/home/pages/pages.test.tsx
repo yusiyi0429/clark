@@ -10,7 +10,8 @@ import { createMockRunner } from "@/lib/local/mock";
 import type { LocalPhase } from "@/lib/local/connection";
 import { KINGDEE_PLACEHOLDER, agentRow, feishuRow, localToolRow, mcpRow, programRow, tokenHubRow, toolRow } from "./connectionRows";
 import { ConnectionsPage } from "./ConnectionsPage";
-import { MonthView } from "./MonthPage";
+import { MonthNav, MonthView } from "./MonthPage";
+import type { MonthExtras } from "./monthLive";
 import { PreferencesPage } from "./PreferencesPage";
 import { MONTH_PAGE, SECONDARY_PAGES } from "./index";
 import { dutyLine } from "./RolesPage";
@@ -218,6 +219,40 @@ describe("月份页（设计 10.4、10.5）", () => {
     const tasks = render(data).split('data-testid="month-task"').slice(1);
     expect(text(tasks[0]!)).toContain("延续自 10 月的首页改版一期");
     expect(text(tasks[2]!)).toContain("已延续到 12 月的复盘入口收尾");
+  });
+
+  describe("本月并进月份页（11/16 重新设计第 6 节）", () => {
+    const extras = (task: { taskId: string; missionId: string }): MonthExtras => task.taskId === "fixture-home"
+      ? { gate: "11/18 验收", status: { text: "2 个在跑 · 1 件等你", rank: 0, waiting: 1 }, project: null }
+      : { gate: "11/30 验收", status: null, project: null };
+    const live = (data: MonthPageData) => renderToStaticMarkup(<MonthView data={data} go={go} extras={extras} today="2026-11-16" />);
+
+    it("当月：Mission 里按验收时间点分段，Task 行尾写现状", () => {
+      const html = live(monthFixture("2026-11"));
+      expect(text(html)).toContain("11/18 验收 · 剩 2 天");
+      expect(text(html)).toContain("11/30 验收 · 剩 14 天");
+      expect(text(html.split('data-testid="month-task"')[1]!)).toContain("2 个在跑 · 1 件等你");
+    });
+
+    it("标题下一行：件数、完成数、下次验收", () => {
+      expect(text(live(monthFixture("2026-11")))).toContain("3 件 Task · 完成 1 · 下次验收 11/18");
+    });
+
+    it("不是当月（没有现状可给）照旧，不分段", () => {
+      expect(render(monthFixture("2026-11"))).not.toContain('data-testid="month-segment"');
+    });
+
+    it("翻月：不在当月时多一个「回到本月」；往前最早到 10 月", () => {
+      const nav = (period: string) => renderToStaticMarkup(<MonthNav period={period} today="2026-11-16" go={go} />);
+      expect(text(nav("2026-10"))).toContain("回到本月");
+      expect(text(nav("2026-11"))).not.toContain("回到本月");
+      expect(nav("2026-10")).toMatch(/aria-label="上个月"[^>]*disabled|disabled[^>]*aria-label="上个月"/);
+      expect(nav("2026-12")).toMatch(/aria-label="下个月"[^>]*disabled|disabled[^>]*aria-label="下个月"/);
+    });
+  });
+
+  it("这个月还没有 Mission：一行「12 月还没有 Mission」", () => {
+    expect(text(render({ period: "2026-12", tasks: [], draft: null }))).toContain("12 月还没有 Mission");
   });
 
   it("没有 Task、没有草稿的部分不画；小字里是 0 的不写", () => {
