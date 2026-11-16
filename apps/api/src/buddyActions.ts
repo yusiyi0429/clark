@@ -19,6 +19,7 @@ import { autoRelayStep } from "./autoRelay.js";
 import type { RunAsk } from "./localDevices.js";
 import { agreementRow, writeAgreement } from "./cardAgreements.js";
 import { CardError } from "./taskCards.js";
+import { companyPeriod } from "./monthlyPlans.js";
 import { checkedWords, recentOwnerWords, type ProjectHistory } from "./sourceWords.js";
 
 /**
@@ -45,7 +46,7 @@ const KIND: Record<BuddyActionName, Kind> = {
   set_appearance: "write", set_feishu_push: "write", start_sub_session: "write", stop_sub_session: "write", archive_sub_session: "write",
   delete_sub_session: "write", create_project: "write", rename_project: "write", archive_project: "write", link_task_to_project: "write",
   transfer_project: "write", split_cards: "write", set_budget: "write", set_task_due_date: "write", message_project: "write", send_message: "write",
-  sub_session_tell: "write", sub_session_stop: "write", sub_session_rename: "write", sub_session_restart: "write", sub_session_answer: "write", sub_session_approve: "write",
+  sub_session_tell: "write", sub_session_stop: "write", sub_session_rename: "write", sub_session_link: "write", sub_session_restart: "write", sub_session_answer: "write", sub_session_approve: "write",
   update_card: "write",
 };
 /**
@@ -53,13 +54,15 @@ const KIND: Record<BuddyActionName, Kind> = {
  * 管说话方式的另两条跟着项目页的页面说明走（pageGuides.ts 的 PIPELINE_RULES）。
  */
 const IRREVERSIBLE = "这一步撤不回：只在动手前请本人点头时说一次，做完以后和别的回话里不再提。";
+/** 本人 11/16：界面上不再显示子会话的字母，读到的 letter 只用来调动作。 */
+const SAY_NAMES = "子会话的 letter 只是调动作用的编号，界面上不显示；跟本人说话时叫子会话的名字，不说字母。";
 const DESCRIPTION: Record<BuddyActionName, string> = {
   read_partner_inbox: "读本人伙伴的会议 meetings、同事来件 received、发件进度 sent 或关键工作事件 events。每页默认20条，nextOffset 可取下一页；按需打开原文。",
   read_partner_item: "以本人身份读会议正文 meeting、本人待整理的妙记 minute、团队请求及答复 delivery、请求附件文字 attachment。id 取自收件列表。会议有多个来源时可选 source（feishu 或 tianshu）；附件须带 attachmentId。没有内容或权限时如实说明。",
-  read_work_home: "读本人的首页：项目、每个项目的子会话（卡、专题）和状态、等你、本月的 Mission 和 Task。要找项目 id、子会话 id、Task id 时先读它。",
+  read_work_home: "读本人的首页：项目、每个项目的子会话（卡、专题）和状态、等你、本月的 Mission 和 Task。要找项目 id、子会话 id、Task id 时先读它。" + SAY_NAMES,
   read_project: "读一个项目的详情（目标、挂着的 Task）、当前子会话状态 subSessions 和最近的动态（含子会话停下的报告：做成了什么、卡在哪、交了什么）。"
     + "subSessions 为 null 表示当前首页未列出该项目，不能当成没有子会话。state=waiting 且 waiting=null 只表示停下一轮，不是完成；waiting/merge 是等合回，done 才是已完成，failed 是验收没过。"
-    + "子会话停了不会再叫你；本人问到近况、或你要说某个子会话的结果，先读它再说，没读过的不评论。",
+    + "子会话停了不会再叫你；本人问到近况、或你要说某个子会话的结果，先读它再说，没读过的不评论。" + SAY_NAMES,
   find_people: "按名字在人员目录里找同事，拿到人员 id（转达、转交要的是 id）。回最多 10 个：personId、name、self（是不是本人自己）。",
   open_page: "让本人的网页打开某一处：home 首页、preferences 偏好，或某个项目、子会话（同「等你」的 open）。只动界面。",
   set_appearance: "切外观：system 跟随系统、light 浅色、dark 深色。",
@@ -75,7 +78,7 @@ const DESCRIPTION: Record<BuddyActionName, string> = {
   archive_project: "归档一个项目。",
   link_task_to_project: "把本人负责的一件 Task 挂到某个项目上（原来挂在别的项目上就移过来）。",
   transfer_project: "把项目转交给同事：发起转交，交接说明由云端写好后直接发出。toPersonId 是同事的人员 id。",
-  split_cards: "登记拆卡：给一件 Task（taskId）或一个没挂 Task 的项目（projectId）拆执行卡，二选一。words 只能原样摘本人在项目对话里说过的话，不改写、不加自己的交代，摘几段用空行隔开；"
+  split_cards: "登记拆卡：给一件 Task（taskId）或一个没挂 Task 的项目（projectId）拆执行卡，二选一。这个月挂了 Task 的项目按 Task 拆：每件 Task 拆一次（taskId 看 read_work_home 里这个项目的 goals），和哪件都不沾边的活放在最相关的那件下面；按项目拆只给这个月没挂 Task 的项目。words 只能原样摘本人在项目对话里说过的话，不改写、不加自己的交代，摘几段用空行隔开；"
     + "拿不准就不带，云端取本人最近说的话。"
     + "modelWords 只放本人关于用哪个来源、哪个模型、思考开到多少的原话（比如「用 Opus」「思考开到最高」），原样摘那一截，不翻译成型号；"
     + "本人没说这些就不带。拆哪几张、范围、怎么做的话放 words，不放 modelWords。"
@@ -99,6 +102,8 @@ const DESCRIPTION: Record<BuddyActionName, string> = {
   sub_session_stop: `只在项目对话里用：按字母停下这个项目里的一个子会话（同 stop_sub_session）。${IRREVERSIBLE}`,
   sub_session_rename: "只在项目对话里用：按字母给这个项目里的一个子会话改名（左栏、子会话页上显示的名字）。名字照 Claude Code 给会话起名：一个短的动宾短语，十来个字，"
     + "细节留在卡的交代和完成标准里，不放进名字。本人让你改名、或名字太长在左栏看不全时用；一次改一个，几个要改就调几次。",
+  sub_session_link: "只在项目对话里用：按字母把这个项目里的一个子会话挂到这个项目上的一件 Task（taskId），写明它对的是这件 Task 验收标准的第几条（criterion，从 1 起；标准看 read_work_home 里这个项目 goals 的 criteria，第一条是 1；对不上任何一条写 null，专题一律 null）。本月页照它算这件 Task 的进度：对某一条的卡验收通过，这一条算达到。"
+    + "以前按项目拆出来、没挂 Task 的子会话，一个一个挂上；拿不准挂哪件、对哪条就问本人，不要硬挂。",
   sub_session_restart: "只在项目对话里用：按字母重开这个项目里的一个子会话。还没开过工的登记开工；停着的（做完一轮、被停下、出错停住）往里说一句 text 续上，不给 text 是「接着做」。",
   sub_session_answer: "只在项目对话里用：替本人回答一个子会话在问的问题（本人说了「C 的问题选第二个」这类话时用）。choices 每题选中的选项 label（照它问的原样，条数和题数一样），"
     + "text 是另外要说的话。本人没表态的不要替本人选。",
@@ -154,6 +159,8 @@ export type BuddyDeps = {
 type Call = { personId: string; conversationId: string | null; runId: string | null };
 type Outcome = { summary: string; result?: unknown; undo?: Undo | null; ui?: TBuddyUiEffect[]; card?: TConversationCard };
 type SubKind = "card" | "topic";
+/** 子会话挂在哪件 Task、对第几条（sub_session_link，本人 11/16 方案 A）；专题只有 Task，条目恒为 null。 */
+type SubLink = { planTaskId: string | null; criterionIndex: number | null; criterionText: string | null };
 type Undo =
   | { kind: "appearance"; previous: string; set: string }
   | { kind: "feishu"; previous: boolean; set: boolean }
@@ -163,6 +170,7 @@ type Undo =
   | { kind: "project_archived"; projectId: string; archived: boolean }
   | { kind: "project_name"; projectId: string; previous: string; set: string }
   | { kind: "sub_title"; sub: SubKind; id: string; previous: string; set: string }
+  | { kind: "sub_link"; sub: SubKind; id: string; previous: SubLink; set: SubLink }
   | { kind: "goal"; projectId: string; taskId: string; previousProjectId: string | null }
   | { kind: "transfer"; transferId: string }
   | { kind: "split"; requestId: string }
@@ -234,13 +242,28 @@ async function callProject(deps: BuddyDeps, call: Call): Promise<string> {
   return scope.slice("project:".length);
 }
 /** 这个项目对话里这个字母是哪个子会话（本人的）。 */
+/** 写子会话挂的 Task 和条目，回原来的样子；带 expect 时现在的不是它就不写、回 null（撤回时用）。 */
+async function writeSubLink(q: Query, kind: SubKind, id: string, set: SubLink, expect?: SubLink): Promise<SubLink | null> {
+  const row = (kind === "card"
+    ? (await q("SELECT plan_task_id,criterion_index,criterion_text FROM tasks WHERE id=$1", [id])).rows[0]
+    : (await q("SELECT plan_task_id FROM research_topics WHERE id=$1", [id])).rows[0]) as
+    { plan_task_id: string | null; criterion_index?: number | null; criterion_text?: string | null };
+  const now: SubLink = { planTaskId: row.plan_task_id, criterionIndex: row.criterion_index ?? null, criterionText: row.criterion_text ?? null };
+  // 撤回存在审计里（jsonb 不保键的顺序），逐项比。
+  if (expect && (now.planTaskId !== expect.planTaskId || now.criterionIndex !== expect.criterionIndex || now.criterionText !== expect.criterionText)) return null;
+  // 只写 Task 和条目，不动 mission_id（卡上 mission_id 和步骤序号要么都有要么都没有，tasks_step_with_mission）。
+  if (kind === "card") await q("UPDATE tasks SET plan_task_id=$2,criterion_index=$3,criterion_text=$4 WHERE id=$1", [id, set.planTaskId, set.criterionIndex, set.criterionText]);
+  else await q("UPDATE research_topics SET plan_task_id=$2 WHERE id=$1", [id, set.planTaskId]);
+  return now;
+}
 async function lettered(deps: BuddyDeps, call: Call, letter: string): Promise<{ kind: SubKind; id: string; title: string; label: string; projectId: string }> {
   const projectId = await callProject(deps, call);
   const sub = await subByLetter(deps.q, projectId, letter);
   if (!sub) throw new BuddyError(404, "LETTER_NOT_FOUND", `这个项目里没有 ${letter}`);
   const row = await ownSub(deps.q, call.personId, sub.kind, sub.id);
   if (row.trashed_at) throw new BuddyError(404, "LETTER_NOT_FOUND", `${letter} 已经删进回收站了`);
-  return { ...sub, title: row.title, label: `${letter} · ${row.title}`, projectId };
+  // 跟本人说的话里只写名字，不写字母（本人 11/16：界面上不再显示字母，字母只是调动作用的编号）。
+  return { ...sub, title: row.title, label: `「${row.title}」`, projectId };
 }
 /** 主管线代本人的转话、重开算一步自动接力（18 节第 12 条）；到上限停着时不做。 */
 async function relayStep(deps: BuddyDeps, projectId: string) {
@@ -400,6 +423,12 @@ const handlers: Handlers = {
   },
   split_cards: async (deps, call, args) => {
     if (Boolean(args.taskId) === Boolean(args.projectId)) throw new BuddyError(400, "INVALID_ARGS", "taskId 和 projectId 要带且只带一个");
+    // 本人 11/16 方案 A：这个月挂了 Task 的项目按 Task 拆，拆出来的卡才知道对的是哪件 Task 的第几条（本月页照它算进度）。
+    if (args.projectId) {
+      const goals = (await deps.q("SELECT task_id,task_name FROM project_goals WHERE project_id=$1 AND owner_id=$2 AND period=$3 ORDER BY linked_at,task_id",
+        [args.projectId, call.personId, companyPeriod(deps.now())])).rows as { task_id: string; task_name: string }[];
+      if (goals.length) throw new BuddyError(409, "PROJECT_HAS_TASKS", `这个项目这个月挂了 Task，按 Task 拆（每件带 taskId 拆一次）：${goals.map((goal) => `「${goal.task_name}」（taskId ${goal.task_id}）`).join("、")}`);
+    }
     // 原话只认本人真说的（16.8）：伙伴带的每段都得是本人最近在项目对话里说的话的原样子串才用，不然改用本人最近说的那几条（同内部登记）。
     // 要在登记之前读：本人最近说的话从上一次登记之后算。
     const said = await recentOwnerWords(deps.q, deps.history, call.personId, { taskId: args.taskId ?? null, projectId: args.projectId ?? null }, call.runId ?? randomUUID());
@@ -479,7 +508,7 @@ const handlers: Handlers = {
     let card: { id: string; label: string };
     if (args.letter) {
       const sub = await lettered(deps, call, args.letter);
-      if (sub.kind !== "card") throw new BuddyError(400, "NOT_A_CARD", `${sub.label} 是专题，没有完成标准`);
+      if (sub.kind !== "card") throw new BuddyError(400, "NOT_A_CARD", `${sub.label}是专题，没有完成标准`);
       card = { id: sub.id, label: sub.label };
     } else {
       await callProject(deps, call);
@@ -488,7 +517,7 @@ const handlers: Handlers = {
     try {
       const revision = await writeAgreement(deps.q, await agreementRow(deps.q, call.personId, card.id), { brief: args.brief, standards: args.standards },
         { kind: "pipeline", name: "管线" }, args.reason.trim(), deps.now());
-      return { summary: revision === null ? `${card.label} 的约定和原来一样，没改` : `改了 ${card.label} 的约定（第 ${revision} 版）`,
+      return { summary: revision === null ? `${card.label}的约定和原来一样，没改` : `改了${card.label}的约定（第 ${revision} 版）`,
         result: { id: card.id, revision }, ui: [subRefresh(card.id)] };
     } catch (cause) {
       if (cause instanceof CardError) throw new BuddyError(cause.status, cause.code, cause.message);
@@ -498,22 +527,40 @@ const handlers: Handlers = {
   sub_session_tell: async (deps, call, args) => {
     const sub = await lettered(deps, call, args.letter);
     const run = await lastRun(deps.q, sub.kind, sub.id);
-    if (!run) throw new BuddyError(409, "NOT_STARTED", `${sub.label} 还没开过工，先用 sub_session_restart 开工`);
+    if (!run) throw new BuddyError(409, "NOT_STARTED", `${sub.label}还没开过工，先用 sub_session_restart 开工`);
     await relayStep(deps, sub.projectId);
     const commandId = await queueCommand(deps, call, sub, run, { type: "message", text: args.text });
-    return { summary: `把话转给了 ${sub.label}${LATER}`, result: { letter: args.letter, kind: sub.kind, id: sub.id, title: sub.title, commandId }, ui: [subRefresh(sub.id)] };
+    return { summary: `把话转给了${sub.label}${LATER}`, result: { letter: args.letter, kind: sub.kind, id: sub.id, title: sub.title, commandId }, ui: [subRefresh(sub.id)] };
   },
   sub_session_stop: async (deps, call, args) => {
     const sub = await lettered(deps, call, args.letter);
     const outcome = await handlers.stop_sub_session(deps, call, { kind: sub.kind, id: sub.id });
-    return { ...outcome, summary: outcome.summary.replace(`「${sub.title}」`, `「${sub.label}」`), result: { letter: args.letter, kind: sub.kind, id: sub.id, title: sub.title } };
+    return { ...outcome, result: { letter: args.letter, kind: sub.kind, id: sub.id, title: sub.title } };
   },
   sub_session_rename: async (deps, call, args) => {
     const sub = await lettered(deps, call, args.letter);
     const title = args.title.trim();
     await web(deps, call.personId, "PATCH", `/api/me/sub-sessions/${sub.kind}/${encodeURIComponent(sub.id)}`, { title });
-    return { summary: `把「${sub.label}」改名为「${title}」`, result: { letter: args.letter, kind: sub.kind, id: sub.id, title },
+    return { summary: `把${sub.label}改名为「${title}」`, result: { letter: args.letter, kind: sub.kind, id: sub.id, title },
       undo: sub.title === title ? null : { kind: "sub_title", sub: sub.kind, id: sub.id, previous: sub.title, set: title }, ui: [subRefresh(sub.id)] };
+  },
+  sub_session_link: async (deps, call, args) => {
+    const sub = await lettered(deps, call, args.letter);
+    const goal = (await deps.q("SELECT task_name FROM project_goals WHERE project_id=$1 AND task_id=$2 LIMIT 1", [sub.projectId, args.taskId])).rows[0] as
+      { task_name: string } | undefined;
+    if (!goal) throw new BuddyError(404, "TASK_NOT_IN_PROJECT", "这件 Task 没挂在这个项目上，先读 read_work_home 看这个项目的 goals");
+    if (sub.kind === "topic" && args.criterion !== null) throw new BuddyError(400, "NOT_A_CARD", `${sub.label}是专题，只挂 Task，criterion 写 null`);
+    let text: string | null = null;
+    if (args.criterion !== null) {
+      const agreement = await web<{ criteria: { index: number; text: string }[] }>(deps, call.personId, "GET", `/api/plan-tasks/${encodeURIComponent(args.taskId)}/agreement`);
+      text = agreement.criteria.find((item) => item.index === args.criterion)?.text ?? null;
+      if (!text) throw new BuddyError(400, "CRITERION_NOT_FOUND", `「${goal.task_name}」只有 ${agreement.criteria.length} 条验收标准`);
+    }
+    const set: SubLink = { planTaskId: args.taskId, criterionIndex: args.criterion, criterionText: text };
+    const previous = (await writeSubLink(deps.q, sub.kind, sub.id, set))!;
+    return { summary: `把${sub.label}挂到「${goal.task_name}」${args.criterion ? `第 ${args.criterion} 条` : ""}`,
+      result: { letter: args.letter, kind: sub.kind, id: sub.id, title: sub.title, taskId: args.taskId, criterion: args.criterion },
+      undo: { kind: "sub_link", sub: sub.kind, id: sub.id, previous, set }, ui: [subRefresh(sub.id), { kind: "refresh", what: ["work_home"] }] };
   },
   sub_session_restart: async (deps, call, args) => {
     const sub = await lettered(deps, call, args.letter);
@@ -522,33 +569,33 @@ const handlers: Handlers = {
     if (!run) {
       await relayStep(deps, sub.projectId);
       const outcome = await handlers.start_sub_session(deps, call, { kind: sub.kind, id: sub.id });
-      return { ...outcome, summary: outcome.summary.replace(`「${sub.title}」`, `「${sub.label}」`), result: { ...result, start: true } };
+      return { ...outcome, result: { ...result, start: true } };
     }
-    if (["queued", "starting", "running"].includes(run.state)) throw new BuddyError(409, "ALREADY_RUNNING", `${sub.label} 正在跑，不用重开`);
-    if (run.state === "waiting_permission") throw new BuddyError(409, "WAITING_PERMISSION", `${sub.label} 在等批准，先批准或拒绝`);
-    if (run.state === "idle" && run.ask?.kind === "question") throw new BuddyError(409, "ASKING", `${sub.label} 在问问题，先回答`);
+    if (["queued", "starting", "running"].includes(run.state)) throw new BuddyError(409, "ALREADY_RUNNING", `${sub.label}正在跑，不用重开`);
+    if (run.state === "waiting_permission") throw new BuddyError(409, "WAITING_PERMISSION", `${sub.label}在等批准，先批准或拒绝`);
+    if (run.state === "idle" && run.ask?.kind === "question") throw new BuddyError(409, "ASKING", `${sub.label}在问问题，先回答`);
     await relayStep(deps, sub.projectId);
     const commandId = await queueCommand(deps, call, sub, run, { type: "message", text: args.text ?? "接着做" });
-    return { summary: `让 ${sub.label} 接着做了${LATER}`, result: { ...result, commandId }, ui: [subRefresh(sub.id)] };
+    return { summary: `让${sub.label}接着做了${LATER}`, result: { ...result, commandId }, ui: [subRefresh(sub.id)] };
   },
   sub_session_answer: async (deps, call, args) => {
     const sub = await lettered(deps, call, args.letter);
     const run = await lastRun(deps.q, sub.kind, sub.id);
-    if (!run || run.state !== "idle" || run.ask?.kind !== "question") throw new BuddyError(409, "NOT_ASKING", `${sub.label} 现在没在问问题`);
+    if (!run || run.state !== "idle" || run.ask?.kind !== "question") throw new BuddyError(409, "NOT_ASKING", `${sub.label}现在没在问问题`);
     const asked = run.ask.request.questions.length;
-    if (args.choices.length !== asked) throw new BuddyError(400, "INVALID_ARGS", `参数不对：${sub.label} 问了 ${asked} 题，choices 要 ${asked} 条`);
+    if (args.choices.length !== asked) throw new BuddyError(400, "INVALID_ARGS", `参数不对：${sub.label}问了 ${asked} 题，choices 要 ${asked} 条`);
     const commandId = await queueCommand(deps, call, sub, run, { type: "answer", requestId: run.ask.request.requestId,
       answer: { choices: args.choices, ...(args.text ? { text: args.text } : {}) } });
-    return { summary: `替本人回答了 ${sub.label} 的问题${LATER}`, result: { letter: args.letter, kind: sub.kind, id: sub.id, title: sub.title, commandId }, ui: [subRefresh(sub.id)] };
+    return { summary: `替本人回答了${sub.label}的问题${LATER}`, result: { letter: args.letter, kind: sub.kind, id: sub.id, title: sub.title, commandId }, ui: [subRefresh(sub.id)] };
   },
   sub_session_approve: async (deps, call, args) => {
     const sub = await lettered(deps, call, args.letter);
     const run = await lastRun(deps.q, sub.kind, sub.id);
-    if (!run || run.state !== "waiting_permission" || run.ask?.kind !== "permission") throw new BuddyError(409, "NOT_WAITING_PERMISSION", `${sub.label} 现在没在等批准`);
+    if (!run || run.state !== "waiting_permission" || run.ask?.kind !== "permission") throw new BuddyError(409, "NOT_WAITING_PERMISSION", `${sub.label}现在没在等批准`);
     const { decision, message, allowForSession } = args;
     const commandId = await queueCommand(deps, call, sub, run, { type: "permission", requestId: run.ask.request.requestId,
       decision: { decision, ...(message ? { message } : {}), ...(allowForSession !== undefined ? { allowForSession } : {}) } });
-    return { summary: `${decision === "allow" ? "批准" : "拒绝"}了 ${sub.label} 的「${run.ask.request.title}」${LATER}`,
+    return { summary: `${decision === "allow" ? "批准" : "拒绝"}了${sub.label}的「${run.ask.request.title}」${LATER}`,
       result: { letter: args.letter, kind: sub.kind, id: sub.id, title: sub.title, commandId }, ui: [subRefresh(sub.id)] };
   },
   update_plan: async (deps, call, args) => {
@@ -730,6 +777,10 @@ export async function undoAction(deps: BuddyDeps, ownerId: string, id: string): 
     case "project_name": {
       if ((await projectName(deps, ownerId, undo.projectId)) !== undo.set) throw changed("项目后来又改过名，照现在的样子撤不了");
       await web(deps, ownerId, "PATCH", `/api/me/projects/${encodeURIComponent(undo.projectId)}`, { name: undo.previous });
+      break;
+    }
+    case "sub_link": {
+      if ((await writeSubLink(q, undo.sub, undo.id, undo.previous, undo.set)) === null) throw changed("子会话后来又挂到别的 Task 或条目上了，照现在的样子撤不了");
       break;
     }
     case "sub_title": {

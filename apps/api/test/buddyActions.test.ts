@@ -317,7 +317,7 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
       expect(await code("sub_session_tell", { letter: "B", text: "先别动测试" })).toBe("LETTER_NOT_FOUND");
       expect(await code("sub_session_tell", { letter: "A", text: "先别动测试" })).toBe("NOT_STARTED");
       // 没开过工的重开 = 登记开工。
-      expect((await act("sub_session_restart", { letter: "C" })).json().summary).toContain("「C · 并行卡独立工作区」");
+      expect((await act("sub_session_restart", { letter: "C" })).json().summary).toContain("「并行卡独立工作区」");
 
       // 本机：A 开工在跑。同一个会话按序号往下报。
       const machine = await f.local();
@@ -338,7 +338,7 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
       expect(await code("sub_session_answer", { letter: "A", choices: [["第二个"]] })).toBe("NOT_ASKING");
       expect(await code("sub_session_approve", { letter: "A", decision: "allow" })).toBe("NOT_WAITING_PERMISSION");
       const told = (await act("sub_session_tell", { letter: "A", text: "先别动测试" })).json();
-      expect(told.summary).toContain("A · 规划员岗位初版");
+      expect(told.summary).toContain("「规划员岗位初版」");
       const claim = async (device = machine.device) => (await f.call("POST", "/api/me/session-commands/claim", { deviceId: device })).json().commands as
         { id: string; command: unknown; subSessionId: string; sessionId: string }[];
       const other = await f.local("另一台");
@@ -371,7 +371,7 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
       await status("waiting_permission", { permission });
       expect((await feed()).at(-1)).toMatchObject({ kind: "sub_session_decision", permission, question: null, status: "open" });
       const approved = (await act("sub_session_approve", { letter: "A", decision: "allow" })).json();
-      expect(approved.summary).toContain("批准了 A · 规划员岗位初版 的「rm -rf build」");
+      expect(approved.summary).toContain("批准了「规划员岗位初版」的「rm -rf build」");
       expect((await claim()).map((entry) => entry.command)).toEqual([{ type: "permission", requestId: "p-1", decision: { decision: "allow" } }]);
       await status("running");
 
@@ -414,12 +414,12 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
       await new Promise((resolve) => setTimeout(resolve, 300));
       expect(await f.t.sql(`SELECT 1 FROM conversation_messages m JOIN conversations c ON c.id=m.conversation_id WHERE c.scope=$1`, [`project:${project}`])).toEqual([]);
       // 停下按字母走 stop_sub_session：登记「请这台电脑停掉」。
-      expect((await act("sub_session_stop", { letter: "A" })).json().summary).toBe("已请那台电脑停掉「A · 规划员岗位初版」（本人电脑上开着天枢网页时马上停）");
+      expect((await act("sub_session_stop", { letter: "A" })).json().summary).toBe("已请那台电脑停掉「规划员岗位初版」（本人电脑上开着天枢网页时马上停）");
       expect((await f.call("POST", "/api/me/session-stops/claim", { deviceId: machine.device })).json().stops).toEqual([expect.objectContaining({ subSessionId: a, sessionId: session })]);
       // 排着的（run 是 queued，3700 的 C、D、K、N）：回本人的话是从队列撤下，不写「停掉」。
       await status("queued", { queuePosition: 1 });
       expect(await f.t.sql("SELECT state FROM local_runs WHERE id=$1", [session])).toEqual([{ state: "queued" }]);
-      expect((await act("sub_session_stop", { letter: "A" })).json().summary).toBe("已请那台电脑把「A · 规划员岗位初版」从队列撤下（本人电脑上开着天枢网页时马上停）");
+      expect((await act("sub_session_stop", { letter: "A" })).json().summary).toBe("已请那台电脑把「规划员岗位初版」从队列撤下（本人电脑上开着天枢网页时马上停）");
       // 不在项目里的卡停了不报。
       await machine.send({ kind: "card", cardId: loose }, [running("不在项目里的卡"), ["stopped", { why: "turn_done", summary: null, blocker: null, outputs: [] }]]);
       expect(await f.t.sql("SELECT 1 FROM sub_session_reports WHERE subject_id=$1", [loose])).toEqual([]);
@@ -510,10 +510,10 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
 
       const done = await update({ letter: "A", standards: ["列出 3 个候选名", "近似商标由本人查"], reason: "本人说商标网要他自己查" });
       expect(done.statusCode).toBe(200);
-      expect(done.json().summary).toBe("改了 A · 候选名初查 的约定（第 2 版）");
+      expect(done.json().summary).toBe("改了「候选名初查」的约定（第 2 版）");
       expect((await f.call("GET", `/api/me/cards/${card}/agreement-changes`)).json().changes).toEqual([expect.objectContaining({ revision: 2,
         by: { kind: "pipeline", name: "管线" }, reason: "本人说商标网要他自己查", after: { brief: null, standards: ["列出 3 个候选名", "近似商标由本人查"] } })]);
-      expect((await update({ cardId: card, brief: "先查商标网", reason: "补一句交代" })).json().summary).toBe("改了 「候选名初查」 的约定（第 3 版）");
+      expect((await update({ cardId: card, brief: "先查商标网", reason: "补一句交代" })).json().summary).toBe("改了「候选名初查」的约定（第 3 版）");
       expect((await update({ letter: "A", cardId: card, brief: "x", reason: "r" })).json().code).toBe("INVALID_ARGS");
       expect((await update({ letter: "A", reason: "r" })).json().code).toBe("INVALID_ARGS");
       expect((await update({ letter: "A", standards: ["x"] })).json().code).toBe("INVALID_ARGS");
@@ -612,10 +612,65 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
       expect((await act({ letter: "Z", title: "随便" }, conversation)).json().code).toBe("LETTER_NOT_FOUND");
       const renamed = await act({ letter: "A", title: "本机拉起三种会话" }, conversation);
       expect(renamed.statusCode, renamed.body).toBe(200);
-      expect(renamed.json()).toMatchObject({ summary: `把「A · ${long}」改名为「本机拉起三种会话」`, undoable: true });
+      expect(renamed.json()).toMatchObject({ summary: `把「${long}」改名为「本机拉起三种会话」`, undoable: true });
       expect((await f.t.sql("SELECT title FROM tasks WHERE id=$1", [card]))[0].title).toBe("本机拉起三种会话");
       expect((await f.undo(renamed.json().auditId)).statusCode).toBe(200);
       expect((await f.t.sql("SELECT title FROM tasks WHERE id=$1", [card]))[0].title).toBe(long);
     } finally { await f.close(); }
+  });
+  it("本人 11/16 方案 A：项目主管线按字母把子会话挂到项目上的一件 Task、写明对第几条，本月页的约定照它算；Task 不在这个项目 404、没有这一条 400、专题不带条目；能撤回", async () => {
+    const f = await fixture();
+    try {
+      await f.grant();
+      const project = (await f.call("POST", "/api/me/projects", { name: "新版天枢应用" })).json().projectId as string;
+      expect((await f.call("PUT", `/api/me/projects/${project}/goals/task-open`)).statusCode).toBe(200);
+      // 总管线按项目拆出来的卡：只挂项目、不挂 Task，验收已经过了。
+      const card = await f.agentCard("跑题库打分");
+      await f.t.sql("UPDATE tasks SET project_id=$2,plan_task_id=NULL,mission_id=NULL,step_order=NULL WHERE id=$1", [card, project]);
+      await f.t.sql(`INSERT INTO card_handbacks(id,task_id,owner_id,client_id,attempt,status,outcome,finished_at) VALUES($1,$2,$3,'h-1',1,'done','pass',now())`,
+        [randomUUID(), card, TEST_MEMBER.personId]);
+      await f.t.sql("INSERT INTO research_topics(id,owner_id,title,project_id) VALUES($1,$2,'录屏选型',$3)", [randomUUID(), TEST_MEMBER.personId, project]);
+      const conversation = randomUUID();
+      await f.t.sql("INSERT INTO project_pipelines(project_id,owner_id,conversation_id) VALUES($1,$2,$3)", [project, TEST_MEMBER.personId, conversation]);
+      await f.call("GET", "/api/me/work-home");
+      const headers = { authorization: `Bearer ${TOKEN}`, "x-owner-id": TEST_MEMBER.personId };
+      const act = (args: unknown) => f.t.app.inject({ method: "POST", url: "/internal/me/buddy-actions/sub_session_link", headers,
+        payload: { args, conversationId: conversation, runId: randomUUID() } });
+      const agreement = async () => ((await f.call("GET", "/api/me/months/2026-11")).json().tasks as { taskId: string; agreement: unknown }[])
+        .find((task) => task.taskId === "task-open")!.agreement;
+      expect(await agreement()).toEqual({ met: 0, total: 2 });
+
+      expect((await act({ letter: "A", taskId: "task-other", criterion: 1 })).json().code).toBe("TASK_NOT_IN_PROJECT");
+      expect((await act({ letter: "A", taskId: "task-open", criterion: 3 })).json().code).toBe("CRITERION_NOT_FOUND");
+      const linked = await act({ letter: "A", taskId: "task-open", criterion: 1 });
+      expect(linked.statusCode, linked.body).toBe(200);
+      expect(linked.json()).toMatchObject({ summary: "把「跑题库打分」挂到「对话质量达标」第 1 条", undoable: true });
+      expect(await agreement()).toEqual({ met: 1, total: 2 });
+      // 还在这个项目里，字母不变。
+      const home = (await f.call("GET", "/api/me/work-home")).json() as { projects: { name: string; subSessions: { id: string; letter: string | null }[] }[] };
+      expect(home.projects.find((entry) => entry.subSessions.some((sub) => sub.id === card))).toMatchObject({ name: "新版天枢应用" });
+      expect(home.projects.flatMap((entry) => entry.subSessions).find((sub) => sub.id === card)?.letter).toBe("A");
+      expect((await act({ letter: "B", taskId: "task-open", criterion: 1 })).json().code).toBe("NOT_A_CARD");
+
+      expect((await f.undo(linked.json().auditId)).statusCode).toBe(200);
+      expect(await agreement()).toEqual({ met: 0, total: 2 });
+      expect((await f.t.sql("SELECT plan_task_id,criterion_index,mission_id FROM tasks WHERE id=$1", [card]))[0]).toEqual({ plan_task_id: null, criterion_index: null, mission_id: null });
+    } finally { await f.close(); }
+  });
+  it("本人 11/16 方案 A：项目这个月挂了 Task 时不按项目拆，回 409 并写清按哪几件 Task 拆；说明里写明按 Task 拆、跟本人说话叫名字不说字母", async () => {
+    const f = await fixture();
+    try {
+      await f.grant();
+      const projectId = (await f.call("POST", "/api/me/projects", { name: "新版天枢应用" })).json().projectId as string;
+      expect((await f.call("PUT", `/api/me/projects/${projectId}/goals/task-open`)).statusCode).toBe(200);
+      const refused = await f.act("split_cards", { projectId });
+      expect([refused.statusCode, refused.json().code]).toEqual([409, "PROJECT_HAS_TASKS"]);
+      expect(refused.json().message).toContain("「对话质量达标」（taskId task-open）");
+      expect((await f.ok("split_cards", { taskId: "task-open" })).result).toMatchObject({ requestId: expect.any(String) });
+    } finally { await f.close(); }
+    const description = (name: string) => actionList({ authority: "full", grantedAt: null }).find((action) => action.name === name)!.description;
+    expect(description("split_cards")).toContain("这个月挂了 Task 的项目按 Task 拆");
+    expect(description("sub_session_link")).toContain("criteria");
+    for (const name of ["read_work_home", "read_project"]) expect(description(name)).toContain("跟本人说话时叫子会话的名字，不说字母");
   });
 });
