@@ -143,6 +143,9 @@
 .plan li { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
 .plan li > [role="img"] { margin-top: calc((1lh - 16px) / 2); }
 .plan li[data-status="completed"] { color: var(--ink-faint); }
+.plan li[data-status="pending"] { color: var(--ink-muted); }
+/* 新首页一种字号的例外（本人 11/16）：对话里的计划清单小 1px（app/home-type.css）；在做的不加粗，只靠深浅和转圈。 */
+.plan { --type-size: 15px; --type-lh: 22px; }
 .plan li[data-status="in_progress"] { font-weight: 600; }
 .planFold { justify-self: start; padding: 0; border: 0; background: none; color: var(--ink-faint); font: inherit; font-size: 12px; cursor: pointer; }
 .verdicts { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }

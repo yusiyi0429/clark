@@ -201,7 +201,9 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .groupTitle { display: block; height: var(--row-28); margin: 0; padding: 6px var(--space-2); overflow: hidden; color: var(--ink-faint); font-size: var(--text-xs); font-weight: 600; line-height: 16px; text-overflow: ellipsis; white-space: nowrap; }
 .groupTitle span { font-weight: 400; }
 /* 「项目」组头（16.2）：12/16 600 淡色，右边 20 见方的「+」；就地新建时下面一行输入框（14）。 */
-.groupHead { display: flex; align-items: center; height: var(--row-28); padding: 0 var(--space-2); color: var(--ink-faint); font-size: var(--text-xs); font-weight: 600; line-height: 16px; }
+.groupHead { display: flex; align-items: center; height: var(--row-28); padding: 0 var(--space-2); color: var(--ink-faint); font-size: var(--text-xs); font-weight: 600; line-height: 16px;
+  /* 新首页一种字号的例外（本人 11/16）：「项目」保持小一号（app/home-type.css）。 */
+  --type-size: 13px; --type-lh: 16px; }
 .groupAdd { display: grid; place-items: center; width: 20px; height: 20px; margin-left: auto; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--ink-faint); cursor: pointer; }
 .groupAdd:hover { background: var(--default-soft); color: var(--ink-muted); }
 .groupAdd:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
@@ -341,7 +343,8 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .tree { --fade-end: linear-gradient(to right, #000 calc(100% - 24px), transparent); }
 .subName { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; -webkit-mask-image: var(--fade-end); mask-image: var(--fade-end); }
 /* 子会话的字母方块（18.10）：16 高的实心小圆角方块，两个字母时变宽。 */
-.letter { display: inline-grid; flex: none; place-items: center; min-width: 16px; height: 16px; padding: 0 3px; border-radius: var(--r-bar); background: var(--hairline-strong); color: var(--ink); font-size: 10px; font-weight: 600; line-height: 1; }
+.letter { display: inline-grid; flex: none; place-items: center; min-width: 16px; height: 16px; padding: 0 3px; border-radius: var(--r-bar); background: var(--hairline-strong); color: var(--ink); font-size: 10px; font-weight: 600; line-height: 1;
+  --type-size: 10px; --type-weight: 600; --type-lh: 1; }
 /* 行尾状态点：在跑灰点闪（节奏同项目标题的呼吸点），停了蓝点，要人介入黄点。 */
 .subDot { display: inline-grid; flex: none; place-items: center; width: 6px; }
 .subDot i { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-faint); }

@@ -6,6 +6,8 @@
 @import "./heroui-tianshu.css";
 /* 新首页的深色：只在外壳带 data-scheme="auto" 时在根上生效。 */
 @import "./scheme-dark.css";
+/* 新首页一种字号：只在外壳带 data-type-scale="one" 时在根上生效。 */
+@import "./home-type.css";
 
 /* ---------------------------------------------------------------------------
    设计 token：与 clark-main `src/app/globals.css` 的 :root 同值，只保留 CEO 工作面

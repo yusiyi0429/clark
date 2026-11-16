@@ -680,7 +680,7 @@ function HomeFrame({ account }: { account: Account }) {
     return (
       <WorkspaceContext.Provider value={workspace}>
         <ViewChrome.Provider value={chrome}>
-          <div className={h.app} data-phone="" data-view={view.kind} data-scheme="auto" data-entering={entering ? "" : undefined} data-testid="work-home">
+          <div className={h.app} data-phone="" data-view={view.kind} data-scheme="auto" data-type-scale="one" data-entering={entering ? "" : undefined} data-testid="work-home">
             {/* 首屏兼首页（5.7）：左栏那几样，底部固定首页的输入框（带「发给」）。 */}
             {view.kind === "home" ? <>
               <aside className={h.left}>{left}</aside>
@@ -703,7 +703,7 @@ function HomeFrame({ account }: { account: Account }) {
     <WorkspaceContext.Provider value={workspace}>
       <ViewChrome.Provider value={chrome}>
         <SideDetailContext.Provider value={side}>
-          <div className={h.app} data-panel={slot === "file" ? "file" : slot ? "open" : "closed"} data-wide={slot === "file" && wide ? "" : undefined} data-view={view.kind} data-scheme="auto" data-entering={entering ? "" : undefined} data-testid="work-home"
+          <div className={h.app} data-panel={slot === "file" ? "file" : slot ? "open" : "closed"} data-wide={slot === "file" && wide ? "" : undefined} data-view={view.kind} data-scheme="auto" data-type-scale="one" data-entering={entering ? "" : undefined} data-testid="work-home"
             data-resizing={leftWidth.dragging || rightWidth.dragging || fileWidth.dragging ? "" : undefined} style={{
               ...(leftWidth.width ? { "--home-left": `${leftWidth.width}px` } : {}),
               ...(rightWidth.width ? { "--home-right": `${rightWidth.width}px` } : {}),

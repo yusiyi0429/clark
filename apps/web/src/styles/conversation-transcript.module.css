@@ -159,6 +159,8 @@
  * 回答末尾的选项照选项框的选项行画（decision-box.module.css 的 .option / .key，同一套变量）：序号 + 文字，悬停 --default-soft，焦点 --focus 外框；手持不显示序号、行高 48。
  */
 :global([data-scheme="auto"]) .prose :is(h1,h2,h3,h4,h5,h6){font-size:16px!important;font-weight:600;line-height:var(--lh-row)}
+/* 新首页一种字号（app/home-type.css）：正文的加粗、标题是内容，照旧加粗；正文行高照旧 26。 */
+.prose{--type-lh:26px}.prose :is(strong,b,th,h1,h2,h3,h4,h5,h6){--type-weight:600}
 :global([data-scheme="auto"]) .pulse{width:6px;height:6px}
 /* 新首页的对话正文（14.1）：伙伴、管线、子会话、本人气泡都是 16，行高 26，各种宽度都一样。 */
 :global([data-scheme="auto"]) :is(.assistant,.user){font-size:16px;line-height:26px}
