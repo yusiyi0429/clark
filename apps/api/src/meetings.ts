@@ -301,7 +301,8 @@ async function bookOnce(
   if ("error" in anchors) return anchors;
   return insertScheduledMeeting(deps.pool, deps.peopleDirectory, deps.preflightAgent, deps.secret, {
     title: input.title, scheduledAt, endsAt, resolved, issueIds: [], originRef: { type: "booking", ...(input.draftId ? { draftId: input.draftId } : {}) },
-    worldAnchors: anchors, createdBy: viewer.personId, invitedPersonIds: unique([leadDriId, ...(input.participants ?? [])]),
+    // 不挂（[]）存成没挂过（null），同配置页建的会：会议页照主持人的单元、公司回退。
+    worldAnchors: anchors.length ? anchors : undefined, createdBy: viewer.personId, invitedPersonIds: unique([leadDriId, ...(input.participants ?? [])]),
   }, deps.introAgent);
 }
 

@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { TWorldAnchorOption } from "@warmap/contracts";
-import { defaultAnchor, defaultMeetingTitle, elapsed, meetingHref, meetingSpan, startableMeetings } from "./meeting";
-
-const option = (kind: TWorldAnchorOption["kind"], id: string, ownerId: string | null = null): TWorldAnchorOption =>
-  ({ kind, id, title: `${kind}-${id}`, brief: null, lifecycle: null, ownerId, parentId: null });
+import { defaultMeetingTitle, elapsed, meetingHref, meetingSpan, startableMeetings } from "./meeting";
 
 describe("伙伴台开会的默认值（设计 2026-11-12 第二节）", () => {
   it("标题按公司时区写「11月12日 15:30 的会」，已约的会写「10:00–11:00」", () => {
@@ -26,15 +22,6 @@ describe("伙伴台开会的默认值（设计 2026-11-12 第二节）", () => {
       { meetingId: "busy", title: "g", at: at(0), endsAt: at(60), canStartRecording: true, stage: "processing" },
     ];
     expect(startableMeetings(meetings, now).map((meeting) => meeting.meetingId)).toEqual(["on", "soon"]);
-  });
-
-  it("挂点：项目本月目标的 Mission > 上次用的 > 我的第一个 Mission > 第一个 Mission；选项里没有的不用", () => {
-    const options = [option("lto", "l1"), option("mission", "m-other", "p2"), option("mission", "m-mine", "me"), option("mission", "m-proj", "p3"), option("unit", "u1")];
-    expect(defaultAnchor(options, { missionId: "m-proj", last: { kind: "lto", id: "l1" }, me: "me" })?.id).toBe("m-proj");
-    expect(defaultAnchor(options, { missionId: "gone", last: { kind: "lto", id: "l1" }, me: "me" })?.id).toBe("l1");
-    expect(defaultAnchor(options, { last: { kind: "mission", id: "gone" }, me: "me" })?.id).toBe("m-mine");
-    expect(defaultAnchor(options, { me: "nobody" })?.id).toBe("m-other");
-    expect(defaultAnchor([option("unit", "u1")], { me: "me" })).toBeNull();
   });
 
   it("会议页在新首页里", () => {

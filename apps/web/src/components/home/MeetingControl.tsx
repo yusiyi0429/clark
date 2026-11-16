@@ -18,7 +18,7 @@
 import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
 import { Popover } from "@heroui/react";
 import { Button as Pressable } from "react-aria-components";
-import { ArrowUpRight, AudioLines } from "lucide-react";
+import { ArrowUpRight, AudioLines, Pencil, X } from "lucide-react";
 import type { TMeetingBookingRequest, TWorldAnchor, TWorldAnchorOption } from "@warmap/contracts";
 import { browserApi, type Card } from "@/lib/api/client";
 import type { Account } from "@/components/AccountMenu";
@@ -34,7 +34,7 @@ import { WorldAnchorPicker } from "@/components/meeting/WorldAnchorPicker";
 import { companyMonth } from "@/lib/companyTime";
 import { feishuConnectHref, readFeishuConnection, type FeishuConnection } from "@/lib/feishuLogin";
 import { refreshWorkspace } from "@/lib/toast";
-import { announceMeeting, defaultAnchor, defaultMeetingTitle, elapsed, meetingHref, meetingSpan, startableMeetings } from "@/lib/home/meeting";
+import { announceMeeting, defaultMeetingTitle, elapsed, meetingHref, meetingSpan, startableMeetings } from "@/lib/home/meeting";
 import { usePartnerMeetings } from "@/lib/home/partnerMeetingFeed";
 import { ICON } from "./StateIcon";
 import h from "@/styles/home.module.css";
@@ -64,7 +64,6 @@ export type MeetingPhase =
 type Recording = { status: "recording" | "uploading" | "transcoding" | "transcribing" | "done" | "failed"; error: string | null };
 
 const STORE = "tianshu.homeMeeting";
-const LAST_ANCHOR = "tianshu.homeMeeting.anchor";
 const LAST_HOST = "tianshu.homeMeeting.host";
 const POLL_MS = 5000;
 
@@ -276,7 +275,7 @@ function useTick(on: boolean) {
 }
 
 /** 伙伴台右下角那一颗：平时是图标按钮，开着会是走秒胶囊。 */
-export function MeetingControl({ meeting, missionId, inline = false }: { meeting: HomeMeeting; missionId?: string | null; inline?: boolean }) {
+export function MeetingControl({ meeting, inline = false }: { meeting: HomeMeeting; inline?: boolean }) {
   const { phase } = meeting;
   const [open, setOpen] = useState(false);
   const [booking, setBooking] = useState(false);
@@ -342,7 +341,7 @@ export function MeetingControl({ meeting, missionId, inline = false }: { meeting
         {inline ? "现在开会" : <AudioLines {...ICON} />}
       </HeroButton>
     );
-    body = <StartForm meeting={meeting} missionId={missionId ?? null} onStarted={() => setOpen(false)} onBook={() => { setOpen(false); setBooking(true); }} />;
+    body = <StartForm meeting={meeting} onStarted={() => setOpen(false)} onBook={() => { setOpen(false); setBooking(true); }} />;
   }
 
   return (
@@ -378,11 +377,13 @@ const MODES: Segment<Mode>[] = [{ id: "local", label: "现场" }, { id: "remote"
  * 新的一场「现场 | 远程」二选一：现场是这台电脑录音；远程多一行参会人，按下就在飞书日历约一场现在开始的会、邀请他们，然后去会议页。
  * 远程要本人连好飞书日历（没连写「飞书日历未连接」和「去连接」，新标签页里连，回来窗口拿回焦点时再读一次）。
  */
-export function StartForm({ meeting, missionId, onStarted, onBook }: { meeting: HomeMeeting; missionId: string | null; onStarted: () => void; onBook: () => void }) {
+export function StartForm({ meeting, onStarted, onBook }: { meeting: HomeMeeting; onStarted: () => void; onBook: () => void }) {
   const { account } = meeting;
   const me = account.personId ?? "";
   const ceo = account.role === "ceo";
-  const [title, setTitle] = useState(() => defaultMeetingTitle(new Date()));
+  const [fallback] = useState(() => defaultMeetingTitle(new Date()));
+  const [title, setTitle] = useState(fallback);
+  const [naming, setNaming] = useState(false);
   const [mode, setMode] = useState<Mode>("local");
   const remote = mode === "remote";
   const feed = usePartnerMeetings();
@@ -413,8 +414,6 @@ export function StartForm({ meeting, missionId, onStarted, onBook }: { meeting: 
     void listWorldAnchorOptions(companyMonth(new Date())).then((next) => {
       if (!live) return;
       setOptions(next);
-      const first = defaultAnchor(next, { missionId, last: read<TWorldAnchor>(LAST_ANCHOR), me });
-      setAnchors(first ? [first] : []);
     }, () => { if (live) setOptionsFailed(true); });
     void listPersonDirectory().then((next) => { if (live) setPeople(next); }, () => { if (live) setPeopleFailed(true); });
     if (ceo) {
@@ -424,7 +423,7 @@ export function StartForm({ meeting, missionId, onStarted, onBook }: { meeting: 
       }, () => { if (live) setHostsFailed(true); });
     }
     return () => { live = false; };
-  }, [ceo, me, missionId, retry]);
+  }, [ceo, retry]);
   useEffect(() => {
     if (!remote) return;
     let live = true;
@@ -436,7 +435,7 @@ export function StartForm({ meeting, missionId, onStarted, onBook }: { meeting: 
 
   const invitable = people.filter((person) => person.personId !== host && person.personId !== me && !participants.includes(person.personId));
   const canInvite = Boolean(feishu?.enabled && feishu.calendar && !peopleFailed);
-  const ready = Boolean(title.trim() && anchors.length && host && (!ceo || hosts.some((person) => person.personId === host)) && !busy
+  const ready = Boolean(title.trim() && host && (!ceo || hosts.some((person) => person.personId === host)) && !busy
     && (!remote || (canInvite && (participants.length || host !== me))));
   // 焦点落在主按钮上（回车就开）：挂点读到、能开的那一刻放过去；人已经在标题框里打字就不抢。
   useEffect(() => {
@@ -470,13 +469,18 @@ export function StartForm({ meeting, missionId, onStarted, onBook }: { meeting: 
   };
   const startNew = () => {
     if (!ready) return;
-    write(LAST_ANCHOR, anchors[0]);
     if (ceo) write(LAST_HOST, host);
     draftId.current ??= crypto.randomUUID();
     const book = instantMeetingPayload({ title: title.trim(), at: Date.now(), participants: remote ? participants : [], anchors, draftId: draftId.current, ...(ceo ? { leadDriId: host } : {}) });
     void (remote ? invite(book) : go({ book }));
   };
   const switchMode = (next: Mode) => { setMode(next); setError(""); draftId.current = null; };
+  // 改完名称：清空了回到默认名称；回车改完把焦点交回主按钮（再回车就开）。
+  const doneNaming = (focusStart: boolean) => {
+    if (!title.trim()) setTitle(fallback);
+    setNaming(false);
+    if (focusStart) startButton.current?.focus();
+  };
 
   return (
     <>
@@ -500,19 +504,28 @@ export function StartForm({ meeting, missionId, onStarted, onBook }: { meeting: 
         <p className={h.sectionTitle}>新的一场</p>
         {me ? <SegmentedSwitch label="怎么开" segments={MODES} selected={mode} onSelect={switchMode} /> : null}
       </div>
-      <input className={h.projectName} aria-label="标题" value={title} maxLength={200} data-testid="meeting-title"
-        onChange={(event) => setTitle(event.currentTarget.value)}
-        onKeyDown={(event) => { if (event.key === "Enter" && !event.nativeEvent.isComposing) { event.preventDefault(); startNew(); } }} />
-      <div className={h.meetField}>
+      {naming ? (
+        <input className={h.projectName} aria-label="标题" value={title} maxLength={200} autoFocus data-testid="meeting-title"
+          onChange={(event) => setTitle(event.currentTarget.value)} onBlur={() => doneNaming(false)}
+          onKeyDown={(event) => { if (event.key === "Enter" && !event.nativeEvent.isComposing) { event.preventDefault(); doneNaming(true); } }} />
+      ) : (
+        <div className={h.meetNameRow}>
+          <span className={h.meetName} title={title} data-testid="meeting-name">{title}</span>
+          <button type="button" className={h.icon} aria-label="改名称" title="改名称" onClick={() => setNaming(true)}><Pencil {...ICON} /></button>
+        </div>
+      )}
+      <div className={h.meetField} role="group" aria-label="关于">
         <span className={h.menuFaint}>关于</span>
-        {anchors.length && !picking ? (
-          <button type="button" className={h.meetAnchor} onClick={() => setPicking(true)} title={anchors[0].title} data-testid="meeting-anchor">{anchors[0].title}</button>
-        ) : optionsFailed ? <span className={h.meetError}>没读到 <button type="button" onClick={() => setRetry(retry + 1)}>重试</button></span> : options ? null : <span className={h.menuFaint}>…</span>}
+        {anchors.length
+          ? <span className={h.meetAnchor} title={anchors[0].title} data-testid="meeting-anchor">{anchors[0].title}</span>
+          : <span className={h.meetAnchor} data-empty="">不挂</span>}
+        {anchors.length ? <button type="button" className={h.icon} aria-label="不挂" title="不挂" onClick={() => { setAnchors([]); setPicking(false); }}><X {...ICON} /></button> : null}
+        <button type="button" className={h.icon} aria-label="改关于" title="改关于" aria-pressed={picking} onClick={() => setPicking(!picking)}><Pencil {...ICON} /></button>
       </div>
-      {options && (picking || !anchors.length) ? (
+      {picking ? options ? (
         <WorldAnchorPicker options={options} value={anchors} viewerId={me} nameOf={nameOf} company={ceo}
           onChange={(next) => { setAnchors(next); if (next[0]?.kind !== "po") setPicking(false); }} />
-      ) : null}
+      ) : optionsFailed ? <p className={h.meetError}>没读到 <button type="button" onClick={() => setRetry(retry + 1)}>重试</button></p> : <p className={h.meetMeta}>…</p> : null}
       {ceo ? (
         <div className={h.meetField}>
           <span className={h.menuFaint}>主持人</span>

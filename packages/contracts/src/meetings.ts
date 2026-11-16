@@ -630,7 +630,7 @@ export const CreateMeetingRequest = Type.Object(
 );
 
 /**
- * 预约建会（POST /api/meetings）：带起止、挂点（1..10）；只存天枢，不写本体。
+ * 预约建会（POST /api/meetings）：带起止、挂点（0..10，不挂时会议页照主持人的单元、公司回退）；只存天枢，不写本体。
  * 成员只能给自己建（leadDriId 缺省或等于本人）；CEO 必须从 DRI 里指定主持人。
  */
 export const MeetingBookingRequest = Type.Object(
@@ -640,7 +640,7 @@ export const MeetingBookingRequest = Type.Object(
     endsAt: IsoDateTime,
     leadDriId: Type.Optional(PersonId),
     participants: Type.Optional(Type.Array(PersonId, { maxItems: 50 })),
-    anchors: Type.Array(PickedWorldAnchor, { minItems: 1, maxItems: 10 }),
+    anchors: Type.Array(PickedWorldAnchor, { maxItems: 10 }),
     /** 从对话里的会议卡约（卡上的 draftId）：同一张卡只建一场会，再约返回已建的那场。 */
     draftId: Type.Optional(Type.String({ format: "uuid" })),
   },

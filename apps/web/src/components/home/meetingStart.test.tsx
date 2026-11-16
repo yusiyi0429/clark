@@ -33,6 +33,7 @@ import { HeroButton } from "@/components/HeroButton";
 import { SegmentedSwitch } from "@/components/SegmentedSwitch";
 import { Select } from "@/components/ui/Select";
 import { instantMeetingPayload } from "@/components/meeting/instantMeeting";
+import { WorldAnchorPicker } from "@/components/meeting/WorldAnchorPicker";
 import { StartForm, type HomeMeeting } from "./MeetingControl";
 
 type Node = { type?: unknown; props?: Record<string, unknown> };
@@ -61,13 +62,15 @@ const onStarted = vi.fn();
 const onBook = vi.fn();
 const render = () => {
   hooks.index = 0; hooks.effectIndex = 0;
-  return nodes(StartForm({ meeting, missionId: null, onStarted, onBook }));
+  return nodes(StartForm({ meeting, onStarted, onBook }));
 };
 const primary = (tree: Node[]) => tree.find((node) => node.type === HeroButton && node.props?.variant === "primary")!;
 const press = (node: Node) => (node.props!.onPress as () => void)();
 const modes = (tree: Node[]) => tree.find((node) => node.type === SegmentedSwitch)!;
 const toRemote = () => (modes(render()).props!.onSelect as (id: string) => void)("remote");
 const field = (tree: Node[], label: string) => tree.find((node) => node.props?.role === "group" && node.props?.["aria-label"] === label);
+const labelled = (tree: Node[], label: string) => tree.find((node) => node.props?.["aria-label"] === label);
+const click = (node: Node | undefined) => (node!.props!.onClick as () => void)();
 
 beforeEach(() => {
   vi.stubGlobal("window", Object.assign(new EventTarget(), { location: { pathname: "/me/work" } }));
@@ -107,7 +110,7 @@ describe("开会弹层：新的一场", () => {
     press(book);
     expect(onBook).toHaveBeenCalled();
     press(primary(render()));
-    await vi.waitFor(() => expect(meeting.start).toHaveBeenCalledWith({ book: expect.objectContaining({ anchors: [{ kind: "mission", id: "m-mine" }] }) }));
+    await vi.waitFor(() => expect(meeting.start).toHaveBeenCalledWith({ book: expect.objectContaining({ anchors: [] }) }));
     expect((meeting.start.mock.calls[0][0] as { book: Record<string, unknown> }).book.participants).toBeUndefined();
   });
 
@@ -150,9 +153,40 @@ describe("开会弹层：新的一场", () => {
     // 约成后照现场那条路通知会议卡、通知栏和对话里的草稿卡重取（它们只听 meeting-changed）。
     expect(changed).toHaveBeenCalledTimes(1);
     const [first, retry] = api.post.mock.calls.map((call) => call[1].body);
-    expect(first).toMatchObject({ draftId: expect.any(String), participants: ["p-third"], anchors: [{ kind: "mission", id: "m-mine" }] });
+    expect(first).toMatchObject({ draftId: expect.any(String), participants: ["p-third"], anchors: [] });
     expect(retry.draftId).toBe(first.draftId);
     expect(Date.parse(first.scheduledAt)).toBeGreaterThanOrEqual(started);
     expect(Date.parse(first.endsAt) - Date.parse(first.scheduledAt)).toBe(3_600_000);
+  });
+});
+
+describe("开会弹层：名称和关于（本人 11/16）", () => {
+  it("名称直接写成字，右边一个改的按钮，点了才出输入框；回车收起，清空了回到默认名称", () => {
+    const tree = render();
+    expect(labelled(tree, "标题")).toBeUndefined();
+    const name = text(tree.find((node) => node.props?.["data-testid"] === "meeting-name")!);
+    expect(name).toMatch(/的会$/);
+    click(labelled(tree, "改名称"));
+    const input = labelled(render(), "标题")!;
+    expect(input.type).toBe("input");
+    expect(input.props!.autoFocus).toBe(true);
+    (input.props!.onChange as (event: unknown) => void)({ currentTarget: { value: "" } });
+    (labelled(render(), "标题")!.props!.onKeyDown as (event: unknown) => void)({ key: "Enter", nativeEvent: { isComposing: false }, preventDefault() {} });
+    expect(labelled(render(), "标题")).toBeUndefined();
+    expect(text(render().find((node) => node.props?.["data-testid"] === "meeting-name")!)).toBe(name);
+  });
+
+  it("关于默认不挂，能直接开；点小图标挑一个挂上，× 去掉又回到不挂", async () => {
+    await vi.waitFor(() => expect(primary(render()).props!.isDisabled).toBe(false));
+    expect(text(field(render(), "关于")!)).toContain("不挂");
+    expect(render().some((node) => node.type === WorldAnchorPicker)).toBe(false);
+    click(labelled(render(), "改关于"));
+    await vi.waitFor(() => expect(render().some((node) => node.type === WorldAnchorPicker)).toBe(true));
+    const picker = render().find((node) => node.type === WorldAnchorPicker)!;
+    (picker.props!.onChange as (next: unknown) => void)([{ kind: "mission", id: "m-mine", title: MISSION.title }]);
+    expect(text(field(render(), "关于")!)).toContain(MISSION.title);
+    expect(render().some((node) => node.type === WorldAnchorPicker)).toBe(false);
+    click(labelled(render(), "不挂"));
+    expect(text(field(render(), "关于")!)).toContain("不挂");
   });
 });

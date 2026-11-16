@@ -1,8 +1,7 @@
 /**
- * 伙伴台「开会」的几条小规矩（设计 2026-11-12 第二节）：默认标题、哪些已约的会现在能开、默认挂点、计时怎么写。
+ * 伙伴台「开会」的几条小规矩（设计 2026-11-12 第二节）：默认标题、哪些已约的会现在能开、计时怎么写（开会默认不挂，11/16）。
  * 只做计算，不碰接口和界面。
  */
-import type { TWorldAnchor, TWorldAnchorOption } from "@warmap/contracts";
 import { COMPANY_TIMEZONE } from "@/lib/companyTime";
 
 /** 这场会的会议页（新首页里，旧的 /me/meetings/:id 会跳过来）。 */
@@ -48,23 +47,6 @@ export function startableMeetings(meetings: readonly BookedMeeting[], now: numbe
       return now >= start - EARLY_MS && now < end;
     })
     .sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
-}
-
-type Picked = Pick<TWorldAnchor, "kind" | "id">;
-const same = (a: Picked, b: Picked) => a.kind === b.kind && a.id === b.id;
-
-/**
- * 默认挂点：在项目页里取这个项目本月目标的 Mission；否则上次开会用的；否则本月我的第一个 Mission；再没有就第一个能挑的。
- * 选项里没有的不用（挂点要在开会那个月的选项里，服务端也这么查）。
- */
-export function defaultAnchor(options: readonly TWorldAnchorOption[], hints: { missionId?: string | null; last?: Picked | null; me: string }): TWorldAnchor | null {
-  const pickable = options.filter((option) => option.kind !== "unit");
-  const found = (hints.missionId ? pickable.find((option) => same(option, { kind: "mission", id: hints.missionId! })) : undefined)
-    ?? (hints.last ? pickable.find((option) => same(option, hints.last!)) : undefined)
-    ?? pickable.find((option) => option.kind === "mission" && option.ownerId === hints.me)
-    ?? pickable.find((option) => option.kind === "mission")
-    ?? pickable[0];
-  return found ? { kind: found.kind, id: found.id, title: found.title } : null;
 }
 
 /** 走秒：一小时内「12:34」，过了「1:02:34」。 */

@@ -155,9 +155,11 @@ a.meetTitle:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px
 .meetRowTitle { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .meetField { display: flex; align-items: center; gap: var(--space-2); min-width: 0; min-height: var(--row-32); }
 .meetField > :first-child { flex: none; width: 3em; }
-.meetAnchor { flex: 1; min-width: 0; height: var(--row-32); padding: 0 var(--space-2); overflow: hidden; border: 0; border-radius: var(--r-control); background: none; color: var(--ink); font: inherit; font-size: var(--text-base); text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
-.meetAnchor:hover { background: var(--default-soft); }
-.meetAnchor:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.meetAnchor { flex: 1; min-width: 0; padding: 0 var(--space-2); overflow: hidden; color: var(--ink); font-size: var(--text-base); line-height: var(--row-32); text-overflow: ellipsis; white-space: nowrap; }
+.meetAnchor[data-empty] { color: var(--ink-faint); }
+/* 名称直接写成字（本人 11/16：生成好了就不摆输入框），右边一颗改的图标，点了才换成输入框。 */
+.meetNameRow { display: flex; align-items: center; gap: var(--space-1); min-width: 0; min-height: var(--row-36); }
+.meetName { flex: 1; min-width: 0; padding: 0 var(--space-2); overflow: hidden; color: var(--ink); font-size: var(--text-base); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .meetError { margin: 0; color: var(--danger); font-size: var(--text-xs); line-height: 16px; }
 /* 远程的参会人：选了的一颗颗 chip（× 去掉），后面接着选人下拉；飞书日历没连时这一行是一句话加「去连接」。 */
 .meetPeople { display: flex; flex: 1; flex-wrap: wrap; align-items: center; gap: var(--space-1); min-width: 0; }
