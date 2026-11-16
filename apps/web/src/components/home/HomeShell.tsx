@@ -48,7 +48,6 @@ import { usePartnerMeetings } from "@/lib/home/partnerMeetingFeed";
 import { focusList } from "@/lib/home/focus";
 import { isTeamDraft } from "./PartnerTeam";
 import { TEAM_DELIVERY_CHANGED } from "@/lib/home/teamDelivery";
-import { useViewerQueueWorkInput } from "./WorkIntake";
 import { LeftColumn, SubLetter, subKey, subLetters, type RowActions } from "./LeftColumn";
 import { ForeignTaskInfo, TaskInfo } from "./TaskInfo";
 import { MissionInfo } from "./MissionInfo";
@@ -124,7 +123,6 @@ function HomeFrame({ account }: { account: Account }) {
   }, []);
   const [speaking, setSpeaking] = useState(false);
   const [outbox, setOutbox] = useState<Outbox>([]);
-  const queueWorkInput = useViewerQueueWorkInput(account.personId ?? null);
   /** 从 Mission 详情点「问伙伴」带进总管线的上下文（输入框左上角「关于：{Mission}」胶囊，14.2、14.5）。 */
   const [buddyContext, setBuddyContext] = useState<string | null>(null);
   /** 月份页在复盘期间换的页头（「11 月复盘」和右边那几样）。 */
@@ -200,15 +198,11 @@ function HomeFrame({ account }: { account: Account }) {
   const send = useCallback(async (text: string, target: SendTarget, files: File[]) => {
     const toTeam = target === "auto" || target === "main" ? isTeamDraft(text, files) : false;
     const resolved = toTeam ? "main" : target === "auto" ? await route(text) : target;
-    if (toTeam || (api.known && !api.live)) {
-      // 团队草稿交给伙伴收件人选择器。旧版工作台仍走原有的对话入口。
-      const entry: OutboxEntry = { id: ++outboxId.current, target: resolved === "main" ? "main" : resolved.projectId, text, files, team: toTeam };
-      setOutbox((queue) => [...queue, entry]);
-    } else {
-      await queueWorkInput(resolved === "main" ? "global" : `project:${resolved.projectId}`, text, files);
-    }
+    // 每句排在本页的外送箱里，进了对应的对话就直接发出去（团队草稿交给伙伴收件人选择器）。
+    const entry: OutboxEntry = { id: ++outboxId.current, target: resolved === "main" ? "main" : resolved.projectId, text, files, team: toTeam };
+    setOutbox((queue) => [...queue, entry]);
     go(resolved === "main" ? "/me/work/buddy" : projectHref(resolved.projectId));
-  }, [route, go, api.known, api.live, queueWorkInput]);
+  }, [route, go]);
   const consume = useCallback((id: number) => setOutbox((queue) => queue.filter((entry) => entry.id !== id)), []);
 
   // ---- 开规划员、开卡（一次交给本机）----
@@ -540,7 +534,6 @@ function HomeFrame({ account }: { account: Account }) {
   } : { lead: null, trail: backgroundButton, parent, letter }), [handheld, go, backgroundButton, parent, letter]);
   // 开会（设计 2026-11-12）：录音挂在外壳上，切项目、切子会话、开设置都不断。在项目页里新的一场默认挂这个项目本月目标的 Mission。
   const meeting = useHomeMeeting({ account, go });
-  const meetingMission = view.kind === "project" ? projects.all.find((entry) => entry.id === view.id)?.current[0]?.missionId ?? null : null;
   // 首页「等你」的件数（11/16 重新设计 4.5）：和首页同一份 focusList，左栏「今天」行、标签页标题写全部件数。
   const recordingMeetingId = meeting.phase.kind === "live" ? meeting.phase.meeting.id : null;
   const { items: meetingItems } = usePartnerMeetings();
@@ -677,7 +670,7 @@ function HomeFrame({ account }: { account: Account }) {
         if (folderIds.length) await projects.actions.setFolders(id, folderIds, name).catch(() => showWorkspaceToast({ text: "文件夹没绑上" }));
         return id;
       }} cardAt={cardAt} working={working} seen={seenMarks} onOpen={markSeen}
-      meeting={{ slot: <MeetingControl meeting={meeting} missionId={meetingMission} />, listening: meeting.listening }}
+      meeting={{ slot: <MeetingControl meeting={meeting} />, listening: meeting.listening }}
       today={todayLabel(work.plan?.today ?? null)} machine={machineDot} trail={handheld ? backgroundButton : null}
       waitingCount={waitingCount} meetingsTrail={meetingsTrail} monthTrail={monthTrail}
       top={handheld ? <HomeWaiting data={data} api={api} go={go} phone offline={machine.disconnected} recordingMeetingId={recordingMeetingId} meeting={meeting} /> : null} />

@@ -11,7 +11,6 @@ vi.mock("@/conversation/useConversation", () => ({ useConversation: () => ({ sco
 vi.mock("./view", () => ({ useViewChrome: () => ({ lead: null, trail: null }) }));
 vi.mock("@/conversation/answerOptions", () => ({ useAnswerOptionFill: () => {} }));
 vi.mock("./InputBar", () => ({ InputBar: ({ dock }: { dock?: ReactNode }) => <div data-testid="measured-input">{dock}</div> }));
-vi.mock("./WorkIntake", () => ({ useQueueWorkInput: () => {}, WorkIntakeQueue: ({ scope }: { scope: string }) => <p>待发需求：{scope}</p> }));
 vi.mock("@/components/work/WorkTimeline", () => ({ WorkTimeline: ({ blocks }: { blocks: { key: string; node: ReactNode }[] }) => <div data-testid="unified-timeline">{blocks.map(block => <section key={block.key} data-block={block.key}>{block.node}</section>)}</div> }));
 vi.mock("@/components/rail/ChatPane", () => ({ ChatColumn: ({ head, timeline, dock, input, data }: {
   head: ReactNode; timeline: (data: unknown) => ReactNode; dock: (latest: unknown) => ReactNode; input: (height: () => void) => ReactNode; data: unknown;
@@ -20,15 +19,15 @@ vi.mock("@/components/rail/ChatPane", () => ({ ChatColumn: ({ head, timeline, do
 import { BuddyView } from "./Conversations";
 
 describe("伙伴工作间集成", () => {
-  it("会议与交接接入唯一时间线，预约留在头部，待发回执位于可测高的输入框内", () => {
+  it("会议与交接接入唯一时间线，预约留在头部；输入框上方没有待发条，发出的话直接进对话", () => {
     feed.meetings.mockReturnValue({ blocks: [{ key: "meeting:a", at: "2026-11-15T00:01:00Z", node: <p>已结束会议</p> }], notice: <p>会议读取提示</p>, scheduled: <details><summary>会议安排</summary>明天</details> });
     feed.handoffs.mockReturnValue({ blocks: [{ key: "handoff:a", at: "2026-11-15T00:03:00Z", node: <p>已确认交接</p> }], notice: null });
     const html = renderToStaticMarkup(<BuddyView buddy={null} projects={[]} other={[]} waiting={[]} outbox={[]} consume={() => {}} onSpeaking={() => {}} go={() => {}} />);
     for (const key of ["team:a", "work:a", "meeting:a", "handoff:a"]) expect(html).toContain(`data-block="${key}"`);
     expect(html.match(/data-testid="unified-timeline"/g)).toHaveLength(1);
     expect(html.indexOf("会议安排")).toBeLessThan(html.indexOf("<main>"));
-    expect(html).toContain('data-testid="measured-input"><p>待发需求：global</p>');
-    expect(html.match(/待发需求：global/g)).toHaveLength(1);
+    expect(html).toContain('<div data-testid="measured-input"></div>');
+    expect(html).not.toContain("待发需求");
     expect(feed.meetings).toHaveBeenCalledTimes(1);
     expect(feed.handoffs).toHaveBeenCalledTimes(1);
   });

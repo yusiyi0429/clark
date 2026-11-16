@@ -43,7 +43,6 @@ import { showWorkspaceToast } from "@/lib/toast";
 import { FolderMenu, FolderText, FootText } from "./InputFooter";
 import { PipelineModelMenu } from "./PipelineModel";
 import { SubSessionSummary } from "./SubSessionSummary";
-import { WorkIntakeQueue, useQueueWorkInput } from "./WorkIntake";
 import { usePartnerWorkEvents } from "./PartnerWorkEvents";
 import { usePartnerTeam } from "./PartnerTeam";
 import { usePartnerMeetingFeed } from "./PartnerMeetings";
@@ -91,21 +90,19 @@ async function sendWithFiles(data: ConversationData, text: string, files: File[]
  * 总管线、Task 管线底下的输入框（14.5）：InputBar，回答进行中右边是停止；回答末尾的选项填进框里；草稿按对话存。
  * context：「关于：{Mission}」胶囊，发出的这一句前面带上它，发完就去掉。
  */
-function ChatInput({ data, placeholder, onHeight, context, footer, intercept, durable = true }: {
+function ChatInput({ data, placeholder, onHeight, context, footer, intercept }: {
   data: ConversationData; placeholder: string; onHeight: (height: number) => void; context?: { label: string; onClear: () => void } | null; footer?: { left?: ReactNode; right?: ReactNode };
-  intercept?: TeamIntercept; durable?: boolean;
+  intercept?: TeamIntercept;
 }) {
   const [fill, setFill] = useState<{ text: string; nonce: number } | null>(null);
-  const queueWorkInput = useQueueWorkInput();
   useAnswerOptionFill(data.scope, (text) => setFill({ text, nonce: Date.now() }));
   return (
-    <InputBar placeholder={placeholder} busy={data.streaming} interruptible={durable || data.interruptible} onStop={data.stop} textRequired={!intercept} onHeight={onHeight} fill={fill} context={context} footer={footer}
-      dock={durable ? <WorkIntakeQueue key={data.scope} scope={data.scope} refreshHistory={data.followLatest} /> : null}
+    <InputBar placeholder={placeholder} busy={data.streaming} interruptible={data.interruptible} onStop={data.stop} textRequired={!intercept} onHeight={onHeight} fill={fill} context={context} footer={footer}
       draftKey={`tianshu-home-draft-v1:${data.scope}`}
       onSend={async (text, files) => {
         if (intercept && await intercept(text,files)) return true;
         const message = context ? `${context.label}\n\n${text}` : text;
-        const ok = durable ? Boolean(await queueWorkInput(data.scope,message,files)) : await sendWithFiles(data,message,files);
+        const ok = await sendWithFiles(data, message, files);
         if (ok) context?.onClear();
         return ok;
       }} />
@@ -410,7 +407,7 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
           )}
           timeline={(current) => <WorkTimeline data={current} blocks={blocks} modelRule={modelRule} />}
           dock={(latest) => <PendingDock latest={latest} />}
-          input={readOnly ? () => null : (onHeight) => <ChatInput data={data} durable={api.live} placeholder={handheld ? "说点什么…" : `与${project.name}讨论…`} onHeight={onHeight} footer={{
+          input={readOnly ? () => null : (onHeight) => <ChatInput data={data} placeholder={handheld ? "说点什么…" : `与${project.name}讨论…`} onHeight={onHeight} footer={{
             left: folder,
             right: <><PipelineModelMenu projectId={project.id} fallback={<ModelText data={data} />} sheet={handheld} />{mode ? <PermissionModeMenu modes={mode.modes} value={mode.value} sheet={handheld} onChange={mode.set} /> : null}</>,
           }} />} />
