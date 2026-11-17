@@ -1,0 +1,80 @@
+/*
+ * 伙伴对话的气泡和卡片（设计 6.1–6.3，conversation/ReplyBubbles.tsx）：只在新首页的伙伴主线和项目对话里。
+ * 一种字号（app/home-type.css）：这里不写字号、字重，只用 --ink / --ink-muted / --ink-faint 分层；颜色只用变量，深色跟着变。
+ * 同一个人连着的气泡间隔 4，换人间隔 16；气泡不带尾巴。
+ */
+.turn { margin: 0 0 16px; color: var(--ink); overflow-wrap: anywhere; }
+.userTurn { display: flex; flex-direction: column; align-items: flex-end; margin: 0 0 16px; color: var(--ink); overflow-wrap: anywhere; }
+.turn:has(+ .turn), .userTurn:has(+ .userTurn) { margin-bottom: 4px; }
+
+.group { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+
+.buddy, .mine { max-width: min(75%, 560px); min-width: 0; padding: 9px 14px; border-radius: 18px; }
+.buddy { background: var(--default); }
+.mine { background: var(--accent-soft); }
+/* 本人气泡里照旧按语音整理的样子换行。 */
+.mine.mine p { white-space: pre-line; margin-bottom: var(--space-2); }
+.mine.mine :is(ul, ol) { margin: 6px 0 var(--space-2); }
+.mine.mine li { margin: 2px 0; }
+
+/* 超过 6 行收起：下沿淡出，下面一个淡色「展开」。 */
+.text[data-clamp] { max-height: calc(6 * var(--type-lh, 26px)); overflow: hidden; }
+.text[data-over] {
+  -webkit-mask-image: linear-gradient(to bottom, black calc(100% - var(--type-lh, 26px)), transparent);
+  mask-image: linear-gradient(to bottom, black calc(100% - var(--type-lh, 26px)), transparent);
+}
+.more { display: block; margin: 2px 0 0; padding: 0; border: 0; background: none; color: var(--ink-faint); font: inherit; cursor: pointer; }
+.more:hover { color: var(--ink-muted); }
+.more:focus-visible, .open:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+
+/* 卡片：白底细边，宽度占满对话栏（不超过 560）；标题、摘要（淡）、时间（更淡）、「打开」。 */
+.card {
+  width: 100%;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--hairline-strong);
+  border-radius: var(--r-card);
+  padding: 14px 16px;
+  max-width: 560px;
+  color: var(--ink);
+}
+.cardHead { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.cardTitle { flex: 1; min-width: 0; }
+.faint { flex: none; color: var(--ink-faint); white-space: nowrap; }
+.summary { margin-top: 2px; color: var(--ink-muted); }
+.acts { display: flex; margin-top: 12px; }
+.open { height: 34px; padding: 0 14px; border: 0; border-radius: var(--r-control); background: var(--ink); color: var(--surface); font: inherit; cursor: pointer; transition: background-color var(--dur-fast) linear; }
+.open:hover { background: var(--ink-muted); }
+.cardBody { margin-top: 10px; }
+
+/* 「•••」：三个点轮流变深。 */
+.typing { display: flex; gap: 5px; width: fit-content; padding: 14px 16px; }
+.typing i { width: 7px; height: 7px; border-radius: 50%; background: var(--ink-faint); opacity: .35; animation: dot 1.2s ease-in-out infinite; }
+.typing i:nth-child(2) { animation-delay: .18s; }
+.typing i:nth-child(3) { animation-delay: .36s; }
+@keyframes dot { 30% { opacity: 1; transform: translateY(-2px); } }
+
+/* 入场：第一次出现时淡入、轻轻上来；一起到的几块错开 60ms。读历史来的不动。 */
+.buddy[data-enter], .card[data-enter] { animation: bubbleIn 320ms cubic-bezier(.32, .72, 0, 1) var(--enter-delay, 0ms) both; transform-origin: left bottom; }
+.card[data-enter] { animation-name: cardIn; }
+@keyframes bubbleIn { from { opacity: 0; transform: translateY(6px) scale(.96); } }
+@keyframes cardIn { from { opacity: 0; transform: translateY(6px); } }
+
+/* 每轮的「用时 / 步骤」那一排，在这一组气泡下面：电脑上鼠标移上去才出，手机上一直淡色出。 */
+.meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; color: var(--ink-faint); opacity: 0; transition: opacity var(--dur-fast) linear; }
+.meta > * + *::before { content: "·"; display: inline-block; margin-right: 6px; text-decoration: none; }
+.turn:hover .meta, .turn:focus-within .meta, .meta:has([aria-expanded="true"]) { opacity: 1; }
+
+@media (max-width: 959px) {
+  .buddy, .mine { max-width: 85%; }
+  .card { max-width: none; }
+}
+@media (max-width: 959px), (hover: none) {
+  .meta { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .buddy[data-enter], .card[data-enter], .typing i { animation: none; }
+}
+:global([data-reduce-motion='true']) .buddy[data-enter],
+:global([data-reduce-motion='true']) .card[data-enter],
+:global([data-reduce-motion='true']) .typing i { animation: none; }

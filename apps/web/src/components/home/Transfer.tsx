@@ -11,6 +11,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft, ChevronRight, Pencil } from "lucide-react";
 import type { THandoverSecretFinding, TConversationHistory } from "@warmap/contracts";
+import { BubbleContext } from "@/conversation/ReplyBubbles";
 import { ConversationTurns } from "@/conversation/Transcript";
 import type { Message } from "@/conversation/useConversation";
 import { HeroButton } from "@/components/HeroButton";
@@ -335,7 +336,8 @@ export function TransferHistory({ history, from }: { history: TConversationHisto
       <button type="button" className={h.foldToggle} data-flat="" aria-expanded={open} onClick={() => setOpen(!open)}>
         <ChevronRight size={14} strokeWidth={1.8} aria-hidden className={h.chevron} data-open={open ? "" : undefined} />{from.name}的对话 {history.messages.length}
       </button>
-      {open ? <ConversationTurns messages={history.messages as Message[]} /> : null}
+      {/* 原负责人那段对话照旧的样子，不成气泡。 */}
+      {open ? <BubbleContext.Provider value={false}><ConversationTurns messages={history.messages as Message[]} /></BubbleContext.Provider> : null}
     </div>
   );
 }

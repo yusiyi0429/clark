@@ -13,6 +13,7 @@ import { useListeningLevel } from "@/components/coagent/presence";
 import { StepList } from "@/components/steps/StepList";
 import { conversationDoing } from "@/components/work/WorkTimeline";
 import { useDictationSignal } from "@/conversation/dictationSignal";
+import { useTurnRevealed } from "@/conversation/ReplyBubbles";
 import { STAGE_COPY, ThinkingStream, liveClock } from "@/conversation/Transcript";
 import type { ConversationData } from "@/conversation/useConversation";
 import { useHomeMeetingState } from "./meetingState";
@@ -62,8 +63,8 @@ function pillText(data: ConversationData, revealed: boolean): string | null {
 
 export function Presence({ buddy, data, go }: { buddy: Buddy | null; data: ConversationData; go: (href: string) => void }) {
   const meeting = useHomeMeetingState();
-  // 第一个气泡出没出（Task 6 接上气泡后由它给）：现在用这一轮的正文出没出字。
-  const revealed = data.partial.length > 0;
+  // 这一轮第一个气泡出没出：对话那边（ReplyBubbles）出了第一块时记下。
+  const revealed = useTurnRevealed(data.scope, data.startedAt);
   const state = usePresenceState(data, revealed);
   const [now, setNow] = useState(() => Date.now());
   // 点开的那一小块记在这一轮上（startedAt），下一轮自己收起。

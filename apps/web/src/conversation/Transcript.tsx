@@ -25,7 +25,9 @@ import { RichStreamProvider } from "./richBlocks/surface";
 import { afterResize, resizing } from "./resizeGate";
 import { modelLine } from "@/lib/local/runModel";
 import { useMessageReaction } from "./Reactions";
+import { BubbleContext, ReplyBubbles, UserBubble } from "./ReplyBubbles";
 import s from "@/styles/conversation-transcript.module.css";
+import b from "@/styles/conversation-bubbles.module.css";
 import c from "@/styles/card-references.module.css";
 
 const seconds = (ms: number) => `${Math.max(1, Math.round(ms / 1000))} 秒`;
@@ -235,6 +237,8 @@ export const ConversationTurn = memo(function ConversationTurn({ message, ms, st
 
 function ConversationTurnBody({ message, ms, streaming = false, thought, steps }: TurnProps) {
   const user = message.role === "user";
+  // 新首页的伙伴主线、项目对话（BubbleContext）：回复成气泡和卡片，本人的话是本人气泡；「用时 / 步骤」那一排挪到这一组气泡下面，一轮结束后才有。
+  const bubbles = useContext(BubbleContext);
   const [thoughtOpen, setThoughtOpen] = useState(false);
   const [stepsOpen, setStepsOpen] = useState(false);
   const stepsId = useId();
@@ -258,10 +262,17 @@ function ConversationTurnBody({ message, ms, streaming = false, thought, steps }
   const ask = useContext(AskContext);
   const reaction = useMessageReaction(streaming ? null : message);
   if (user && message.answers && ask?.inline) return null;
+  const details = (
+    <>
+      {thought && thoughtOpen ? <div className={s.thoughtFull} data-testid="conversation-thought-full">{thought.text}</div> : null}
+      {steps?.length && stepsOpen ? <StepList steps={steps} id={stepsId} className={s.settledSteps} /> : null}
+    </>
+  );
+  const prose = <MarkdownBody text={quoted.message} streaming={streaming} />;
   return (
-    <article className={user ? s.user : s.assistant} data-chat-role={message.role} aria-label={user ? "你" : "天枢"}
+    <article className={bubbles ? (user ? b.userTurn : b.turn) : user ? s.user : s.assistant} data-chat-role={message.role} aria-label={user ? "你" : "天枢"}
       data-testid={streaming ? "conversation-streaming-turn" : undefined} aria-busy={streaming || undefined} {...reaction?.target}>
-      {!user && ms !== undefined ? (
+      {bubbles ? null : !user && ms !== undefined ? (
         <div className={s.meta}>
           <span className={s.time}>用时 {seconds(ms)}</span>
           {thoughtToggle}
@@ -275,8 +286,7 @@ function ConversationTurnBody({ message, ms, streaming = false, thought, steps }
           <span>用时</span>
         </div>
       ) : null}
-      {thought && thoughtOpen ? <div className={s.thoughtFull} data-testid="conversation-thought-full">{thought.text}</div> : null}
-      {steps?.length && stepsOpen ? <StepList steps={steps} id={stepsId} className={s.settledSteps} /> : null}
+      {bubbles ? null : details}
       {user && message.referencesSnapshot?.length ? (
         <details className={c.sentReferences}>
           <summary>
@@ -306,13 +316,23 @@ function ConversationTurnBody({ message, ms, streaming = false, thought, steps }
       {user && message.via && message.via !== "report" ? <div className={s.pageTag} data-testid={`conversation-via-${message.via}`}>{VIA_LABEL[message.via]}</div> : null}
       {quoted.quotes.length ? <QuoteChips quotes={quoted.quotes} sent /> : null}
       {/* 回答 Agent 提问的那一句：画成紧凑的问答记录，不显示原文。 */}
-      {user && message.answers ? <AnswerRecord record={message.answers} /> : (
+      {user && message.answers ? <AnswerRecord record={message.answers} /> : bubbles ? (
+        user ? <UserBubble><div className={s.prose}>{prose}</div></UserBubble>
+          : <MemoryUsedProvider value={memoryUsed}><ReplyBubbles markdown={quoted.message} streaming={streaming} at={message.createdAt} /></MemoryUsedProvider>
+      ) : (
         <div className={s.prose}>
           <MemoryUsedProvider value={memoryUsed}>
-            <MarkdownBody text={quoted.message} streaming={streaming} />
+            {prose}
           </MemoryUsedProvider>
         </div>
       )}
+      {bubbles && !user && !streaming && (ms !== undefined || thoughtToggle) ? (
+        <div className={b.meta}>
+          {ms !== undefined ? <span>用时 {seconds(ms)}</span> : null}
+          {thoughtToggle}
+        </div>
+      ) : null}
+      {bubbles && !streaming ? details : null}
       {/* 伙伴对话的回执（17.4）：两个小勾，送达亮第一个，读到亮第二个。 */}
       {user && message.receipt ? (message.receipt === "failed" ? <ResendLine message={message} /> : <ReceiptTicks state={message.receipt} />) : null}
       {reaction?.view}
@@ -368,7 +388,7 @@ export function ConversationTurns({ messages, partial = "", footer, after, inser
         {switches?.has(index) ? modelRule!(switches.get(index)!) : null}
         {message.kind === "carried" && messages[index - 1]?.kind !== "carried" ? <CarriedDivider message={message} /> : null}
         {isReportPrompt(message) ? null : (
-          <ConversationTurn message={message} ms={message.role === "assistant" ? turnMs(messages, index) : undefined}
+          <ConversationTurn key="turn" message={message} ms={message.role === "assistant" ? turnMs(messages, index) : undefined}
             thought={!partial && thought && index === messages.length - 1 && message.role === "assistant" ? thought : undefined}
             steps={!partial && steps?.length && index === messages.length - 1 && message.role === "assistant" ? steps : undefined} />
         )}
@@ -387,7 +407,7 @@ export function ConversationTurns({ messages, partial = "", footer, after, inser
   );
   if (partial || trailing || status) rows.push(
     <Fragment key={`turn-${messages.length}`}>
-      {partial ? <ConversationTurn message={{ sequence: -1, role: "assistant", content: partial }} streaming thought={thought ?? undefined} steps={steps?.length ? steps : undefined} /> : null}
+      {partial ? <ConversationTurn key="turn" message={{ sequence: -1, role: "assistant", content: partial }} streaming thought={thought ?? undefined} steps={steps?.length ? steps : undefined} /> : null}
       {/* 与上面 footer 同一个位置（流式中没有选项，这里放状态区）：完成后提案卡仍在同一位置，不重挂。 */}
       {status ?? null}
       {trailing ?? null}

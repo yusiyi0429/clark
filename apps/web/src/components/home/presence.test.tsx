@@ -69,6 +69,7 @@ vi.mock("@/conversation/dictationSignal", () => ({ useDictationSignal: () => env
 import { StepList } from "@/components/steps/StepList";
 import { markScrolled } from "@/components/rail/ChatPane";
 import { WorkTimeline } from "@/components/work/WorkTimeline";
+import { revealTurn } from "@/conversation/ReplyBubbles";
 import { Presence, usePresenceState } from "./Presence";
 
 const css = readFileSync(new URL("../../styles/presence.module.css", import.meta.url), "utf8");
@@ -131,6 +132,10 @@ describe("页头在场：形象钉在正中，状态胶囊挂在下面（设计 
     expect(rule("pill")).toContain("color-mix(in oklab, var(--surface) 82%, transparent)");
     expect(rule("pill")).toContain("blur(12px)");
     expect(rule("pill")).toContain("var(--hairline)");
+    // 胶囊最宽是页头（对话栏）的宽，不按窗口：右边面板打开时也出不了对话栏。
+    expect(css).toMatch(/\.head\[data-flush\] \{[^}]*container-type: inline-size/);
+    expect(rule("pill")).toMatch(/max-width: 100cqw/);
+    expect(css).not.toMatch(/100vw/);
     expect(css).not.toMatch(/font-size|font-weight/);
     expect(css.match(/#[0-9a-f]{3,8}\b|rgb\(/gi)).toBeNull();
     // 减少动态效果时胶囊不做入场动画。
@@ -161,8 +166,12 @@ describe("页头在场：形象钉在正中，状态胶囊挂在下面（设计 
     const bare = elements(call({ buddy: miles, data: answering(), go: vi.fn() })).find((element) => element.props["data-testid"] === "presence-pill")!;
     expect(text(bare)).toBe("12 秒停止");
     hooks.reset();
-    // 出字以后没有具体在做的：在回答 · 用时；形象是正在输入。
-    const typing = call({ buddy: miles, data: answering({ partial: "好", stage: "answering" }), go: vi.fn() });
+    // 第一个气泡出来以后（对话那边报了 revealTurn）没有具体在做的：在回答 · 用时；形象是正在输入。
+    const replying = answering({ partial: "好", stage: "answering" });
+    expect(markState(call({ buddy: miles, data: replying, go: vi.fn() }))).toBe("thinking");
+    revealTurn(replying.scope, replying.startedAt);
+    hooks.reset();
+    const typing = call({ buddy: miles, data: replying, go: vi.fn() });
     expect(text(elements(typing).find((element) => element.props["data-testid"] === "presence-pill"))).toBe("在回答 · 12 秒停止");
     expect(markState(typing)).toBe("typing");
   });
