@@ -29,7 +29,7 @@ import { askAnchor, cardHref, deriveFeed, goalAnchor, infoHref } from "@/lib/hom
 import type { FeedItem, ProjectFeedItem, WaitingItem } from "@/lib/home/types";
 import type { WorkHomeApi } from "@/lib/home/useWorkHome";
 import { BlockedDecision, MergeDecision, answeredOf, markAnswered } from "./TaskDecisions";
-import { subKey } from "./LeftColumn";
+import { subKey } from "./SubRows";
 import f from "@/styles/task-feed.module.css";
 
 const POLL_MS = 5000;

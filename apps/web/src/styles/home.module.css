@@ -44,6 +44,19 @@
 .rightHandle::after { content: ""; position: absolute; top: 0; bottom: 0; left: 2px; width: 2px; background: transparent; transition: background var(--dur-fast) linear; }
 .rightHandle:hover::after, .rightHandle[data-dragging]::after, .rightHandle:focus-visible::after { background: var(--hairline-strong); }
 .app[data-resizing] { cursor: col-resize; transition: none; user-select: none; }
+/*
+ * 左栏收起（设计 4.1，只电脑）：列宽变 0（跟着列宽过渡），内容等过渡走完再藏（藏了 Tab 走不进去）；拖宽的把手不画。
+ * 开合按钮在中间左上角（外壳上，所有页面都在），页头左边一直给它留出位置；收起期间有新东西时右上角一颗蓝点。
+ */
+.app[data-left="closed"] { --home-left: 0px; }
+.app[data-left="closed"] .left { visibility: hidden; overflow: hidden; box-shadow: none; transition: visibility 0s linear var(--dur-slow); }
+.app[data-left="closed"] .leftInner { min-width: 240px; }
+.display > .leftToggle { position: absolute; top: calc((var(--row-48) - var(--row-32)) / 2); left: var(--space-2); z-index: 6; }
+.cornerDot[data-tone="accent"] { background: var(--accent); }
+.app:not([data-phone]) .display :is(.viewHead:not([data-flush]), [data-embedded] > header) { padding-left: calc(var(--space-2) * 2 + var(--row-32)); }
+/* 对话页（伙伴主线、项目对话）的页头在居中的正文列里：列离左边不够远时让出按钮的位置；对话列页头上沿留 14（v2-chat .head），按钮跟着下移对齐。 */
+.app:not([data-phone]) .convo :has(> .viewHead[data-flush]) { padding-left: max(var(--gutter), calc(var(--space-2) * 2 + var(--row-32))); }
+.display:has(.convo .viewHead[data-flush]) > .leftToggle { top: calc(14px + (var(--row-48) - var(--row-32)) / 2); }
 /* 展示区和对话都是单列 grid：列宽给 minmax(0, 1fr)，里面的长标题、代码块不能把这一列撑得比展示区宽（不出横向滚动、不压到右栏）。 */
 .display { position: relative; min-width: 0; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); }
 .right { position: relative; min-width: 0; min-height: 0; background: var(--surface); box-shadow: inset 1px 0 0 var(--hairline); }
@@ -54,7 +67,7 @@
 .icon { position: relative; display: inline-grid; flex: none; place-items: center; width: var(--row-32); height: var(--row-32); border: 0; border-radius: var(--r-control); background: none; color: var(--ink-faint); cursor: pointer; }
 .icon:hover:not(:disabled), .icon[aria-pressed="true"] { background: var(--default-soft); color: var(--ink-muted); }
 .icon:disabled { opacity: .45; cursor: default; }
-.icon:focus-visible, .stageHit:focus-visible, .today:focus-visible, .taskMain:focus-visible, .sub:focus-visible, .foldToggle:focus-visible, .meRow:focus-visible,
+.icon:focus-visible, .buddyHit:focus-visible, .today:focus-visible, .taskMain:focus-visible, .sub:focus-visible, .foldToggle:focus-visible, .meRow:focus-visible,
 .taskLine:focus-visible, .waitMain:focus-visible, .sendTo:focus-visible {
   outline: 2px solid var(--focus); outline-offset: -2px;
 }
@@ -76,47 +89,31 @@
 /* ---------- 左栏（5.4.2）：栏内边距 8、行内边距 8，字头在 x=16；Task 状态位 16 宽、标题从 x=40；子会话图标在 x=40、名字在 x=64；竖线在 x=24 ---------- */
 .leftInner { display: flex; flex-direction: column; height: 100%; min-height: 0; padding: var(--space-2) var(--space-2) 0; }
 
-/* 伙伴台：5:3（宽跟着左栏，高 = 宽 × 0.6；矮屏再变扁），伙伴居中；没有边、没有阴影。在总管线时铺选中底。 */
-.stage { position: relative; flex: none; aspect-ratio: 5 / 3; max-height: 36dvh; border-radius: var(--r-card); transition: background-color var(--dur-base) var(--ease-swift); }
-.stage:hover { background: var(--default-soft); }
-.stage[data-current] { background: var(--default-soft-hover); }
-.stageHit { display: grid; place-items: center; width: 100%; height: 100%; padding: 0; border: 0; border-radius: inherit; background: none; cursor: pointer; }
-.stageMore { position: absolute; top: var(--space-2); right: var(--space-2); opacity: 0; transition: opacity var(--dur-snap) var(--ease-swift); }
-.stage:hover .stageMore, .stageMore:focus-within { opacity: 1; }
 /*
- * 伙伴台「亮着」（17.2 第 3 条）：只在伙伴对话里，台子里面两层光，不加外发光和阴影。
- * ::before 一圈 1.5px 流光边（conic-gradient + mask 抠成边框），::after 底部一片淡光（从底边往上约 40%）。
- * data-glow：idle 空闲（都不动）、listening 在听（底光跟着麦克风音量 --level 0–1）、speaking 在说或在想（环 4 秒转一圈）。
- * 进伙伴对话淡入 240ms，离开淡出 400ms；浅色靠环显，深色环弱一点、底光亮一点。
+ * 伙伴名片（设计 4.1）：64 高，左边形象槽（胶囊 56×22、Q 版 48 的圆，槽宽 56）、右边伙伴名；开会录音时名字下面一行 --counter 色的走秒。
+ * 悬停淡底，在伙伴主线时选中底；鼠标移上去右边出「⋯」进「伙伴」二级页。
  */
-@property --glow-angle { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
-.stage { isolation: isolate; --g1: color-mix(in oklab, var(--accent) 70%, transparent); --g2: color-mix(in oklab, var(--accent) 30%, transparent); --ring: 0.7; --wash: 0.08; }
-:global(:root[data-color-scheme="dark"]) .stage { --ring: 0.45; --wash: 0.14; }
-.stage::before, .stage::after { content: ""; position: absolute; z-index: -1; pointer-events: none; opacity: 0; transition: opacity 400ms ease; }
-.stage::before {
-  inset: 0; padding: 1.5px; border-radius: inherit;
-  background: conic-gradient(from var(--glow-angle), var(--g1), var(--g2) 25%, transparent 45% 65%, var(--g1));
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor; mask-composite: exclude;
-}
-.stage::after { inset: auto 0 0; height: 40%; border-radius: 0 0 var(--r-card) var(--r-card); background: radial-gradient(120% 100% at 50% 100%, var(--g1), transparent 70%); }
-.stage[data-glow]::before { opacity: var(--ring); transition-duration: 240ms; }
-.stage[data-glow]::after { opacity: calc(var(--wash) + var(--level, 0) * 0.25); transition-duration: 240ms; }
-.stage[data-glow="listening"]::after { transition: opacity 120ms linear; }
-.stage[data-glow="speaking"]::before { animation: glowSpin 4s linear infinite; }
-@keyframes glowSpin { to { --glow-angle: 360deg; } }
-@media (prefers-reduced-motion: reduce) {
-  .stage::before { animation: none !important; }
-  /* 减少动态效果：底光不跟着响度一明一暗，亮着就是一片定的淡光。 */
-  .stage[data-glow="listening"]::after { opacity: calc(var(--wash) + .1); }
-}
+.buddyCard { position: relative; flex: none; border-radius: var(--r-card); }
+.buddyCard:hover { background: var(--default-soft); }
+.buddyCard:has(> .buddyHit[aria-current="page"]) { background: var(--default-soft-hover); }
+.buddyHit { display: flex; align-items: center; gap: var(--space-3); width: 100%; min-height: 64px; padding: var(--space-2); border: 0; border-radius: inherit; background: none; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.buddySlot { display: grid; flex: none; place-items: center; width: 56px; }
+.buddyText { display: grid; min-width: 0; padding-right: var(--row-32); }
+.buddyName, .buddyRec { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.buddyRec { color: var(--counter); font-variant-numeric: tabular-nums; }
+.buddyMore { position: absolute; top: 50%; right: var(--space-2); opacity: 0; transform: translateY(-50%); transition: opacity var(--dur-snap) var(--ease-swift); }
+.buddyCard:hover .buddyMore, .buddyMore:focus-within { opacity: 1; }
 
 /*
- * 伙伴台右下角的「开会」（设计 2026-11-12）：常驻一颗小图标按钮（弱化字色，悬停变正常）；开着会就地变成走秒胶囊，
- * 在台子底部右侧、不挡伙伴。红点慢慢一明一暗，「减少动态效果」时不闪。手机上在横条最右边。
+ * 「会议」行行尾的「开会」（设计 2026-11-12；11/17 设计 4.1 从伙伴台挪来）：常驻一颗小图标按钮（弱化字色，悬停变正常）；开着会就地变成走秒胶囊。
+ * 它和行按钮并排、定位到行尾；行按钮右边给它留出位置，下一场写在它前面，胶囊出来时下一场不写（胶囊比按钮宽）。
+ * 红点慢慢一明一暗，「减少动态效果」时不闪。
  */
-.meetSlot { position: absolute; right: var(--space-2); bottom: var(--space-2); display: flex; }
-.app[data-phone] .meetSlot { top: 50%; bottom: auto; transform: translateY(-50%); }
+.meetRow { position: relative; display: grid; flex: none; margin-top: var(--space-2); }
+.meetRow > .today { margin-top: 0; padding-right: calc(var(--space-1) * 2 + var(--row-32)); }
+.today + .meetRow, .meetRow + .today { margin-top: 0; }
+.meetRow:has(.meetPill) .rowTrail { display: none; }
+.meetSlot { position: absolute; top: 50%; right: var(--space-1); display: flex; transform: translateY(-50%); }
 .app[data-phone] .meetButton { min-width: var(--touch-hit, 44px); min-height: var(--touch-hit, 44px); }
 .meetButton { color: var(--ink-muted); }
 .meetButton:hover { color: var(--ink); }
@@ -129,16 +126,8 @@
 .meetPill[data-state="organizing"] { color: var(--ink-muted); cursor: default; }
 .meetPill[data-state="organizing"]:hover { box-shadow: inset 0 0 0 1px var(--hairline); }
 @keyframes meetBreath { 50% { opacity: .3; } }
-/*
- * Miles、C妹 占满台子的高，名牌在台子下沿：胶囊一长（整理中、没录上音、录音断了……）就会压到名牌，这时伙伴往左让开；
- * 三种横放胶囊在台子中间偏上，碰不到右下角，不动。
- */
-.stage [data-place="stage"]:is([data-skin="miles"], [data-skin="cmei"]) { position: relative; left: 0; transition: left var(--dur-base) var(--ease-swift), scale 420ms cubic-bezier(.34, 1.56, .64, 1); }
-.stage:has(.meetPill:is([data-state="organizing"], [data-state="ready"], [data-state="failed"])) [data-place="stage"]:is([data-skin="miles"], [data-skin="cmei"]) { left: -16px; }
-.stage:has(.meetPill:is([data-state="quiet"], [data-state="broken"])) [data-place="stage"]:is([data-skin="miles"], [data-skin="cmei"]) { left: -56px; }
 @media (prefers-reduced-motion: reduce) {
   .meetPill i { animation: none; }
-  .stage [data-place="stage"]:is([data-skin="miles"], [data-skin="cmei"]) { transition: none; }
 }
 /* 点开的那一小块：全站那一种弹层，宽 320；已约的会在上，「新的一场」（现场 | 远程）在下。列写成 minmax(0, 1fr)：长 Mission 名省略，不撑框。 */
 .meetPop { width: min(320px, calc(100vw - 32px)); }
@@ -296,24 +285,13 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .projectText .taskName { text-overflow: clip; }
 .projectText .taskName[data-cut] { -webkit-mask-image: var(--fade-end); mask-image: var(--fade-end); }
 /*
- * 项目名后面紧跟折叠箭头（49 条，照 Claude Code 侧栏）：名字按钮按字宽排，点的范围用 ::after 铺满整行；
- * 箭头、信息按钮、「…」是定位的、排在后面，盖在它上面。行尾的点挪到按钮外面，靠右、不接点击。
+ * 名字按钮按字宽排，点的范围用 ::after 铺满整行；信息按钮、「…」是定位的、排在后面，盖在它上面。行尾的点挪到按钮外面，靠右、不接点击。
  */
 .projectMain { flex: 0 1 auto; }
 .projectMain::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }
 .taskMain.projectMain:focus-visible { outline: none; }
 .projectMain:focus-visible::after { outline: 2px solid var(--focus); outline-offset: -2px; }
-.projectFold { position: relative; display: inline-grid; flex: none; place-items: center; width: 20px; height: var(--left-main-lh, 24px); margin: 0 var(--space-2) 0 calc(-1 * var(--space-1)); padding: 0; border: 0; border-radius: var(--r-bar); background: none; color: var(--ink-faint); cursor: pointer; }
-.projectFold:hover { background: var(--default-soft-hover); color: var(--ink-muted); }
-.projectFold:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
-.taskRow[data-two] .projectFold { align-self: flex-start; margin-top: 6px; }
-.app[data-phone] .projectFold::after { content: ""; position: absolute; inset: -10px -8px; }
 .projectDot { margin-left: auto; margin-right: var(--space-2); pointer-events: none; }
-/* 悬停时信息按钮、「…」浮在行尾：名字长时一直给它们留出位置（不是悬停时才收，免得箭头在指针底下挪走），箭头不被盖住。 */
-@media (hover: hover) {
-  .taskRow[data-project-row]:has(> .projectFold) .projectMain { max-width: calc(100% - 20px - var(--space-1) - var(--row-32)); }
-  .taskRow[data-project-row="menu"]:has(> .projectFold) .projectMain { max-width: calc(100% - 20px - var(--space-1) - var(--row-32) - var(--row-28)); }
-}
 /* 呼吸：透明度 1 ↔ 0.3，一个来回 1.4 秒，缓入缓出；减少动态效果时只是一颗不闪的灰点。 */
 @keyframes workingBreath { 50% { opacity: .3; } }
 .srOnly { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
@@ -361,19 +339,6 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 /* 「子会话 N」（14.2）：和子会话行同一个缩进，ChevronRight + 12/16 400 淡色，收起时后面一排 6px 小方块（一格一个子会话）；悬停字变 --ink-muted。 */
 .foldToggle { display: flex; align-items: center; gap: var(--space-2); width: 100%; height: var(--row-28); padding: 0 var(--space-2); border: 0; border-radius: var(--r-control); background: none; color: var(--ink-faint); font: inherit; font-size: var(--text-xs); line-height: 16px; font-variant-numeric: tabular-nums; text-align: left; cursor: pointer; }
 .foldToggle:hover { background: var(--default-soft); color: var(--ink-muted); }
-/*
- * 收起时项目下面那一行（49 条）：和子会话行同一个缩进，第二行小字（--left-sub 13、淡墨）；受阻 --warning、未读 --accent（同行尾黄点、蓝点）。
- * 放不下省略号截断、不折行。它是这一枝最后一行时，竖线到它这里拐个弯（「└」）。
- */
-.subsSummary { position: relative; display: flex; align-items: center; width: 100%; height: var(--row-28); padding: 0 var(--space-2); border: 0; border-radius: var(--r-control); background: none; color: var(--ink-faint); font: inherit; font-size: var(--left-sub, 13px); font-weight: 400; line-height: var(--left-sub-lh, 18px); font-variant-numeric: tabular-nums; text-align: left; cursor: pointer; }
-.subsSummary:hover { background: var(--default-soft); }
-.subsSummary:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
-.subsSummaryText { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.subsSummary [data-tone="warning"] { color: var(--warning); }
-.subsSummary [data-tone="accent"] { color: var(--accent); }
-.branch:has(> .subsSummary:last-child) { box-shadow: none; }
-.subsSummary:last-child::before { content: ""; position: absolute; top: -2px; left: calc(-1 * var(--space-2)); width: 6px; height: calc(50% + 2px); border-bottom: 1px solid var(--hairline-strong); border-left: 1px solid var(--hairline-strong); border-bottom-left-radius: 4px; pointer-events: none; }
-.app[data-phone] .subsSummary { min-height: var(--touch-hit, 44px); }
 /* 小方块：排队是空心发丝线，在跑是 --ink-muted 描边慢慢呼吸，等你实心 --ink，停了实心发丝线，做完淡的实心。 */
 
 /*
@@ -437,7 +402,7 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .menuVersion { margin: var(--space-1) 0 0; padding: var(--space-1) var(--space-3); color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; box-shadow: inset 0 1px 0 var(--hairline); }
 
 @media (hover: none) {
-  .stageMore, .info { opacity: 1; }
+  .buddyMore, .info { opacity: 1; }
   .rowMore { visibility: hidden; pointer-events: none; }
   .taskRow:is(:hover, :focus-within) .subDot, .subItem:is(:hover, :focus-within) .subDot { visibility: visible; }
   /* 在行里排（不悬停也一直在），要定位着才盖得住项目名铺满整行的点击范围（49 条）。 */
@@ -694,7 +659,6 @@ button.bgLabel:hover { background: var(--default-soft); }
 .app[data-phone] .left { box-shadow: none; background: var(--surface); }
 /* 手机首屏兼首页（5.7）：伙伴台宽 100%、高 160 → 「今天」行（行尾后台任务按钮，不能点）→ 等你 → 树 → 本人行（跟在树后面，不贴底）。整页一起滚，左右留白 16。 */
 .app[data-phone] .leftInner { overflow-y: auto; padding: calc(var(--space-2) + env(safe-area-inset-top, 0px)) var(--space-4) env(safe-area-inset-bottom, 0px); }
-.app[data-phone] .stage { height: 160px; }
 .app[data-phone] .today { cursor: default; }
 /* 手机上左栏的「会议」「本月」两行能点：触控高度 44（设计第 8 节）。 */
 .app[data-phone] button.today { height: var(--touch-hit, 44px); cursor: pointer; }

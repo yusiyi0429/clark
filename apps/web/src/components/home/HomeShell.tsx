@@ -2,13 +2,13 @@
 
 /**
  * 新首页 /me/work（新首页_伙伴总管线与Task管线_2026-11-07，替换 V2 设计第 20.4 节的三栏首页），按人打开：
- * - 左：四个锚点——伙伴台（总管线）、「今天」行（首页）、Mission → Task → 子会话、本人行（个人菜单），见 LeftColumn。
+ * - 左：伙伴名片（总管线）、「今天」「会议」「本月」、项目、本人行（个人菜单），见 LeftColumn；电脑上能收起（中间左上角的按钮）。
  * - 中：展示区——首页、总管线、Task 管线、Task 详情、子会话、二级页、月份页（地址决定，见 view.ts）。
  * - 右：平时没有（第 73 条）。要看时出一个面板，同一时间只放一样：会话详情（页头的信息按钮）、文件预览（含「改动」）、后台任务（页头右上角的按钮）；
  *   再开一样就替掉前一样，关掉就完全没有；左边缘能拖宽。放大时面板占满中间和右边。
- * 手机：首屏兼首页（伙伴台、今天、等你、树、本人），点进去全屏；后台任务从「今天」行和页头的按钮打开，是底部抽屉。
+ * 手机：首屏兼首页（伙伴名片、今天、等你、树、本人），点进去全屏；后台任务从「今天」行和页头的按钮打开，是底部抽屉。
  * 深色按「偏好 · 外观」（跟随系统 / 浅色 / 深色，17.2）：外壳带 data-scheme="auto"，深色变量挂在根上（app/scheme-dark.css）；
- * 外观存在服务端，进首页、切回这个标签页时读一次（useAppearance）。伙伴不飞走，一直在台上（设计 9.2）。
+ * 外观存在服务端，进首页、切回这个标签页时读一次（useAppearance）。
  * 切换展示区用 history.pushState（Next 会同步 usePathname），不等服务端；每个地址也都有页面，刷新照样打开。
  *
  * 云端不指挥本机（第 4.4 条）：开子会话、开规划员都由这台电脑上开着的网页去拉起本机程序——
@@ -48,14 +48,15 @@ import { usePartnerMeetings } from "@/lib/home/partnerMeetingFeed";
 import { focusList } from "@/lib/home/focus";
 import { isTeamDraft } from "./PartnerTeam";
 import { TEAM_DELIVERY_CHANGED } from "@/lib/home/teamDelivery";
-import { LeftColumn, type RowActions } from "./LeftColumn";
+import { LeftColumn } from "./LeftColumn";
+import type { RowActions } from "./SubRows";
 import { ForeignTaskInfo, TaskInfo } from "./TaskInfo";
 import { MissionInfo } from "./MissionInfo";
 import { MeetingView } from "./MeetingView";
 import { MeetingsPage, meetingSections, nextMeetingTrail } from "./MeetingsPage";
 import { ProjectInfo } from "./ProjectInfo";
 import { ProjectTrail } from "./ProjectParts";
-import { LeftResize, RightResize, useFileWidth, useLeftWidth, useRightWidth } from "./LeftResize";
+import { LeftResize, LeftToggle, RightResize, leftUnseen, useFileWidth, useLeftCollapsed, useLeftWidth, useRightWidth } from "./LeftResize";
 import { SideDetailContext, type PanelKind, type SideDetail } from "./SideDetail";
 import { seenKey, withSeen, type SeenKind, type SeenMarks } from "@/lib/home/seen";
 import { seenSequence } from "@/lib/home/transfer";
@@ -72,7 +73,8 @@ import { useMonthExtras } from "./pages/monthLive";
 import { useHomeArrival } from "@/components/onboarding/useHomeArrival";
 import { ICON } from "./StateIcon";
 import { useTabTitle } from "./useTabTitle";
-import { MeetingControl, useHomeMeeting } from "./MeetingControl";
+import { HomeMeetingProvider, MeetingControl, useHomeMeeting } from "./MeetingControl";
+import { HomeMeetingContext } from "./meetingState";
 import h from "@/styles/home.module.css";
 import { linkPerson } from "@/lib/local/link";
 import { useAppearance } from "@/lib/appearance";
@@ -465,7 +467,6 @@ function HomeFrame({ account }: { account: Account }) {
     return () => window.removeEventListener(SPLIT_EVENT, handler);
   }, []);
   const allCards = useMemo(() => Object.values(work.boards).flatMap((board) => board.cards), [work.boards]);
-  const cardAt = useMemo(() => new Map(allCards.map((card) => [card.id, card.createdAt])), [allCards]);
   useAutoReturn(local.runner, here, allCards, local.sessions, changed);
 
   // ---- 后台任务 ----
@@ -658,25 +659,38 @@ function HomeFrame({ account }: { account: Account }) {
     .filter((project) => projectWorking(project, work.workers, speaking && view.kind === "project" && view.id === project.id))
     .map((project) => project.id)), [projects.projects, work.workers, speaking, view]);
 
+  // 名片上的「在听」和走秒读外壳给的开会状态（HomeMeetingProvider）：走秒时只有左栏跟着重画。
   const left = (
-    <LeftColumn data={data} view={view} buddy={buddy} speaking={speaking} go={go} phone={handheld} account={account} month={month} onRetryPlan={api.planFailed ? () => void api.retryPlan() : null}
-      projects={projects.projects} archived={projects.archived} archivedSubs={projects.archivedSubs} actions={rowActions} folderLimit={projects.folderLimit}
-      onCreate={async (name, folderIds) => {
-        const id = await projects.actions.create(name);
-        // 项目建好了、文件夹没绑上：照样进项目页，提示一句，文件夹在详情里再加。
-        if (folderIds.length) await projects.actions.setFolders(id, folderIds, name).catch(() => showWorkspaceToast({ text: "文件夹没绑上" }));
-        return id;
-      }} cardAt={cardAt} working={working} seen={seenMarks} onOpen={markSeen}
-      meeting={{ slot: <MeetingControl meeting={meeting} />, listening: meeting.listening }}
-      today={todayLabel(work.plan?.today ?? null)} machine={machineDot} trail={handheld ? backgroundButton : null}
-      waitingCount={waitingCount} meetingsTrail={meetingsTrail} monthTrail={monthTrail}
-      top={handheld ? <HomeWaiting data={data} api={api} go={go} phone offline={machine.disconnected} recordingMeetingId={recordingMeetingId} meeting={meeting} /> : null} />
+    <HomeMeetingContext.Consumer>{(state) => (
+      <LeftColumn data={data} view={view} buddy={buddy} go={go} phone={handheld} account={account} month={month} onRetryPlan={api.planFailed ? () => void api.retryPlan() : null}
+        projects={projects.projects} archived={projects.archived} actions={rowActions} folderLimit={projects.folderLimit}
+        onCreate={async (name, folderIds) => {
+          const id = await projects.actions.create(name);
+          // 项目建好了、文件夹没绑上：照样进项目页，提示一句，文件夹在详情里再加。
+          if (folderIds.length) await projects.actions.setFolders(id, folderIds, name).catch(() => showWorkspaceToast({ text: "文件夹没绑上" }));
+          return id;
+        }} working={working} seen={seenMarks} onOpen={markSeen}
+        meeting={{ slot: <MeetingControl meeting={meeting} />, listening: state.listening, clock: state.clock }}
+        today={todayLabel(work.plan?.today ?? null)} machine={machineDot} trail={handheld ? backgroundButton : null}
+        waitingCount={waitingCount} meetingsTrail={meetingsTrail} monthTrail={monthTrail}
+        top={handheld ? <HomeWaiting data={data} api={api} go={go} phone offline={machine.disconnected} recordingMeetingId={recordingMeetingId} meeting={meeting} /> : null} />
+    )}</HomeMeetingContext.Consumer>
   );
+  // 左栏收起（设计 4.1，只电脑）：收起期间有新东西时按钮上一颗蓝点——项目出了没看过的蓝点，或等你比收起那一刻多了（刷新后接着收着的，从读到数据那一刻算）。
+  const leftFold = useLeftCollapsed();
+  const collapsed = leftFold.collapsed && !handheld;
+  const [since, setSince] = useState<number | null>(null);
+  useEffect(() => {
+    if (!collapsed) setSince(null);
+    else if (since === null && api.ready) setSince(waitingCount);
+  }, [collapsed, since, api.ready, waitingCount]);
+  const leftDot = leftUnseen({ collapsed, projects: projects.projects, seen: seenMarks, waitingCount, since });
 
   if (handheld) {
     return (
       <WorkspaceContext.Provider value={workspace}>
         <ViewChrome.Provider value={chrome}>
+          <HomeMeetingProvider meeting={meeting}>
           <div className={h.app} data-phone="" data-view={view.kind} data-scheme="auto" data-type-scale="one" data-entering={entering ? "" : undefined} data-testid="work-home">
             {/* 首屏兼首页（5.7）：左栏那几样，底部固定首页的输入框（带「发给」）。 */}
             {view.kind === "home" ? <>
@@ -692,6 +706,7 @@ function HomeFrame({ account }: { account: Account }) {
               </div>
             ) : null}
           </div>
+          </HomeMeetingProvider>
         </ViewChrome.Provider>
       </WorkspaceContext.Provider>
     );
@@ -700,14 +715,15 @@ function HomeFrame({ account }: { account: Account }) {
     <WorkspaceContext.Provider value={workspace}>
       <ViewChrome.Provider value={chrome}>
         <SideDetailContext.Provider value={side}>
-          <div className={h.app} data-panel={slot === "file" ? "file" : slot ? "open" : "closed"} data-wide={slot === "file" && wide ? "" : undefined} data-view={view.kind} data-scheme="auto" data-type-scale="one" data-entering={entering ? "" : undefined} data-testid="work-home"
+          <HomeMeetingProvider meeting={meeting}>
+          <div className={h.app} data-panel={slot === "file" ? "file" : slot ? "open" : "closed"} data-left={collapsed ? "closed" : undefined} data-wide={slot === "file" && wide ? "" : undefined} data-view={view.kind} data-scheme="auto" data-type-scale="one" data-entering={entering ? "" : undefined} data-testid="work-home"
             data-resizing={leftWidth.dragging || rightWidth.dragging || fileWidth.dragging ? "" : undefined} style={{
-              ...(leftWidth.width ? { "--home-left": `${leftWidth.width}px` } : {}),
+              ...(leftWidth.width && !collapsed ? { "--home-left": `${leftWidth.width}px` } : {}),
               ...(rightWidth.width ? { "--home-right": `${rightWidth.width}px` } : {}),
               ...(fileWidth.width ? { "--home-file": `${fileWidth.width}px` } : {}),
             } as CSSProperties}>
-            <aside className={h.left}>{left}<LeftResize control={leftWidth} /></aside>
-            <main className={h.display}>{display(view)}</main>
+            <aside className={h.left}>{left}{collapsed ? null : <LeftResize control={leftWidth} />}</aside>
+            <main className={h.display}><LeftToggle collapsed={collapsed} unseen={leftDot} onToggle={leftFold.toggle} />{display(view)}</main>
             {slot ? (
               <aside className={h.right} aria-label={PANEL_LABEL[slot]} data-testid="side-panel">
                 {/* 文件预览自己有页头（名字、改动、放大、关闭），这里只给它一块地方。 */}
@@ -728,6 +744,7 @@ function HomeFrame({ account }: { account: Account }) {
               </aside>
             ) : null}
           </div>
+          </HomeMeetingProvider>
         </SideDetailContext.Provider>
       </ViewChrome.Provider>
     </WorkspaceContext.Provider>

@@ -22,8 +22,8 @@ export type BuddyState = "idle" | "thinking" | "typing" | "done" | "listening";
 
 export function BuddyMark({ buddy, place, active = false, listening = false, level = 0, state = "idle" }: {
   buddy: Buddy | null;
-  /** stage：新首页左栏顶上的伙伴台（正方形里居中，比页头大一号，设计 9.2）。head、card：新首页页头正中、左上角伙伴名片。 */
-  place: "sheet" | "entry" | "note" | "stage" | "head" | "card";
+  /** head、card：新首页页头正中、左上角伙伴名片。 */
+  place: "sheet" | "entry" | "note" | "head" | "card";
   active?: boolean;
   /** 在听本人说话（听写中）。 */
   listening?: boolean;
@@ -43,7 +43,7 @@ export function BuddyMark({ buddy, place, active = false, listening = false, lev
     <span className={b.mark} data-place={place} data-skin={skin} data-state={placed ? state : undefined} data-shape={circle ? "circle" : undefined}
       data-listening={listening || undefined} aria-hidden>
       <span className={b.scale}>
-        <PresenceCapsule skin={skin} name={buddy?.name ?? ""} milesSize={place === "sheet" || place === "stage" ? "header" : "small"}
+        <PresenceCapsule skin={skin} name={buddy?.name ?? ""} milesSize={place === "sheet" ? "header" : "small"}
           shape={circle ? "circle" : undefined} still={placed && state === "idle"} pose={pose} level={poseLevel} />
       </span>
     </span>

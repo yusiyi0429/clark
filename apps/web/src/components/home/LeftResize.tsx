@@ -4,8 +4,13 @@
  * 栏宽能拖：左栏（17.2 第 24 条，改掉第 15 条的「不能拖」）拖右边缘，240–360；没拖过照 --home-left 的 clamp 随窗口变。
  * 右边的面板（11/11）拖左边缘，260–560；没拖过照 --home-right（288）。放文件时另记一个宽（第 73 条），360–1400，没拖过约占展示区一半（--home-file）。窗口窄时右栏让中栏至少留 480（CSS 里夹，见 home.module.css .app）。
  * 拖过记住本人的宽度（这台浏览器 localStorage，读写都包 try/catch），双击边缘回到默认；键盘聚焦把手后左右键一次 8。手机走抽屉，不画。
+ * 左栏还能收起（设计 4.1，只电脑）：宽变 0，中间左上角一颗按钮（PanelLeft）开合；收没收起按这台电脑记。
  */
-import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
+import { PanelLeft } from "lucide-react";
+import type { Project } from "@/lib/home/projects";
+import { showUnseen, type SeenMarks } from "@/lib/home/seen";
+import { ICON } from "./StateIcon";
 import h from "@/styles/home.module.css";
 
 export const LEFT_MIN = 240;
@@ -94,3 +99,41 @@ function ColumnResize({ control, side, label }: { control: Control; side: "left"
 
 export const LeftResize = ({ control }: { control: Control }) => <ColumnResize control={control} side="left" label="左栏宽度" />;
 export const RightResize = ({ control }: { control: Control }) => <ColumnResize control={control} side="right" label="右栏宽度" />;
+
+const COLLAPSED = "tianshu-home-left-collapsed-v1";
+
+/** 左栏收没收起：挂载后读这台电脑记的（首帧按展开，和服务端一致），开合时记下；存不了就只在这一页。 */
+export function useLeftCollapsed(): { collapsed: boolean; toggle(): void } {
+  const [collapsed, setCollapsed] = useState(false);
+  useEffect(() => {
+    try { setCollapsed(localStorage.getItem(COLLAPSED) === "1"); } catch { /* 读不了按展开 */ }
+  }, []);
+  const toggle = useCallback(() => {
+    const next = !collapsed;
+    setCollapsed(next);
+    try { if (next) localStorage.setItem(COLLAPSED, "1"); else localStorage.removeItem(COLLAPSED); } catch { /* 存不了就只在这一页 */ }
+  }, [collapsed]);
+  return { collapsed, toggle };
+}
+
+/**
+ * 收起期间有新东西（按钮上一颗蓝点）：哪个项目出了没看过的蓝点（同左栏的「刚看过」），或者等你的件数比收起那一刻（since）多了。展开就没有。
+ */
+export function leftUnseen({ collapsed, projects, seen, waitingCount, since }: {
+  collapsed: boolean; projects: Project[]; seen?: SeenMarks; waitingCount: number; since: number | null;
+}): boolean {
+  if (!collapsed) return false;
+  return (since !== null && waitingCount > since) || projects.some((project) => showUnseen(project.unseen, seen, "project", project.id, project.lastActivity));
+}
+
+/** 中间左上角的开合按钮（画在外壳上，所有页面都在）。 */
+export function LeftToggle({ collapsed, unseen, onToggle }: { collapsed: boolean; unseen: boolean; onToggle: () => void }) {
+  const label = collapsed ? "展开左栏" : "收起左栏";
+  return (
+    <button type="button" className={`${h.icon} ${h.leftToggle}`} aria-label={label} title={label} onClick={onToggle}
+      data-unseen={unseen ? "" : undefined} data-testid="left-toggle">
+      <PanelLeft {...ICON} />
+      {unseen ? <i className={h.cornerDot} data-tone="accent" aria-hidden /> : null}
+    </button>
+  );
+}

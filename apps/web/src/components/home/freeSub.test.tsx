@@ -7,16 +7,12 @@ vi.mock("@/lib/board/cloud", async (importOriginal) => {
   return { ...actual, topicBrief: vi.fn(async () => ({ topicId: "t", markdown: "# 首页改版\n\n把登录页改简单一点", critics: [], latestVersion: null, role: null })) };
 });
 
-import type { HomeProject, WorkHomeData } from "@/lib/home/types";
 import { topicBrief, CloudError } from "@/lib/board/cloud";
 import { queueText, subQueueText } from "@/lib/home/derive";
-import { fromHome } from "@/lib/home/projects";
-import { LocalContext, type LocalRunnerState } from "@/lib/local/LocalRunnerProvider";
 import { createMockRunner } from "@/lib/local/mock";
 import type { LocalRunner } from "@/lib/local/runner";
 import { startTopic } from "@/lib/local/start";
 import { claimTopic } from "@/lib/home/startFolder";
-import { LeftColumn } from "./LeftColumn";
 import { NewSubView } from "./NewSub";
 import { scopeOf, viewOf } from "./view";
 
@@ -76,36 +72,6 @@ describe("项目下的「+」开自由子会话（第 68 条）", () => {
     expect(after.status).not.toBe("queued");
     expect(after.heldBy).toBeUndefined();
     await expect(runner.createSession({ subject: { kind: "card", cardId: "c2" }, title: "x", firstMessage: "x", free: true })).rejects.toMatchObject({ status: 400 });
-  });
-});
-
-const sub = (extra: Record<string, unknown>) => ({ id: "t9", kind: "topic", letter: "C", title: "把按钮改圆", state: "running", unseen: false, waiting: null, queueReason: null, role: null,
-  sessionId: null, deviceId: null, autoStart: false, updatedAt: "2026-11-11T01:00:00.000Z", merge: null, holdUntil: null, ...extra });
-const home = (extra: Partial<HomeProject> = {}) => ({
-  period: "2026-11", archivedCount: 0, month: { missions: [] }, waiting: [], other: { subSessions: [], items: [] },
-  projects: [{ projectId: "p1", name: "首页改版", lastActivityAt: "2026-11-11T01:00:00.000Z", budget: null, goals: [], transfer: null, unseen: false,
-    summary: { running: 0, waiting: 0, queued: 0, done: 0, doneToday: 0, needsYou: 0 }, pipeline: { conversationId: null, scope: "project:p1" }, planning: false, subSessions: [], items: [], ...extra }],
-}) as unknown as WorkHomeData;
-const left = (data: WorkHomeData, local?: Partial<LocalRunnerState>) => {
-  const tree = <LeftColumn data={data} view={{ kind: "home" }} buddy={null} speaking={false} go={() => undefined} phone={false} account={{ displayName: "孙铭泽", role: "member" }}
-    today="11 月 11 日 周三" projects={data.projects.map((project) => fromHome(project, data, new Map()))} archived={[]} onCreate={async () => "x"}
-    actions={{ archiveSub: vi.fn(), deleteSub: vi.fn(), renameSub: vi.fn(), archiveProject: vi.fn(), deleteProject: vi.fn(), renameProject: vi.fn() } as never} />;
-  return renderToStaticMarkup(local ? <LocalContext.Provider value={{ sessions: [], ...local } as LocalRunnerState}>{tree}</LocalContext.Provider> : tree);
-};
-
-describe("左栏的「+」和排队行（第 68 条）", () => {
-  it("项目行和详情放在一起一个「+」，进 /new；这台电脑的本机程序太旧（protocol < 4）时不出，手机、本机没连上时照出", () => {
-    expect(left(home())).toMatch(/<span class="[^"]*" data-menu=""><button[^>]*data-testid="project-new-sub"[^>]*aria-label="首页改版 新子会话"/);
-    expect(left(home(), { phase: "ready", runner: { freeSessions: false } as never })).not.toContain("project-new-sub");
-    expect(left(home(), { phase: "ready", runner: { freeSessions: true } as never })).toContain("project-new-sub");
-    expect(left(home(), { phase: "offline", runner: {} as never })).toContain("project-new-sub");
-  });
-
-  it("排着队在等文件夹的子会话：行尾写在等哪一个（名字，本人 11/16 不再写字母）", () => {
-    const other = (extra: Record<string, unknown>) => ({ ...home(), other: { subSessions: [sub(extra)], items: [] } }) as unknown as WorkHomeData;
-    const html = left(other({ state: "queued", queueReason: "folder_busy", heldBy: HOLDER }));
-    expect(html).toMatch(/把按钮改圆<\/span><span[^>]*data-testid="sub-held">等「改登录页」<\/span>/);
-    expect(left(other({ state: "queued", queueReason: "slot" }))).not.toContain("sub-held");
   });
 });
 
