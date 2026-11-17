@@ -187,6 +187,10 @@
 }
 .capsule[data-skin='panda'] .eye:last-child .pupil { left: 29%; top: 52%; }
 .capsule[data-skin='panda'][data-pose='speaking'] .pupil { left: 50%; top: 50%; width: 9px; height: 4px; }
+/* 页头、伙伴名片（设计 5.2）：熊猫的黑眼圈不动，只有眼珠在圈里看——在想往左上，正在输入往下。 */
+.capsule[data-skin='panda'] .pupil { transition: height 140ms ease-out, translate 280ms cubic-bezier(0.32, 0.72, 0, 1); }
+.capsule[data-skin='panda'][data-pose='thinking'] .pupil { translate: calc(-50% - 3px) calc(-50% - 4px); }
+.capsule[data-skin='panda'][data-pose='typing'] .pupil { translate: -50% calc(-50% + 4px); }
 
 /* 耳朵与参考图同尺度：直径 23、探出上沿 10、离两端各 18。 */
 .ear {
@@ -240,7 +244,7 @@
 @media (prefers-reduced-motion: reduce) {
   .face { --level: 0 !important; }
   .capsule, .capsule[data-leaving], .pupil, .capsule[data-pose] .wave, .capsule[data-pose] .glass { animation: none; }
-  .glass, .face, .pupil { transition: none; }
+  .glass, .face, .pupil, .capsule[data-skin='panda'] .pupil { transition: none; }
 }
 
 :global([data-reduce-motion='true']) .capsule,
@@ -250,7 +254,8 @@
 :global([data-reduce-motion='true']) .face { --level: 0 !important; }
 :global([data-reduce-motion='true']) .glass,
 :global([data-reduce-motion='true']) .face,
-:global([data-reduce-motion='true']) .pupil { transition: none; }
+:global([data-reduce-motion='true']) .pupil,
+:global([data-reduce-motion='true']) .capsule[data-skin='panda'] .pupil { transition: none; }
 
 @media (prefers-reduced-transparency: reduce) {
   .glass { -webkit-backdrop-filter: none; backdrop-filter: none; background: linear-gradient(180deg, #0011fd 0%, #0600a6 46%, #3a4dff 100%); }

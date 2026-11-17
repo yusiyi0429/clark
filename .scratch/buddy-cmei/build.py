@@ -207,6 +207,7 @@ for side, e in eyes.items():
     a_base = (ndimage.binary_dilation(e["opening"] | e["lash"], iterations=3) & ~HAIR).astype(float)   # 盖住底图补过洞的那一圈（头发除外）
     a_lash = band_zone.astype(float)                             # 只压眼珠范围里那截上眼线
     lash_rgb = p1
+    e["a_base"] = a_base
     cid = "{id}-open-" + side
     clips.append(f'<clipPath id="{cid}"><path d="{path_of(e["opening"])}"/></clipPath>')
     eye_svg[side] = (f'<g data-part="eye-{side}">{layer(base_e, a_base, box)}'
@@ -226,11 +227,15 @@ open_m = roi_mask(OPEN_ROI) & (np.sqrt(((lab2 - color.rgb2lab(SKIN[None, None]))
 open_m = ndimage.binary_opening(open_m, iterations=1)
 open_svg = f'<g data-part="mouth-open" display="none">{layer(p2, ink_alpha(p2, ndimage.binary_dilation(open_m, iterations=1), 0.35), OPEN_ROI)}</g>'
 closed_svg = ""
-lab4 = color.rgb2lab(p4)
+# 闭眼（笑眼，11/17）：除了描线，还整块盖住底图补过洞的那一圈（和眼白那层同一个范围 a_base），用第 4 格的原图像素，
+# 显示闭眼、藏起睁眼时不露出底图补的洞（右眼那里补得发糊）。第 4 格按眼睛周围一圈对齐：(4, 587) 比整格相位相关的接缝更小。
+p4e = crop((P1[0] + 4, P1[1] + 587, P1[2] + 4, P1[3] + 587))
+lab4 = color.rgb2lab(p4e)
 for side, e in eyes.items():
     zone = roi_mask(e["box"]) & ((lab4[..., 0] < 55) & (((np.degrees(np.arctan2(lab4[..., 2], lab4[..., 1])) + 360) % 360) < 60))
     zone = ndimage.binary_dilation(zone, iterations=1) & roi_mask(e["box"])
-    closed_svg += f'<g data-part="eye-{side}-closed" display="none">{layer(p4, ink_alpha(p4, zone, 0.5), e["box"])}</g>'
+    x0, y0, x1, y1 = e["box"]
+    closed_svg += f'<g data-part="eye-{side}-closed" display="none">{layer(p4e, np.maximum(e["a_base"], ink_alpha(p4e, zone, 0.5)), (x0 - 4, y0 - 4, x1 + 4, y1 + 4))}</g>'
 
 # 手：两只扒在胶囊沿上的手，往下补 16 行（举手回弹时不露平切口）
 HB = (HANDS_ROI[0], HANDS_ROI[1], HANDS_ROI[2], H)

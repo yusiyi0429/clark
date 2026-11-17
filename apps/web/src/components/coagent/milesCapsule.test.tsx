@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { PresenceCapsule } from "./PresenceCapsule";
 import { CMEI_ART, CMEI_SVG } from "./cmeiArt";
 import { MILES_ART, MILES_SVG } from "./milesArt";
-import { milesBoxHeight, milesCapsuleWidth } from "./milesRig";
+import { milesBoxHeight, milesCapsuleWidth, milesTalks } from "./milesRig";
 
 describe("伙伴形象 Miles", () => {
   it("选了 Miles 的胶囊换成 Miles 那一块，姿势、退场和读屏那句照旧", () => {
@@ -52,6 +52,11 @@ describe("Q 版圆形头像", () => {
       expect(html).not.toContain("style=");
     }
     expect(renderToStaticMarkup(<PresenceCapsule skin="cmei" pose="idle" level={0} shape="circle" />)).toContain(`viewBox="${CMEI_ART.head}"`);
+  });
+
+  it("只有在说时嘴跟着动；正在输入只低头看、点头，嘴不动", () => {
+    expect(milesTalks("speaking")).toBe(true);
+    for (const pose of ["idle", "listening", "thinking", "typing", "done"] as const) expect(milesTalks(pose)).toBe(false);
   });
 
   it("胶囊那一块照旧：没有 data-shape，宽高写在元素上", () => {

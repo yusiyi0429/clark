@@ -25,6 +25,15 @@ describe("伙伴形象：页头、名片", () => {
     }
   });
 
+  it("页头、名片里默认胶囊空闲时一点不动（光也停着），有事时才动；老位置照旧", () => {
+    expect(renderToStaticMarkup(<BuddyMark buddy={buddy("classic")} place="head" />)).toContain('data-still="true"');
+    expect(renderToStaticMarkup(<BuddyMark buddy={null} place="card" />)).toContain('data-still="true"');
+    for (const state of ["thinking", "typing", "done", "listening"] as const) {
+      expect(renderToStaticMarkup(<BuddyMark buddy={buddy("classic")} place="head" state={state} />)).not.toContain("data-still");
+    }
+    expect(renderToStaticMarkup(<BuddyMark buddy={buddy("classic")} place="sheet" active={false} />)).not.toContain("data-still");
+  });
+
   it("C妹 的圆也是正方形取景", () => {
     const [, , width, height] = CMEI_ART.head.split(" ").map(Number);
     expect(width).toBe(height);

@@ -20,9 +20,14 @@
  * 动画用 WAAPI，跑完把终态写回元素再撤掉；减少动效时直接摆好终态，只剩名字和流光的静帧。
  */
 
-/** thinking、typing、done 只有页头和名片的 Q 版用（设计 5.2）；正在输入时嘴跟着动，和在说一样。 */
+/** thinking、typing、done 只有页头和名片的 Q 版用（设计 5.2）。 */
 export type MilesPose = "idle" | "listening" | "speaking" | "thinking" | "typing" | "done";
 export type MilesShape = "capsule" | "circle";
+
+/** 嘴只在说时跟着音节动；正在输入（typing）只低头看、点头，嘴不动。 */
+export function milesTalks(pose: MilesPose): boolean {
+  return pose === "speaking";
+}
 
 /** 一种探出胶囊的形象：摆位常量和画（milesArt、cmeiArt 的格式，id 写成 {id}-…），没起名字时胶囊上写的字。 */
 export interface MilesFigure {
@@ -153,7 +158,7 @@ export function mountMiles(svg: SVGSVGElement, { figure, idPrefix, classes, name
   let level = 0;
   let target = 0;
   let syllable = 0;
-  const talking = () => pose === "speaking" || pose === "typing";
+  const talking = () => milesTalks(pose);
   const timers = new Set<number>();
   const live = new Set<Animation>();
 

@@ -44,7 +44,7 @@ export function BuddyMark({ buddy, place, active = false, listening = false, lev
       data-listening={listening || undefined} aria-hidden>
       <span className={b.scale}>
         <PresenceCapsule skin={skin} name={buddy?.name ?? ""} milesSize={place === "sheet" || place === "stage" ? "header" : "small"}
-          shape={circle ? "circle" : undefined} pose={pose} level={poseLevel} />
+          shape={circle ? "circle" : undefined} still={placed && state === "idle"} pose={pose} level={poseLevel} />
       </span>
     </span>
   );
