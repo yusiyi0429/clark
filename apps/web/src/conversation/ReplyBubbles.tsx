@@ -96,8 +96,8 @@ const enter = (delay: number | null) => (delay === null ? {} : { "data-enter": "
 
 type Piece = { kind: "bubble" | "card"; markdown: string; title: string; summary: string; open: boolean };
 
-/** edge：挂在这组最后一块底边上的东西（本人点的表情，设计 6.5）。 */
-export function ReplyBubbles({ markdown, streaming, at, edge }: { markdown: string; streaming: boolean; at?: string; edge?: ReactNode }) {
+/** edge(part, parts)：挂在每一块底边上的东西（本人在这一块点的表情，设计 6.5）；给了的每块标上第几块、按块悬停。 */
+export function ReplyBubbles({ markdown, streaming, at, edge }: { markdown: string; streaming: boolean; at?: string; edge?: (part: number, parts: number) => ReactNode }) {
   const { segments, tail } = useMemo(() => splitReply(markdown, streaming), [markdown, streaming]);
   // 在这里流式过的：入场有动画；一挂上就是写完的（读历史来的）一次出齐。
   const live = useRef(streaming);
@@ -165,18 +165,22 @@ export function ReplyBubbles({ markdown, streaming, at, edge }: { markdown: stri
   return (
     <div className={b.group}>
       {pieces.map((piece, index) => {
-        const onEdge = index === pieces.length - 1 && edge ? <div className={b.edge}>{edge}</div> : null;
+        const onEdge = edge ? <div className={b.edge}>{edge(index, pieces.length)}</div> : null;
+        const part = edge ? { "data-reaction-part": index, "data-reactable": "" } : undefined;
         return piece.kind === "card"
-          ? <ReplyCard key={index} markdown={piece.markdown} title={piece.title} summary={piece.summary} open={piece.open} at={streaming ? undefined : at} delay={delays.current[index] ?? null} edge={onEdge} />
-          : <TextBubble key={index} markdown={piece.markdown} open={piece.open} collapsible={!grown.current.has(index)} delay={delays.current[index] ?? null} edge={onEdge} />;
+          ? <ReplyCard key={index} markdown={piece.markdown} title={piece.title} summary={piece.summary} open={piece.open} at={streaming ? undefined : at} delay={delays.current[index] ?? null} edge={onEdge} part={part} />
+          : <TextBubble key={index} markdown={piece.markdown} open={piece.open} collapsible={!grown.current.has(index)} delay={delays.current[index] ?? null} edge={onEdge} part={part} />;
       })}
       {streaming && tail && !shown ? <TypingBubble /> : null}
     </div>
   );
 }
 
+/** 本人能按块点表情时块上的标记（第几块、按块悬停）。 */
+type PartMark = { "data-reaction-part": number; "data-reactable": string } | undefined;
+
 /** 一个气泡：超过 6 行收起（边写边长过的不收），下面淡色「展开」就地展开。open：还在写。 */
-function TextBubble({ markdown, open, collapsible, delay, edge }: { markdown: string; open: boolean; collapsible: boolean; delay: number | null; edge?: ReactNode }) {
+function TextBubble({ markdown, open, collapsible, delay, edge, part }: { markdown: string; open: boolean; collapsible: boolean; delay: number | null; edge?: ReactNode; part: PartMark }) {
   const box = useRef<HTMLDivElement>(null);
   const [over, setOver] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -192,7 +196,7 @@ function TextBubble({ markdown, open, collapsible, delay, edge }: { markdown: st
     return () => observer.disconnect();
   }, [clamp, markdown]);
   return (
-    <BuddyBubble {...enter(delay)}>
+    <BuddyBubble {...part} {...enter(delay)}>
       <div ref={box} className={`${ts.prose} ${b.text}`} data-clamp={clamp ? "" : undefined} data-over={clamp && over ? "" : undefined}>
         <MarkdownBody text={markdown} streaming={open} />
       </div>
@@ -219,7 +223,7 @@ function withoutTitle(markdown: string, title: string): string {
  * 一张卡：标题、摘要（淡色）、时间（淡色）、「打开」。电脑上「打开」在右边文件预览那一格看全文；手机上（没有那一格）就地展开。
  * open：还在写，只出壳子（标题 +「…」）。
  */
-function ReplyCard({ markdown, title, summary, open, at, delay, edge }: { markdown: string; title: string; summary: string; open: boolean; at?: string; delay: number | null; edge?: ReactNode }) {
+function ReplyCard({ markdown, title, summary, open, at, delay, edge, part }: { markdown: string; title: string; summary: string; open: boolean; at?: string; delay: number | null; edge?: ReactNode; part: PartMark }) {
   const side = useSideDetail();
   const id = useId();
   const [inPlace, setInPlace] = useState(false);
@@ -243,7 +247,7 @@ function ReplyCard({ markdown, title, summary, open, at, delay, edge }: { markdo
     side?.show(null);
   };
   return (
-    <section className={b.card} data-card="" aria-label={title} {...enter(delay)}>
+    <section className={b.card} data-card="" aria-label={title} {...part} {...enter(delay)}>
       <div className={b.cardHead}>
         <span className={b.cardTitle}>{title}</span>
         {time ? <span className={b.faint}>{time}</span> : null}

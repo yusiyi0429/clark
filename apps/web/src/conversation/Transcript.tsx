@@ -144,7 +144,7 @@ export function sameTurn(previous: TurnProps, next: TurnProps): boolean {
     && a.role === b.role && a.content === b.content
     && (a.memoryUsed ?? []).join("|") === (b.memoryUsed ?? []).join("|")
     && a.readScope?.label === b.readScope?.label && a.kind === b.kind && a.via === b.via && a.meta?.href === b.meta?.href && a.answers?.askId === b.answers?.askId
-    && a.receipt === b.receipt && (a.reactions ?? []).join("|") === (b.reactions ?? []).join("|") && (a.buddyReactions ?? []).join("|") === (b.buddyReactions ?? []).join("|")
+    && a.receipt === b.receipt && sameList(a.reactions, b.reactions, (item) => `${item.part}:${item.emoji}`) && (a.buddyReactions ?? []).join("|") === (b.buddyReactions ?? []).join("|")
     && sameList(a.attachments, b.attachments, (item) => item.id)
     && sameList(a.referencesSnapshot, b.referencesSnapshot, (item) => `${item.cardId}@${item.version}`);
 }
@@ -330,7 +330,7 @@ function ConversationTurnBody({ message, ms, streaming = false, thought, steps }
             {/* 两个勾在气泡里右下角，不另占一行。 */}
             {message.receipt && message.receipt !== "failed" ? <ReceiptTicks state={message.receipt} className={b.tick} /> : null}
             {message.buddyReactions?.length || reaction ? (
-              <div className={b.edge}>{message.buddyReactions?.length ? <BuddyReactions emojis={message.buddyReactions} /> : null}{reaction?.view}</div>
+              <div className={b.edge}>{message.buddyReactions?.length ? <BuddyReactions emojis={message.buddyReactions} /> : null}{reaction?.view(0, 1)}</div>
             ) : null}
           </UserBubble>
         ) : <MemoryUsedProvider value={memoryUsed}><ReplyBubbles markdown={quoted.message} streaming={streaming} at={message.createdAt} edge={reaction?.view} /></MemoryUsedProvider>
@@ -351,7 +351,7 @@ function ConversationTurnBody({ message, ms, streaming = false, thought, steps }
       {bubbles && !streaming ? details : null}
       {/* 伙伴对话的回执（17.4）：两个小勾，送达亮第一个，读到亮第二个。 */}
       {user && message.receipt ? (message.receipt === "failed" ? <ResendLine message={message} /> : bubbles ? null : <ReceiptTicks state={message.receipt} />) : null}
-      {bubbles ? null : reaction?.view}
+      {bubbles ? null : reaction?.view(0, 1)}
     </article>
   );
 }

@@ -4,9 +4,10 @@
  * 表情（本人 11/16，照 WhatsApp / iMessage）：
  * - 输入框下面一行的表情按钮：点开一个小面板，点一个插到光标处（EmojiButton）。
  * - 伙伴台、项目对话里的一条消息：右键、悬停出的小按钮、手机上长按，弹出六个快捷表情加「更多」；选了挂在气泡下面，再点自己挂的就取消。
+ *   按块点（本人 11/17）：伙伴回答拆成的每个气泡、卡片各点各的，每块一个，点另一个换掉；老页面（不用气泡的）整条算一块。
  *   只是本人自己的标记（存在天枢，读历史时随消息带回 reactions），不送给模型、不通知别人。
  */
-import { createContext, useContext, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
+import { createContext, useContext, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode, type TouchEvent } from "react";
 import { Popover } from "@heroui/react";
 import { MoreHorizontal, Smile, SmilePlus } from "lucide-react";
 import type { TConversationReaction } from "@warmap/contracts";
@@ -33,8 +34,6 @@ export const EMOJIS: readonly { char: string; name: string }[] = [
 /** 右键、长按先出的六个。 */
 export const QUICK_REACTIONS = EMOJIS.slice(0, 6);
 const COLUMNS = 8;
-/** 一条消息上本人最多挂几个（同契约 MESSAGE_REACTION_MAX；网页不从契约包取运行时的值）。 */
-const MAX_REACTIONS = 3;
 export const emojiName = (char: string) => EMOJIS.find((emoji) => emoji.char === char)?.name ?? char;
 
 /** 在 start–end（选中的那段）插一个表情，返回新的字和光标位置。 */
@@ -42,9 +41,21 @@ export function insertEmoji(text: string, start: number, end: number, emoji: str
   return { text: text.slice(0, start) + emoji + text.slice(end), caret: start + emoji.length };
 }
 
-/** 点一个表情：挂过的取消；没挂过的加上（同一个只算一个），超过上限去掉最早挂的。 */
-export function toggleReaction(current: readonly string[], emoji: string): string[] {
-  return current.includes(emoji) ? current.filter((item) => item !== emoji) : [...current, emoji].slice(-MAX_REACTIONS);
+/** 本人挂在一块上的表情：part 是第几块（从 0 数），-1 是老数据，算最后一块。 */
+export type PartReaction = { part: number; emoji: string };
+
+/** 第 part 块（共 parts 块）上本人挂的：这一块有自己的就是它，没有时最后一块看老数据（-1）。 */
+export function reactionAt(entries: readonly PartReaction[], part: number, parts: number): PartReaction | undefined {
+  return entries.find((entry) => entry.part === part) ?? (part === parts - 1 ? entries.find((entry) => entry.part === -1) : undefined);
+}
+
+/** 在第 part 块上点一个：点同一个取消，点另一个换掉。改的是这一块画着的那条（老数据就改 -1 那条）；返回改后的整组和要存的那一条。 */
+export function toggleReaction(entries: readonly PartReaction[], part: number, parts: number, emoji: string): { entries: PartReaction[]; saved: { part: number; emoji: string | null } } {
+  const held = reactionAt(entries, part, parts);
+  const at = held?.part ?? part;
+  const next = held?.emoji === emoji ? null : emoji;
+  const rest = entries.filter((entry) => entry.part !== at);
+  return { entries: next ? [...rest, { part: at, emoji: next }] : rest, saved: { part: at, emoji: next } };
 }
 
 /** 一排表情按钮：方向键在里面走（上下按列），回车、空格选。 */
@@ -101,7 +112,11 @@ export function EmojiButton({ onPick, disabled = false }: { onPick: (emoji: stri
 }
 
 /** buddyName：伙伴点的表情读屏念「{伙伴名} 点了 …」。 */
-type Reactions = { of: (message: Message) => readonly string[]; toggle: (message: Message, emoji: string) => void; buddyName?: string };
+type Reactions = {
+  of: (message: Message) => readonly PartReaction[];
+  toggle: (message: Message, part: number, parts: number, emoji: string) => void;
+  buddyName?: string;
+};
 /** 伙伴台、项目对话给（ReactionsProvider）；别处没有，消息上就不出表情。 */
 export const ReactionContext = createContext<Reactions | null>(null);
 
@@ -109,17 +124,17 @@ const keyOf = (message: Pick<Message, "role" | "runId">) => `${message.role}:${m
 
 /** 本人在这段对话里挂的表情：先在这一页改，存不上改回去。读回的历史以这一页改过的为准。 */
 export function useReactionStore(scope: string): Reactions {
-  const [changed, setChanged] = useState<ReadonlyMap<string, readonly string[]>>(() => new Map());
+  const [changed, setChanged] = useState<ReadonlyMap<string, readonly PartReaction[]>>(() => new Map());
   return useMemo(() => {
     const of = (message: Message) => changed.get(keyOf(message)) ?? message.reactions ?? [];
-    const set = (key: string, emojis: readonly string[]) => setChanged((current) => new Map(current).set(key, emojis));
+    const set = (key: string, entries: readonly PartReaction[]) => setChanged((current) => new Map(current).set(key, entries));
     return {
       of,
-      toggle(message, emoji) {
+      toggle(message, part, parts, emoji) {
         const before = of(message);
-        const emojis = toggleReaction(before, emoji);
-        const body: TConversationReaction = { runId: message.runId!, role: message.role, emojis };
-        set(keyOf(message), emojis);
+        const { entries, saved } = toggleReaction(before, part, parts, emoji);
+        const body: TConversationReaction = { runId: message.runId!, role: message.role, ...saved };
+        set(keyOf(message), entries);
         void browserApi.PUT("/api/conversations/{scope}/reactions", { params: { path: { scope } }, body })
           .then(({ error }) => { if (error) throw new Error(); })
           .catch(() => { set(keyOf(message), before); showWorkspaceToast({ text: "表情没存上" }); });
@@ -146,32 +161,46 @@ export function BuddyReactions({ emojis }: { emojis: readonly string[] }) {
 
 const LONG_PRESS_MS = 500;
 
+/** 右键、长按落在第几块（块上有 data-reaction-part，ReplyBubbles 给）；块外面是 -1，算最后一块。 */
+const partOf = (target: EventTarget | null) => Number((target as Element | null)?.closest?.("[data-reaction-part]")?.getAttribute("data-reaction-part") ?? -1);
+
 /**
- * 一条消息上的表情：给气泡的事件（右键、长按）和挂在气泡下面的那一行（挂的表情、悬停出的小按钮、快捷表情浮层）。
- * edge：新首页的两种对话里这一行挂在气泡底边上（由气泡给位置），不再挂在整条下面。
+ * 一条消息上的表情：给整条的事件（右键、长按，开的是点到的那一块的）和挂在每一块下面的那一行 view(part, parts)（挂的表情、悬停出的小按钮、快捷表情浮层）。
+ * edge：新首页的两种对话里这一行挂在气泡底边上（由气泡给位置），不再挂在整条下面；伙伴的回答按块悬停，data-reactable 在每块上（ReplyBubbles 给）。
  * 没有 ReactionContext、还没写进历史的（没有 runId）、留痕行这类不出。
  */
 export function useMessageReaction(message: Message | null, edge = false) {
   const reactions = useContext(ReactionContext);
-  const [open, setOpen] = useState(false);
+  /** 开着的是哪一块的浮层（-1 是最后一块）。 */
+  const [open, setOpen] = useState<number | null>(null);
   const press = useRef<ReturnType<typeof setTimeout> | null>(null);
   if (!reactions || !message?.runId || message.kind || message.sequence < 1) return null;
   const cancel = () => { if (press.current) clearTimeout(press.current); press.current = null; };
   const target = {
-    "data-reactable": "",
+    "data-reactable": edge && message.role === "assistant" ? undefined : "",
     style: { position: "relative" as const },
     onContextMenu: (event: MouseEvent) => {
       // 选了字的右键照浏览器的（复制）。
       if (window.getSelection()?.toString()) return;
       event.preventDefault();
-      setOpen(true);
+      setOpen(partOf(event.target));
     },
-    onTouchStart: () => { cancel(); press.current = setTimeout(() => { press.current = null; setOpen(true); }, LONG_PRESS_MS); },
+    onTouchStart: (event: TouchEvent) => {
+      cancel();
+      const part = partOf(event.target);
+      press.current = setTimeout(() => { press.current = null; setOpen(part); }, LONG_PRESS_MS);
+    },
     onTouchEnd: cancel,
     onTouchMove: cancel,
   };
-  const view = <MessageReactions mine={reactions.of(message)} user={message.role === "user"} edge={edge} open={open} onOpenChange={setOpen} onToggle={(emoji) => reactions.toggle(message, emoji)} />;
-  return { open, target, view };
+  const entries = reactions.of(message);
+  const view = (part: number, parts: number) => {
+    const mine = reactionAt(entries, part, parts);
+    const shown = open === part || (open === -1 && part === parts - 1);
+    return <MessageReactions mine={mine ? [mine.emoji] : []} user={message.role === "user"} edge={edge} open={shown}
+      onOpenChange={(next) => setOpen(next ? part : null)} onToggle={(emoji) => reactions.toggle(message, part, parts, emoji)} />;
+  };
+  return { target, view };
 }
 
 export function MessageReactions({ mine, user, edge = false, open, onOpenChange, onToggle }: {

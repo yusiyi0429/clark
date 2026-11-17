@@ -59,7 +59,7 @@ export type Message = { sequence: number; role: "user" | "assistant"; content: s
   ranOn?: "cloud" | "local";
   fallback?: TLocalFallbackReason;
   /** 本人挂在这条消息上的表情（伙伴台、项目对话，Reactions.tsx）。 */
-  reactions?: string[];
+  reactions?: { part: number; emoji: string }[];
   /** 伙伴点在本人这句上的表情（派活成功后，服务端点的 👍；只读）。 */
   buddyReactions?: string[];
   meta?: { issueId?: string; title?: string; href?: string } };

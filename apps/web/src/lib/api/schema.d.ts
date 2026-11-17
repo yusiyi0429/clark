@@ -1955,7 +1955,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** 本人给伙伴台（global）、项目对话（project:<id>）里的一条消息挂表情：整组替换，同一个只算一个，最多 3 个，空数组是全取消。只是本人的标记，读历史时随消息带回 reactions */
+        /** 本人给伙伴台（global）、项目对话（project:<id>）里一条消息的一块挂表情：每块一个，换掉这一块原来的，emoji 为 null 是取消。只是本人的标记，读历史时随消息带回 reactions */
         put: operations["putConversationReaction"];
         post?: never;
         delete?: never;
@@ -7385,7 +7385,10 @@ export interface components {
                     title?: string;
                     href?: string;
                 };
-                reactions?: string[];
+                reactions?: {
+                    part: number;
+                    emoji: string;
+                }[];
                 buddyReactions?: string[];
             }[];
             localTurn?: {
@@ -7780,7 +7783,8 @@ export interface components {
         ConversationReaction: {
             runId: string;
             role: "user" | "assistant";
-            emojis: string[];
+            part: number;
+            emoji: string | null;
         };
         IssueDraftResponse: {
             draft: {
@@ -29433,7 +29437,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 存下的那组表情 */
+            /** @description 存下的那一块的表情 */
             200: {
                 headers: {
                     [name: string]: unknown;

@@ -682,7 +682,7 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
 });
 
 describe("派活成功后伙伴在本人那句话上点 👍", { timeout: 60_000 }, () => {
-  type Said = { role: string; runId: string; reactions?: string[]; buddyReactions?: string[] };
+  type Said = { role: string; runId: string; reactions?: { part: number; emoji: string }[]; buddyReactions?: string[] };
   /** 本人在这段对话里说一句，回这一句的 runId（Chat 调动作带的就是它）。 */
   const ask = async (f: Awaited<ReturnType<typeof fixture>>, scope: string, message: string) => {
     expect((await f.t.app.inject({ method: "POST", url: `/api/conversations/${encodeURIComponent(scope)}/messages`,
@@ -710,8 +710,8 @@ describe("派活成功后伙伴在本人那句话上点 👍", { timeout: 60_000
       const message = await asked(f, "global", runId);
       expect(message.buddyReactions).toEqual(["👍"]);
       expect(message).not.toHaveProperty("reactions");
-      expect(await f.t.sql("SELECT person_id, scope, role, reactor FROM conversation_reactions")).toEqual([
-        { person_id: TEST_MEMBER.personId, scope: "global", role: "user", reactor: "buddy" }]);
+      expect(await f.t.sql("SELECT person_id, scope, role, reactor, part FROM conversation_reactions")).toEqual([
+        { person_id: TEST_MEMBER.personId, scope: "global", role: "user", reactor: "buddy", part: 0 }]);
     } finally { await f.close(); }
   });
 

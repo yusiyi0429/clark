@@ -351,25 +351,33 @@ export const ConversationMessage = Type.Object(
       { issueId: Type.Optional(Type.String()), title: Type.Optional(Type.String()), href: Type.Optional(Type.String()) },
       { additionalProperties: false },
     )),
-    /** 本人挂在这条消息上的表情（只在伙伴台和项目对话；见 ConversationReaction）；没挂的没有这个字段。 */
-    reactions: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 16 }), { maxItems: 3 })),
+    /**
+     * 本人挂在这条消息上的表情，按块一块一个（只在伙伴台和项目对话；见 ConversationReaction）；没挂的没有这个字段。
+     * part 是第几块（伙伴回答拆成的气泡或卡片，从 0 数；本人的话只有第 0 块），-1 是老数据，网页当成最后一块。
+     */
+    reactions: Type.Optional(Type.Array(Type.Object(
+      { part: Type.Integer({ minimum: -1 }), emoji: Type.String({ minLength: 1, maxLength: 16 }) },
+      { additionalProperties: false },
+    ))),
     /** 伙伴点在这条消息上的表情（派活成功后在本人那句话上点 👍）；和本人的分开存，本人改自己的不动它。没点的没有这个字段。 */
     buddyReactions: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 16 }), { maxItems: 3 })),
   },
   { additionalProperties: false },
 );
 
-/** 一条消息上本人最多挂几个表情。 */
+/** 一条消息上伙伴最多点几个表情。 */
 export const MESSAGE_REACTION_MAX = 3;
 /**
- * 本人给伙伴台、项目对话里的一条消息挂的表情（写的时候整组替换，空数组是全取消；返回存下的那组）。只是本人自己的标记：不送给模型、不通知别人。
- * 消息按 runId + role 认（一轮里本人一句、回答一句；序号读历史时会重排，不拿它认）。同一个表情只算一个。
+ * 本人给伙伴台、项目对话里一条消息的一块挂的表情：每块一个，写的时候换掉这一块原来的，emoji 为 null 是取消；返回存下的。
+ * 只是本人自己的标记：不送给模型、不通知别人。消息按 runId + role 认（一轮里本人一句、回答一句；序号读历史时会重排，不拿它认），
+ * part 同 ConversationMessage.reactions 的 part（-1 是老数据那一块）。
  */
 export const ConversationReaction = Type.Object(
   {
     runId: Type.String({ minLength: 1, maxLength: 200 }),
     role: Type.Union([Type.Literal("user"), Type.Literal("assistant")]),
-    emojis: Type.Array(Type.String({ minLength: 1, maxLength: 16 }), { maxItems: MESSAGE_REACTION_MAX }),
+    part: Type.Integer({ minimum: -1 }),
+    emoji: Type.Union([Type.String({ minLength: 1, maxLength: 16 }), Type.Null()]),
   },
   { additionalProperties: false },
 );

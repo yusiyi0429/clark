@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { InputBar } from "@/components/home/InputBar";
 import { ConversationTurn } from "./Transcript";
-import { EMOJIS, EmojiGrid, QUICK_REACTIONS, QuickReactions, ReactionContext, insertEmoji, toggleReaction } from "./Reactions";
+import { EMOJIS, EmojiGrid, QUICK_REACTIONS, QuickReactions, ReactionContext, insertEmoji, reactionAt, toggleReaction } from "./Reactions";
 import { BubbleContext } from "./ReplyBubbles";
 import type { Message } from "./useConversation";
 
@@ -39,15 +39,24 @@ describe("对一条消息回应表情", () => {
     expect(html).toMatch(/aria-label="爱心"[^>]*aria-pressed="true"|aria-pressed="true"[^>]*aria-label="爱心"/);
   });
 
-  it("点一个挂上、再点取消、同一个只算一个；最多 3 个，再挂去掉最早的", () => {
-    expect(toggleReaction([], "👍")).toEqual(["👍"]);
-    expect(toggleReaction(["👍"], "👍")).toEqual([]);
-    expect(toggleReaction(["👍", "❤️"], "❤️")).toEqual(["👍"]);
-    expect(toggleReaction(["👍", "❤️", "😂"], "🙏")).toEqual(["❤️", "😂", "🙏"]);
+  it("每块一个：点了挂上、点同一个取消、点另一个换掉；只动这一块", () => {
+    expect(toggleReaction([], 0, 2, "👍")).toEqual({ entries: [{ part: 0, emoji: "👍" }], saved: { part: 0, emoji: "👍" } });
+    expect(toggleReaction([{ part: 0, emoji: "👍" }], 0, 2, "👍")).toEqual({ entries: [], saved: { part: 0, emoji: null } });
+    expect(toggleReaction([{ part: 0, emoji: "👍" }, { part: 1, emoji: "🙏" }], 0, 2, "❤️"))
+      .toEqual({ entries: [{ part: 1, emoji: "🙏" }, { part: 0, emoji: "❤️" }], saved: { part: 0, emoji: "❤️" } });
+  });
+
+  it("老数据（-1）算最后一块：在最后一块上点改的就是它；这一块有自己的就不看 -1", () => {
+    expect(reactionAt([{ part: -1, emoji: "🎉" }], 2, 3)).toEqual({ part: -1, emoji: "🎉" });
+    expect(reactionAt([{ part: -1, emoji: "🎉" }], 0, 3)).toBeUndefined();
+    expect(reactionAt([{ part: -1, emoji: "🎉" }, { part: 2, emoji: "👍" }], 2, 3)).toEqual({ part: 2, emoji: "👍" });
+    expect(toggleReaction([{ part: -1, emoji: "🎉" }], 2, 3, "👍")).toEqual({ entries: [{ part: -1, emoji: "👍" }], saved: { part: -1, emoji: "👍" } });
+    expect(toggleReaction([{ part: -1, emoji: "🎉" }], 2, 3, "🎉")).toEqual({ entries: [], saved: { part: -1, emoji: null } });
+    expect(toggleReaction([{ part: -1, emoji: "🎉" }], 0, 3, "👍").saved).toEqual({ part: 0, emoji: "👍" });
   });
 
   it("挂的表情画在气泡下面，按下态、念中文名；气泡可以右键；没有回应的地方（别的页面）不出", () => {
-    const store = { of: () => ["👍"], toggle: () => undefined };
+    const store = { of: () => [{ part: -1, emoji: "👍" }], toggle: () => undefined };
     const html = renderToStaticMarkup(<ReactionContext.Provider value={store}><ConversationTurn message={answer} /></ReactionContext.Provider>);
     expect(html).toMatch(/<article[^>]*data-reactable=""/);
     expect(html).toMatch(/data-testid="message-reactions".*aria-pressed="true" aria-label="点赞"[^>]*>👍<\/button>.*aria-label="回应"/);
@@ -75,26 +84,45 @@ describe("新首页的两种对话里：表情挂在气泡底边（设计 6.5）
     const all = [...html.matchAll(new RegExp(`<div[^>]*${attribute}[^>]*>`, "g"))];
     return divAt(html, all.at(nth)!.index!);
   };
-  type Store = { of: () => string[]; toggle: () => void; buddyName?: string };
+  type Store = { of: () => { part: number; emoji: string }[]; toggle: () => void; buddyName?: string };
   const inBubbles = (message: Message, store: Store | null) => renderToStaticMarkup(
     <ReactionContext.Provider value={store}><BubbleContext.Provider value={true}><ConversationTurn message={message} /></BubbleContext.Provider></ReactionContext.Provider>);
 
-  it("本人点的表情挂在最后一个气泡上", () => {
-    const store = { of: () => ["👍"], toggle: () => undefined };
+  it("每块各挂各的：表情在那一块的底边，每块自己有加表情的按钮（悬停那一块才出）", () => {
+    const store = { of: () => [{ part: 0, emoji: "👍" }, { part: 1, emoji: "❤️" }], toggle: () => undefined };
     const html = inBubbles({ ...answer, content: "第一段。\n\n第二段。" }, store);
     expect(html.match(/data-bubble="buddy"/g)).toHaveLength(2);
-    expect(bubbleOf(html, 'data-bubble="buddy"', 0)).not.toContain("message-reactions");
-    const last = bubbleOf(html, 'data-bubble="buddy"');
-    expect(last).toMatch(/<div[^>]*data-edge=""[^>]*data-testid="message-reactions"/);
-    expect(last).toMatch(/aria-pressed="true" aria-label="点赞"[^>]*>👍<\/button>/);
-    // 最后一块是卡片时挂在卡片上。
-    const card = inBubbles({ ...answer, content: "先看这个。\n\n## 本周\n\n- 周二发清单\n- 周三确认" }, store);
-    expect(card.slice(card.indexOf("<section"), card.indexOf("</section>"))).toContain("message-reactions");
-    expect(bubbleOf(card, 'data-bubble="buddy"')).not.toContain("message-reactions");
+    const [first, second] = [bubbleOf(html, 'data-bubble="buddy"', 0), bubbleOf(html, 'data-bubble="buddy"', 1)];
+    expect(first).toMatch(/<div[^>]*data-edge=""[^>]*data-testid="message-reactions"/);
+    expect(first).toMatch(/aria-pressed="true" aria-label="点赞"[^>]*>👍<\/button>/);
+    expect(first).not.toContain("❤️");
+    expect(second).toMatch(/aria-pressed="true" aria-label="爱心"[^>]*>❤️<\/button>/);
+    expect(second).not.toContain("👍");
+    // 悬停跟着那一块：块上有 data-reactable，整条回答上没有。
+    expect(first).toMatch(/^<div[^>]*data-reactable=""/);
+    expect(second).toMatch(/^<div[^>]*data-reactable=""/);
+    expect(html).not.toMatch(/<article[^>]*data-reactable/);
+    expect(html.match(/data-testid="reaction-add"/g)).toHaveLength(2);
+    // 卡片也是一块。
+    const card = inBubbles({ ...answer, content: "先看这个。\n\n## 本周\n\n- 周二发清单\n- 周三确认" }, { of: () => [{ part: 1, emoji: "👍" }], toggle: () => undefined });
+    expect(card.slice(card.indexOf("<section"), card.indexOf("</section>"))).toMatch(/aria-label="点赞"[^>]*>👍<\/button>/);
+    expect(bubbleOf(card, 'data-bubble="buddy"')).not.toContain(">👍</button>");
+  });
+
+  it("老数据（-1）落在最后一块；老页面（不用气泡的）整条算一块", () => {
+    const store = { of: () => [{ part: -1, emoji: "🎉" }], toggle: () => undefined };
+    const html = inBubbles({ ...answer, content: "第一段。\n\n第二段。" }, store);
+    expect(bubbleOf(html, 'data-bubble="buddy"', 0)).not.toContain("🎉");
+    expect(bubbleOf(html, 'data-bubble="buddy"', 1)).toContain(">🎉</button>");
+    const old = (of: Store["of"]) => renderToStaticMarkup(<ReactionContext.Provider value={{ of, toggle: () => undefined }}><ConversationTurn message={{ ...answer, content: "第一段。\n\n第二段。" }} /></ReactionContext.Provider>);
+    expect(old(() => [{ part: -1, emoji: "🎉" }]).match(/data-testid="message-reactions"/g)).toHaveLength(1);
+    expect(old(() => [{ part: -1, emoji: "🎉" }])).toContain(">🎉</button>");
+    expect(old(() => [{ part: 0, emoji: "👍" }, { part: 1, emoji: "❤️" }])).toContain(">👍</button>");
+    expect(old(() => [{ part: 0, emoji: "👍" }, { part: 1, emoji: "❤️" }])).not.toContain("❤️");
   });
 
   it("伙伴点的表情只读，读屏念谁点的", () => {
-    const store = { of: () => ["❤️"], toggle: () => undefined, buddyName: "小天" };
+    const store = { of: () => [{ part: 0, emoji: "❤️" }], toggle: () => undefined, buddyName: "小天" };
     const mine: Message = { sequence: 1, role: "user", content: "交给你了", runId: "run-1", buddyReactions: ["👍"] };
     const bubble = bubbleOf(inBubbles(mine, store), 'data-bubble="mine"');
     // 伙伴的在气泡角上、不是按钮（点了不切换），念「小天 点了 👍」；和本人自己点的分开画。
