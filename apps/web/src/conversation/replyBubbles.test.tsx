@@ -25,6 +25,11 @@ const hooks = vi.hoisted(() => {
     begin(name: string) { active = true; cursor = 0; book = name; },
     end() { active = false; },
     reset() { active = false; books.clear(); provided.clear(); queue = []; },
+    /** 卸载：这个组件的 effect 都清掉，账本扔掉（再调就是新挂上的）。 */
+    unmount(name: string) {
+      for (const slot of books.get(name) ?? []) if (slot && typeof (slot as Slot).cleanup === "function") (slot as Slot).cleanup!();
+      books.delete(name);
+    },
     provide(context: unknown, value: unknown) { provided.set(context, value); },
     useState(initial: unknown) {
       const list = slots();
@@ -81,6 +86,8 @@ vi.mock("react", async (original) => {
     useContext: (context: Context<unknown>) => (hooks.active ? hooks.useContext(context) : react.useContext(context)),
     useEffect: (run: () => void | (() => void), deps?: readonly unknown[]) => (hooks.active ? hooks.useEffect(run, deps) : react.useEffect(run, deps)),
     useLayoutEffect: (run: () => void | (() => void), deps?: readonly unknown[]) => (hooks.active ? hooks.useEffect(run, deps) : react.useLayoutEffect(run, deps)),
+    useSyncExternalStore: <T,>(subscribe: (listener: () => void) => () => void, get: () => T, server?: () => T) =>
+      (hooks.active ? get() : react.useSyncExternalStore(subscribe, get, server)),
   };
 });
 vi.mock("@/components/home/meetingState", () => ({ useHomeMeetingState: () => env.meeting }));
@@ -90,7 +97,7 @@ import { SideDetailContext, type SideDetail } from "@/components/home/SideDetail
 import { Presence } from "@/components/home/Presence";
 import { TransferHistory } from "@/components/home/Transfer";
 import { WorkTimeline } from "@/components/work/WorkTimeline";
-import { BubbleContext, HOLD_MS, ReplyBubbles, RevealContext, TypingBubble } from "./ReplyBubbles";
+import { BubbleContext, HOLD_MS, ReplyBubbles, RevealContext, TypingBubble, revealTurn } from "./ReplyBubbles";
 import { ConversationTurn, MarkdownBody } from "./Transcript";
 
 const css = readFileSync(new URL("../styles/conversation-bubbles.module.css", import.meta.url), "utf8");
@@ -136,6 +143,8 @@ const data = (extra: Partial<ConversationData> = {}) => ({
 
 afterEach(() => {
   hooks.reset();
+  // 页头的「这一轮出没出」是模块里的值：每个测试从没有出过开始。
+  revealTurn("", 0);
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
@@ -230,6 +239,8 @@ describe("伙伴回复成气泡和卡片（设计 6.1–6.3）", () => {
     expect(renderToStaticMarkup(<WorkTimeline data={data()} blocks={[]} />)).toContain('data-testid="typing"');
     const bubbles = (markdown: string, streaming = true) => call("bubbles", () => ReplyBubbles({ markdown, streaming }));
 
+    // 这一轮的第一帧：只有没写完的一段，先露「•••」。
+    expect(typing(bubbles("第一"))).toBe(true);
     // 两段一起写完到的：马上都出，入场错开 60ms；第三段还在写，先露「•••」。
     let tree = bubbles("第一段。\n\n第二段。\n\n第三段在写");
     expect(pieces(tree)).toEqual([{ kind: "bubble", markdown: "第一段。", open: false }, { kind: "bubble", markdown: "第二段。", open: false }]);
@@ -325,5 +336,78 @@ describe("伙伴回复成气泡和卡片（设计 6.1–6.3）", () => {
     vi.advanceTimersByTime(HOLD_MS);
     call("bubbles", () => ReplyBubbles({ markdown: `${live.partial}，又写了几个字`, streaming: true }));
     expect(state()).toBe("typing");
+  });
+});
+
+describe("出字的边角", () => {
+  const bubbles = (markdown: string, streaming = true) => call("bubbles", () => ReplyBubbles({ markdown, streaming }));
+  const delays = (tree: ReactNode) => elements(tree).filter((element) => typeof element.type === "function" && ["TextBubble", "ReplyCard"].includes(element.type.name))
+    .map((element) => element.props.delay);
+
+  it("重挂不重藏：挂上时已经在的内容算露过，不再等、不再淡入；后来一起到的几块错开最多 3 步", () => {
+    vi.useFakeTimers();
+    // 刷新后接上这一轮（或流式那条换了 key 重挂）：挂上时已有写完的段和在写的一段。
+    let tree = bubbles("一。\n\n二。\n\n三在写");
+    expect(pieces(tree)).toEqual([
+      { kind: "bubble", markdown: "一。", open: false }, { kind: "bubble", markdown: "二。", open: false }, { kind: "bubble", markdown: "三在写", open: true },
+    ]);
+    expect(delays(tree)).toEqual([null, null, null]);
+    expect(typing(tree)).toBe(false);
+    // 之后新到的照常淡入。
+    tree = bubbles("一。\n\n二。\n\n三写完了。\n\n四。\n\n五");
+    expect(delays(tree)).toEqual([null, null, null, 0]);
+
+    // 同一页里重挂：这一轮第一段已经在气泡里边写边长，重挂后接着露，不收回去等 2 秒。
+    hooks.reset();
+    bubbles("第一段在写");
+    vi.advanceTimersByTime(HOLD_MS);
+    expect(pieces(bubbles("第一段在写，长了"))).toEqual([{ kind: "bubble", markdown: "第一段在写，长了", open: true }]);
+    hooks.reset();
+    tree = bubbles("第一段在写，长了，又长");
+    expect(pieces(tree)).toEqual([{ kind: "bubble", markdown: "第一段在写，长了，又长", open: true }]);
+    expect(delays(tree)).toEqual([null]);
+    expect(typing(tree)).toBe(false);
+
+    // 新的一轮从第一帧挂上：一下到了六段，入场错开 0、60、120、180，之后不再往后推。
+    hooks.reset();
+    expect(typing(bubbles("开"))).toBe(true);
+    tree = bubbles("开头。\n\n1。\n\n2。\n\n3。\n\n4。\n\n5。\n\n6");
+    expect(delays(tree)).toEqual([0, 60, 120, 180, 180, 180]);
+  });
+
+  it("没写完的那段等满 2 秒一定会出：计时器到了、没有新字也出", () => {
+    // 只换计时器、不换 Date：计时器比 Date.now() 先到一点（浏览器里常有）。
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    expect(typing(bubbles("在写第一段"))).toBe(true);
+    vi.advanceTimersByTime(HOLD_MS);
+    // 计时器叫醒重画一次，字没变。
+    const tree = bubbles("在写第一段");
+    expect(pieces(tree)).toEqual([{ kind: "bubble", markdown: "在写第一段", open: true }]);
+    expect(typing(tree)).toBe(false);
+  });
+
+  it("右边开着的那张卡卸载了（换会话、重读历史），右边那一格关上", () => {
+    const shown: { value: SideDetail["shown"] } = { value: null };
+    const side = { get shown() { return shown.value; }, node: {} as HTMLElement, open: false, wide: false, toggle: vi.fn(), setWide: vi.fn(),
+      show: vi.fn((kind: SideDetail["shown"]) => { shown.value = kind; }) } as unknown as SideDetail;
+    hooks.provide(SideDetailContext, side);
+    const card = named(bubbles("## 本周\n\n- 周二发清单\n- 周三确认", false), "ReplyCard")[0]!;
+    (button(expand("card", card), "打开")!.props.onClick as () => void)();
+    expect(named(expand("card", card), "SideContent")).toHaveLength(1);
+    // 没开着的卡卸载不碰右边。
+    const other = named(call("other", () => ReplyBubbles({ markdown: "## 下周\n\n- 周一\n- 周二", streaming: false })), "ReplyCard")[0]!;
+    expand("otherCard", other);
+    hooks.unmount("otherCard");
+    expect(side.show).toHaveBeenLastCalledWith("file");
+    hooks.unmount("card");
+    expect(side.show).toHaveBeenLastCalledWith(null);
+    // 再挂上同一张（同一个 id）也不当它还开着。
+    shown.value = "file";
+    expect(named(expand("card", card), "SideContent")).toHaveLength(0);
+  });
+
+  it("只有选项块、正文还空着：露「•••」", () => {
+    const html = renderToStaticMarkup(<WorkTimeline data={data({ partial: "```options\n[{\"label\":\"先做灯塔\"}]\n```", stage: "answering" })} blocks={[]} />);
+    expect(html).toContain('data-testid="typing"');
   });
 });

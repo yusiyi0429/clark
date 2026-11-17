@@ -82,8 +82,8 @@ export function WorkTimeline({ data, blocks, modelRule }: { data: ConversationDa
   const reveal = useMemo(() => () => revealTurn(data.scope, data.startedAt), [data.scope, data.startedAt]);
   const status = data.streaming ? (
     <ConversationStatusSlot>
-      {/* 一轮开始、还没有任何内容：马上露「•••」；有了内容以后由气泡那边在等下一块时露。 */}
-      {data.partial.trim() ? null : <TypingBubble />}
+      {/* 一轮开始、还没有任何正文（只写了选项块也算没有）：马上露「•••」；有了正文以后由气泡那边在等下一块时露。 */}
+      {parseAnswerOptions(data.partial, true).body.trim() ? null : <TypingBubble />}
       {data.thinking ? <ConversationThinking stage={data.stage} startedAt={data.startedAt} onStop={data.stop} route={data.route} progress={data.progress} steps={data.steps} thought={null} readScope={data.readScope} row={false} /> : null}
       {/* 伙伴这一轮的计划清单和出的卡（17.4，同 ConversationTimeline）：写完读回历史后挂在那条回答上。 */}
       {data.plan ? <PlanChecklist entries={data.plan.entries} collapsed={data.plan.collapsed} /> : null}

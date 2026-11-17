@@ -10,7 +10,7 @@
  * - 读历史来的一次出齐，没有入场；减少动态效果时没有入场动画。
  * - 这一轮第一个块出来时报给页头（RevealContext → revealTurn），形象从在想变正在输入。
  */
-import { createContext, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type HTMLAttributes, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type HTMLAttributes, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { HeroButton } from "@/components/HeroButton";
 import { SideContent, useSideDetail } from "@/components/home/SideDetail";
@@ -29,29 +29,27 @@ export const RevealContext = createContext<(() => void) | null>(null);
 
 /** 没写完的那一段等多久先出。 */
 export const HOLD_MS = 2000;
-/** 一起到的几块入场错开多少。 */
+/** 一起到的几块入场错开多少；最多错开几步（再多的和第 3 步一起出）。 */
 const STAGGER_MS = 60;
+const STAGGER_STEPS = 3;
 
 /** 一个小订阅：值变了叫一声，订了的组件重画。 */
 function signal<T>(initial: T) {
   let value = initial;
   const listeners = new Set<() => void>();
+  const get = () => value;
+  const subscribe = (listener: () => void) => {
+    listeners.add(listener);
+    return () => { listeners.delete(listener); };
+  };
   return {
-    get: () => value,
+    get,
     set(next: T) {
       if (Object.is(next, value)) return;
       value = next;
       listeners.forEach((listener) => listener());
     },
-    useValue(): T {
-      const [, bump] = useState(0);
-      useEffect(() => {
-        const listener = () => bump((n) => n + 1);
-        listeners.add(listener);
-        return () => { listeners.delete(listener); };
-      }, []);
-      return value;
-    },
+    useValue: (): T => useSyncExternalStore(subscribe, get, get),
   };
 }
 
@@ -67,6 +65,9 @@ export function useTurnRevealed(scope: string, startedAt: number): boolean {
 
 /** 右边那一格里现在是哪张卡（同一时间只放一张）。 */
 const openCard = signal<string | null>(null);
+
+/** 正在写的那条回复上一次画到的字、没写完的那段出没出：同一页里它重挂（key 换了）时接着露，不重藏。 */
+let streamed: { markdown: string; shown: boolean } | null = null;
 
 /** 伙伴气泡的样子：靠左、--default 底、圆角 18。 */
 export function BuddyBubble({ children, ...rest }: { children: ReactNode } & HTMLAttributes<HTMLDivElement>) {
@@ -92,6 +93,7 @@ export function ReplyBubbles({ markdown, streaming, at }: { markdown: string; st
   const { segments, tail } = useMemo(() => splitReply(markdown, streaming), [markdown, streaming]);
   // 在这里流式过的：入场有动画；一挂上就是写完的（读历史来的）一次出齐。
   const live = useRef(streaming);
+  const mounted = useRef(false);
   const [, wake] = useState(0);
   /** 没写完的那一段从什么时候开始写、出没出；seen：它以气泡出着时已经到了多少字。 */
   const hold = useRef<{ index: number; since: number; shown: boolean; seen: number } | null>(null);
@@ -100,6 +102,17 @@ export function ReplyBubbles({ markdown, streaming, at }: { markdown: string; st
   /** 以气泡边写边长过的块：人看着它长出来，写完不收起。 */
   const grown = useRef(new Set<number>());
   const reveal = useContext(RevealContext);
+
+  // 写到一半挂上的（刷新后接上、换了 key 重挂）：挂上时已经在的内容算露过，不再等、不再淡入。
+  // 这一轮从第一帧挂上时只有没写完的一段，照常等；同一页里重挂时看上一次画到哪。
+  if (!mounted.current) {
+    mounted.current = true;
+    const earlier = streaming && (segments.length > 0 || (!!streamed?.shown && markdown.startsWith(streamed.markdown)));
+    if (earlier) {
+      delays.current = Array<null>(segments.length + (tail ? 1 : 0)).fill(null);
+      if (tail) hold.current = { index: segments.length, since: Date.now(), shown: true, seen: 0 };
+    }
+  }
 
   let shown = false;
   if (tail) {
@@ -116,12 +129,15 @@ export function ReplyBubbles({ markdown, streaming, at }: { markdown: string; st
     if (current.shown && tail.kind === "bubble") current.seen = markdown.length;
     shown = current.shown;
   } else hold.current = null;
-  const holdUntil = tail && !shown ? hold.current!.since + HOLD_MS : null;
+  if (streaming) streamed = { markdown, shown };
+  else if (streamed && markdown.startsWith(streamed.markdown)) streamed = null;
+  // 等满 2 秒计时器直接把它标成出了（计时器比 Date.now() 先到一点时，不靠重画时再算）。
+  const held = tail && !shown ? hold.current : null;
   useEffect(() => {
-    if (holdUntil === null) return;
-    const timer = setTimeout(() => wake((n) => n + 1), Math.max(0, holdUntil - Date.now()));
+    if (!held) return;
+    const timer = setTimeout(() => { held.shown = true; wake((n) => n + 1); }, Math.max(0, held.since + HOLD_MS - Date.now()));
     return () => clearTimeout(timer);
-  }, [holdUntil]);
+  }, [held]);
 
   const pieces: Piece[] = segments.map((segment) => (segment.kind === "card"
     ? { kind: "card", markdown: segment.markdown, title: segment.title, summary: segment.summary, open: false }
@@ -131,7 +147,7 @@ export function ReplyBubbles({ markdown, streaming, at }: { markdown: string; st
     if (tail.kind === "bubble") grown.current.add(segments.length);
   }
   const first = delays.current.length;
-  for (let index = first; index < pieces.length; index += 1) delays.current[index] = live.current ? (index - first) * STAGGER_MS : null;
+  for (let index = first; index < pieces.length; index += 1) delays.current[index] = live.current ? Math.min(index - first, STAGGER_STEPS) * STAGGER_MS : null;
 
   const visible = pieces.length > 0;
   useLayoutEffect(() => {
@@ -195,6 +211,14 @@ function ReplyCard({ markdown, title, summary, open, at, delay }: { markdown: st
   const side = useSideDetail();
   const id = useId();
   const [inPlace, setInPlace] = useState(false);
+  const sideRef = useRef(side);
+  sideRef.current = side;
+  // 右边开着的是这张、它卸载了（换会话、重读历史重挂）：右边那一格跟着关，不留个空面板。
+  useEffect(() => () => {
+    if (openCard.get() !== id) return;
+    openCard.set(null);
+    if (sideRef.current?.shown === "file") sideRef.current.show(null);
+  }, [id]);
   const panel = openCard.useValue() === id && side?.shown === "file";
   const time = cardTime(at);
   const show = () => {

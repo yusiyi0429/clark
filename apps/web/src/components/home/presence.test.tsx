@@ -61,6 +61,8 @@ vi.mock("react", async (original) => {
     useState: (initial?: unknown) => (hooks.active ? hooks.useState(initial) : react.useState(initial)),
     useRef: (initial?: unknown) => (hooks.active ? hooks.useRef(initial) : react.useRef(initial)),
     useEffect: (run: () => void | (() => void), deps?: readonly unknown[]) => (hooks.active ? hooks.useEffect(run, deps) : react.useEffect(run, deps)),
+    useSyncExternalStore: <T,>(subscribe: (listener: () => void) => () => void, get: () => T, server?: () => T) =>
+      (hooks.active ? get() : react.useSyncExternalStore(subscribe, get, server)),
   };
 });
 vi.mock("./meetingState", () => ({ useHomeMeetingState: () => env.meeting }));
