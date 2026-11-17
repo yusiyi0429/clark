@@ -52,6 +52,7 @@ function closes(line: string, close: string): boolean {
 function continues(last: Part, line: string, kind: PartKind, blank: boolean): boolean {
   if (last.kind === "list" && /^[ \t]/.test(line)) return true;
   if (kind === "heading" || kind === "code") return false;
+  if (last.kind === "code" && !last.open) return false;
   if (!blank) return true;
   return last.kind === "list" && kind === "list";
 }
@@ -187,12 +188,23 @@ function group(parts: Part[]): Group[] {
 }
 
 /**
+ * 这一段的类别定了：第一行已经写完；或者还没写完，但再往后写也变不成别的块——
+ * 第一个字不是任何块记号的开头（`- * + # | > ` ~ $` 和数字），或者记号后面已经出现空白（记号那一截写完了）。
+ * 「1」还不算（再来「. 」就是清单项），一个汉字开头当场就算。
+ */
+function begun(part: Part, last: number): boolean {
+  if (part.start < last) return true;
+  const text = part.lines[0].trimStart();
+  return !/^[-*+#|>`~$\d]/.test(text) || /\s/.test(text);
+}
+
+/**
  * 流式中这一段以后不会再变（`last` 是最后一行、可能还没写完那一行的行号）：
- * 后面已经起了一段（那一段的第一行已经写完），或者自己后面有一行写完的空行（清单、没关上的围栏不算，空行后面还能接）。
+ * 后面已经起了一段且类别定了，或者自己后面有一行写完的空行（清单、没关上的围栏不算，空行后面还能接）。
  */
 function closed(parts: Part[], index: number, last: number): boolean {
   const next = parts[index + 1];
-  if (next && next.start < last) return true;
+  if (next && begun(next, last)) return true;
   const part = parts[index];
   if (part.kind === "list" || part.open) return false;
   let content = part.lines.length - 1;
@@ -205,7 +217,7 @@ function settled(parts: Part[], group: Group, last: number): boolean {
   if (!closed(parts, group.to - 1, last)) return false;
   if (!group.lookahead) return true;
   const next = parts[group.to];
-  return next !== undefined && next.start < last && (next.kind !== "list" || closed(parts, group.to, last));
+  return next !== undefined && begun(next, last) && (next.kind !== "list" || closed(parts, group.to, last));
 }
 
 function markdownOf(parts: Part[]): string {

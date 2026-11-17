@@ -42,6 +42,20 @@ describe("splitReply", () => {
     expect(splitReply("- a\n- b\n\n", true).segments).toEqual([]);
     expect(splitReply("- a\n- b\n\n下一句\n", true).segments).toEqual([{ kind: "bubble", markdown: "- a\n- b" }]);
   });
+  it("流式：清单、卡片后面的话一出第一个字就是自己的气泡，不在上一块里长", () => {
+    expect(splitReply("- a\n- b\n\n下一句", true)).toEqual({ segments: [{ kind: "bubble", markdown: "- a\n- b" }], tail: { kind: "bubble", markdown: "下一句", title: "" } });
+    expect(splitReply("```\nx\n```\n\n一整段解释", true)).toEqual({
+      segments: [{ kind: "card", markdown: "```\nx\n```", title: "x", summary: "" }],
+      tail: { kind: "bubble", markdown: "一整段解释", title: "" },
+    });
+    expect(splitReply("- a\n- b\n\n1", true).segments).toEqual([]);
+  });
+  it("围栏关上以后紧跟的话不算进代码卡", () => {
+    expect(splitReply("```\nx\n```\n说完了。").segments).toEqual([
+      { kind: "card", markdown: "```\nx\n```", title: "x", summary: "" },
+      { kind: "bubble", markdown: "说完了。" },
+    ]);
+  });
   it("流式：每多一个字，segments 只往后长，最后和整段拆分一致", () => {
     const replies = [
       "先说结论：能交。\n\n## 验收\n\n- 标准一达到\n- 标准二达到\n\n### 风险\n\n没有。",
@@ -49,6 +63,7 @@ describe("splitReply", () => {
       "两件事：\n\n- 一\n- 二\n- 三\n- 四\n- 五\n- 六\n\n完。",
       "```ts\nconst a = 1\n\nconst b = 2\n```\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n说完了。",
       "公式：\n\n$$\na\n\nb\n$$\n\n- a\n\n1. b\n\n#a 不是标题\n说明\n## 是标题\n内容",
+      "```\nx\n```\n说完了。\n\n- a\n- b\n\n下一句很长很长。\n\n- c\n\n12 个人\n\n1.5 倍\n\n- d\n\n> 引用",
     ];
     for (const reply of replies) {
       const chars = [...reply];
