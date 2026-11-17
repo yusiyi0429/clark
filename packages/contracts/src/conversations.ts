@@ -353,6 +353,8 @@ export const ConversationMessage = Type.Object(
     )),
     /** 本人挂在这条消息上的表情（只在伙伴台和项目对话；见 ConversationReaction）；没挂的没有这个字段。 */
     reactions: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 16 }), { maxItems: 3 })),
+    /** 伙伴点在这条消息上的表情（派活成功后在本人那句话上点 👍）；和本人的分开存，本人改自己的不动它。没点的没有这个字段。 */
+    buddyReactions: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 16 }), { maxItems: 3 })),
   },
   { additionalProperties: false },
 );
@@ -455,6 +457,12 @@ export const ConversationSseEvent = Type.Union([
   Type.Object({ ...StreamBase, type: Type.Literal("ui"), ui: BuddyUiEffect }, { additionalProperties: false }),
   /** 伙伴这一轮出的卡（17.4：send_message 的 buddy_message）：动作做完时天枢插进这一轮的流，界面接在回答后面；读回历史时在这条回答的 cards 里。 */
   Type.Object({ ...StreamBase, type: Type.Literal("card"), card: ConversationCard }, { additionalProperties: false }),
+  /**
+   * 伙伴点的表情：派活成功（拆卡、开工、转话、重开、转给项目对话）后天枢在本人这一轮那句话上点 👍，插进这一轮的流。
+   * emojis 是伙伴在这条消息上的整组（同历史里的 buddyReactions）；消息按 runId + role 认。
+   */
+  Type.Object({ ...StreamBase, type: Type.Literal("buddy_reaction"), role: Type.Literal("user"),
+    emojis: Type.Array(Type.String({ minLength: 1, maxLength: 16 }), { minItems: 1, maxItems: 3 }) }, { additionalProperties: false }),
   /**
    * 本人这条消息的回执（17.4，伙伴对话：scope 为 global 和 project:<id>，网页发的才有）：delivered 天枢收下了（第一个勾），read 伙伴读到了（第二个勾）。
    * messageId 是天枢给这条消息的 id，两帧按它对上同一条消息。两帧都在这条消息自己的响应流里，排在最前面。

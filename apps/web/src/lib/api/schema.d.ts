@@ -7386,6 +7386,7 @@ export interface components {
                     href?: string;
                 };
                 reactions?: string[];
+                buddyReactions?: string[];
             }[];
             localTurn?: {
                 /** Format: uuid */
@@ -7627,6 +7628,16 @@ export interface components {
                     title: string;
                 } | null;
             };
+        } | {
+            runId: string;
+            /** @description global 或稳定对象 scope */
+            scope: string;
+            sequence: number;
+            /** @constant */
+            type: "buddy_reaction";
+            /** @constant */
+            role: "user";
+            emojis: string[];
         } | {
             runId?: string;
             /** @description global 或稳定对象 scope */

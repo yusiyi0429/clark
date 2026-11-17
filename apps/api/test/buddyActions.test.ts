@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import type { FeishuClient } from "../src/feishu/client.js";
 import { BOARD_NOW, boardFixture, THIRD } from "./boardFixture.js";
 import { letterOf, seqOf } from "../src/subSessionLetters.js";
-import { actionList } from "../src/buddyActions.js";
+import { actionList, runAction, type BuddyDeps } from "../src/buddyActions.js";
+import type { Query } from "../src/meetingStore.js";
+import { projectHistoryReader } from "../src/sourceWords.js";
 import { BUDDY_ACTION_NAMES } from "@warmap/contracts";
 import { buddyPersona } from "../src/buddyPersona.js";
 import { TEST_CEO, TEST_MEMBER } from "./helpers.js";
@@ -28,9 +30,9 @@ async function fixture(seed: Parameters<typeof boardFixture>[1] = {}) {
     return { messageId: "om_test" };
   } } as unknown as FeishuClient;
   const f = await boardFixture({ feishuClient }, { boardCloudAgents: false, internalChatToken: TOKEN, ...seed });
-  const act = (name: string, args: unknown, options: { token?: string; ip?: string; owner?: string } = {}) => f.t.app.inject({ method: "POST",
+  const act = (name: string, args: unknown, options: { token?: string; ip?: string; owner?: string; turn?: { runId: string; conversationId: string } } = {}) => f.t.app.inject({ method: "POST",
     url: `/internal/me/buddy-actions/${name}`, headers: { authorization: `Bearer ${options.token ?? TOKEN}`, "x-owner-id": options.owner ?? TEST_MEMBER.personId },
-    payload: { args }, ...(options.ip ? { remoteAddress: options.ip } : {}) });
+    payload: { args, ...options.turn }, ...(options.ip ? { remoteAddress: options.ip } : {}) });
   const ok = async (name: string, args: unknown) => {
     const res = await act(name, args);
     if (res.statusCode !== 200) throw new Error(`${name}: ${res.body}`);
@@ -676,5 +678,112 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
     expect(description("split_cards")).toContain("这个月挂了 Task 的项目按 Task 拆");
     expect(description("sub_session_link")).toContain("criteria");
     for (const name of ["read_work_home", "read_project"]) expect(description(name)).toContain("跟本人说话时叫子会话的名字，不说字母");
+  });
+});
+
+describe("派活成功后伙伴在本人那句话上点 👍", { timeout: 60_000 }, () => {
+  type Said = { role: string; runId: string; reactions?: string[]; buddyReactions?: string[] };
+  /** 本人在这段对话里说一句，回这一句的 runId（Chat 调动作带的就是它）。 */
+  const ask = async (f: Awaited<ReturnType<typeof fixture>>, scope: string, message: string) => {
+    expect((await f.t.app.inject({ method: "POST", url: `/api/conversations/${encodeURIComponent(scope)}/messages`,
+      headers: { cookie: f.member, origin: f.t.publicOrigin, accept: "text/event-stream" }, payload: { message } })).statusCode).toBe(200);
+    return (await said(f, scope)).filter((message) => message.role === "user").at(-1)!.runId;
+  };
+  const said = async (f: Awaited<ReturnType<typeof fixture>>, scope: string): Promise<Said[]> => (await f.t.app.inject({ method: "GET",
+    url: `/api/conversations/${encodeURIComponent(scope)}/messages`, headers: { cookie: f.member } })).json().messages;
+  const asked = async (f: Awaited<ReturnType<typeof fixture>>, scope: string, runId: string) =>
+    (await said(f, scope)).find((message) => message.role === "user" && message.runId === runId)!;
+  const project = async (f: Awaited<ReturnType<typeof fixture>>) => {
+    const projectId = (await f.call("POST", "/api/me/projects", { name: "派活" })).json().projectId as string;
+    const conversationId = randomUUID();
+    await f.t.sql(`INSERT INTO project_pipelines(project_id,owner_id,conversation_id) VALUES($1,$2,$3)
+      ON CONFLICT (project_id,owner_id) DO UPDATE SET conversation_id=EXCLUDED.conversation_id`, [projectId, TEST_MEMBER.personId, conversationId]);
+    return { projectId, conversationId };
+  };
+
+  it("派活成功后在本人那句话上点 👍，读历史带 buddyReactions（伙伴台）", async () => {
+    const f = await fixture();
+    try {
+      await f.grant();
+      const runId = await ask(f, "global", "把打分那件拆一下");
+      expect((await f.act("split_cards", { taskId: "task-open" }, { turn: { runId, conversationId: randomUUID() } })).statusCode).toBe(200);
+      const message = await asked(f, "global", runId);
+      expect(message.buddyReactions).toEqual(["👍"]);
+      expect(message).not.toHaveProperty("reactions");
+      expect(await f.t.sql("SELECT person_id, scope, role, reactor FROM conversation_reactions")).toEqual([
+        { person_id: TEST_MEMBER.personId, scope: "global", role: "user", reactor: "buddy" }]);
+    } finally { await f.close(); }
+  });
+
+  it("派活成功后在本人那句话上点 👍，读历史带 buddyReactions（项目对话）", async () => {
+    const f = await fixture();
+    try {
+      await f.grant();
+      const { projectId, conversationId } = await project(f);
+      const scope = `project:${projectId}`;
+      const runId = await ask(f, scope, "先拆打分");
+      expect((await f.act("split_cards", { projectId }, { turn: { runId, conversationId } })).statusCode).toBe(200);
+      expect((await asked(f, scope, runId)).buddyReactions).toEqual(["👍"]);
+      // 伙伴台那段没有。
+      expect(await f.t.sql("SELECT scope FROM conversation_reactions")).toEqual([{ scope }]);
+    } finally { await f.close(); }
+  });
+
+  it("派活成功后经对话流推出伙伴表情事件", async () => {
+    const f = await fixture();
+    try {
+      await f.grant();
+      const runId = await ask(f, "global", "把打分那件拆一下");
+      const streamed: { runId: string; event: Record<string, unknown> }[] = [];
+      const q = f.t.pool.query.bind(f.t.pool) as Query;
+      const deps: BuddyDeps = { app: f.t.app, q, env: f.t.env, now: () => new Date(), names: () => new Map(),
+        stream: (run, event) => { streamed.push({ runId: run, event }); return true; }, history: projectHistoryReader({ q, conversationTurnTimeoutMs: 10_000 }) };
+      await runAction(deps, { personId: TEST_MEMBER.personId, conversationId: randomUUID(), runId }, "split_cards", { taskId: "task-open" });
+      expect(streamed.filter(({ event }) => event.type === "buddy_reaction")).toEqual([
+        { runId, event: { type: "buddy_reaction", role: "user", emojis: ["👍"] } }]);
+
+      // 点表情失败不让动作失败。
+      const broken: BuddyDeps = { ...deps, q: (async (text: string, params?: unknown[]) => {
+        if (text.includes("conversation_reactions")) throw new Error("表情表坏了");
+        return q(text, params);
+      }) as Query };
+      await expect(runAction(broken, { personId: TEST_MEMBER.personId, conversationId: randomUUID(), runId }, "split_cards", { taskId: "task-open" }))
+        .resolves.toMatchObject({ summary: expect.any(String) });
+    } finally { await f.close(); }
+  });
+
+  it("派活没成不点", async () => {
+    const f = await fixture();
+    try {
+      await f.grant();
+      const { projectId, conversationId } = await project(f);
+      expect((await f.call("PUT", `/api/me/projects/${projectId}/goals/task-open`)).statusCode).toBe(200);
+      const runId = await ask(f, `project:${projectId}`, "拆一下");
+      expect((await f.act("split_cards", { projectId }, { turn: { runId, conversationId } })).statusCode).toBe(409);
+      expect(await f.t.sql("SELECT * FROM conversation_reactions")).toEqual([]);
+    } finally { await f.close(); }
+  });
+
+  it("不是派活的动作不点", async () => {
+    const f = await fixture();
+    try {
+      await f.grant();
+      const runId = await ask(f, "global", "换成深色");
+      expect((await f.act("set_appearance", { appearance: "dark" }, { turn: { runId, conversationId: randomUUID() } })).statusCode).toBe(200);
+      expect(await f.t.sql("SELECT * FROM conversation_reactions")).toEqual([]);
+    } finally { await f.close(); }
+  });
+
+  it("同一轮派了两次只有一个 👍", async () => {
+    const f = await fixture();
+    try {
+      await f.grant();
+      const { projectId, conversationId } = await project(f);
+      const scope = `project:${projectId}`;
+      const runId = await ask(f, scope, "先拆打分");
+      for (let i = 0; i < 2; i++) expect((await f.act("split_cards", { projectId }, { turn: { runId, conversationId } })).statusCode).toBe(200);
+      expect((await asked(f, scope, runId)).buddyReactions).toEqual(["👍"]);
+      expect(await f.t.sql("SELECT emojis FROM conversation_reactions")).toEqual([{ emojis: ["👍"] }]);
+    } finally { await f.close(); }
   });
 });
