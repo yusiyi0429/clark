@@ -17,6 +17,7 @@ import { AskContext, askAnswers } from "@/conversation/AskPanel";
 import { parseAnswerOptions } from "@/conversation/answerOptions";
 import { RescopeContext } from "@/conversation/ScopeChip";
 import { withoutSupersededCards } from "@/conversation/ConversationTimeline";
+import { BubbleContext, RevealContext, TypingBubble, revealTurn } from "@/conversation/ReplyBubbles";
 import type { ConversationData, ThinkingStage, TurnProgress } from "@/conversation/useConversation";
 import { AskDecision, BuddyQuestionDecision } from "./decisions";
 
@@ -77,8 +78,12 @@ export function WorkTimeline({ data, blocks, modelRule }: { data: ConversationDa
   const placed = useMemo(() => placeBlocks(data.messages, blocks), [data.messages, blocks]);
   // 新首页的对话：答过的提问卡原处收成一行（inline），不另画本人那条问答记录。
   const ask = useMemo(() => ({ send: data.send, streaming: data.streaming, ...askAnswers(data.messages), inline: true }), [data.send, data.streaming, data.messages]);
+  // 回复成气泡（设计 6.1–6.3）；第一个块出来时报给页头（Presence）。
+  const reveal = useMemo(() => () => revealTurn(data.scope, data.startedAt), [data.scope, data.startedAt]);
   const status = data.streaming ? (
     <ConversationStatusSlot>
+      {/* 一轮开始、还没有任何内容：马上露「•••」；有了内容以后由气泡那边在等下一块时露。 */}
+      {data.partial.trim() ? null : <TypingBubble />}
       {data.thinking ? <ConversationThinking stage={data.stage} startedAt={data.startedAt} onStop={data.stop} route={data.route} progress={data.progress} steps={data.steps} thought={null} readScope={data.readScope} row={false} /> : null}
       {/* 伙伴这一轮的计划清单和出的卡（17.4，同 ConversationTimeline）：写完读回历史后挂在那条回答上。 */}
       {data.plan ? <PlanChecklist entries={data.plan.entries} collapsed={data.plan.collapsed} /> : null}
@@ -89,6 +94,8 @@ export function WorkTimeline({ data, blocks, modelRule }: { data: ConversationDa
     [data.rescope, data.streaming]);
   const blocksAt = (index: number) => (placed.get(index) ?? []).map((block) => <div key={block.key} data-block={block.key}>{block.node}</div>);
   return (
+    <BubbleContext.Provider value={true}>
+    <RevealContext.Provider value={reveal}>
     <RescopeContext.Provider value={rescope}>
     <AskContext.Provider value={ask}>
     <ConversationTurns messages={data.messages} partial={data.streaming ? data.partial : ""} status={status} modelRule={modelRule}
@@ -111,5 +118,7 @@ export function WorkTimeline({ data, blocks, modelRule }: { data: ConversationDa
       }} />
     </AskContext.Provider>
     </RescopeContext.Provider>
+    </RevealContext.Provider>
+    </BubbleContext.Provider>
   );
 }

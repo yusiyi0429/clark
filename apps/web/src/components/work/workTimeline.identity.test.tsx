@@ -7,6 +7,7 @@ import type { ConversationData, Message } from "@/conversation/useConversation";
 vi.mock("react", async (original) => ({ ...await original<typeof import("react")>(), useMemo: (compute: () => unknown) => compute() }));
 import { ConversationTurn, ConversationTurns } from "@/conversation/Transcript";
 import { WorkTimeline, type TimedBlock } from "./WorkTimeline";
+import { BubbleContext } from "@/conversation/ReplyBubbles";
 
 type Element = ReactElement<Record<string, unknown>>;
 type Located = { path: string[]; element: Element };
@@ -92,5 +93,15 @@ describe("WorkTimeline event key ancestry", () => {
     expect(block(streaming).path).toEqual(block(before).path);
     expect(block(settled).path).toEqual(block(before).path);
     expect(order(streaming)).toEqual(["message:1", meeting.key, handoff.key, "message:-1"]);
+  });
+
+  it("wraps the timeline in bubbles (BubbleContext = true) and keeps the reply node from streaming to settled", () => {
+    const top = WorkTimeline({ data: data([message(1)]), blocks: [] }) as Element;
+    expect(top.type === BubbleContext || top.type === BubbleContext.Provider).toBe(true);
+    expect(top.props.value).toBe(true);
+    const turn = (tree: Located[]) => tree.find(({ element }) => element.type === ConversationTurn && (element.props.message as Message).role === "assistant")!;
+    const streaming = turn(rendered([message(1)], [], { streaming: true, partial: "reply" }));
+    const settled = turn(rendered([message(1), { sequence: 2, role: "assistant", content: "reply" }], []));
+    expect(settled.path).toEqual(streaming.path);
   });
 });
