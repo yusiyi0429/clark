@@ -4,7 +4,8 @@
  * 新首页 /me/work（新首页_伙伴总管线与Task管线_2026-11-07，替换 V2 设计第 20.4 节的三栏首页），按人打开：
  * - 左：伙伴名片（总管线）、「今天」「会议」「本月」、项目、本人行（个人菜单），见 LeftColumn；电脑上能收起（中间左上角的按钮）。
  * - 中：展示区——首页、总管线、Task 管线、Task 详情、子会话、二级页、月份页（地址决定，见 view.ts）。
- * - 右：平时没有（第 73 条）。要看时出一个面板，同一时间只放一样：会话详情（页头的信息按钮）、文件预览（含「改动」）、会话（页头右上角的按钮，设计 4.3：子会话、这台电脑、后台任务）；
+ * - 右：平时没有（第 73 条）。要看时出一个面板，同一时间只放一样：会话详情（页头的信息按钮）、文件预览（含「改动」）、会话（页头右上角的按钮，设计 4.3：子会话、这台电脑、后台任务）、
+ *   一个子会话的 thread（设计 6.6：项目对话里的小条、会话面板里的行点开，宽同文件预览）；
  *   再开一样就替掉前一样，关掉就完全没有；左边缘能拖宽。放大时面板占满中间和右边。
  * 手机：首屏兼首页（伙伴名片、今天、等你、树、本人），点进去全屏；会话从「今天」行和页头的按钮打开，是底部抽屉（会话列表，下面是这台电脑、后台任务）。
  * 深色按「偏好 · 外观」（跟随系统 / 浅色 / 深色，17.2）：外壳带 data-scheme="auto"，深色变量挂在根上（app/scheme-dark.css）；
@@ -51,6 +52,8 @@ import { isTeamDraft } from "./PartnerTeam";
 import { TEAM_DELIVERY_CHANGED } from "@/lib/home/teamDelivery";
 import { LeftColumn } from "./LeftColumn";
 import { SeenContext, subIcon, type RowActions } from "./SubRows";
+import { ThreadPane } from "./ThreadPane";
+import { threadOpener } from "./ThreadChip";
 import { ForeignTaskInfo, TaskInfo } from "./TaskInfo";
 import { MissionInfo } from "./MissionInfo";
 import { MeetingView } from "./MeetingView";
@@ -132,18 +135,20 @@ function HomeFrame({ account }: { account: Account }) {
   const [monthHead, setMonthHead] = useState<MonthHead | null>(null);
   const outboxId = useRef(0);
 
-  // 右边的面板位（第 73 条）：平时没有；详情、文件、会话同一时间只放一样，再开一样就替掉前一样，关掉就完全没有。
-  // 详情跟着展示区走（换着看别的子会话、项目接着看那一个的详情，到了没有详情的页面就收起）；文件是那一页自己的，换页就关；会话一直跟着。
+  // 右边的面板位（第 73 条）：平时没有；详情、文件、会话、thread 同一时间只放一样，再开一样就替掉前一样，关掉就完全没有。
+  // 详情跟着展示区走（换着看别的子会话、项目接着看那一个的详情，到了没有详情的页面就收起）；文件、thread 是那一页里点开的，换页就关；会话一直跟着。
   const [shown, setShown] = useState<PanelKind | null>(null);
   const [wide, setWide] = useState(false);
   const [sideNode, setSideNode] = useState<HTMLElement | null>(null);
+  const [thread, setThread] = useState<{ kind: "card" | "topic"; id: string } | null>(null);
   const sideView = view.kind === "card" || view.kind === "topic" || view.kind === "project";
   const slot = handheld || (shown === "detail" && !sideView) ? null : shown;
   const show = useCallback((kind: PanelKind | null) => { setShown(kind); setWide(false); }, []);
-  useEffect(() => { setShown((current) => (current === "file" ? null : current)); setWide(false); }, [pathname]);
+  useEffect(() => { setShown((current) => (current === "file" || current === "thread" ? null : current)); setWide(false); }, [pathname]);
   const side = useMemo<SideDetail | null>(() => (handheld ? null : {
     open: slot === "detail", node: slot === "detail" || slot === "file" ? sideNode : null, shown: slot, show, wide: slot === "file" && wide, setWide,
     toggle: (open) => { const next = open ?? slot !== "detail"; if (next) show("detail"); else if (slot === "detail") show(null); },
+    openThread: (subject) => { setThread(subject); show("thread"); },
   }), [handheld, slot, sideNode, show, wide]);
   useEffect(() => { setSheet(false); }, [pathname]);
   // 换了展示区的内容：焦点落到页头上（5.2 交互状态）。新内容自己抢了焦点（选项框、输入框）就不动；第一次打开页面不动。
@@ -680,17 +685,19 @@ function HomeFrame({ account }: { account: Account }) {
   const collapsed = leftFold.collapsed && !handheld;
   const leftDot = useLeftDot({ collapsed, homeReady: api.ready, meetingsLoaded, localPhase: local.phase, projects: projects.projects, seen: seenMarks, waitingCount });
 
-  // 会话面板（设计 4.3）：电脑上在右边的面板位，手机上在底部抽屉；点行、「…」里的「标为已读」照左栏的「刚看过」记。
+  // 会话面板（设计 4.3）：电脑上在右边的面板位，点行在右边开 thread（6.6）；手机上在底部抽屉，点行去那个子会话。
+  // 点行、「…」里的「标为已读」、小条上的蓝点、thread 打开时照左栏的「刚看过」记（seen，挂在外壳上）。
   const sessionsPanel = (phone: boolean) => (
-    <SeenContext.Provider value={{ seen: seenMarks, onOpen: markSeen }}>
-      <SessionsPanel view={view} projects={projects.all} other={data.other.subSessions} archivedSubs={projects.archivedSubs} actions={rowActions} go={go}
-        items={items} onStop={stop} resources={work.resources} handheld={phone} />
-    </SeenContext.Provider>
+    <SessionsPanel view={view} projects={projects.all} other={data.other.subSessions} archivedSubs={projects.archivedSubs} actions={rowActions} go={go}
+      items={items} onStop={stop} resources={work.resources} handheld={phone} onOpenSub={phone ? undefined : threadOpener(side, go)} />
   );
+  const seen = useMemo(() => ({ seen: seenMarks, onOpen: markSeen }), [seenMarks, markSeen]);
+  const threadSub = slot === "thread" && thread ? subs.find((sub) => sub.kind === thread.kind && sub.id === thread.id) ?? null : null;
   if (handheld) {
     return (
       <WorkspaceContext.Provider value={workspace}>
         <ViewChrome.Provider value={chrome}>
+          <SeenContext.Provider value={seen}>
           <HomeMeetingProvider meeting={meeting}>
           <div className={h.app} data-phone="" data-view={view.kind} data-scheme="auto" data-type-scale="one" data-entering={entering ? "" : undefined} data-testid="work-home">
             {/* 首屏兼首页（5.7）：左栏那几样，底部固定首页的输入框（带「发给」）。 */}
@@ -708,6 +715,7 @@ function HomeFrame({ account }: { account: Account }) {
             ) : null}
           </div>
           </HomeMeetingProvider>
+          </SeenContext.Provider>
         </ViewChrome.Provider>
       </WorkspaceContext.Provider>
     );
@@ -716,8 +724,9 @@ function HomeFrame({ account }: { account: Account }) {
     <WorkspaceContext.Provider value={workspace}>
       <ViewChrome.Provider value={chrome}>
         <SideDetailContext.Provider value={side}>
+          <SeenContext.Provider value={seen}>
           <HomeMeetingProvider meeting={meeting}>
-          <div className={h.app} data-panel={slot === "file" ? "file" : slot ? "open" : "closed"} data-left={collapsed ? "closed" : undefined} data-wide={slot === "file" && wide ? "" : undefined} data-view={view.kind} data-scheme="auto" data-type-scale="one" data-entering={entering ? "" : undefined} data-testid="work-home"
+          <div className={h.app} data-panel={slot === "file" || slot === "thread" ? "file" : slot ? "open" : "closed"} data-left={collapsed ? "closed" : undefined} data-wide={slot === "file" && wide ? "" : undefined} data-view={view.kind} data-scheme="auto" data-type-scale="one" data-entering={entering ? "" : undefined} data-testid="work-home"
             data-resizing={leftWidth.dragging || rightWidth.dragging || fileWidth.dragging ? "" : undefined} style={{
               ...(leftWidth.width && !collapsed ? { "--home-left": `${leftWidth.width}px` } : {}),
               ...(rightWidth.width ? { "--home-right": `${rightWidth.width}px` } : {}),
@@ -727,8 +736,9 @@ function HomeFrame({ account }: { account: Account }) {
             <main className={h.display}><LeftToggle collapsed={collapsed} unseen={leftDot} onToggle={leftFold.toggle} />{display(view)}</main>
             {slot ? (
               <aside className={h.right} aria-label={PANEL_LABEL[slot]} data-testid="side-panel">
-                {/* 文件预览自己有页头（名字、改动、放大、关闭），这里只给它一块地方。 */}
-                {slot === "file" ? <div ref={setSideNode} className={h.sideFile} /> : (
+                {/* 文件预览自己有页头（名字、改动、放大、关闭），这里只给它一块地方；thread 也自己画页头（名字、放大、关闭）。 */}
+                {slot === "file" ? <div ref={setSideNode} className={h.sideFile} />
+                  : slot === "thread" ? (threadSub ? <ThreadPane key={`${threadSub.kind}:${threadSub.id}`} sub={threadSub} go={go} onClose={() => show(null)} /> : null) : (
                   <div className={h.side} data-testid={slot === "detail" ? "side-detail" : "side-sessions"}>
                     <div className={h.sideHead}>
                       <span className={h.resName}>{PANEL_LABEL[slot]}</span><span className={h.grow} />
@@ -741,18 +751,19 @@ function HomeFrame({ account }: { account: Account }) {
                     </div>
                   </div>
                 )}
-                {slot === "file" && wide ? null : <RightResize control={slot === "file" ? fileWidth : rightWidth} />}
+                {slot === "file" && wide ? null : <RightResize control={slot === "file" || slot === "thread" ? fileWidth : rightWidth} />}
               </aside>
             ) : null}
           </div>
           </HomeMeetingProvider>
+          </SeenContext.Provider>
         </SideDetailContext.Provider>
       </ViewChrome.Provider>
     </WorkspaceContext.Provider>
   );
 }
 
-const PANEL_LABEL: Record<PanelKind, string> = { detail: "详情", file: "文件", sessions: "会话" };
+const PANEL_LABEL: Record<PanelKind, string> = { detail: "详情", file: "文件", sessions: "会话", thread: "会话" };
 
 /** 二级页、月份页的壳（5.4.7）：页头（返回、标题）+ 文档类阅读尺，内容是挂进来的组件。 */
 function SecondaryFrame({ title, trail, go, back = true, children }: { title: string; trail?: React.ReactNode; go: (href: string) => void; back?: boolean; children: React.ReactNode }) {

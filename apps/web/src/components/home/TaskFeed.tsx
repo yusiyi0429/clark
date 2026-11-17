@@ -11,8 +11,8 @@
  * 挂上一件 Task（goal_linked）由项目对话自己画成分隔线，不在这里。
  * 第一次没过不出：改法自动送回重做，不打扰你。B 的接口没上时由各件 Task 看板上的卡拼（derive.ts 的 deriveFeed，没有返工那一种）。
  */
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { TLocalQuestionAnswerRequest, TProjectGoalChangedItem, TProjectSubSessionDecisionItem, TTaskFeedItem } from "@warmap/contracts";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import type { TLocalQuestionAnswerRequest, TProjectGoalChangedItem, TProjectSubSessionDecisionItem, TProjectSubSessionReportItem, TTaskFeedItem } from "@warmap/contracts";
 import { HeroButton } from "@/components/HeroButton";
 import { DecisionBox } from "@/components/work/DecisionBox";
 import { ApprovalDecision, QuestionDecision, awayChip } from "@/components/work/decisions";
@@ -26,10 +26,11 @@ import { canCommandHere } from "@/lib/work/actions";
 import { useMergeIssues } from "@/lib/work/merge";
 import type { Worker } from "@/lib/work/workers";
 import { askAnchor, cardHref, deriveFeed, goalAnchor, infoHref } from "@/lib/home/derive";
-import type { FeedItem, ProjectFeedItem, WaitingItem } from "@/lib/home/types";
+import type { FeedItem, ProjectFeedItem, SubSession, WaitingItem } from "@/lib/home/types";
 import type { WorkHomeApi } from "@/lib/home/useWorkHome";
 import { BlockedDecision, MergeDecision, answeredOf, markAnswered } from "./TaskDecisions";
-import { subKey } from "./SubRows";
+import { subHref, subIcon, subKey } from "./SubRows";
+import { ThreadChip } from "./ThreadChip";
 import f from "@/styles/task-feed.module.css";
 
 const POLL_MS = 5000;
@@ -65,9 +66,12 @@ export { askAnchor } from "@/lib/home/derive";
 /**
  * 验收行变成对话里按时间插的几块；合不合回的选项框接在「过了」那一句后面。子会话在问、在等批准的，也在这里出选项框（14.3）。
  * onSay：「自己说」发进项目对话；发不出去（对话正在回话）时回 false。
+ * threads（项目对话，设计 4.3 硬规矩）：要你出手的那几块（受阻、等你补、等合回、停下有原因的报告）下面挂这个子会话的小条；
+ * 子会话已经不在等这一块要的（状态变了），或本人点过「看结果」，收成一行淡色字，不带按钮和小条。
  */
-export function feedBlocks({ items, workers, go, onSay, onChanged, remoteAsks, decisions = [] }: {
-  items: FeedItem[];
+export function feedBlocks({ items, workers, go, onSay, onChanged, remoteAsks, decisions = [], threads }: {
+  items: (FeedItem | TProjectSubSessionReportItem)[];
+  threads?: { subs: readonly SubSession[]; onOpen: (sub: SubSession) => void };
   workers: Worker[];
   /** 项目动态里子会话要人介入的那几条（18.10）：按它记下的位置出决定卡，标字母；还开着的才画，答过、失效的不画（同本机那边答过就收起）。 */
   decisions?: TProjectSubSessionDecisionItem[];
@@ -79,22 +83,35 @@ export function feedBlocks({ items, workers, go, onSay, onChanged, remoteAsks, d
   onChanged: () => void;
 }): TimedBlock[] {
   const workerOf = (cardId: string) => workers.find((worker) => worker.cardId === cardId && worker.kind === "card") ?? null;
+  // 要你出手的那一块：还在等就照原样、最后一块下面挂小条；不在等了收成一行淡色字（line）。
+  const settledLine = (line: string) => <p className={f.settled} data-testid="hand-settled">{line}</p>;
+  const hand = (item: { id: string; at: string; afterSequence?: number | null }, subId: string, waits: (sub: SubSession) => boolean, line: string, blocks: TimedBlock[]): TimedBlock[] => {
+    if (!threads) return blocks;
+    const sub = threads.subs.find((entry) => entry.id === subId);
+    if (!sub || !waits(sub)) return [{ key: item.id, at: item.at, afterSequence: item.afterSequence, node: settledLine(line) }];
+    const last = blocks.at(-1)!;
+    return [...blocks.slice(0, -1), { ...last, node: <>{last.node}<ThreadChip sub={sub} onOpen={threads.onOpen} /></> }];
+  };
   const feed = items.flatMap((item): TimedBlock[] => {
     switch (item.kind) {
       case "card_passed": {
         const worker = workerOf(item.cardId);
         const blocks: TimedBlock[] = [{ key: item.id, at: item.at, node: <PassedLine item={item} worker={worker} go={go} onChanged={onChanged} /> }];
         if (item.merge?.state === "needs_merge" && worker?.session) blocks.push({ key: `${item.id}:merge`, at: `${item.at}~`, node: <MergeDecision session={worker.session} title={worker.title} onChanged={onChanged} /> });
-        return blocks;
+        return item.merge?.state === "needs_merge" ? hand(item, item.cardId, (sub) => sub.waiting === "merge", passedText(item), blocks) : blocks;
       }
-      case "card_blocked": return [{ key: item.id, at: item.at, node: <BlockedDecision item={item} worker={workerOf(item.cardId)} go={go} onChanged={onChanged} /> }];
+      case "card_blocked": return hand(item, item.cardId, (sub) => sub.waiting === "verdict", `${item.title} 受阻`,
+        [{ key: item.id, at: item.at, node: <BlockedDecision item={item} worker={workerOf(item.cardId)} go={go} onChanged={onChanged} /> }]);
       // 等你补（主循环第 61 条）：框钉在子会话里，这里照第 54 条只指过去。
-      case "card_needs_person": return [{ key: item.id, at: item.at, node: (
+      case "card_needs_person": return hand(item, item.cardId, (sub) => sub.waiting === "needs_person", `${item.title} 等你补`, [{ key: item.id, at: item.at, node: (
         <p className={f.sentence} data-testid="feed-needs-person">
           <button type="button" className={f.sentenceLink} onClick={() => go(cardHref(item.cardId))}>{item.title} 等你补</button>
           {item.handback?.headline ? <span className={f.more}>{item.handback.headline}</span> : null}
         </p>
-      ) }];
+      ) }]);
+      // 子会话停下、有原因（18.10）：还停着才算要你出手；点过「看结果」也收起。
+      case "sub_session_report": return hand(item, item.sub.id, (sub) => subIcon(sub).state === "stopped" && !answeredOf(item.id), reportLine(item),
+        [{ key: item.id, at: item.at, afterSequence: item.afterSequence, node: <SubSessionReport item={item} go={go} settled={settledLine(reportLine(item))} /> }]);
       case "criteria_met": return [{ key: item.id, at: item.at, node: <CriteriaDecision item={item} go={go} onSay={onSay} /> }];
       case "rework_opened": return [{ key: item.id, at: item.at, node: (
         <p className={f.sentence} data-testid="feed-rework">
@@ -270,4 +287,42 @@ function SubSessionAsk({ worker, remote: item }: { worker: Worker; remote?: Pick
   );
 }
 
+const WHY: Record<TProjectSubSessionReportItem["why"], string> = { turn_done: "做完一轮", interrupted: "本人停下", held: "停着等", error: "出错", killed: "强停", runner_restart: "本机程序重启" };
+const outputHref = (id: string) => `/api/me/local-outputs/${encodeURIComponent(id)}`;
+const reportLine = (item: TProjectSubSessionReportItem) => `${item.sub.title} · ${WHY[item.why]}`;
 
+/**
+ * 子会话停了的报告（18.10，项目动态 sub_session_report）：一行「标题 · 停着等」，下面是做成了什么（summary）、卡在哪（blocker，淡色）和「看结果」。
+ * 这一轮交了产出物的列在下面一行：云端收下的（outputId）点了直接打开，还没收到的只写标题；「看结果」打开第一件收下的，一件都没收到时进那个子会话。
+ * 点过「看结果」（这台电脑上记着）以后换成 settled（收成的那一行淡色字）。
+ */
+function SubSessionReport({ item, go, settled }: { item: TProjectSubSessionReportItem; go: (href: string) => void; settled: ReactNode }) {
+  const [looked, setLooked] = useState(() => !!answeredOf(item.id));
+  if (looked) return settled;
+  const received = item.outputs.find((output) => output.outputId);
+  const look = () => {
+    markAnswered(item.id, "看结果");
+    setLooked(true);
+    if (received) window.open(outputHref(received.outputId!), "_blank", "noopener"); else go(subHref(item.sub));
+  };
+  return (
+    <div className={f.ask} data-testid="sub-report">
+      <p className={f.askFrom}>{reportLine(item)}</p>
+      <p className={f.sentence}>
+        {item.summary ? <span>{item.summary}</span> : null}
+        {item.blocker ? <span className={f.more}>{item.blocker}</span> : null}
+        <HeroButton variant="ghost" size="sm" onPress={look}>看结果</HeroButton>
+      </p>
+      {item.outputs.length ? (
+        <p className={f.more} data-testid="sub-report-outputs">
+          {item.outputs.map((output, index) => (
+            <span key={`${output.outputId ?? output.fileName}:${index}`}>
+              {index ? " · " : null}
+              {output.outputId ? <a href={outputHref(output.outputId)} target="_blank" rel="noopener" className={f.sentenceLink} title={output.fileName}>{output.title}</a> : <span title={output.fileName}>{output.title}</span>}
+            </span>
+          ))}
+        </p>
+      ) : null}
+    </div>
+  );
+}
