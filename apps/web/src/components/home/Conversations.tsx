@@ -277,15 +277,43 @@ export function PipelineView(props: PipelineProps) {
   return props.api.live ? <LivePipeline {...props} /> : props.tasks[0] ? <MockPipeline {...props} task={props.tasks[0]} /> : <div className={h.convo} aria-busy />;
 }
 
+/**
+ * 这一页里建好了对话的项目（projectId → scope），和在途的那次 POST：认得的项目直接画，不再等；
+ * 严格模式双跑、同时打开两次都复用在途的那次。没建成的不记，先用本地的 scope，下次打开再试。
+ */
+const pipelineScopes = new Map<string, string>();
+const pipelineOpens = new Map<string, Promise<string>>();
+export function openPipeline(id: string, fallback: string): Promise<string> {
+  let opening = pipelineOpens.get(id);
+  if (!opening) {
+    opening = openProjectPipeline(id).then((answer) => {
+      if (answer) pipelineScopes.set(id, answer.scope);
+      else pipelineOpens.delete(id);
+      return answer?.scope ?? fallback;
+    }, () => {
+      pipelineOpens.delete(id);
+      return fallback;
+    });
+    pipelineOpens.set(id, opening);
+  }
+  return opening;
+}
+
+/** 项目对话的 scope：认得的项目挂上就有；第一次打开时等 POST 回来（之前为 null）。 */
+export function usePipelineScope(id: string, fallback: string): string | null {
+  const [scope, setScope] = useState<string | null>(() => pipelineScopes.get(id) ?? null);
+  useEffect(() => {
+    if (scope) return;
+    let alive = true;
+    void openPipeline(id, fallback).then((next) => { if (alive) setScope(next); });
+    return () => { alive = false; };
+  }, [id, fallback, scope]);
+  return scope;
+}
+
 /** 第一次打开时建这个项目的对话（POST /api/me/projects/:projectId/pipeline），收发走现有对话接口，scope 是 project:<projectId>。 */
 function LivePipeline(props: PipelineProps) {
-  const { id, scope: fallback } = props.project;
-  const [scope, setScope] = useState<string | null>(null);
-  useEffect(() => {
-    let alive = true;
-    void openProjectPipeline(id).then((answer) => answer?.scope ?? fallback, () => fallback).then((next) => { if (alive) setScope(next); });
-    return () => { alive = false; };
-  }, [id, fallback]);
+  const scope = usePipelineScope(props.project.id, props.project.scope);
   return scope ? <LivePipelineBody scope={scope} {...props} /> : <div className={h.convo} aria-busy />;
 }
 

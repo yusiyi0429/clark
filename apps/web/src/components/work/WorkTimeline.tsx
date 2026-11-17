@@ -77,7 +77,9 @@ export function WorkTimeline({ data, blocks, modelRule }: { data: ConversationDa
   const latest = !data.streaming && last?.role === "assistant" ? last.sequence : null;
   const quick = useMemo(() => (latest === null ? null : { sequence: latest, send: (text: string) => void data.send(text, []) }), [latest, data.send]);
   const latestCards = useMemo(() => withoutSupersededCards(data.messages), [data.messages]);
-  const placed = useMemo(() => placeBlocks(data.messages, blocks), [data.messages, blocks]);
+  // 第一次读这条对话、消息还没到：先不插块（含开工小条），不然它们全排在最前、消息到了再被挤下去。
+  const unread = data.historyStatus === "loading" && !data.messages.length;
+  const placed = useMemo(() => placeBlocks(data.messages, unread ? [] : blocks), [data.messages, blocks, unread]);
   // 新首页的对话：答过的提问卡原处收成一行（inline），不另画本人那条问答记录。
   const ask = useMemo(() => ({ send: data.send, streaming: data.streaming, ...askAnswers(data.messages), inline: true }), [data.send, data.streaming, data.messages]);
   // 回复成气泡（设计 6.1–6.3）；第一个块出来时报给页头（Presence）。

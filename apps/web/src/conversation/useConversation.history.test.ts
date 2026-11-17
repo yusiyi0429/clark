@@ -35,14 +35,18 @@ vi.mock("react", () => ({
     });
   },
 }));
-import { useConversation, type Message } from "./useConversation";
+import type { Message } from "./useConversation";
+/** 每个测试像新打开的页面：这一页读过的对话（模块里记的）不带到下一个测试。 */
+let useConversation: typeof import("./useConversation").useConversation;
 
 type Pending = { url: string; init?: RequestInit; resolve: (value: unknown) => void; reject: (cause: unknown) => void; done: boolean };
 let requests: Pending[] = [];
 /** 服务端已经回了、网络层没理会取消：只能靠 hook 自己丢掉迟到的结果。 */
 let ignoreAbort = false;
 
-beforeEach(() => {
+beforeEach(async () => {
+  vi.resetModules();
+  ({ useConversation } = await import("./useConversation"));
   h.states = []; h.refs = []; h.memos = []; h.effects = [];
   requests = []; ignoreAbort = false;
   vi.stubGlobal("window", { dispatchEvent: vi.fn(), location: { assign: vi.fn() } });
@@ -152,6 +156,37 @@ describe("对话历史：载入中、真的没有、没读到是三种状态", (
     historyRequest().resolve(ok([user(1, "上次的问题")]));
     await flush();
     expect(render()).toMatchObject({ historyStatus: "ready", historyError: null, historyWaiting: null, messages: [user(1, "上次的问题")] });
+  });
+});
+
+describe("读过的对话记在页面里", () => {
+  it("读过的对话再挂上，当场有消息、不显示载入，随后照常刷新", async () => {
+    scope = "issue:remembered";
+    render();
+    historyRequest().resolve(ok([user(1, "上次的问题"), assistant(2, "上次的回答")]));
+    await flush();
+    unmount();
+    // 切走再切回来：新挂上的一份（状态从零开始）。
+    h.states = []; h.refs = []; h.memos = []; h.effects = [];
+    const reads = requests.filter((request) => !request.init?.method).length;
+    const again = render();
+    expect(again).toMatchObject({ historyStatus: "ready", historyError: null, messages: [user(1, "上次的问题"), assistant(2, "上次的回答")] });
+    // 照常去读一次；读的时候不切到载入中（不出「正在刷新对话记录…」），消息也不清。
+    expect(requests.filter((request) => !request.init?.method)).toHaveLength(reads + 1);
+    expect(render()).toMatchObject({ historyStatus: "ready", messages: [user(1, "上次的问题"), assistant(2, "上次的回答")] });
+    historyRequest().resolve(ok([user(1, "上次的问题"), assistant(2, "上次的回答"), user(3, "后来在别处问的")]));
+    await flush();
+    expect(render()).toMatchObject({ historyStatus: "ready", messages: [user(1, "上次的问题"), assistant(2, "上次的回答"), user(3, "后来在别处问的")] });
+  });
+
+  it("没读成过的对话挂上时照旧是载入中", async () => {
+    scope = "issue:never-read";
+    render();
+    historyRequest().resolve(failed(404));
+    await flush();
+    unmount();
+    h.states = []; h.refs = []; h.memos = []; h.effects = [];
+    expect(render()).toMatchObject({ historyStatus: "loading", messages: [] });
   });
 });
 
