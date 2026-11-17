@@ -661,6 +661,9 @@ button.bgLabel:hover { background: var(--default-soft); }
 /* 面板里子会话是正文：名字用 --ink（深色下 --ink-muted 和 --ink-faint 一样，组名靠这个分开）；已归档的照旧淡。 */
 .sessions .sub { color: var(--ink); }
 .sessions .subs[data-archived] .sub { color: var(--ink-faint); }
+.subStatus { flex: none; color: var(--ink-faint); white-space: nowrap; }
+/* 「…」出来时盖在行尾，短状态同状态点一起让开。 */
+.subItem:is(:hover, :focus-within, :has(> .rowMore[data-open])) .subStatus { visibility: hidden; }
 .sessionsRow { display: flex; align-items: center; gap: var(--space-2); width: 100%; min-height: var(--row-32); padding: 0 var(--space-2); border: 0; border-radius: var(--r-control); background: none; color: var(--ink-muted); font: inherit; text-align: left; cursor: pointer; }
 .sessionsRow:hover { background: var(--default-soft); }
 .sessionsRow:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }

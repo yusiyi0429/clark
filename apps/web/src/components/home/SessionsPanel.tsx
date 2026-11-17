@@ -3,12 +3,13 @@
 /**
  * 右边「会话」面板（设计 4.3，取代原来的「后台任务」），从上到下：
  * 1. 会话：项目页（含这个项目的卡、专题页）只列这个项目的子会话（派活单的先后）；其余页面按项目分组（组名淡色，没有子会话的项目不列），
- *    最后「其他」放不挂项目的。一行就是左栏原来那一行（SubRow，「…」菜单照旧）。
- * 2. 「新会话」：只在项目页，规矩同原来项目行上的「+」。
+ *    最后「其他」放不挂项目的。一行就是左栏原来那一行（SubRow，「…」菜单照旧），名字后面一个淡色短状态（subStatus）。
+ * 2. 「新会话」：规矩同原来项目行上的「+」。项目页直接去这个项目的新建页；其余页面先弹一列能加的项目，选了再去；一个能加的都没有不出。
  * 3. 「已归档 N」：点开就地列出这个范围里归档了的子会话，「…」里能恢复；没有不出。
  * 4. 发丝线 → 这台电脑（资源块）→ 后台任务。手机的底部抽屉：会话那几样，下面接原来的 BackgroundPanel。
  */
 import { useContext, useState } from "react";
+import { Dropdown } from "@heroui/react";
 import { LaptopMinimal, Plus } from "lucide-react";
 import type { TArchivedSubSession } from "@warmap/contracts";
 import { newSubHref, type Project } from "@/lib/home/projects";
@@ -32,6 +33,18 @@ export function panelProject(view: View, projects: readonly Project[]): Project 
   }
 }
 
+/**
+ * 会话行的短状态（设计 4.3）：在跑、等你（在等本人批准、回答、拿主意、补、合回）、已交回（做完了）、失败（出错停下）；别的（排队、做完一轮、本人停的、第一次验收没过在改）不写。
+ * 在跑不写几分钟：首页数据里子会话没有这一轮的开始时间。
+ */
+export function subStatus(sub: Pick<SubSession, "state" | "waiting" | "stopWhy">): string | null {
+  if (sub.state === "running") return "在跑";
+  if (sub.state === "done") return "已交回";
+  if (sub.state === "waiting" && sub.waiting) return "等你";
+  if (sub.state === "waiting" && sub.stopWhy === "error") return "失败";
+  return null;
+}
+
 export function SessionsPanel({ view, projects, other, archivedSubs, actions, go, items, onStop, resources, handheld = false, onOpenSub }: {
   view: View;
   projects: Project[];
@@ -51,10 +64,12 @@ export function SessionsPanel({ view, projects, other, archivedSubs, actions, go
   const scoped = panelProject(view, projects);
   const open = onOpenSub ?? ((sub: SubSession) => go(subHref(sub)));
   const rows = (subs: SubSession[]) => (
-    <ul className={h.subs}>{planOrder(subs).map((sub) => <SubRow key={subKey(sub)} sub={sub} view={view} go={() => open(sub)} />)}</ul>
+    <ul className={h.subs}>{planOrder(subs).map((sub) => <SubRow key={subKey(sub)} sub={sub} view={view} go={() => open(sub)} status={subStatus(sub)} />)}</ul>
   );
   // 同原来项目行上的「+」：有菜单动作、项目没归档；这台电脑的本机程序连着却开不了自由子会话（protocol < 4）时不出，手机、没连上照出。
-  const canAdd = !!scoped && !!actions && !scoped.archived && !(local?.phase === "ready" && !local.runner.freeSessions);
+  const canAddTo = (project: Project) => !!actions && !project.archived && !(local?.phase === "ready" && !local.runner.freeSessions);
+  const addable = scoped ? (canAddTo(scoped) ? [scoped] : []) : projects.filter(canAddTo);
+  const canAdd = addable.length > 0;
   const archived = scoped ? archivedSubs.filter((sub) => sub.projectId === scoped.id) : archivedSubs;
   const groups = scoped ? [] : projects.filter((project) => project.subSessions.length);
   const listed = scoped ? scoped.subSessions.length > 0 : groups.length > 0 || other.length > 0;
@@ -71,6 +86,15 @@ export function SessionsPanel({ view, projects, other, archivedSubs, actions, go
             </>}
             {canAdd && scoped ? (
               <button type="button" className={h.sessionsRow} onClick={() => go(newSubHref(scoped.id))} data-testid="panel-new-sub"><Plus {...ICON} />新会话</button>
+            ) : canAdd ? (
+              <Dropdown>
+                <Dropdown.Trigger className={h.sessionsRow} data-testid="panel-new-sub"><Plus {...ICON} />新会话</Dropdown.Trigger>
+                <Dropdown.Popover placement="bottom start" offset={4} className={h.pop}>
+                  <Dropdown.Menu aria-label="新会话" className={h.menuList} onAction={(key) => go(newSubHref(String(key)))}>
+                    {addable.map((project) => <Dropdown.Item key={project.id} id={project.id} textValue={project.name} className={h.menuItem}>{project.name}</Dropdown.Item>)}
+                  </Dropdown.Menu>
+                </Dropdown.Popover>
+              </Dropdown>
             ) : null}
             {archived.length ? (
               <button type="button" className={h.sessionsRow} data-faint="" aria-expanded={archivedOpen} onClick={() => setArchivedOpen(!archivedOpen)} data-testid="panel-archived">

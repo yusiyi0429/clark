@@ -30,10 +30,7 @@ import { acceptDrafts, acceptProjectDrafts, dismissDraft, readTaskBudget, type P
 import { TIER_LABEL, draftRole, modelForTier, type CardRole, type RoleView } from "@/lib/team/roles";
 import { SLOT_CAP, startBatch, type StartPlan } from "@/lib/work/queue";
 import { QUEUE_LABEL, liveSessions, type Worker } from "@/lib/work/workers";
-import type { SubSession } from "@/lib/home/types";
 import { ICON as STATE_ICON, StateIcon } from "./StateIcon";
-import { stoppedLabel } from "./SubRows";
-import { subQueueText } from "@/lib/home/derive";
 import h from "@/styles/home.module.css";
 import x from "@/styles/decision-box.module.css";
 import { SourceWords } from "@/components/cards/SourceWords";
@@ -438,18 +435,5 @@ export function PlanningLine({ planner }: { planner: Worker }) {
       ) : null}
     </>
   );
-}
-
-const WAIT_TEXT: Record<NonNullable<SubSession["waiting"]>, string> = { approval: "等你批准", question: "等你回复", verdict: "受阻", merge: "等你合回", needs_person: "等你补" };
-/** 事件行的阶段（5.6 状态词）。 */
-export function subStage(sub: SubSession): string {
-  switch (sub.state) {
-    case "queued": return subQueueText(sub)!;
-    // 停下了、没在问你：一轮做完的「做完一轮」，真停了的「已停下」（契约 aa6aba9e、stopWhy）；第一次验收没过是进行中的「重做中」（5.4.2），不是失败。
-    case "waiting": return sub.waiting ? WAIT_TEXT[sub.waiting] ?? "等你" : stoppedLabel(sub);
-    case "done": return "已完成";
-    case "failed": return "重做中";
-    default: return "进行中";
-  }
 }
 

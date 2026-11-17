@@ -118,7 +118,8 @@ export function Subs({ subs, view, go, flat = false }: { subs: SubSession[]; vie
   );
 }
 
-export function SubRow({ sub, view, go }: { sub: SubSession; view: View; go: (href: string) => void }) {
+/** status：名字后面一个淡色短状态（右边会话面板用，设计 4.3）；不给不画。 */
+export function SubRow({ sub, view, go, status = null }: { sub: SubSession; view: View; go: (href: string) => void; status?: string | null }) {
   const current = (view.kind === "card" || view.kind === "topic") && view.kind === sub.kind && view.id === sub.id;
   // 悬停全名的提示里带一行「来源 · 模型」（这台电脑上跑着、报了来源的才有；行里不放，太挤）。
   const local = useContext(LocalContext);
@@ -155,6 +156,7 @@ export function SubRow({ sub, view, go }: { sub: SubSession; view: View; go: (hr
       <button type="button" className={h.sub} data-state={sub.state} aria-current={current ? "page" : undefined} onClick={() => { opened.onOpen?.("sub", sub.id, sub.updatedAt); go(subHref(sub)); }} data-tree-row="" data-testid="tree-sub" {...name.rowProps}>
         <span ref={name.textRef} className={h.subName}>{sub.title}</span>
         {heldBy ? <span className={h.subReason} data-testid="sub-held">等「{heldBy.title}」</span> : null}
+        {status ? <span className={h.subStatus} data-testid="sub-status">{status}</span> : null}
         {dot ? <span className={h.subDot} data-tone={dot.tone} role="img" aria-label={dot.label} data-testid="sub-dot"><i aria-hidden /></span> : null}
       </button>
       {name.tip}

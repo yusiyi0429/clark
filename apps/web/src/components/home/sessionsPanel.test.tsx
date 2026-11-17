@@ -7,9 +7,11 @@ import type { TArchivedSubSession } from "@warmap/contracts";
  * 右边「会话」面板（设计 4.3）。没有 jsdom：
  * - 带 data-testid 的原生元素的 props 从 JSX 运行时截下来，直接调它们的处理器（同 leftColumn.test）；
  * - 面板自己第一个 useState（「已归档 N」开没开）换成测试里记着的值，点了以后再画一遍就是开着的；
- * - 行尾「…」菜单换成桩，记下每行的菜单项，直接跑「恢复」。
+ * - 行尾「…」菜单换成桩，记下每行的菜单项，直接跑「恢复」；
+ * - 弹出菜单（Dropdown）换成直接画出来的桩，记下菜单的 onAction，直接选一项。
  */
-const tap = vi.hoisted(() => ({ props: new Map<string, Record<string, unknown>>(), menus: new Map<string, { id: string; run: () => unknown }[]>(), first: 0, open: false }));
+const tap = vi.hoisted(() => ({ props: new Map<string, Record<string, unknown>>(), menus: new Map<string, { id: string; run: () => unknown }[]>(),
+  actions: new Map<string, (key: string) => void>(), first: 0, open: false }));
 const capture = vi.hoisted(() => <T,>(fn: T) => ((type: unknown, props: Record<string, unknown>, ...rest: unknown[]) => {
   if (typeof type === "string" && typeof props?.["data-testid"] === "string") tap.props.set(props["data-testid"] as string, props);
   return (fn as unknown as (...args: unknown[]) => unknown)(type, props, ...rest);
@@ -36,6 +38,18 @@ vi.mock("./RowMenu", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./RowMenu")>();
   return { ...actual, RowMenu: ({ label, items }: { label: string; items: { id: string; run: () => unknown }[] }) => { tap.menus.set(label, items); return null; } };
 });
+vi.mock("@heroui/react", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@heroui/react")>();
+  const { createElement, Fragment } = await import("react");
+  type Props = { children?: unknown; [key: string]: unknown };
+  const Dropdown = Object.assign(({ children }: Props) => createElement(Fragment, null, children as never), {
+    Trigger: ({ children, ...rest }: Props) => createElement("button", { type: "button", ...rest }, children as never),
+    Popover: ({ children }: Props) => createElement(Fragment, null, children as never),
+    Menu: ({ children, onAction, "aria-label": label }: Props) => { tap.actions.set(label as string, onAction as (key: string) => void); return createElement("ul", { "aria-label": label }, children as never); },
+    Item: ({ children, id }: Props) => createElement("li", { "data-key": id }, children as never),
+  });
+  return { ...actual, Dropdown };
+});
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }), usePathname: () => "/me/work" }));
 
 import type { Project } from "@/lib/home/projects";
@@ -49,7 +63,7 @@ import type { RowActions } from "./SubRows";
 import type { View } from "./view";
 
 const sub = (id: string, title: string, extra: Partial<SubSession> = {}) => ({
-  id, kind: "topic", letter: null, title, state: "done", unseen: false, waiting: null, queueReason: null, holdUntil: null, role: null,
+  id, kind: "topic", letter: null, title, state: "queued", unseen: false, waiting: null, queueReason: null, holdUntil: null, role: null,
   sessionId: null, deviceId: null, autoStart: false, updatedAt: "2026-11-17T01:00:00.000Z", merge: null, ...extra,
 }) as unknown as SubSession;
 const project = (id: string, name: string, subSessions: SubSession[], extra: Partial<Project> = {}) => ({
@@ -107,24 +121,56 @@ describe("右边「会话」面板（设计 4.3）", () => {
 
   it("主线里按项目分组列全部，没挂项目的在「其他」", () => {
     const html = render({ view: { kind: "buddy" } });
-    expect(text(html)).toMatch(/\|首页改版\|调研\|改登录页\|胸牌固件\|待机屏\|其他\|以前的会话\|/);
+    expect(text(html)).toMatch(/\|首页改版\|调研\|改登录页\|胸牌固件\|待机屏\|在跑\|其他\|以前的会话\|/);
     // 没有子会话的项目不列；没有不挂项目的就没有「其他」。
-    expect(html).not.toContain("空项目");
+    expect(html).not.toContain('<section aria-label="空项目"');
     expect(text(render({ view: { kind: "home" }, other: [] }))).not.toContain("|其他|");
   });
 
-  it("「新会话」只在项目里，点了去新建页", () => {
+  it("项目里点「新会话」直接去新建页", () => {
     const go = vi.fn();
     const html = render({ view: { kind: "project", id: "p1" }, go });
     expect(html).toMatch(/data-testid="panel-new-sub"[^>]*>.*新会话/);
     (tap.props.get("panel-new-sub")?.onClick as () => void)();
     expect(go).toHaveBeenCalledWith("/me/work/projects/p1/new");
-    expect(render({ view: { kind: "buddy" } })).not.toContain("panel-new-sub");
     // 同原来行上「+」的规矩：没有菜单动作、项目归档了、这台电脑的本机程序太旧（protocol < 4）时不出；本机没连上照出。
     expect(render({ view: { kind: "project", id: "p1" }, actions: null })).not.toContain("panel-new-sub");
     expect(render({ view: { kind: "project", id: "p4" }, projects: [project("p4", "旧项目", [], { archived: true })] })).not.toContain("panel-new-sub");
     expect(render({ view: { kind: "project", id: "p1" } }, localState({ runner: { freeSessions: false } as never }))).not.toContain("panel-new-sub");
     expect(render({ view: { kind: "project", id: "p1" } }, localState({ phase: "offline", runner: {} as never }))).toContain("panel-new-sub");
+  });
+
+  it("主线里点「新会话」先选项目", () => {
+    const go = vi.fn();
+    const archived = project("p4", "旧项目", [], { archived: true });
+    const html = render({ view: { kind: "buddy" }, projects: [P1, P2, P3, archived], go });
+    // 菜单里是能加的项目（没子会话的也算），归档了的不列；选一个去它的新建页。
+    expect(html).toMatch(/data-testid="panel-new-sub"[^>]*>.*新会话/);
+    expect(text(html)).toMatch(/\|新会话\|首页改版\|胸牌固件\|空项目\|/);
+    expect(html).not.toContain('data-key="p4"');
+    tap.actions.get("新会话")?.("p2");
+    expect(go).toHaveBeenCalledWith("/me/work/projects/p2/new");
+  });
+
+  it("没有能加的项目时不出", () => {
+    expect(render({ view: { kind: "buddy" }, projects: [project("p4", "旧项目", [], { archived: true })] })).not.toContain("panel-new-sub");
+    expect(render({ view: { kind: "buddy" }, actions: null })).not.toContain("panel-new-sub");
+    expect(render({ view: { kind: "buddy" } }, localState({ runner: { freeSessions: false } as never }))).not.toContain("panel-new-sub");
+    expect(render({ view: { kind: "buddy" }, projects: [] })).not.toContain("panel-new-sub");
+  });
+
+  it("每行带一个短状态：在跑 / 等你 / 已交回 / 失败，别的不写", () => {
+    const subs = [
+      sub("s1", "甲", { state: "running", updatedAt: "2026-11-17T01:00:00.000Z" }),
+      sub("s2", "乙", { state: "waiting", waiting: "question", updatedAt: "2026-11-17T01:01:00.000Z" }),
+      sub("s3", "丙", { state: "done", updatedAt: "2026-11-17T01:02:00.000Z" }),
+      sub("s4", "丁", { state: "waiting", waiting: null, stopWhy: "error", updatedAt: "2026-11-17T01:03:00.000Z" }),
+      sub("s5", "戊", { state: "waiting", waiting: null, stopWhy: "turn_done", updatedAt: "2026-11-17T01:04:00.000Z" }),
+      sub("s6", "己", { state: "queued", updatedAt: "2026-11-17T01:05:00.000Z" }),
+    ];
+    const html = render({ view: { kind: "project", id: "p9" }, projects: [project("p9", "试", subs)] });
+    expect(text(html)).toMatch(/\|甲\|在跑\|乙\|等你\|丙\|已交回\|丁\|失败\|戊\|己\|/);
+    expect(html.match(/data-testid="sub-status"/g)).toHaveLength(4);
   });
 
   it("「已归档 N」点开能恢复", () => {
