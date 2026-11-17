@@ -36,6 +36,35 @@ describe("splitReply", () => {
     expect(splitReply("说明：\n\n```ts\nconst a", true).tail).toMatchObject({ kind: "card" });
     expect(splitReply("## 计划\n\n- 先做", true).tail).toMatchObject({ kind: "card", title: "计划" });
   });
+  it("流式：还可能被下一块改写的块留在 tail", () => {
+    expect(splitReply("三件事：\n\n", true)).toEqual({ segments: [], tail: { kind: "bubble", markdown: "三件事：", title: "" } });
+    expect(splitReply("```\nx\n```\n\n", true).segments).toEqual([]);
+    expect(splitReply("- a\n- b\n\n", true).segments).toEqual([]);
+    expect(splitReply("- a\n- b\n\n下一句\n", true).segments).toEqual([{ kind: "bubble", markdown: "- a\n- b" }]);
+  });
+  it("流式：每多一个字，segments 只往后长，最后和整段拆分一致", () => {
+    const replies = [
+      "先说结论：能交。\n\n## 验收\n\n- 标准一达到\n- 标准二达到\n\n### 风险\n\n没有。",
+      "三件事：\n\n- 改首页\n- 换头像\n- 补测试\n\n就这些。",
+      "两件事：\n\n- 一\n- 二\n- 三\n- 四\n- 五\n- 六\n\n完。",
+      "```ts\nconst a = 1\n\nconst b = 2\n```\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n说完了。",
+      "公式：\n\n$$\na\n\nb\n$$\n\n- a\n\n1. b\n\n#a 不是标题\n说明\n## 是标题\n内容",
+    ];
+    for (const reply of replies) {
+      const chars = [...reply];
+      let previous: ReturnType<typeof splitReply>["segments"] = [];
+      for (let length = 1; length <= chars.length; length++) {
+        const { segments } = splitReply(chars.slice(0, length).join(""), true);
+        expect(segments.slice(0, previous.length), `${JSON.stringify(reply)} 第 ${length} 个字`).toEqual(previous);
+        previous = segments;
+      }
+      expect(splitReply(reply).segments.slice(0, previous.length)).toEqual(previous);
+    }
+  });
+  it("代码卡和公式卡的标题取块里第一行，不取围栏上的语言名", () => {
+    expect(splitReply("```ts\n\nconst a = 1\nconst b = 2\n```").segments[0]).toMatchObject({ kind: "card", title: "const a = 1", summary: "const b = 2" });
+    expect(splitReply("$$\nx^2\n$$").segments[0]).toMatchObject({ kind: "card", title: "x^2", summary: "" });
+  });
   it("空的回复", () => {
     expect(splitReply("")).toEqual({ segments: [], tail: null });
     expect(splitReply("  \n")).toEqual({ segments: [], tail: null });

@@ -4,7 +4,8 @@ import { splitStableBlocks } from "./smoothText";
  * 伙伴的一条回复拆成气泡和卡片（设计稿 6.2）。
  * - 卡片：以标题开头的一节（吞到下一个标题或末尾）、表格、代码块 / 富块 / 公式块、长清单；相邻的非标题卡片料并成一张。
  * - 其余是气泡；以冒号结尾的段落和紧跟着的短清单并成一个气泡。
- * - 流式中最后一块没写完、或最后一节标题还可能往下吞，放进 `tail`，不进 `segments`。
+ * - 流式中 `segments` 只往后长：还没写完、或还可能被后面的内容改写的块（标题还可能往下吞、卡片料还可能并上下一块、
+ *   冒号结尾的话还要看下一块、短清单还可能变长）连同它后面已经到的文字放进 `tail`。
  */
 
 export type ReplySegment =
@@ -13,8 +14,8 @@ export type ReplySegment =
 export type ReplyTail = { kind: "bubble" | "card"; markdown: string; title: string } | null;
 
 type PartKind = "heading" | "code" | "table" | "list" | "paragraph";
-/** 一段：空行隔开的一个结构（段落、清单、表格、代码……）。`open`：围栏或公式块还没关上。 */
-type Part = { kind: PartKind; lines: string[]; open: boolean };
+/** 一段：空行隔开的一个结构（段落、清单、表格、代码……）。`start`：第一行的行号。`open`：围栏或公式块还没关上。 */
+type Part = { kind: PartKind; start: number; lines: string[]; open: boolean };
 
 const FENCE = /^ {0,3}(`{3,}|~{3,})/;
 const MATH = /^ {0,3}\$\$/;
@@ -64,8 +65,10 @@ function toParts(text: string): Part[] {
   const parts: Part[] = [];
   let close: string | null = null;
   let blank = false;
+  let lineNumber = -1;
   for (const block of splitStableBlocks(text)) {
     block.split("\n").forEach((line, index) => {
+      lineNumber += 1;
       const last = parts.at(-1);
       if (close && last) {
         last.lines.push(line);
@@ -83,7 +86,7 @@ function toParts(text: string): Part[] {
       const kind = lineKind(line);
       const fence = opening(line);
       if (last && index > 0 && continues(last, line, kind, blank)) last.lines.push(line);
-      else parts.push({ kind, lines: [line], open: false });
+      else parts.push({ kind, start: lineNumber, lines: [line], open: false });
       if (fence) {
         close = fence;
         parts.at(-1)!.open = true;
@@ -119,18 +122,21 @@ function lineText(line: string): string {
   return TABLE_ROW.test(line) ? cells(line) : plain(line);
 }
 
-function cardTitle(markdown: string): string {
-  return truncate(lineText(markdown.split("\n")[0]), TITLE_CHARS);
+/** 只有记号的围栏行、`$$` 行：不当标题、摘要（代码卡不取围栏上的语言名）。 */
+function isMarkerLine(line: string): boolean {
+  return FENCE.test(line) || /^ {0,3}\$\$[ \t]*$/.test(line);
 }
 
-/** 标题来源那一行之后第一行有内容的文字（跳过表格分隔行、围栏行）。 */
-function cardSummary(markdown: string): string {
-  for (const line of markdown.split("\n").slice(1)) {
-    if (isDelimiterRow(line) || FENCE.test(line) || MATH.test(line)) continue;
+/** 卡的标题和摘要：第一、第二行有内容的文字（跳过表格分隔行、围栏行）。 */
+function describeCard(markdown: string): { title: string; summary: string } {
+  const texts: string[] = [];
+  for (const line of markdown.split("\n")) {
+    if (texts.length === 2) break;
+    if (isDelimiterRow(line) || isMarkerLine(line)) continue;
     const text = lineText(line);
-    if (text) return truncate(text, SUMMARY_CHARS);
+    if (text) texts.push(text);
   }
-  return "";
+  return { title: truncate(texts[0] ?? "", TITLE_CHARS), summary: truncate(texts[1] ?? "", SUMMARY_CHARS) };
 }
 
 /** 长清单：超过 5 项，或有嵌套，或有一项超过 24 个字。 */
@@ -151,49 +157,72 @@ function isCardMaterial(part: Part): boolean {
   return part.kind === "code" || part.kind === "table" || (part.kind === "list" && isLongList(part));
 }
 
-type Group = { kind: "bubble" | "card"; parts: Part[]; heading: boolean };
+function endsWithColon(part: Part): boolean {
+  return part.kind === "paragraph" && /[：:]$/.test(part.lines.join("\n").trimEnd());
+}
+
+/**
+ * 一组：拼成一个气泡或一张卡的连续几段，`parts[from, to)`。
+ * `lookahead`：这一组拼成什么还要看下一段（标题往下吞、卡片料并上下一块、冒号结尾的话并上短清单）。
+ */
+type Group = { kind: "bubble" | "card"; from: number; to: number; lookahead: boolean };
 
 function group(parts: Part[]): Group[] {
   const groups: Group[] = [];
-  for (let at = 0; at < parts.length; ) {
-    const part = parts[at];
-    let end = at + 1;
+  for (let from = 0; from < parts.length; ) {
+    const part = parts[from];
+    let to = from + 1;
     if (part.kind === "heading") {
-      while (end < parts.length && parts[end].kind !== "heading") end++;
+      while (to < parts.length && parts[to].kind !== "heading") to++;
     } else if (isCardMaterial(part)) {
-      while (end < parts.length && isCardMaterial(parts[end])) end++;
-    } else if (part.kind === "paragraph" && /[：:]$/.test(part.lines.join("\n").trimEnd())
-      && parts[end]?.kind === "list" && !isLongList(parts[end])) {
-      end++;
+      while (to < parts.length && isCardMaterial(parts[to])) to++;
+    } else if (endsWithColon(part) && parts[to]?.kind === "list" && !isLongList(parts[to])) {
+      to++;
     }
     const card = part.kind === "heading" || isCardMaterial(part);
-    groups.push({ kind: card ? "card" : "bubble", parts: parts.slice(at, end), heading: part.kind === "heading" });
-    at = end;
+    groups.push({ kind: card ? "card" : "bubble", from, to, lookahead: card || to === from + 1 && endsWithColon(part) });
+    from = to;
   }
   return groups;
 }
 
-function markdownOf(group: Group): string {
-  return group.parts.flatMap((part) => part.lines).join("\n").trimEnd();
+/**
+ * 流式中这一段以后不会再变（`last` 是最后一行、可能还没写完那一行的行号）：
+ * 后面已经起了一段（那一段的第一行已经写完），或者自己后面有一行写完的空行（清单、没关上的围栏不算，空行后面还能接）。
+ */
+function closed(parts: Part[], index: number, last: number): boolean {
+  const next = parts[index + 1];
+  if (next && next.start < last) return true;
+  const part = parts[index];
+  if (part.kind === "list" || part.open) return false;
+  let content = part.lines.length - 1;
+  while (content > 0 && !part.lines[content].trim()) content--;
+  return content + 1 < part.lines.length && part.start + content + 1 < last;
+}
+
+/** 流式中这一组以后不会再变：最后一段关上了；要看下一段的，下一段的类别也定了（清单要等它关上，免得短清单再变长）。 */
+function settled(parts: Part[], group: Group, last: number): boolean {
+  if (!closed(parts, group.to - 1, last)) return false;
+  if (!group.lookahead) return true;
+  const next = parts[group.to];
+  return next !== undefined && next.start < last && (next.kind !== "list" || closed(parts, group.to, last));
+}
+
+function markdownOf(parts: Part[]): string {
+  return parts.flatMap((part) => part.lines).join("\n").trimEnd();
 }
 
 export function splitReply(markdown: string, streaming = false): { segments: ReplySegment[]; tail: ReplyTail } {
-  const groups = group(toParts(markdown));
-  let tail: ReplyTail = null;
-  const last = groups.at(-1);
-  if (streaming && last) {
-    const unfinished = !/\n[ \t]*\n\s*$/.test(markdown) || last.parts.some((part) => part.open) || last.heading;
-    if (unfinished) {
-      groups.pop();
-      const text = markdownOf(last);
-      tail = { kind: last.kind, markdown: text, title: last.kind === "card" ? cardTitle(text) : "" };
-    }
-  }
-  const segments = groups.map((group): ReplySegment => {
-    const text = markdownOf(group);
-    return group.kind === "card"
-      ? { kind: "card", markdown: text, title: cardTitle(text), summary: cardSummary(text) }
-      : { kind: "bubble", markdown: text };
+  const parts = toParts(markdown);
+  const groups = group(parts);
+  const last = markdown.split("\n").length - 1;
+  const done = streaming ? groups.findIndex((group) => !settled(parts, group, last)) : -1;
+  const segments = (done === -1 ? groups : groups.slice(0, done)).map((group): ReplySegment => {
+    const text = markdownOf(parts.slice(group.from, group.to));
+    return group.kind === "card" ? { kind: "card", markdown: text, ...describeCard(text) } : { kind: "bubble", markdown: text };
   });
-  return { segments, tail };
+  if (done === -1) return { segments, tail: null };
+  const pending = groups[done];
+  const text = markdownOf(parts.slice(pending.from));
+  return { segments, tail: { kind: pending.kind, markdown: text, title: pending.kind === "card" ? describeCard(text).title : "" } };
 }
