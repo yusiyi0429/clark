@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { InputBar } from "@/components/home/InputBar";
 import { ConversationTurn } from "./Transcript";
 import { EMOJIS, EmojiGrid, QUICK_REACTIONS, QuickReactions, ReactionContext, insertEmoji, toggleReaction } from "./Reactions";
+import { BubbleContext } from "./ReplyBubbles";
 import type { Message } from "./useConversation";
 
 const answer: Message = { sequence: 2, role: "assistant", content: "好的", runId: "run-1" };
@@ -54,5 +55,64 @@ describe("对一条消息回应表情", () => {
     // 还没写进历史的（没有 runId）不出。
     expect(renderToStaticMarkup(<ReactionContext.Provider value={store}><ConversationTurn message={{ ...answer, runId: undefined }} /></ReactionContext.Provider>))
       .not.toContain("message-reactions");
+  });
+});
+
+describe("新首页的两种对话里：表情挂在气泡底边（设计 6.5）", () => {
+  /** 从 at 处那个 <div 起，到和它配对的 </div> 为止。 */
+  const divAt = (html: string, at: number) => {
+    const tags = /<div\b[^>]*>|<\/div>/g;
+    tags.lastIndex = at;
+    let depth = 0;
+    for (let tag = tags.exec(html); tag; tag = tags.exec(html)) {
+      depth += tag[0].startsWith("</") ? -1 : 1;
+      if (depth === 0) return html.slice(at, tags.lastIndex);
+    }
+    return html.slice(at);
+  };
+  /** 第 n 个（-1 是最后一个）带这个属性的 div。 */
+  const bubbleOf = (html: string, attribute: string, nth = -1) => {
+    const all = [...html.matchAll(new RegExp(`<div[^>]*${attribute}[^>]*>`, "g"))];
+    return divAt(html, all.at(nth)!.index!);
+  };
+  type Store = { of: () => string[]; toggle: () => void; buddyName?: string };
+  const inBubbles = (message: Message, store: Store | null) => renderToStaticMarkup(
+    <ReactionContext.Provider value={store}><BubbleContext.Provider value={true}><ConversationTurn message={message} /></BubbleContext.Provider></ReactionContext.Provider>);
+
+  it("本人点的表情挂在最后一个气泡上", () => {
+    const store = { of: () => ["👍"], toggle: () => undefined };
+    const html = inBubbles({ ...answer, content: "第一段。\n\n第二段。" }, store);
+    expect(html.match(/data-bubble="buddy"/g)).toHaveLength(2);
+    expect(bubbleOf(html, 'data-bubble="buddy"', 0)).not.toContain("message-reactions");
+    const last = bubbleOf(html, 'data-bubble="buddy"');
+    expect(last).toMatch(/<div[^>]*data-edge=""[^>]*data-testid="message-reactions"/);
+    expect(last).toMatch(/aria-pressed="true" aria-label="点赞"[^>]*>👍<\/button>/);
+    // 最后一块是卡片时挂在卡片上。
+    const card = inBubbles({ ...answer, content: "先看这个。\n\n## 本周\n\n- 周二发清单\n- 周三确认" }, store);
+    expect(card.slice(card.indexOf("<section"), card.indexOf("</section>"))).toContain("message-reactions");
+    expect(bubbleOf(card, 'data-bubble="buddy"')).not.toContain("message-reactions");
+  });
+
+  it("伙伴点的表情只读，读屏念谁点的", () => {
+    const store = { of: () => ["❤️"], toggle: () => undefined, buddyName: "小天" };
+    const mine: Message = { sequence: 1, role: "user", content: "交给你了", runId: "run-1", buddyReactions: ["👍"] };
+    const bubble = bubbleOf(inBubbles(mine, store), 'data-bubble="mine"');
+    // 伙伴的在气泡角上、不是按钮（点了不切换），念「小天 点了 👍」；和本人自己点的分开画。
+    expect(bubble).toMatch(/<span[^>]*aria-label="小天 点了 👍"[^>]*>👍<\/span>/);
+    expect(bubble).not.toMatch(/<button[^>]*aria-label="小天 点了/);
+    expect(bubbleOf(bubble, 'data-testid="message-reactions"')).not.toContain("点了");
+    expect(bubble).toMatch(/aria-pressed="true" aria-label="爱心"/);
+    // 刚发出、还没写进历史的那句（没有 runId）：自己点不了，伙伴点的照样出。
+    expect(bubbleOf(inBubbles({ ...mine, runId: undefined }, store), 'data-bubble="mine"')).toContain('aria-label="小天 点了 👍"');
+    // 没给伙伴名时叫「伙伴」；老页面（不用气泡的）不出。
+    expect(inBubbles(mine, { of: () => [], toggle: () => undefined })).toContain('aria-label="伙伴 点了 👍"');
+    expect(renderToStaticMarkup(<ReactionContext.Provider value={store}><ConversationTurn message={mine} /></ReactionContext.Provider>)).not.toContain("点了");
+  });
+
+  it("本人那句的两个勾放在气泡里，不另占一行", () => {
+    const html = inBubbles({ sequence: 1, role: "user", content: "交给你了", receipt: "read" }, null);
+    expect(bubbleOf(html, 'data-bubble="mine"')).toContain('data-testid="message-receipt"');
+    // 老页面照旧在气泡下面一行。
+    expect(renderToStaticMarkup(<ConversationTurn message={{ sequence: 1, role: "user", content: "交给你了", receipt: "read" }} />)).toContain('data-testid="message-receipt"');
   });
 });

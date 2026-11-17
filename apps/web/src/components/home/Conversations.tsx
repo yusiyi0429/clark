@@ -161,7 +161,7 @@ export function BuddyView({ buddy, outbox, consume, onSpeaking, waiting, go, con
               </header>
             </>
           )}
-          timeline={(current) => <>{meetingFeed.notice}{handoffFeed.notice}<ReactionsProvider scope={current.scope}><WorkTimeline data={current} blocks={[...team.blocks, ...events, ...meetingFeed.blocks, ...handoffFeed.blocks]} modelRule={modelRule} /></ReactionsProvider></>}
+          timeline={(current) => <>{meetingFeed.notice}{handoffFeed.notice}<ReactionsProvider scope={current.scope} buddyName={name}><WorkTimeline data={current} blocks={[...team.blocks, ...events, ...meetingFeed.blocks, ...handoffFeed.blocks]} modelRule={modelRule} /></ReactionsProvider></>}
           dock={(latest) => <>{team.composer}<PendingDock latest={latest} /></>}
           input={(onHeight) => <ChatInput data={data} placeholder={`与${name}讨论…`} onHeight={onHeight} intercept={team.intercept} footer={{ left: team.launcher, right: <ModelText data={data} /> }}
             context={context ? { label: context, onClear: () => onClearContext?.() } : null} />} />
@@ -385,7 +385,7 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
               </header>
             </>
           )}
-          timeline={(current) => <ReactionsProvider scope={current.scope}><WorkTimeline data={current} blocks={blocks} modelRule={modelRule} /></ReactionsProvider>}
+          timeline={(current) => <ReactionsProvider scope={current.scope} buddyName={buddy?.name?.trim() || "伙伴"}><WorkTimeline data={current} blocks={blocks} modelRule={modelRule} /></ReactionsProvider>}
           dock={(latest) => <PendingDock latest={latest} />}
           input={readOnly ? () => null : (onHeight) => <ChatInput data={data} placeholder={handheld ? "说点什么…" : `与${project.name}讨论…`} onHeight={onHeight} footer={{
             left: folder,

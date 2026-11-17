@@ -8,7 +8,7 @@
 import { useMemo, type ReactNode } from "react";
 import type { TBuddyPlan } from "@warmap/contracts";
 import { ConversationStatusSlot, ConversationThinking, ConversationTurns, LocalTurnRow, STAGE_COPY } from "@/conversation/Transcript";
-import { AnswerOptions } from "@/conversation/AnswerOptionRow";
+import { QuickReplyContext } from "@/conversation/AnswerOptionRow";
 import { EntryCards } from "@/conversation/EntryCards";
 import { PlanChecklist } from "@/components/cards/PlanChecklist";
 import { planDoing } from "@/components/cards/ActivityLine";
@@ -73,7 +73,9 @@ export function buddyQuestionOpen(card: { status: string }, messages: readonly {
 export function WorkTimeline({ data, blocks, modelRule }: { data: ConversationData; blocks: TimedBlock[]; modelRule?: (label: string) => ReactNode }) {
   const lastIndex = data.messages.length - 1;
   const last = data.messages[lastIndex];
-  const options = !data.streaming && last?.role === "assistant" ? parseAnswerOptions(last.content).options : [];
+  // 最新一条回答的选项画成它最后一个气泡下面的一排小胶囊，点了直接发出（设计 6.4）。
+  const latest = !data.streaming && last?.role === "assistant" ? last.sequence : null;
+  const quick = useMemo(() => (latest === null ? null : { sequence: latest, send: (text: string) => void data.send(text, []) }), [latest, data.send]);
   const latestCards = useMemo(() => withoutSupersededCards(data.messages), [data.messages]);
   const placed = useMemo(() => placeBlocks(data.messages, blocks), [data.messages, blocks]);
   // 新首页的对话：答过的提问卡原处收成一行（inline），不另画本人那条问答记录。
@@ -82,8 +84,8 @@ export function WorkTimeline({ data, blocks, modelRule }: { data: ConversationDa
   const reveal = useMemo(() => () => revealTurn(data.scope, data.startedAt), [data.scope, data.startedAt]);
   const status = data.streaming ? (
     <ConversationStatusSlot>
-      {/* 一轮开始、还没有任何内容：马上露「•••」；有了内容以后由气泡那边在等下一块时露。 */}
-      {data.partial.trim() ? null : <TypingBubble />}
+      {/* 一轮开始、还没有任何正文（只写了选项块也算没有）：马上露「•••」；有了正文以后由气泡那边在等下一块时露。 */}
+      {parseAnswerOptions(data.partial, true).body.trim() ? null : <TypingBubble />}
       {data.thinking ? <ConversationThinking stage={data.stage} startedAt={data.startedAt} onStop={data.stop} route={data.route} progress={data.progress} steps={data.steps} thought={null} readScope={data.readScope} row={false} /> : null}
       {/* 伙伴这一轮的计划清单和出的卡（17.4，同 ConversationTimeline）：写完读回历史后挂在那条回答上。 */}
       {data.plan ? <PlanChecklist entries={data.plan.entries} collapsed={data.plan.collapsed} /> : null}
@@ -96,13 +98,13 @@ export function WorkTimeline({ data, blocks, modelRule }: { data: ConversationDa
   return (
     <BubbleContext.Provider value={true}>
     <RevealContext.Provider value={reveal}>
+    <QuickReplyContext.Provider value={quick}>
     <RescopeContext.Provider value={rescope}>
     <AskContext.Provider value={ask}>
     <ConversationTurns messages={data.messages} partial={data.streaming ? data.partial : ""} status={status} modelRule={modelRule}
       insertions={blocksAt}
       trailing={!data.streaming && data.localTurn ? <LocalTurnRow turn={data.localTurn} /> : undefined}
       steps={!data.thinking || data.stage === "answering" ? data.steps : null}
-      footer={(index) => (index === lastIndex && options.length ? <AnswerOptions scope={data.scope} options={options} /> : null)}
       after={(index) => {
         const cards = latestCards[index] ?? [];
         // 伙伴的提问卡在对话里就地答（选项框），别的卡照旧。
@@ -118,6 +120,7 @@ export function WorkTimeline({ data, blocks, modelRule }: { data: ConversationDa
       }} />
     </AskContext.Provider>
     </RescopeContext.Provider>
+    </QuickReplyContext.Provider>
     </RevealContext.Provider>
     </BubbleContext.Provider>
   );
