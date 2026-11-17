@@ -368,6 +368,9 @@ describe("出字的边角", () => {
     expect(delays(tree)).toEqual([null]);
     expect(typing(tree)).toBe(false);
 
+    // 新的一轮第一帧就是整段交来的一段：照常淡入。
+    hooks.reset();
+    expect(delays(bubbles("整段交来的一段。\n\n"))).toEqual([0]);
     // 新的一轮从第一帧挂上：一下到了六段，入场错开 0、60、120、180，之后不再往后推。
     hooks.reset();
     expect(typing(bubbles("开"))).toBe(true);

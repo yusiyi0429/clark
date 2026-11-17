@@ -100,7 +100,8 @@ export function EmojiButton({ onPick, disabled = false }: { onPick: (emoji: stri
   );
 }
 
-type Reactions = { of: (message: Message) => readonly string[]; toggle: (message: Message, emoji: string) => void };
+/** buddyName：伙伴点的表情读屏念「{伙伴名} 点了 …」。 */
+type Reactions = { of: (message: Message) => readonly string[]; toggle: (message: Message, emoji: string) => void; buddyName?: string };
 /** 伙伴台、项目对话给（ReactionsProvider）；别处没有，消息上就不出表情。 */
 export const ReactionContext = createContext<Reactions | null>(null);
 
@@ -127,17 +128,30 @@ export function useReactionStore(scope: string): Reactions {
   }, [changed, scope]);
 }
 
-export function ReactionsProvider({ scope, children }: { scope: string; children: ReactNode }) {
-  return <ReactionContext.Provider value={useReactionStore(scope)}>{children}</ReactionContext.Provider>;
+export function ReactionsProvider({ scope, buddyName, children }: { scope: string; buddyName: string; children: ReactNode }) {
+  const store = useReactionStore(scope);
+  const value = useMemo(() => ({ ...store, buddyName }), [store, buddyName]);
+  return <ReactionContext.Provider value={value}>{children}</ReactionContext.Provider>;
+}
+
+/** 伙伴点在本人那句上的表情（设计 6.5）：只读，点了不切换；读屏念「{伙伴名} 点了 👍」。和本人自己点的分开画。 */
+export function BuddyReactions({ emojis }: { emojis: readonly string[] }) {
+  const name = useContext(ReactionContext)?.buddyName || "伙伴";
+  return (
+    <span className={r.byBuddy} data-by-buddy="">
+      {emojis.map((emoji) => <span key={emoji} className={r.chip} role="img" aria-label={`${name} 点了 ${emoji}`} title={`${name} 点了 ${emoji}`}>{emoji}</span>)}
+    </span>
+  );
 }
 
 const LONG_PRESS_MS = 500;
 
 /**
  * 一条消息上的表情：给气泡的事件（右键、长按）和挂在气泡下面的那一行（挂的表情、悬停出的小按钮、快捷表情浮层）。
+ * edge：新首页的两种对话里这一行挂在气泡底边上（由气泡给位置），不再挂在整条下面。
  * 没有 ReactionContext、还没写进历史的（没有 runId）、留痕行这类不出。
  */
-export function useMessageReaction(message: Message | null) {
+export function useMessageReaction(message: Message | null, edge = false) {
   const reactions = useContext(ReactionContext);
   const [open, setOpen] = useState(false);
   const press = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -156,12 +170,12 @@ export function useMessageReaction(message: Message | null) {
     onTouchEnd: cancel,
     onTouchMove: cancel,
   };
-  const view = <MessageReactions mine={reactions.of(message)} user={message.role === "user"} open={open} onOpenChange={setOpen} onToggle={(emoji) => reactions.toggle(message, emoji)} />;
+  const view = <MessageReactions mine={reactions.of(message)} user={message.role === "user"} edge={edge} open={open} onOpenChange={setOpen} onToggle={(emoji) => reactions.toggle(message, emoji)} />;
   return { open, target, view };
 }
 
-export function MessageReactions({ mine, user, open, onOpenChange, onToggle }: {
-  mine: readonly string[]; user: boolean; open: boolean; onOpenChange: (open: boolean) => void; onToggle: (emoji: string) => void;
+export function MessageReactions({ mine, user, edge = false, open, onOpenChange, onToggle }: {
+  mine: readonly string[]; user: boolean; edge?: boolean; open: boolean; onOpenChange: (open: boolean) => void; onToggle: (emoji: string) => void;
 }) {
   // 「更多」翻出的面板只到这一次收起；收起的动画里不换回快捷那一排，下次打开再从快捷那一排起。
   const [more, setMore] = useState(false);
@@ -169,7 +183,7 @@ export function MessageReactions({ mine, user, open, onOpenChange, onToggle }: {
   if (open !== shown) { setShown(open); if (open) setMore(false); }
   const pick = (emoji: string) => { onOpenChange(false); onToggle(emoji); };
   return (
-    <div className={r.row} data-side={user ? "end" : "start"} data-testid="message-reactions">
+    <div className={r.row} data-side={user ? "end" : "start"} data-edge={edge ? "" : undefined} data-reacted={mine.length ? "" : undefined} data-testid="message-reactions">
       {mine.map((emoji) => (
         <button key={emoji} type="button" className={r.chip} aria-pressed="true" aria-label={emojiName(emoji)} title={emojiName(emoji)} onClick={() => onToggle(emoji)}>{emoji}</button>
       ))}

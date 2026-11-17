@@ -1,15 +1,22 @@
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { ReactElement } from "react";
+import { isValidElement, type ReactElement, type ReactNode } from "react";
 import type { ConversationData, Message } from "./useConversation";
 
-/** 回答末尾的选项：原文不进 DOM、不进到达淡入的分段；只在最新一条回答下；点了只填输入框。 */
+/** 回答末尾的选项：原文不进 DOM、不进到达淡入的分段；只在最新一条回答下；新首页的两种对话里点了直接发，别处只填输入框。 */
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+// 直接调 WorkTimeline 看它给下去的东西时，useMemo 就地算（不经 React 渲染）。
+const direct = vi.hoisted(() => ({ on: false }));
+vi.mock("react", async (original) => {
+  const react = await original<typeof import("react")>();
+  return { ...react, useMemo: (compute: () => unknown, deps: readonly unknown[]) => (direct.on ? compute() : react.useMemo(compute, deps)) };
+});
 
 import { ConversationTimeline } from "./ConversationTimeline";
 import { ConversationTurn } from "./Transcript";
-import { AnswerOptions } from "./AnswerOptionRow";
+import { AnswerOptions, QuickReplyContext } from "./AnswerOptionRow";
 import { ANSWER_OPTION_EVENT } from "./answerOptions";
+import { WorkTimeline } from "@/components/work/WorkTimeline";
 
 const ANSWER = "## 备选方案\n- 维持现状：按现有排期\n- 正式采用：本周发出 PO";
 const BLOCK = '```options\n[{"label":"维持现状"},{"label":"正式采用"},{"label":"暂不决定"}]\n```';
@@ -76,6 +83,64 @@ describe("点击", () => {
     const event = dispatch.mock.calls[0][0] as CustomEvent;
     expect(event.type).toBe(ANSWER_OPTION_EVENT);
     expect(event.detail).toEqual({ scope: "battlefield:aidc", text: "选择：暂不决定" });
+    vi.unstubAllGlobals();
+  });
+});
+
+describe("快捷回复（设计 6.4）", () => {
+  const PLAIN = `两个都行，看你。\n\n${BLOCK}`;
+  type Element = ReactElement<Record<string, unknown>>;
+  const elements = (node: ReactNode): Element[] => (Array.isArray(node) ? node.flatMap(elements)
+    : isValidElement(node) ? [node as Element, ...elements((node as Element).props.children as ReactNode)] : []);
+  /** 从 at 处那个 <div 起，到和它配对的 </div> 为止。 */
+  const divAt = (html: string, at: number) => {
+    const tags = /<div\b[^>]*>|<\/div>/g;
+    tags.lastIndex = at;
+    let depth = 0;
+    for (let tag = tags.exec(html); tag; tag = tags.exec(html)) {
+      depth += tag[0].startsWith("</") ? -1 : 1;
+      if (depth === 0) return html.slice(at, tags.lastIndex);
+    }
+    return html.slice(at);
+  };
+
+  it("气泡里的快捷回复点了直接发出", () => {
+    const send = vi.fn(async () => true);
+    const history = data([ask(1, "先做哪个？"), reply(2, PLAIN)], { send, rescope: vi.fn() });
+    const html = renderToStaticMarkup(<WorkTimeline data={history} blocks={[]} />);
+    // 一排小胶囊，在这条回复里、最后一个气泡下面（「用时」那一排之前），不在这条回复外面。
+    const article = html.slice(html.lastIndexOf("<article"));
+    const row = article.indexOf('data-testid="answer-options"');
+    expect(row).toBeGreaterThan(article.lastIndexOf('data-bubble="buddy"'));
+    expect(row).toBeLessThan(article.indexOf("</article>"));
+    expect(divAt(article, article.lastIndexOf("<div", row))).toMatch(/data-pills=""/);
+    expect(optionRow(html)).toHaveLength(1);
+    // 点了：选项的字原样作为本人的话发出去，不填输入框。
+    const dispatch = vi.fn();
+    vi.stubGlobal("window", { dispatchEvent: dispatch });
+    direct.on = true;
+    const tree = WorkTimeline({ data: history, blocks: [] });
+    direct.on = false;
+    const quick = elements(tree).find((element) => element.type === QuickReplyContext || element.type === QuickReplyContext.Provider)!.props.value as
+      { message: Message; send: (text: string) => void };
+    expect(quick.message).toBe(history.messages[1]);
+    const pills = AnswerOptions({ options: ["维持现状", "正式采用"], send: quick.send }) as ReactElement<{ children: ReactElement<{ onClick: () => void }>[] }>;
+    pills.props.children[1].props.onClick();
+    expect(send).toHaveBeenCalledWith("正式采用", []);
+    expect(dispatch).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it("别处的快捷回复照旧只填输入框", () => {
+    const html = renderToStaticMarkup(<ConversationTimeline data={data([ask(1, "先做哪个？"), reply(2, PLAIN)])} />);
+    // 在这条回答外面（下面），不是胶囊。
+    expect(html.indexOf('data-testid="answer-options"')).toBeGreaterThan(html.lastIndexOf("</article>"));
+    expect(optionRow(html)[0]).not.toContain("data-pills");
+    const dispatch = vi.fn();
+    vi.stubGlobal("window", { dispatchEvent: dispatch });
+    const row = AnswerOptions({ scope: "battlefield:aidc", options: ["维持现状", "正式采用"] }) as ReactElement<{ children: ReactElement<{ onClick: () => void }>[] }>;
+    row.props.children[1].props.onClick();
+    expect((dispatch.mock.calls[0][0] as CustomEvent).detail).toEqual({ scope: "battlefield:aidc", text: "选择：正式采用" });
     vi.unstubAllGlobals();
   });
 });

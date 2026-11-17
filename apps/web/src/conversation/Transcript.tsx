@@ -24,7 +24,8 @@ import { CONVERSATION_REHYPE_PLUGINS, CONVERSATION_REMARK_PLUGINS, holdOpenMath 
 import { RichStreamProvider } from "./richBlocks/surface";
 import { afterResize, resizing } from "./resizeGate";
 import { modelLine } from "@/lib/local/runModel";
-import { useMessageReaction } from "./Reactions";
+import { BuddyReactions, useMessageReaction } from "./Reactions";
+import { AnswerOptions, QuickReplyContext } from "./AnswerOptionRow";
 import { BubbleContext, ReplyBubbles, UserBubble } from "./ReplyBubbles";
 import s from "@/styles/conversation-transcript.module.css";
 import b from "@/styles/conversation-bubbles.module.css";
@@ -125,6 +126,7 @@ export const MarkdownBody = memo(function MarkdownBody({ text, streaming, fresh 
 });
 
 const NO_MEMORY: readonly string[] = [];
+const NO_OPTIONS: string[] = [];
 
 /** 已经收起的思考摘要：正文开始以后挂在这条回答的「用时」一行，点开看全文。 */
 type SettledThought = { text: string; seconds: number };
@@ -142,7 +144,7 @@ export function sameTurn(previous: TurnProps, next: TurnProps): boolean {
     && a.role === b.role && a.content === b.content
     && (a.memoryUsed ?? []).join("|") === (b.memoryUsed ?? []).join("|")
     && a.readScope?.label === b.readScope?.label && a.kind === b.kind && a.via === b.via && a.meta?.href === b.meta?.href && a.answers?.askId === b.answers?.askId
-    && a.receipt === b.receipt && (a.reactions ?? []).join("|") === (b.reactions ?? []).join("|")
+    && a.receipt === b.receipt && (a.reactions ?? []).join("|") === (b.reactions ?? []).join("|") && (a.buddyReactions ?? []).join("|") === (b.buddyReactions ?? []).join("|")
     && sameList(a.attachments, b.attachments, (item) => item.id)
     && sameList(a.referencesSnapshot, b.referencesSnapshot, (item) => `${item.cardId}@${item.version}`);
 }
@@ -253,14 +255,19 @@ function ConversationTurnBody({ message, ms, streaming = false, thought, steps }
   ) : null;
   const attachments = message.attachments ?? [];
   // 回答末尾的选项块（answerOptions）在进 Markdown、remend 与到达淡入之前就拿掉，流式中没写完的也不露出。
-  const quoted = useMemo(() => (user ? readQuotedMessage(message.content) : { message: parseAnswerOptions(message.content, streaming).body, quotes: [] }),
-    [user, message.content, streaming]);
+  const quoted = useMemo(() => {
+    if (user) return { ...readQuotedMessage(message.content), options: NO_OPTIONS };
+    const { body, options } = parseAnswerOptions(message.content, streaming);
+    return { message: body, quotes: [], options };
+  }, [user, message.content, streaming]);
   const battlefield = user ? pageContextBattlefield(message.content) : null;
   const memoryKey = streaming ? "" : (message.memoryUsed ?? []).join("|");
   const memoryUsed = useMemo(() => (memoryKey ? memoryKey.split("|") : NO_MEMORY), [memoryKey]);
   // 新首页的对话里回答提问的那一句不另画：提问卡原处收成了一行（AskContext.inline）。
   const ask = useContext(AskContext);
-  const reaction = useMessageReaction(streaming ? null : message);
+  // 新首页的两种对话：最新一条回答的选项是最后一个气泡下面的一排小胶囊（设计 6.4）；表情挂在气泡底边上（6.5）。
+  const quick = useContext(QuickReplyContext);
+  const reaction = useMessageReaction(streaming ? null : message, bubbles);
   if (user && message.answers && ask?.inline) return null;
   const details = (
     <>
@@ -317,8 +324,16 @@ function ConversationTurnBody({ message, ms, streaming = false, thought, steps }
       {quoted.quotes.length ? <QuoteChips quotes={quoted.quotes} sent /> : null}
       {/* 回答 Agent 提问的那一句：画成紧凑的问答记录，不显示原文。 */}
       {user && message.answers ? <AnswerRecord record={message.answers} /> : bubbles ? (
-        user ? <UserBubble><div className={s.prose}>{prose}</div></UserBubble>
-          : <MemoryUsedProvider value={memoryUsed}><ReplyBubbles markdown={quoted.message} streaming={streaming} at={message.createdAt} /></MemoryUsedProvider>
+        user ? (
+          <UserBubble>
+            <div className={s.prose}>{prose}</div>
+            {/* 两个勾在气泡里右下角，不另占一行。 */}
+            {message.receipt && message.receipt !== "failed" ? <ReceiptTicks state={message.receipt} className={b.tick} /> : null}
+            {message.buddyReactions?.length || reaction ? (
+              <div className={b.edge}>{message.buddyReactions?.length ? <BuddyReactions emojis={message.buddyReactions} /> : null}{reaction?.view}</div>
+            ) : null}
+          </UserBubble>
+        ) : <MemoryUsedProvider value={memoryUsed}><ReplyBubbles markdown={quoted.message} streaming={streaming} at={message.createdAt} edge={reaction?.view} /></MemoryUsedProvider>
       ) : (
         <div className={s.prose}>
           <MemoryUsedProvider value={memoryUsed}>
@@ -326,6 +341,7 @@ function ConversationTurnBody({ message, ms, streaming = false, thought, steps }
           </MemoryUsedProvider>
         </div>
       )}
+      {bubbles && !streaming && quick?.message === message ? <AnswerOptions options={quoted.options} send={quick.send} /> : null}
       {bubbles && !user && !streaming && (ms !== undefined || thoughtToggle) ? (
         <div className={b.meta}>
           {ms !== undefined ? <span>用时 {seconds(ms)}</span> : null}
@@ -334,8 +350,8 @@ function ConversationTurnBody({ message, ms, streaming = false, thought, steps }
       ) : null}
       {bubbles && !streaming ? details : null}
       {/* 伙伴对话的回执（17.4）：两个小勾，送达亮第一个，读到亮第二个。 */}
-      {user && message.receipt ? (message.receipt === "failed" ? <ResendLine message={message} /> : <ReceiptTicks state={message.receipt} />) : null}
-      {reaction?.view}
+      {user && message.receipt ? (message.receipt === "failed" ? <ResendLine message={message} /> : bubbles ? null : <ReceiptTicks state={message.receipt} />) : null}
+      {bubbles ? null : reaction?.view}
     </article>
   );
 }

@@ -60,6 +60,8 @@ export type Message = { sequence: number; role: "user" | "assistant"; content: s
   fallback?: TLocalFallbackReason;
   /** 本人挂在这条消息上的表情（伙伴台、项目对话，Reactions.tsx）。 */
   reactions?: string[];
+  /** 伙伴点在本人这句上的表情（派活成功后，服务端点的 👍；只读）。 */
+  buddyReactions?: string[];
   meta?: { issueId?: string; title?: string; href?: string } };
 export type Attachment = { id: string; fileName: string; mimeType: string };
 export type ConversationStatus = "idle" | "streaming" | "complete" | "failed" | "aborted";
@@ -725,6 +727,15 @@ ${input}` : input;
       return index < 0 || current[index].receipt === "read" ? current
         : current.map((item, at) => (at === index ? { ...item, receipt: state, messageId } : item));
     });
+    /** 伙伴在本人这一轮那句上点的表情（整组）：按 runId 认，刚发出还没有 runId 的就是这一轮最后一句本人的话。 */
+    const markBuddyReaction = (eventRunId: string | undefined, emojis: string[]) => setMessages((current) => {
+      let index = eventRunId ? current.findIndex((item) => item.role === "user" && item.runId === eventRunId) : -1;
+      if (index < 0) {
+        index = current.length - 1;
+        while (index >= 0 && current[index].role !== "user") index -= 1;
+      }
+      return index < 0 ? current : current.map((item, at) => (at === index ? { ...item, buddyReactions: emojis } : item));
+    });
     let reply = "";
     let notice: string | undefined;
     /** 这一轮走过恢复时服务端在 done 里给的那行说明（读不回历史时本地补的那条回答也带上）。 */
@@ -926,6 +937,7 @@ ${input}` : input;
             receipt = { messageId: event.messageId, state: event.state };
             if (live()) markReceipt(event.state, event.messageId);
           }
+          if (event.type === "buddy_reaction" && event.emojis && live()) markBuddyReaction(event.runId, event.emojis);
           if (event.type === "plan" && event.plan && live()) setTurnPlan(event.plan);
           if (event.type === "model" && event.provider && event.model && live()) setTurnModel({ provider: event.provider, model: event.model });
           if (event.type === "card" && event.card && live()) { const card = event.card; setTurnCards((current) => [...current, card]); }

@@ -89,7 +89,8 @@ const enter = (delay: number | null) => (delay === null ? {} : { "data-enter": "
 
 type Piece = { kind: "bubble" | "card"; markdown: string; title: string; summary: string; open: boolean };
 
-export function ReplyBubbles({ markdown, streaming, at }: { markdown: string; streaming: boolean; at?: string }) {
+/** edge：挂在这组最后一块底边上的东西（本人点的表情，设计 6.5）。 */
+export function ReplyBubbles({ markdown, streaming, at, edge }: { markdown: string; streaming: boolean; at?: string; edge?: ReactNode }) {
   const { segments, tail } = useMemo(() => splitReply(markdown, streaming), [markdown, streaming]);
   // 在这里流式过的：入场有动画；一挂上就是写完的（读历史来的）一次出齐。
   const live = useRef(streaming);
@@ -104,10 +105,10 @@ export function ReplyBubbles({ markdown, streaming, at }: { markdown: string; st
   const reveal = useContext(RevealContext);
 
   // 写到一半挂上的（刷新后接上、换了 key 重挂）：挂上时已经在的内容算露过，不再等、不再淡入。
-  // 这一轮从第一帧挂上时只有没写完的一段，照常等；同一页里重挂时看上一次画到哪。
+  // 这一轮从第一帧挂上时只有一块（没写完的一段，或整段交来的一段），照常等、照常淡入；同一页里重挂时看上一次画到哪。
   if (!mounted.current) {
     mounted.current = true;
-    const earlier = streaming && (segments.length > 0 || (!!streamed?.shown && markdown.startsWith(streamed.markdown)));
+    const earlier = streaming && (segments.length + (tail ? 1 : 0) > 1 || (!!streamed?.shown && markdown.startsWith(streamed.markdown)));
     if (earlier) {
       delays.current = Array<null>(segments.length + (tail ? 1 : 0)).fill(null);
       if (tail) hold.current = { index: segments.length, since: Date.now(), shown: true, seen: 0 };
@@ -156,16 +157,19 @@ export function ReplyBubbles({ markdown, streaming, at }: { markdown: string; st
 
   return (
     <div className={b.group}>
-      {pieces.map((piece, index) => (piece.kind === "card"
-        ? <ReplyCard key={index} markdown={piece.markdown} title={piece.title} summary={piece.summary} open={piece.open} at={streaming ? undefined : at} delay={delays.current[index] ?? null} />
-        : <TextBubble key={index} markdown={piece.markdown} open={piece.open} collapsible={!grown.current.has(index)} delay={delays.current[index] ?? null} />))}
+      {pieces.map((piece, index) => {
+        const onEdge = index === pieces.length - 1 && edge ? <div className={b.edge}>{edge}</div> : null;
+        return piece.kind === "card"
+          ? <ReplyCard key={index} markdown={piece.markdown} title={piece.title} summary={piece.summary} open={piece.open} at={streaming ? undefined : at} delay={delays.current[index] ?? null} edge={onEdge} />
+          : <TextBubble key={index} markdown={piece.markdown} open={piece.open} collapsible={!grown.current.has(index)} delay={delays.current[index] ?? null} edge={onEdge} />;
+      })}
       {streaming && tail && !shown ? <TypingBubble /> : null}
     </div>
   );
 }
 
 /** 一个气泡：超过 6 行收起（边写边长过的不收），下面淡色「展开」就地展开。open：还在写。 */
-function TextBubble({ markdown, open, collapsible, delay }: { markdown: string; open: boolean; collapsible: boolean; delay: number | null }) {
+function TextBubble({ markdown, open, collapsible, delay, edge }: { markdown: string; open: boolean; collapsible: boolean; delay: number | null; edge?: ReactNode }) {
   const box = useRef<HTMLDivElement>(null);
   const [over, setOver] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -186,6 +190,7 @@ function TextBubble({ markdown, open, collapsible, delay }: { markdown: string; 
         <MarkdownBody text={markdown} streaming={open} />
       </div>
       {clamp && over ? <button type="button" className={b.more} onClick={() => setExpanded(true)}>展开</button> : null}
+      {edge}
     </BuddyBubble>
   );
 }
@@ -207,7 +212,7 @@ function withoutTitle(markdown: string, title: string): string {
  * 一张卡：标题、摘要（淡色）、时间（淡色）、「打开」。电脑上「打开」在右边文件预览那一格看全文；手机上（没有那一格）就地展开。
  * open：还在写，只出壳子（标题 +「…」）。
  */
-function ReplyCard({ markdown, title, summary, open, at, delay }: { markdown: string; title: string; summary: string; open: boolean; at?: string; delay: number | null }) {
+function ReplyCard({ markdown, title, summary, open, at, delay, edge }: { markdown: string; title: string; summary: string; open: boolean; at?: string; delay: number | null; edge?: ReactNode }) {
   const side = useSideDetail();
   const id = useId();
   const [inPlace, setInPlace] = useState(false);
@@ -240,6 +245,7 @@ function ReplyCard({ markdown, title, summary, open, at, delay }: { markdown: st
       {inPlace ? <div className={`${ts.prose} ${b.cardBody}`}><MarkdownBody text={withoutTitle(markdown, title)} streaming={false} /></div> : null}
       {open || inPlace ? null : <div className={b.acts}><button type="button" className={b.open} onClick={show}>打开</button></div>}
       {side && panel ? <SideContent side={side} kind="file"><CardPreview title={title} markdown={markdown} onClose={close} /></SideContent> : null}
+      {edge}
     </section>
   );
 }

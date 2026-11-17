@@ -17,6 +17,21 @@
 .mine.mine :is(ul, ol) { margin: 6px 0 var(--space-2); }
 .mine.mine li { margin: 2px 0; }
 
+/* 表情挂在气泡底边（设计 6.5）：伙伴回复的挂在这组最后一块左下，本人那句的（含伙伴点的）在右下；挂着表情时让出压出去的那一截。 */
+.buddy, .mine, .card { position: relative; }
+.edge { position: absolute; left: 8px; bottom: -12px; display: flex; align-items: center; gap: 6px; }
+.mine > .edge { left: auto; right: 8px; flex-direction: row-reverse; }
+:is(.buddy, .mine, .card):has(> .edge :is([data-reacted], [data-by-buddy])) { margin-bottom: 12px; }
+/* 本人那句的两个勾：气泡里右下角，不另占一行。 */
+.mine:has(> .tick) { padding-right: 36px; }
+.mine > .tick { position: absolute; right: 12px; bottom: 9px; height: var(--type-lh, 24px); align-items: center; margin: 0; }
+
+/* 快捷回复（设计 6.4）：最后一个气泡下面一排小胶囊，靠左；白底、发丝线、圆角满，点了就发出。 */
+.pills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.pills button { min-height: 34px; padding: 5px 14px; border: 0; border-radius: var(--r-capsule, 999px); background: var(--surface); box-shadow: inset 0 0 0 1px var(--hairline-strong); color: var(--ink); font: inherit; text-align: left; cursor: pointer; transition: background-color var(--dur-fast) linear; }
+.pills button:hover { background: var(--default-soft); }
+.pills button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
 /* 超过 6 行收起：下沿淡出，下面一个淡色「展开」。 */
 .text[data-clamp] { max-height: calc(6 * var(--type-lh, 26px)); overflow: hidden; }
 .text[data-over] {

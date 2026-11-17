@@ -18,6 +18,13 @@
 .chip { --type-lh: 24px; display: inline-flex; align-items: center; height: 24px; padding: 0 6px; border: 0; border-radius: var(--r-capsule, 999px); background: var(--neutral-wash); box-shadow: inset 0 0 0 1px var(--hairline); cursor: pointer; }
 .chip:hover { background: var(--default-soft-hover); }
 .chip:focus-visible, .add:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+/* 新首页的两种对话：这一行挂在气泡底边上（位置由气泡给，conversation-bubbles 的 .edge）；表情和加表情的按钮是压在边上的白底小胶囊。 */
+.row[data-edge] { position: static; margin-top: 0; }
+.row[data-edge] .chip, .row[data-edge] .add, .byBuddy > .chip { background: var(--surface); box-shadow: 0 0 0 1px var(--hairline), var(--elev-2); }
+.row[data-edge] .add { border-radius: var(--r-capsule, 999px); }
+/* 伙伴点的：只读，和本人点的分开一组。 */
+.byBuddy { display: inline-flex; gap: var(--space-1); }
+.byBuddy > .chip { cursor: default; }
 /* 加表情的小按钮：鼠标移到这条消息上、键盘焦点进来、浮层开着时才出现；手机上不出（长按）。 */
 .add { min-width: 24px; width: 24px; height: 24px; color: var(--ink-faint); opacity: 0; transition: opacity var(--dur-fast) linear; }
 .add:hover { color: var(--ink-muted); }
