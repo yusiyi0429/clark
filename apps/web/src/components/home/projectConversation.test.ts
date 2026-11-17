@@ -47,6 +47,10 @@ describe("开了工的计划（设计 6.6）", () => {
     expect(html).toMatch(/改首页.*换头像/);
     expect(html).not.toContain("调研");
     expect(html).not.toContain("别的计划的卡");
+    // 没记开工的序号（老计划、假对话）：按最早那张卡建出来的时间排，不钉在最后。
+    const timed = startedThreads({ key: "t1", workers: [], cards: [card("c1", "2026-11-17T01:01:00Z")], subs, anchor: null, onOpen: vi.fn() });
+    expect(timed).toMatchObject({ at: "2026-11-17T01:01:00Z" });
+    expect(timed).not.toHaveProperty("afterSequence");
     // 还没开工（这份计划没有卡）的不挂。
     expect(startedThreads({ key: "t1", workers: [], cards: [], subs, anchor: null, onOpen: vi.fn() })).toBeNull();
   });

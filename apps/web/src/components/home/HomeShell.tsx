@@ -693,6 +693,8 @@ function HomeFrame({ account }: { account: Account }) {
   );
   const seen = useMemo(() => ({ seen: seenMarks, onOpen: markSeen }), [seenMarks, markSeen]);
   const threadSub = slot === "thread" && thread ? subs.find((sub) => sub.kind === thread.kind && sub.id === thread.id) ?? null : null;
+  // thread 里那个子会话不在了（开着时被归档、删了）：面板当作关着，不留一块空的。
+  const panel = slot === "thread" && !threadSub ? null : slot;
   if (handheld) {
     return (
       <WorkspaceContext.Provider value={workspace}>
@@ -726,7 +728,7 @@ function HomeFrame({ account }: { account: Account }) {
         <SideDetailContext.Provider value={side}>
           <SeenContext.Provider value={seen}>
           <HomeMeetingProvider meeting={meeting}>
-          <div className={h.app} data-panel={slot === "file" || slot === "thread" ? "file" : slot ? "open" : "closed"} data-left={collapsed ? "closed" : undefined} data-wide={slot === "file" && wide ? "" : undefined} data-view={view.kind} data-scheme="auto" data-type-scale="one" data-entering={entering ? "" : undefined} data-testid="work-home"
+          <div className={h.app} data-panel={panel === "file" || panel === "thread" ? "file" : panel ? "open" : "closed"} data-left={collapsed ? "closed" : undefined} data-wide={slot === "file" && wide ? "" : undefined} data-view={view.kind} data-scheme="auto" data-type-scale="one" data-entering={entering ? "" : undefined} data-testid="work-home"
             data-resizing={leftWidth.dragging || rightWidth.dragging || fileWidth.dragging ? "" : undefined} style={{
               ...(leftWidth.width && !collapsed ? { "--home-left": `${leftWidth.width}px` } : {}),
               ...(rightWidth.width ? { "--home-right": `${rightWidth.width}px` } : {}),
@@ -734,24 +736,24 @@ function HomeFrame({ account }: { account: Account }) {
             } as CSSProperties}>
             <aside className={h.left}>{left}{collapsed ? null : <LeftResize control={leftWidth} />}</aside>
             <main className={h.display}><LeftToggle collapsed={collapsed} unseen={leftDot} onToggle={leftFold.toggle} />{display(view)}</main>
-            {slot ? (
-              <aside className={h.right} aria-label={PANEL_LABEL[slot]} data-testid="side-panel">
+            {panel ? (
+              <aside className={h.right} aria-label={PANEL_LABEL[panel]} data-testid="side-panel">
                 {/* 文件预览自己有页头（名字、改动、放大、关闭），这里只给它一块地方；thread 也自己画页头（名字、放大、关闭）。 */}
-                {slot === "file" ? <div ref={setSideNode} className={h.sideFile} />
-                  : slot === "thread" ? (threadSub ? <ThreadPane key={`${threadSub.kind}:${threadSub.id}`} sub={threadSub} go={go} onClose={() => show(null)} /> : null) : (
-                  <div className={h.side} data-testid={slot === "detail" ? "side-detail" : "side-sessions"}>
+                {panel === "file" ? <div ref={setSideNode} className={h.sideFile} />
+                  : panel === "thread" && threadSub ? <ThreadPane key={`${threadSub.kind}:${threadSub.id}`} sub={threadSub} go={go} onClose={() => show(null)} /> : (
+                  <div className={h.side} data-testid={panel === "detail" ? "side-detail" : "side-sessions"}>
                     <div className={h.sideHead}>
-                      <span className={h.resName}>{PANEL_LABEL[slot]}</span><span className={h.grow} />
-                      <HeroButton variant="ghost" size="sm" isIconOnly title="关闭" aria-label={`关闭${PANEL_LABEL[slot]}`} onPress={() => show(null)} data-testid="side-close"><X {...ICON} /></HeroButton>
+                      <span className={h.resName}>{PANEL_LABEL[panel]}</span><span className={h.grow} />
+                      <HeroButton variant="ghost" size="sm" isIconOnly title="关闭" aria-label={`关闭${PANEL_LABEL[panel]}`} onPress={() => show(null)} data-testid="side-close"><X {...ICON} /></HeroButton>
                     </div>
                     <div className={h.sideScroll}>
-                      {slot === "sessions" ? sessionsPanel(false)
+                      {panel === "sessions" ? sessionsPanel(false)
                         : view.kind === "project" ? (() => { const project = projects.all.find((entry) => entry.id === view.id); return project ? projectInfo(project, true) : null; })()
                         : <div ref={setSideNode} />}
                     </div>
                   </div>
                 )}
-                {slot === "file" && wide ? null : <RightResize control={slot === "file" || slot === "thread" ? fileWidth : rightWidth} />}
+                {panel === "file" && wide ? null : <RightResize control={panel === "file" || panel === "thread" ? fileWidth : rightWidth} />}
               </aside>
             ) : null}
           </div>

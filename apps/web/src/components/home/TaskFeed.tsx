@@ -85,12 +85,15 @@ export function feedBlocks({ items, workers, go, onSay, onChanged, remoteAsks, d
   const workerOf = (cardId: string) => workers.find((worker) => worker.cardId === cardId && worker.kind === "card") ?? null;
   // 要你出手的那一块：还在等就照原样、最后一块下面挂小条；不在等了收成一行淡色字（line）。
   const settledLine = (line: string) => <p className={f.settled} data-testid="hand-settled">{line}</p>;
-  const hand = (item: { id: string; at: string; afterSequence?: number | null }, subId: string, waits: (sub: SubSession) => boolean, line: string, blocks: TimedBlock[]): TimedBlock[] => {
-    if (!threads) return blocks;
-    const sub = threads.subs.find((entry) => entry.id === subId);
-    if (!sub || !waits(sub)) return [{ key: item.id, at: item.at, afterSequence: item.afterSequence, node: settledLine(line) }];
+  // blocks 给成函数时，小条交给它自己放（报告点了「看结果」当场收起，小条跟着一起不挂）。
+  const hand = (item: { id: string; at: string; afterSequence?: number | null }, subId: string, waits: (sub: SubSession) => boolean, line: string,
+    blocks: TimedBlock[] | ((chip: ReactNode) => TimedBlock[])): TimedBlock[] => {
+    const sub = threads?.subs.find((entry) => entry.id === subId);
+    if (threads && (!sub || !waits(sub))) return [{ key: item.id, at: item.at, afterSequence: item.afterSequence, node: settledLine(line) }];
+    const chip = threads && sub ? <ThreadChip sub={sub} onOpen={threads.onOpen} /> : null;
+    if (typeof blocks === "function") return blocks(chip);
     const last = blocks.at(-1)!;
-    return [...blocks.slice(0, -1), { ...last, node: <>{last.node}<ThreadChip sub={sub} onOpen={threads.onOpen} /></> }];
+    return [...blocks.slice(0, -1), { ...last, node: <>{last.node}{chip}</> }];
   };
   const feed = items.flatMap((item): TimedBlock[] => {
     switch (item.kind) {
@@ -111,7 +114,7 @@ export function feedBlocks({ items, workers, go, onSay, onChanged, remoteAsks, d
       ) }]);
       // 子会话停下、有原因（18.10）：还停着才算要你出手；点过「看结果」也收起。
       case "sub_session_report": return hand(item, item.sub.id, (sub) => subIcon(sub).state === "stopped" && !answeredOf(item.id), reportLine(item),
-        [{ key: item.id, at: item.at, afterSequence: item.afterSequence, node: <SubSessionReport item={item} go={go} settled={settledLine(reportLine(item))} /> }]);
+        (chip) => [{ key: item.id, at: item.at, afterSequence: item.afterSequence, node: <SubSessionReport item={item} go={go} settled={settledLine(reportLine(item))} chip={chip} /> }]);
       case "criteria_met": return [{ key: item.id, at: item.at, node: <CriteriaDecision item={item} go={go} onSay={onSay} /> }];
       case "rework_opened": return [{ key: item.id, at: item.at, node: (
         <p className={f.sentence} data-testid="feed-rework">
@@ -294,9 +297,9 @@ const reportLine = (item: TProjectSubSessionReportItem) => `${item.sub.title} ·
 /**
  * 子会话停了的报告（18.10，项目动态 sub_session_report）：一行「标题 · 停着等」，下面是做成了什么（summary）、卡在哪（blocker，淡色）和「看结果」。
  * 这一轮交了产出物的列在下面一行：云端收下的（outputId）点了直接打开，还没收到的只写标题；「看结果」打开第一件收下的，一件都没收到时进那个子会话。
- * 点过「看结果」（这台电脑上记着）以后换成 settled（收成的那一行淡色字）。
+ * 下面挂 chip（这个子会话的小条）；点过「看结果」（这台电脑上记着）以后整块换成 settled（收成的那一行淡色字），小条不再挂。
  */
-function SubSessionReport({ item, go, settled }: { item: TProjectSubSessionReportItem; go: (href: string) => void; settled: ReactNode }) {
+function SubSessionReport({ item, go, settled, chip }: { item: TProjectSubSessionReportItem; go: (href: string) => void; settled: ReactNode; chip: ReactNode }) {
   const [looked, setLooked] = useState(() => !!answeredOf(item.id));
   if (looked) return settled;
   const received = item.outputs.find((output) => output.outputId);
@@ -305,7 +308,7 @@ function SubSessionReport({ item, go, settled }: { item: TProjectSubSessionRepor
     setLooked(true);
     if (received) window.open(outputHref(received.outputId!), "_blank", "noopener"); else go(subHref(item.sub));
   };
-  return (
+  return (<>
     <div className={f.ask} data-testid="sub-report">
       <p className={f.askFrom}>{reportLine(item)}</p>
       <p className={f.sentence}>
@@ -324,5 +327,6 @@ function SubSessionReport({ item, go, settled }: { item: TProjectSubSessionRepor
         </p>
       ) : null}
     </div>
-  );
+    {chip}
+  </>);
 }

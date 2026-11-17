@@ -46,7 +46,7 @@ import s from "@/styles/v2-session.module.css";
  * queued：首页数据里它在排队时的状态词（「已排队 · 等 B 改登录页 这一轮做完」，第 68 条），页头照写；不在排队为 null。
  * ask：钉在输入框上方的另一个框（自由子会话等着项目绑文件夹时的「在哪个文件夹开工？」），有它时先出它。
  * 自由子会话（topic.free，第 68 条，项目下的「+」开的）：界面上就是一个子会话，没有提纲、版本、评审会、存飞书，页头不出「当前版本」。
- * pane：放在右边的 thread 视图里（设计 6.6，ThreadPane 给它的面板位为 null）：一直单列，当前版本就地换掉对话来看；名字在 thread 的页头上，这里不再写。
+ * pane：放在右边的 thread 视图里（设计 6.6，ThreadPane 给它的面板位为 null）：一直单列，当前版本、改动的文件都就地换掉对话来看；名字在 thread 的页头上，这里不再写。
  */
 export function TopicSession({ topicId, embedded = false, waiting = null, queued = null, ask = null, pane = false }: { topicId: string; embedded?: boolean; waiting?: Attention | null; queued?: string | null; ask?: ReactNode; pane?: boolean }) {
   const chrome = useViewChrome();
@@ -98,9 +98,9 @@ export function TopicSession({ topicId, embedded = false, waiting = null, queued
   const models = useSessionModels(local.runner, local.models, session, local.refresh, () => showWorkspaceToast({ text: "没换成" }), local.status, local.sources !== null);
   // 说一句：一按就先画出来（useSessionSend）。
   const send = useSessionSend(local.runner, session?.id ?? null, view, { kind: "topic", id: topicId });
-  // 自由子会话改的是项目文件夹：和卡的子会话一样，一轮末尾那一行点了在右边的面板位看那一轮的改动，按处或整个文件恢复（第 72 条）。
+  // 自由子会话改的是项目文件夹：和卡的子会话一样，一轮末尾那一行点了在右边的面板位看那一轮的改动（thread 面板里就地换掉对话来看），按处或整个文件恢复（第 72 条）。
   const free = !!detail?.topic.free;
-  const fileSession = free && embedded && side && ready && !handheld ? session?.id ?? null : null;
+  const fileSession = free && embedded && (side || pane) && ready && !handheld ? session?.id ?? null : null;
   const files = useSessionFiles(local.runner, fileSession, filesSignal(view.status, view.entries));
   const [preview, setPreview] = useState<PreviewFile | null>(null);
   const showPanel = side?.show;
@@ -244,7 +244,10 @@ export function TopicSession({ topicId, embedded = false, waiting = null, queued
           {free ? null : <HeroButton variant="ghost" size="sm" isIconOnly aria-label="当前版本" title="当前版本" data-pressed={showDoc || undefined} onPress={() => (side ? side.toggle() : setReading(!showDoc))} data-testid="session-details"><Info {...ICON} aria-hidden /></HeroButton>}
           {chrome.trail}
         </header>
-        <div className={s.body} data-solo="">{showDoc && !side ? <div className={s.paneScroll}>{doc}</div> : chat}</div>
+        <div className={s.body} data-solo="">
+          {pane && preview ? <FilePreview file={preview} onClose={closePreview} canRestore={!running(status)} />
+            : showDoc && !side ? <div className={s.paneScroll}>{doc}</div> : chat}
+        </div>
         {side && !free ? <SideContent side={side}><div className={s.page} data-embedded="" data-side="">{doc}</div></SideContent> : null}
         {side && free && preview ? <SideContent side={side} kind="file"><FilePreview file={preview} onClose={closePreview} canRestore={!running(status)} wide={side.wide} onWide={side.setWide} /></SideContent> : null}
         {dialogs}

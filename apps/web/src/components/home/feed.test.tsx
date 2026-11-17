@@ -204,5 +204,20 @@ describe("要你出手的事回到项目对话（设计 4.3 硬规矩，本人 1
     } finally {
       vi.unstubAllGlobals();
     }
+    // 块排好以后才点的「看结果」：报告当场收成一行，小条跟着一起不挂（不等下一次重排）。
+    const blocks = feedBlocks({ items: [report], workers: [], go: vi.fn(), onSay: vi.fn(), onChanged: vi.fn(), threads: { subs: open, onOpen: vi.fn() } });
+    vi.stubGlobal("localStorage", { getItem: () => JSON.stringify({ r1: "看结果" }), setItem: () => undefined });
+    try {
+      const html = renderToStaticMarkup(<LocalContext.Provider value={local([])}>{blocks.map((block) => <div key={block.key}>{block.node}</div>)}</LocalContext.Provider>);
+      expect(html).toContain('data-testid="hand-settled"');
+      expect(html).not.toContain("thread-chip");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("停着等的报告之后又正常停了一次：旧的那块不再算要你出手", () => {
+    const later = { ...report, id: "r2", at: "2026-11-07T06:30:00Z", why: "turn_done" as const, summary: "都查完了", blocker: null };
+    expect(conversationFeed([report, later]).map((entry) => entry.id)).toEqual([]);
   });
 });

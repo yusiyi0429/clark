@@ -223,27 +223,29 @@ type PipelineProps = {
  * 同一个子会话只留最新那一块。挂上 Task 的分隔线、过了的验收行、返工、会议交接不进对话。
  */
 const CONVERSATION_FEED = new Set<ProjectFeedItem["kind"]>(["handover", "handover_summary", "transfer_declined", "goal_changed", "sub_session_decision", "criteria_met"]);
-/** 要你出手的那一块是哪个子会话的；不是这几种为 null。 */
+/** 要你出手的那几种是哪个子会话的；不是这几种为 null。子会话的报告不管停下有没有原因都算（后来正常停了一次，前面那块就不是最新的了）。 */
 const handOf = (item: ProjectFeedItem): string | null => {
   switch (item.kind) {
     case "card_blocked": case "card_needs_person": return item.cardId;
     case "card_passed": return item.merge?.state === "needs_merge" ? item.cardId : null;
-    case "sub_session_report": return item.blocker || item.why === "error" ? item.sub.id : null;
+    case "sub_session_report": return item.sub.id;
     default: return null;
   }
 };
+/** 报告里只有停下有原因的（卡在哪、出错）要你出手。 */
+const needsYou = (item: ProjectFeedItem) => item.kind !== "sub_session_report" || !!item.blocker || item.why === "error";
 export function conversationFeed(feed: readonly ProjectFeedItem[]): ProjectFeedItem[] {
   // 动态从旧到新：每个子会话最后那一块。
   const latest = new Map(feed.flatMap((item) => { const sub = handOf(item); return sub ? [[sub, item.id] as const] : []; }));
   return feed.filter((item) => {
     const sub = handOf(item);
-    if (sub) return latest.get(sub) === item.id;
+    if (sub) return latest.get(sub) === item.id && needsYou(item);
     return CONVERSATION_FEED.has(item.kind) && !(item.kind === "goal_changed" && item.answer);
   });
 }
 
 /**
- * 开了工的计划（设计 6.6）：在开工那一下的位置（plan.startedAfterSequence；没有时按最早那张卡建出来的时间）挂这份计划开出的子会话，
+ * 开了工的计划（设计 6.6）：在开工那一下的位置（plan.startedAfterSequence；没记时按最早那张卡建出来的时间排，不放最后）挂这份计划开出的子会话，
  * 一个一条 thread 小条，按派活单的先后。这份计划还没有卡时为 null。
  */
 export function startedThreads({ key, workers, cards, subs, anchor, onOpen }: {
@@ -254,7 +256,7 @@ export function startedThreads({ key, workers, cards, subs, anchor, onOpen }: {
   const started = planOrder(subs.filter((sub) => sub.kind === "card" && created.has(sub.id)), created);
   const first = [...created.values()].sort()[0];
   if (!first || !started.length) return null;
-  return { key: `started:${key}`, at: first, afterSequence: anchor, node: (
+  return { key: `started:${key}`, at: first, ...(anchor === null ? {} : { afterSequence: anchor }), node: (
     <div className={h.threads} data-testid="started-threads">{started.map((sub) => <ThreadChip key={sub.id} sub={sub} onOpen={onOpen} />)}</div>
   ) };
 }
