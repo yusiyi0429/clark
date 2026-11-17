@@ -20,9 +20,13 @@ vi.mock("react", () => {
     },
   };
 });
-import { STREAM_SILENCE_MS, useConversation } from "./useConversation";
+import { STREAM_SILENCE_MS } from "./useConversation";
+/** 每个测试像新打开的页面：这一页读过的对话（模块里记的）不带到下一个测试。 */
+let useConversation: typeof import("./useConversation").useConversation;
 
-beforeEach(() => {
+beforeEach(async () => {
+  vi.resetModules();
+  ({ useConversation } = await import("./useConversation"));
   state.values = []; state.refs = [];
   vi.stubGlobal("window", { dispatchEvent: vi.fn(), location: { assign: vi.fn() } });
 });

@@ -95,6 +95,15 @@ describe("WorkTimeline event key ancestry", () => {
     expect(order(streaming)).toEqual(["message:1", meeting.key, handoff.key, "message:-1"]);
   });
 
+  it("第一次打开、消息没到时不画插块", () => {
+    // 第一次读历史、一条消息还没到：开工小条等按时间 / 序号插的块都先不画（只留载入状态）。
+    const anchored: TimedBlock = { ...handoff, key: "started", afterSequence: 3 };
+    expect(order(rendered([], [handoff, meeting, anchored], { historyStatus: "loading" }))).toEqual([]);
+    // 读到了（哪怕 0 条）、或已经有消息（重试、读过的对话）时照常画。
+    expect(order(rendered([], [handoff, meeting], { historyStatus: "ready" }))).toEqual([meeting.key, handoff.key]);
+    expect(order(rendered([message(1)], [handoff], { historyStatus: "loading" }))).toEqual(["message:1", handoff.key]);
+  });
+
   it("wraps the timeline in bubbles (BubbleContext = true) and keeps the reply node from streaming to settled", () => {
     const top = WorkTimeline({ data: data([message(1)]), blocks: [] }) as Element;
     expect(top.type === BubbleContext || top.type === BubbleContext.Provider).toBe(true);

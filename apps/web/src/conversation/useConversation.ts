@@ -293,6 +293,12 @@ function withoutPendingTurn(messages: Message[], pending: string): Message[] {
   return messages;
 }
 
+/**
+ * 这一页里读成功过的对话（按 scope）：再挂上时先用它画（算已读到），同时照常重读、读回来替换。
+ * 登录、退出、登录失效都是整页跳转（lib/logout、AccessScreen、401 时 location.assign），换人时它随页面清掉。
+ */
+const readConversations = new Map<string, { messages: Message[]; localTurn: TConversationLocalTurn | null }>();
+
 class TurnError extends Error {
   constructor(public code: string | undefined, message: string) {
     super(message);
@@ -301,7 +307,7 @@ class TurnError extends Error {
 
 export function useConversation(scope: string, viewingMaterial: { id: string; editable: boolean } | null = null, messageContext?: string,
   anchorSelection?: AnchorSelection) {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>(readConversations.get(scope)?.messages ?? []);
   const [status, setStatus] = useState<ConversationStatus>("idle");
   const [partial, setPartial] = useState("");
   const [stage, setStage] = useState<ThinkingStage>("thinking");
@@ -322,9 +328,9 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploading, setUploading] = useState(false);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
-  const [historyStatus, setHistoryStatus] = useState<HistoryStatus>("loading");
+  const [historyStatus, setHistoryStatus] = useState<HistoryStatus>(readConversations.has(scope) ? "ready" : "loading");
   /** 项目对话正在本人电脑上跑、还没写进历史的那一轮（读历史时单独给）。 */
-  const [localTurn, setLocalTurn] = useState<TConversationLocalTurn | null>(null);
+  const [localTurn, setLocalTurn] = useState<TConversationLocalTurn | null>(readConversations.get(scope)?.localTurn ?? null);
   const [historyError, setHistoryError] = useState<string | null>(null);
   /** 载入对话记录时连不上、正在自己重试：从什么时候开始等、是不是在等网络恢复。 */
   const [historyWaiting, setHistoryWaiting] = useState<{ since: number; offline: boolean } | null>(null);
@@ -440,6 +446,7 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
           setLocalTurn(body.localTurn ?? null);
           // 伙伴对话读回的本人那几句都已经读到了（17.4 的两个勾）。
           const saved = isBuddyScope(scope) ? (body.messages as Message[]).map((item) => (item.role === "user" ? { ...item, receipt: "read" as const } : item)) : body.messages as Message[];
+          readConversations.set(scope, { messages: saved, localTurn: body.localTurn ?? null });
           const loaded = withPendingTurn(saved, pendingTurn.current);
           setMessages(loaded);
           setHistoryStatus("ready");
@@ -467,7 +474,15 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
   }, [historyUrl]);
 
   useEffect(() => {
-    setMessages([]);
+    // 读过的这条：先画上次读到的，后台安静地重读（不出「正在刷新对话记录…」）；没读过的照旧从载入中开始。
+    const known = readConversations.get(scope);
+    setMessages(known?.messages ?? []);
+    if (known) {
+      setLocalTurn(known.localTurn);
+      setHistoryStatus("ready");
+      setHistoryError(null);
+      setHistoryWaiting(null);
+    }
     setPartial("");
     setStatus("idle");
     setError(null);
@@ -479,7 +494,7 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
     setUploading(false);
     setAttachmentError(null);
     const started = generation.current;
-    void loadHistory("show").then((loaded) => {
+    void loadHistory(known ? "quiet" : "show").then((loaded) => {
       // 刷新、切回来时最后一句还在回答：接上这一轮（同样的进行中一行、停止可用），写完换成回答。
       const run = loaded ? runningQuestion(loaded) : undefined;
       if (run && generation.current === started) followRef.current(run);
