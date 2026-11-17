@@ -50,6 +50,16 @@ describe("splitReply", () => {
     });
     expect(splitReply("- a\n- b\n\n1", true).segments).toEqual([]);
   });
+  it("流式：以粗体、行内代码、数字开头的话也当场是自己的气泡", () => {
+    const list = { kind: "bubble", markdown: "- a\n- b" };
+    expect(splitReply("- a\n- b\n\n**注意**：后面一整段", true)).toEqual({ segments: [list], tail: { kind: "bubble", markdown: "**注意**：后面一整段", title: "" } });
+    expect(splitReply("```\nx\n```\n\n`npm`命令要先装", true)).toEqual({
+      segments: [{ kind: "card", markdown: "```\nx\n```", title: "x", summary: "" }],
+      tail: { kind: "bubble", markdown: "`npm`命令要先装", title: "" },
+    });
+    expect(splitReply("- a\n- b\n\n12个人参加", true)).toEqual({ segments: [list], tail: { kind: "bubble", markdown: "12个人参加", title: "" } });
+    expect(splitReply("- a\n- b\n\n1.5倍", true)).toEqual({ segments: [list], tail: { kind: "bubble", markdown: "1.5倍", title: "" } });
+  });
   it("围栏关上以后紧跟的话不算进代码卡", () => {
     expect(splitReply("```\nx\n```\n说完了。").segments).toEqual([
       { kind: "card", markdown: "```\nx\n```", title: "x", summary: "" },
@@ -64,6 +74,10 @@ describe("splitReply", () => {
       "```ts\nconst a = 1\n\nconst b = 2\n```\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n说完了。",
       "公式：\n\n$$\na\n\nb\n$$\n\n- a\n\n1. b\n\n#a 不是标题\n说明\n## 是标题\n内容",
       "```\nx\n```\n说完了。\n\n- a\n- b\n\n下一句很长很长。\n\n- c\n\n12 个人\n\n1.5 倍\n\n- d\n\n> 引用",
+      "- a\n- b\n\n**注意**：后面一整段\n\n- c",
+      "```\nx\n```\n\n`npm`命令要先装\n\n| a |\n|---|\n| 1 |",
+      "- a\n- b\n\n12个人参加\n\n- c\n- d",
+      "- a\n- b\n\n1.5倍\n\n1. 一\n2. 二\n\n~~删掉~~的话\n\n$a$ 和 #号 *星",
     ];
     for (const reply of replies) {
       const chars = [...reply];

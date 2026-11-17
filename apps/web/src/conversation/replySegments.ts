@@ -188,14 +188,14 @@ function group(parts: Part[]): Group[] {
 }
 
 /**
- * 这一段的类别定了：第一行已经写完；或者还没写完，但再往后写也变不成别的块——
- * 第一个字不是任何块记号的开头（`- * + # | > ` ~ $` 和数字），或者记号后面已经出现空白（记号那一截写完了）。
- * 「1」还不算（再来「. 」就是清单项），一个汉字开头当场就算。
+ * 这一段的类别定了：第一行已经写完；或者还没写完，但已经不是某个块记号的半截——
+ * 「-」「#」「``」「$」「1」「1.」这类再写一个字可能变成清单、标题、围栏、公式，要等；
+ * 「**注意**」「`npm`」「12个人」「1.5倍」、汉字开头当场就算。
  */
+const MARKER_PREFIX = /^(?:[-*+]|#{1,6}|`{1,2}|~{1,2}|\$|\d{1,9}[.)]?)$/;
+
 function begun(part: Part, last: number): boolean {
-  if (part.start < last) return true;
-  const text = part.lines[0].trimStart();
-  return !/^[-*+#|>`~$\d]/.test(text) || /\s/.test(text);
+  return part.start < last || !MARKER_PREFIX.test(part.lines[0].trimStart());
 }
 
 /**
