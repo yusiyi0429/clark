@@ -8,7 +8,7 @@
  * - 后台任务：组头 12/16 600 淡色，「进行中」前面一颗转圈（整栏只有它在转）；「已完成」默认收起，有失败时自动展开、组头后面加「· 失败 1」。
  *   行高 36：种类、名字、用时，停止按钮鼠标移上去或有焦点时才出（手持上一直显示），不能停的不画。行里不放状态图标，失败的行首一个叉、用时换成「失败」，
  *   停了的用时换成「已停止」，停着等额度恢复的换成「等额度恢复 · 08:00」。后台任务点不进去，行没有悬停底。
- * 电脑上（第 73 条）右边平时没有，只在面板位里放后台任务两组（BackgroundTasks）；这一整块（带资源块）只给手机的底部抽屉用。
+ * 这一整块（带资源块）给手机的底部抽屉用；电脑上（设计 4.3）右边的会话面板里放资源块（MachineBlock）和后台任务两组（BackgroundTasks）。
  */
 import { useEffect, useState } from "react";
 import { ChevronDown, ChevronRight, LoaderCircle, Square, X } from "lucide-react";
@@ -90,6 +90,16 @@ export function BackgroundPanel({ items, resources, onStop, handheld = false }: 
   onStop: (item: BackgroundItem) => Promise<void>;
   handheld?: boolean;
 }) {
+  return (
+    <div className={h.bg} data-testid="background-panel">
+      <MachineBlock resources={resources} handheld={handheld} />
+      <div className={h.bgBody}><BackgroundTasks items={items} onStop={onStop} handheld={handheld} /></div>
+    </div>
+  );
+}
+
+/** 资源块（这台电脑、在跑的子会话、剩余用量）：手机抽屉里的 BackgroundPanel 和电脑上右边的会话面板（设计 4.3）都用。 */
+export function MachineBlock({ resources, handheld = false }: { resources: Resources; handheld?: boolean }) {
   const machine = useMachine(resources.quota);
   const [acting, setActing] = useState(false);
   // 逐项检查：有一项不对时默认展开；本人点过就照本人的来。
@@ -97,43 +107,40 @@ export function BackgroundPanel({ items, resources, onStop, handheld = false }: 
   const bad = machine.checks.some((check) => check.bad);
   const showChecks = checksOpen ?? bad;
   return (
-    <div className={h.bg} data-testid="background-panel">
-      <div className={h.bgHead} data-testid="resources">
-        <div className={h.resLine}>
-          <button type="button" className={h.pcRow} aria-expanded={showChecks} onClick={() => setChecksOpen(!showChecks)} data-testid="machine-row">
-            {bad ? <i className={h.warnDot} aria-hidden /> : null}
-            <span className={h.resName}>这台电脑</span><span className={h.resWord}> · {machine.word}</span>
-            <ChevronDown size={14} strokeWidth={1.8} aria-hidden className={h.pcChevron} data-open={showChecks ? "" : undefined} />
-          </button>
-        </div>
-        {showChecks ? (
-          <>
-            <ul className={h.checks} data-testid="machine-checks">
-              {machine.checks.map((check) => <li key={check.name} data-bad={check.bad ? "" : undefined}><span>{check.name}</span><span className={h.checkValue}>{check.value}</span></li>)}
-            </ul>
-            {machine.offline && !handheld ? <LocalInstall /> : null}
-            {machine.action ? (
-              <div className={h.checkFix}>
-                <HeroButton variant="tertiary" size="sm" isDisabled={acting} onPress={() => { setActing(true); void machine.action!.run().finally(() => setActing(false)); }}>{machine.action.label}</HeroButton>
-              </div>
-            ) : null}
-          </>
-        ) : null}
-        {machine.ready ? (
-          <div className={h.runLine} title={`同时最多跑 ${resources.local.cap} 张卡`}>
-            在跑的子会话<span className={h.grow} />
-            {resources.local.cap <= MANY_SESSIONS ? <Slots used={resources.local.used} cap={resources.local.cap} /> : null}
-            <span className={`${h.runCount} ${h.num}`}>{resources.local.used}/{resources.local.cap}</span>
-          </div>
-        ) : null}
-        {machine.usage.length ? (
-          <>
-            <p className={h.usageHead}>剩余用量</p>
-            <ul className={h.usage}>{machine.usage.map((cell) => <UsageItem key={cell.id} cell={cell} />)}</ul>
-          </>
-        ) : null}
+    <div className={h.bgHead} data-testid="resources">
+      <div className={h.resLine}>
+        <button type="button" className={h.pcRow} aria-expanded={showChecks} onClick={() => setChecksOpen(!showChecks)} data-testid="machine-row">
+          {bad ? <i className={h.warnDot} aria-hidden /> : null}
+          <span className={h.resName}>这台电脑</span><span className={h.resWord}> · {machine.word}</span>
+          <ChevronDown size={14} strokeWidth={1.8} aria-hidden className={h.pcChevron} data-open={showChecks ? "" : undefined} />
+        </button>
       </div>
-      <div className={h.bgBody}><BackgroundTasks items={items} onStop={onStop} handheld={handheld} /></div>
+      {showChecks ? (
+        <>
+          <ul className={h.checks} data-testid="machine-checks">
+            {machine.checks.map((check) => <li key={check.name} data-bad={check.bad ? "" : undefined}><span>{check.name}</span><span className={h.checkValue}>{check.value}</span></li>)}
+          </ul>
+          {machine.offline && !handheld ? <LocalInstall /> : null}
+          {machine.action ? (
+            <div className={h.checkFix}>
+              <HeroButton variant="tertiary" size="sm" isDisabled={acting} onPress={() => { setActing(true); void machine.action!.run().finally(() => setActing(false)); }}>{machine.action.label}</HeroButton>
+            </div>
+          ) : null}
+        </>
+      ) : null}
+      {machine.ready ? (
+        <div className={h.runLine} title={`同时最多跑 ${resources.local.cap} 张卡`}>
+          在跑的子会话<span className={h.grow} />
+          {resources.local.cap <= MANY_SESSIONS ? <Slots used={resources.local.used} cap={resources.local.cap} /> : null}
+          <span className={`${h.runCount} ${h.num}`}>{resources.local.used}/{resources.local.cap}</span>
+        </div>
+      ) : null}
+      {machine.usage.length ? (
+        <>
+          <p className={h.usageHead}>剩余用量</p>
+          <ul className={h.usage}>{machine.usage.map((cell) => <UsageItem key={cell.id} cell={cell} />)}</ul>
+        </>
+      ) : null}
     </div>
   );
 }

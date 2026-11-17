@@ -4,9 +4,9 @@
  * 新首页 /me/work（新首页_伙伴总管线与Task管线_2026-11-07，替换 V2 设计第 20.4 节的三栏首页），按人打开：
  * - 左：伙伴名片（总管线）、「今天」「会议」「本月」、项目、本人行（个人菜单），见 LeftColumn；电脑上能收起（中间左上角的按钮）。
  * - 中：展示区——首页、总管线、Task 管线、Task 详情、子会话、二级页、月份页（地址决定，见 view.ts）。
- * - 右：平时没有（第 73 条）。要看时出一个面板，同一时间只放一样：会话详情（页头的信息按钮）、文件预览（含「改动」）、后台任务（页头右上角的按钮）；
+ * - 右：平时没有（第 73 条）。要看时出一个面板，同一时间只放一样：会话详情（页头的信息按钮）、文件预览（含「改动」）、会话（页头右上角的按钮，设计 4.3：子会话、这台电脑、后台任务）；
  *   再开一样就替掉前一样，关掉就完全没有；左边缘能拖宽。放大时面板占满中间和右边。
- * 手机：首屏兼首页（伙伴名片、今天、等你、树、本人），点进去全屏；后台任务从「今天」行和页头的按钮打开，是底部抽屉。
+ * 手机：首屏兼首页（伙伴名片、今天、等你、树、本人），点进去全屏；会话从「今天」行和页头的按钮打开，是底部抽屉（会话列表，下面是这台电脑、后台任务）。
  * 深色按「偏好 · 外观」（跟随系统 / 浅色 / 深色，17.2）：外壳带 data-scheme="auto"，深色变量挂在根上（app/scheme-dark.css）；
  * 外观存在服务端，进首页、切回这个标签页时读一次（useAppearance）。
  * 切换展示区用 history.pushState（Next 会同步 usePathname），不等服务端；每个地址也都有页面，刷新照样打开。
@@ -17,7 +17,7 @@
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type CSSProperties } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { ArrowLeft, ListChecks, LoaderCircle, X } from "lucide-react";
+import { ArrowLeft, X } from "lucide-react";
 import type { THomePlanTask, TLocalPermissionMode } from "@warmap/contracts";
 import type { Account } from "@/components/AccountMenu";
 import { useBuddy } from "@/components/buddy/useBuddy";
@@ -40,7 +40,8 @@ import { HeroButton } from "@/components/HeroButton";
 import type { BackgroundItem, RouteTarget } from "@/lib/home/types";
 import { useBackground } from "@/lib/home/useBackground";
 import { useWorkHome } from "@/lib/home/useWorkHome";
-import { BackgroundPanel, BackgroundTasks, useMachine } from "./BackgroundPanel";
+import { useMachine } from "./BackgroundPanel";
+import { SessionsButton, SessionsPanel, panelProject } from "./SessionsPanel";
 import { BuddyView, PipelineView, type Outbox, type OutboxEntry } from "./Conversations";
 import { HomeComposer, HomeView, HomeWaiting, type SendTarget } from "./HomeView";
 import { PartnerMeetingsProvider } from "./PartnerMeetings";
@@ -49,7 +50,7 @@ import { focusList } from "@/lib/home/focus";
 import { isTeamDraft } from "./PartnerTeam";
 import { TEAM_DELIVERY_CHANGED } from "@/lib/home/teamDelivery";
 import { LeftColumn } from "./LeftColumn";
-import type { RowActions } from "./SubRows";
+import { SeenContext, subIcon, type RowActions } from "./SubRows";
 import { ForeignTaskInfo, TaskInfo } from "./TaskInfo";
 import { MissionInfo } from "./MissionInfo";
 import { MeetingView } from "./MeetingView";
@@ -131,8 +132,8 @@ function HomeFrame({ account }: { account: Account }) {
   const [monthHead, setMonthHead] = useState<MonthHead | null>(null);
   const outboxId = useRef(0);
 
-  // 右边的面板位（第 73 条）：平时没有；详情、文件、后台任务同一时间只放一样，再开一样就替掉前一样，关掉就完全没有。
-  // 详情跟着展示区走（换着看别的子会话、项目接着看那一个的详情，到了没有详情的页面就收起）；文件是那一页自己的，换页就关；后台任务一直跟着。
+  // 右边的面板位（第 73 条）：平时没有；详情、文件、会话同一时间只放一样，再开一样就替掉前一样，关掉就完全没有。
+  // 详情跟着展示区走（换着看别的子会话、项目接着看那一个的详情，到了没有详情的页面就收起）；文件是那一页自己的，换页就关；会话一直跟着。
   const [shown, setShown] = useState<PanelKind | null>(null);
   const [wide, setWide] = useState(false);
   const [sideNode, setSideNode] = useState<HTMLElement | null>(null);
@@ -472,7 +473,6 @@ function HomeFrame({ account }: { account: Account }) {
   // ---- 后台任务 ----
   const items = useBackground(scopeOf(view), api);
   const machine = useMachine(work.resources.quota);
-  const running = items.filter((item) => item.state === "running" || item.state === "queued").length;
   // 规划员、验收员停会话；子 agent、后台命令只停那一项，会话接着做。
   const stop = async (item: BackgroundItem) => {
     if (!item.sessionId) return;
@@ -508,16 +508,14 @@ function HomeFrame({ account }: { account: Account }) {
     const goal = data.projects.flatMap((project) => project.goals).find((entry) => entry.taskId === taskId);
     return goal ? { taskId, missionId: goal.missionId, name: goal.name, doneDefinition: null, criteria: goal.criteria } : null;
   };
-  // 后台任务按钮（5.7、第 73 条）：没有在跑的是 ListChecks；有在跑的是转圈加数字。手机上点了出底部抽屉；电脑上在右边的面板位开关「后台任务」。
-  const tasksOpen = slot === "tasks";
+  // 会话按钮（设计 4.2、4.3，取代后台任务按钮）：面板范围里有子会话在跑、或后台任务在跑在排时外面一圈慢转的细环。手机上点了出底部抽屉；电脑上在右边的面板位开关「会话」。
+  const sessionsOpen = slot === "sessions";
+  const scopedSubs = panelProject(view, projects.all)?.subSessions ?? subs;
+  const running = items.some((item) => item.state === "running" || item.state === "queued") || scopedSubs.some((sub) => subIcon(sub).state === "running");
   const backgroundButton = useMemo(() => (
-    <button type="button" className={h.icon} aria-label="后台任务" title="后台任务" aria-pressed={handheld ? undefined : tasksOpen}
-      onClick={() => (handheld ? setSheet(true) : show(tasksOpen ? null : "tasks"))} data-testid={handheld ? "phone-background" : "background-button"}>
-      {running ? <span className={h.runningCount}><LoaderCircle {...ICON} />{running}</span> : <ListChecks {...ICON} />}
-      {/* 手机上：这台电脑没连上不亮点，额度（云端各设备报的）快用完照样亮（11.2）。电脑上额度看模型旁边的圆环，这里不亮。 */}
-      {handheld && machine.quotaAlert ? <i className={h.cornerDot} data-tone={machine.quotaAlert === "danger" ? "danger" : undefined} aria-hidden /> : null}
-    </button>
-  ), [running, machine.quotaAlert, handheld, tasksOpen, show]);
+    <SessionsButton running={running} open={sessionsOpen} handheld={handheld} alert={machine.quotaAlert}
+      onPress={() => (handheld ? setSheet(true) : show(sessionsOpen ? null : "sessions"))} />
+  ), [running, machine.quotaAlert, handheld, sessionsOpen, show]);
   // 子会话页头的上一级：它在哪个项目里，点了回到项目对话。
   const subId = view.kind === "card" || view.kind === "topic" ? view.id : null;
   const owner = subId ? projects.all.find((project) => project.subSessions.some((sub) => sub.id === subId)) ?? null : null;
@@ -682,6 +680,13 @@ function HomeFrame({ account }: { account: Account }) {
   const collapsed = leftFold.collapsed && !handheld;
   const leftDot = useLeftDot({ collapsed, homeReady: api.ready, meetingsLoaded, localPhase: local.phase, projects: projects.projects, seen: seenMarks, waitingCount });
 
+  // 会话面板（设计 4.3）：电脑上在右边的面板位，手机上在底部抽屉；点行、「…」里的「标为已读」照左栏的「刚看过」记。
+  const sessionsPanel = (phone: boolean) => (
+    <SeenContext.Provider value={{ seen: seenMarks, onOpen: markSeen }}>
+      <SessionsPanel view={view} projects={projects.all} other={data.other.subSessions} archivedSubs={projects.archivedSubs} actions={rowActions} go={go}
+        items={items} onStop={stop} resources={work.resources} handheld={phone} />
+    </SeenContext.Provider>
+  );
   if (handheld) {
     return (
       <WorkspaceContext.Provider value={workspace}>
@@ -695,9 +700,9 @@ function HomeFrame({ account }: { account: Account }) {
             </> : <main className={h.display}>{display(view)}</main>}
             {sheet ? (
               <div className={h.sheetBackdrop} data-closing={sheetClosing ? "" : undefined} onClick={closeSheet}>
-                <div className={h.sheet} role="dialog" aria-modal="true" aria-label="后台任务" onClick={(event) => event.stopPropagation()}>
+                <div className={h.sheet} role="dialog" aria-modal="true" aria-label="会话" onClick={(event) => event.stopPropagation()}>
                   <span className={h.grabber} aria-hidden />
-                  <BackgroundPanel items={items} resources={work.resources} onStop={stop} handheld />
+                  {sessionsPanel(true)}
                 </div>
               </div>
             ) : null}
@@ -724,13 +729,13 @@ function HomeFrame({ account }: { account: Account }) {
               <aside className={h.right} aria-label={PANEL_LABEL[slot]} data-testid="side-panel">
                 {/* 文件预览自己有页头（名字、改动、放大、关闭），这里只给它一块地方。 */}
                 {slot === "file" ? <div ref={setSideNode} className={h.sideFile} /> : (
-                  <div className={h.side} data-testid={slot === "detail" ? "side-detail" : "side-tasks"}>
+                  <div className={h.side} data-testid={slot === "detail" ? "side-detail" : "side-sessions"}>
                     <div className={h.sideHead}>
                       <span className={h.resName}>{PANEL_LABEL[slot]}</span><span className={h.grow} />
                       <HeroButton variant="ghost" size="sm" isIconOnly title="关闭" aria-label={`关闭${PANEL_LABEL[slot]}`} onPress={() => show(null)} data-testid="side-close"><X {...ICON} /></HeroButton>
                     </div>
                     <div className={h.sideScroll}>
-                      {slot === "tasks" ? <div className={h.bgBody}>{items.length ? <BackgroundTasks items={items} onStop={stop} /> : <p className={h.sideEmpty}>没有后台任务</p>}</div>
+                      {slot === "sessions" ? sessionsPanel(false)
                         : view.kind === "project" ? (() => { const project = projects.all.find((entry) => entry.id === view.id); return project ? projectInfo(project, true) : null; })()
                         : <div ref={setSideNode} />}
                     </div>
@@ -747,7 +752,7 @@ function HomeFrame({ account }: { account: Account }) {
   );
 }
 
-const PANEL_LABEL: Record<PanelKind, string> = { detail: "详情", file: "文件", tasks: "后台任务" };
+const PANEL_LABEL: Record<PanelKind, string> = { detail: "详情", file: "文件", sessions: "会话" };
 
 /** 二级页、月份页的壳（5.4.7）：页头（返回、标题）+ 文档类阅读尺，内容是挂进来的组件。 */
 function SecondaryFrame({ title, trail, go, back = true, children }: { title: string; trail?: React.ReactNode; go: (href: string) => void; back?: boolean; children: React.ReactNode }) {
