@@ -33737,6 +33737,15 @@
                     "maxLength": 16,
                     "type": "string"
                   }
+                },
+                "buddyReactions": {
+                  "maxItems": 3,
+                  "type": "array",
+                  "items": {
+                    "minLength": 1,
+                    "maxLength": 16,
+                    "type": "string"
+                  }
                 }
               }
             }
@@ -35046,6 +35055,50 @@
                     }
                   }
                 ]
+              }
+            }
+          },
+          {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "runId",
+              "scope",
+              "sequence",
+              "type",
+              "role",
+              "emojis"
+            ],
+            "properties": {
+              "runId": {
+                "type": "string"
+              },
+              "scope": {
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128}|project:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
+                "description": "global 或稳定对象 scope",
+                "type": "string"
+              },
+              "sequence": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "type": {
+                "const": "buddy_reaction",
+                "type": "string"
+              },
+              "role": {
+                "const": "user",
+                "type": "string"
+              },
+              "emojis": {
+                "minItems": 1,
+                "maxItems": 3,
+                "type": "array",
+                "items": {
+                  "minLength": 1,
+                  "maxLength": 16,
+                  "type": "string"
+                }
               }
             }
           },

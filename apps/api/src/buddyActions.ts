@@ -21,6 +21,8 @@ import { agreementRow, writeAgreement } from "./cardAgreements.js";
 import { CardError } from "./taskCards.js";
 import { companyPeriod } from "./monthlyPlans.js";
 import { checkedWords, recentOwnerWords, type ProjectHistory } from "./sourceWords.js";
+import { addBuddyReaction } from "./conversationReactions.js";
+import { logEvent } from "./observability.js";
 
 /**
  * 伙伴代本人做事（新首页 17.4，契约 buddyActions.ts）。Chat 每轮读动作清单（actionList），模型调哪个就按名字执行（runAction）。
@@ -668,7 +670,21 @@ export async function runAction(deps: BuddyDeps, call: Call, name: string, args:
     if (outcome.card) deps.stream(call.runId, { type: "card", card: outcome.card });
     if (kind === "write") await tickPlan(deps, call.runId);
   }
+  if (DISPATCH.has(action) && call.runId && call.conversationId) await thumbsUp(deps, call.personId, call.conversationId, call.runId);
   return { summary: outcome.summary, result: outcome.result ?? null, auditId, undoable: Boolean(outcome.undo) };
+}
+
+/** 派活的动作：做成了伙伴在本人这一轮那句话上点 👍。 */
+const DISPATCH = new Set<BuddyActionName>(["split_cards", "start_sub_session", "sub_session_tell", "sub_session_restart", "message_project"]);
+/** 点 👍 并插进这一轮的流；失败只记日志，不让动作失败。 */
+async function thumbsUp(deps: BuddyDeps, personId: string, conversationId: string, runId: string) {
+  try {
+    const scope = await conversationScope(deps.q, personId, conversationId);
+    const emojis = await addBuddyReaction(deps.q, { personId, scope, runId, role: "user", emoji: "👍" });
+    deps.stream?.(runId, { type: "buddy_reaction", role: "user", emojis });
+  } catch (error) {
+    logEvent({ event: "buddy_actions.reaction_failed", runId, error: (error as Error)?.message });
+  }
 }
 
 /** 兜底：写动作做成了而伙伴没打勾，把清单上第一条进行中的标成完成。 */

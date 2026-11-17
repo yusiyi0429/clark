@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { TEST_CEO, TEST_MEMBER, createTestApp } from "./helpers.js";
 import type { ConversationRuntime } from "../src/conversations.js";
+import { addBuddyReaction } from "../src/conversationReactions.js";
+import type { Query } from "../src/meetingStore.js";
 
 const runtime: ConversationRuntime = {
   async run(input) {
@@ -54,6 +56,42 @@ describe("对话消息上的表情（本人自己的标记）", { timeout: 30_00
       expect(after.at(-1)).not.toHaveProperty("reactions");
       expect(after[0].reactions).toEqual(["🙏"]);
       expect(await t.sql("SELECT count(*)::int AS n FROM conversation_reactions WHERE person_id = $1 AND role = 'assistant'", [TEST_CEO.personId])).toEqual([{ n: 0 }]);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("伙伴点的和本人点的分开存，本人改自己的不动伙伴的", async () => {
+    const t = await createTestApp({}, runtime);
+    try {
+      const ceo = await t.loginCookie();
+      await t.app.inject({ method: "POST", url: "/api/conversations/global/messages",
+        headers: { cookie: ceo, origin: t.publicOrigin, accept: "text/event-stream" }, payload: { message: "你好" } });
+      const history = async (): Promise<(Row & { buddyReactions?: string[] })[]> => (await t.app.inject({
+        method: "GET", url: "/api/conversations/global/messages", headers: { cookie: ceo },
+      })).json().messages;
+      const [asked] = await history();
+      const q = t.pool.query.bind(t.pool) as Query;
+      const buddy = (emoji: string) => addBuddyReaction(q, { personId: TEST_CEO.personId, scope: "global", runId: asked.runId, role: "user", emoji });
+      // 伙伴点的同一个只算一个、最多 3 个，回整组。
+      expect(await buddy("👍")).toEqual(["👍"]);
+      expect(await buddy("👍")).toEqual(["👍"]);
+      await buddy("❤️");
+      await buddy("😂");
+      expect(await buddy("😮")).toEqual(["👍", "❤️", "😂"]);
+      await t.sql("UPDATE conversation_reactions SET emojis = ARRAY['👍'] WHERE reactor = 'buddy'");
+
+      const react = (emojis: string[]) => t.app.inject({ method: "PUT", url: "/api/conversations/global/reactions",
+        headers: { cookie: ceo, origin: t.publicOrigin }, payload: { runId: asked.runId, role: "user", emojis } });
+      expect((await react(["🙏"])).statusCode).toBe(200);
+      expect((await history())[0]).toMatchObject({ reactions: ["🙏"], buddyReactions: ["👍"] });
+
+      // 本人取消自己的：伙伴的还在。
+      expect((await react([])).json()).toEqual({ runId: asked.runId, role: "user", emojis: [] });
+      const after = (await history())[0];
+      expect(after).not.toHaveProperty("reactions");
+      expect(after.buddyReactions).toEqual(["👍"]);
+      expect(await t.sql("SELECT reactor, emojis FROM conversation_reactions")).toEqual([{ reactor: "buddy", emojis: ["👍"] }]);
     } finally {
       await t.close();
     }
