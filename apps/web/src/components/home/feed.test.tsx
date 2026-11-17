@@ -9,8 +9,9 @@ import { LocalContext } from "@/lib/local/LocalRunnerProvider";
 import { createMockRunner } from "@/lib/local/mock";
 import type { TLocalSessionSummary } from "@/lib/local/runner";
 import { toWorker, type Worker } from "@/lib/work/workers";
-import type { FeedItem } from "@/lib/home/types";
+import type { FeedItem, SubSession } from "@/lib/home/types";
 import { GoalChangeDecision, feedBlocks } from "./TaskFeed";
+import { conversationFeed } from "./Conversations";
 
 const ROLE = { id: "00000000-0000-4000-8000-000000000001", name: "开发", kind: "worker" as const };
 const CARD = "00000000-0000-4000-8000-0000000000c1";
@@ -150,5 +151,82 @@ describe("月中 Task 改了或取消了（16.4，goal_changed）", () => {
     const html = draw(change({ answer: "keep", answeredAt: "2026-11-15T03:00:00Z" }));
     expect(html).toContain("留着");
     expect(html).not.toContain("推荐");
+  });
+});
+
+describe("要你出手的事回到项目对话（设计 4.3 硬规矩，本人 11/17）", () => {
+  const CARD2 = "00000000-0000-4000-8000-0000000000c2";
+  const CARD3 = "00000000-0000-4000-8000-0000000000c3";
+  const TOPIC = "00000000-0000-4000-8000-0000000000d4";
+  const sub = (id: string, title: string, extra: Partial<SubSession> = {}) => ({
+    id, kind: "card", letter: null, title, state: "waiting", unseen: false, waiting: null, queueReason: null, holdUntil: null, role: null,
+    sessionId: null, deviceId: null, autoStart: false, updatedAt: "2026-11-17T01:00:00.000Z", merge: null, ...extra,
+  }) as unknown as SubSession;
+  const blocked: FeedItem = { kind: "card_blocked", id: "b1", at: "2026-11-07T05:00:00Z", cardId: CARD, title: "greet", handbackId: HANDBACK, fix: "补上 404 的处理", sourceWordIssues: [] };
+  const needs: FeedItem = { kind: "card_needs_person", id: "n1", at: "2026-11-07T05:10:00Z", cardId: CARD2, title: "登录页", handbackId: HANDBACK, fix: null, sourceWordIssues: [] };
+  const merge: FeedItem = { kind: "card_passed", id: "p1", at: "2026-11-07T05:20:00Z", cardId: CARD3, title: "接口", met: 3, total: 3,
+    merge: { state: "needs_merge", commit: null, baseBranch: "main", reason: "dirty", message: "主文件夹有没提交的改动", at: "2026-11-07T05:21:00Z" } };
+  const report = { kind: "sub_session_report" as const, id: "r1", at: "2026-11-07T05:30:00Z", afterSequence: 4, sub: { kind: "topic" as const, id: TOPIC, letter: "D", title: "调研" },
+    why: "held" as const, summary: "查完了一半", blocker: "订阅额度用完了", outputs: [] };
+  const open = [sub(CARD, "greet", { waiting: "verdict" }), sub(CARD2, "登录页", { waiting: "needs_person" }), sub(CARD3, "接口", { waiting: "merge" }),
+    sub(TOPIC, "调研", { kind: "topic", stopWhy: "held" })];
+  const draw = (items: Parameters<typeof feedBlocks>[0]["items"], subs: SubSession[]) => {
+    const blocks = feedBlocks({ items, workers: [], go: vi.fn(), onSay: vi.fn(), onChanged: vi.fn(), threads: { subs, onOpen: vi.fn() } });
+    return renderToStaticMarkup(<LocalContext.Provider value={local([])}>{blocks.map((block) => <div key={block.key}>{block.node}</div>)}</LocalContext.Provider>);
+  };
+
+  it("受阻、等合回、等你补、停下有原因的回到项目对话，带原来的按钮", () => {
+    const html = draw([blocked, needs, merge, report], open);
+    expect(text(html)).toMatch(/再改一轮.*推荐.*我去看看/);
+    expect(text(html)).toContain("登录页 等你补");
+    expect(text(html)).toContain("接口 验收过了（3/3），无法合回");
+    expect(text(html)).toMatch(/调研 · 停着等.*查完了一半.*订阅额度用完了.*看结果/);
+    // 每块下面挂这个子会话的小条。
+    expect(html.match(/data-testid="thread-chip"/g)).toHaveLength(4);
+  });
+
+  it("同一个子会话只留最新一块，处理完收起", () => {
+    // 同一张卡先受阻、后来等你补：只留等你补那一块。
+    const later: FeedItem = { ...needs, id: "n2", cardId: CARD, title: "greet" };
+    expect(conversationFeed([blocked, later]).map((entry) => entry.id)).toEqual(["n2"]);
+    // 状态变了（不再受阻、不再等你补、合回了、又跑起来了）：收成一行淡色字，不再带按钮和小条。
+    const moved = [sub(CARD, "greet", { state: "running" }), sub(CARD2, "登录页", { state: "running" }), sub(CARD3, "接口", { state: "done" }), sub(TOPIC, "调研", { kind: "topic", state: "running" })];
+    const html = draw([blocked, needs, merge, report], moved);
+    expect(html.match(/data-testid="hand-settled"/g)).toHaveLength(4);
+    expect(text(html)).toMatch(/greet 受阻.*登录页 等你补.*接口 验收过了（3\/3），无法合回.*调研 · 停着等/);
+    expect(text(html)).not.toContain("再改一轮");
+    expect(text(html)).not.toContain("看结果");
+    expect(html).not.toContain("thread-chip");
+    // 本人点过「看结果」的报告也收起。
+    vi.stubGlobal("localStorage", { getItem: () => JSON.stringify({ r1: "看结果" }), setItem: () => undefined });
+    try {
+      expect(draw([report], open)).toContain('data-testid="hand-settled"');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    // 块排好以后才点的「看结果」：报告当场收成一行，小条跟着一起不挂（不等下一次重排）。
+    const blocks = feedBlocks({ items: [report], workers: [], go: vi.fn(), onSay: vi.fn(), onChanged: vi.fn(), threads: { subs: open, onOpen: vi.fn() } });
+    vi.stubGlobal("localStorage", { getItem: () => JSON.stringify({ r1: "看结果" }), setItem: () => undefined });
+    try {
+      const html = renderToStaticMarkup(<LocalContext.Provider value={local([])}>{blocks.map((block) => <div key={block.key}>{block.node}</div>)}</LocalContext.Provider>);
+      expect(html).toContain('data-testid="hand-settled"');
+      expect(html).not.toContain("thread-chip");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("卡等合回、受阻时又在子会话里正常停了一轮：那一块照旧留在项目对话里，带原来的按钮", () => {
+    const stop = (id: string, at: string, cardId: string) => ({ ...report, id, at, sub: { kind: "card" as const, id: cardId, letter: "B", title: "x" }, why: "turn_done" as const, blocker: null });
+    const kept = conversationFeed([blocked, merge, stop("s1", "2026-11-07T06:00:00Z", CARD), stop("s3", "2026-11-07T06:00:00Z", CARD3)]);
+    expect(kept.map((entry) => entry.id)).toEqual(["b1", "p1"]);
+    const html = draw(kept as Parameters<typeof feedBlocks>[0]["items"], open);
+    expect(text(html)).toMatch(/再改一轮.*推荐.*我去看看/);
+    expect(text(html)).toContain("接口 验收过了（3/3），无法合回");
+  });
+
+  it("停着等的报告之后又正常停了一次：旧的那块不再算要你出手", () => {
+    const later = { ...report, id: "r2", at: "2026-11-07T06:30:00Z", why: "turn_done" as const, summary: "都查完了", blocker: null };
+    expect(conversationFeed([report, later]).map((entry) => entry.id)).toEqual([]);
   });
 });

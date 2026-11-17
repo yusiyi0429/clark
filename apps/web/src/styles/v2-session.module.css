@@ -314,3 +314,5 @@ button.output:focus-visible { outline: 2px solid var(--focus); outline-offset: -
 
 /* 停下那一行（主循环第 65 条）：对话末尾，淡色小字写原因，行尾弱按钮「接着做」。 */
 .stopLine { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-height: var(--row-28); color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; }
+/* 右边 thread 视图里的窄面板模式（设计 6.6）：一直单列，详情、文件、当前版本都就地换掉对话来看（盖过上面按内容分两栏的几条）。 */
+.page[data-pane] > .body[data-solo] { grid-template-columns: minmax(0, 1fr); }

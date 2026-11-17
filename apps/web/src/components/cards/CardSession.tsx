@@ -77,8 +77,9 @@ export function stateChip(attention: Attention | null, rest: CardWait | null, st
  * 手机上没有右栏，照旧在「对话」和「结果」之间切。
  * waiting：首页数据里这个子会话在等什么（左栏的点用的那一份，已经照这台电脑上的会话改过）；页头标签和钉在输入框上方的框都从它和本机事件流算（第 54 条）。
  * queued：首页数据里它在排队时的状态词（subQueueText），页头照写；不在排队为 null。
+ * pane：放在右边的 thread 视图里（设计 6.6，ThreadPane 给它的面板位为 null）：一直单列，详情、文件都就地换掉对话来看；名字在 thread 的页头上，这里不再写。
  */
-export function CardSession({ cardId, embedded = false, waiting, queued = null }: { cardId: string; embedded?: boolean; waiting?: Attention | null; queued?: string | null }) {
+export function CardSession({ cardId, embedded = false, waiting, queued = null, pane: narrow = false }: { cardId: string; embedded?: boolean; waiting?: Attention | null; queued?: string | null; pane?: boolean }) {
   const chrome = useViewChrome();
   /** 看结果还是对话；没选过时，子会话不在这台电脑上（手机、别的电脑、还没开）先看摘要（5.4.3）。 */
   const [details, setDetails] = useState<boolean | null>(null);
@@ -298,19 +299,21 @@ export function CardSession({ cardId, embedded = false, waiting, queued = null }
     // 停止在输入框右边（27 条，在跑时没字是停止方块）；页头只留「推翻」。
     const stop = canFlip ? <HeroButton variant="ghost" size="sm" onPress={() => { openDetails(true); setFlipping(true); }}>推翻</HeroButton> : null;
     return (
-      <div className={s.page} data-embedded="" data-testid="card-session">
+      <div className={s.page} data-embedded="" data-pane={narrow ? "" : undefined} data-testid="card-session">
         <header className={s.embedHead}>
           {chrome.lead}
-          <b className={s.embedTitle}>{chrome.parent}<span className={s.embedName}>{item.title}</span></b>
+          <b className={s.embedTitle}>{narrow ? null : <>{chrome.parent}<span className={s.embedName}>{item.title}</span></>}</b>
           <span className={s.stateChip} data-tone={chipOf.tone}>{chipOf.tone === "wait" ? <i aria-hidden /> : null}{chipOf.text}</span>
           <span className={s.exec} />
           {stop}
           <HeroButton variant="ghost" size="sm" isIconOnly aria-label={inSide ? "详情" : "结果"} title={inSide ? "详情" : "结果"} data-pressed={showPane || undefined} onPress={() => openDetails()} data-testid="session-details"><Info {...ICON} aria-hidden /></HeroButton>
           {chrome.trail}
         </header>
-        <div className={s.body} data-solo={shownPreview && !side && !handheld ? undefined : ""}>
-          {showPane && !inSide ? <div className={s.paneScroll}>{pane}</div> : chat}
-          {side ? null : previewNode}
+        <div className={s.body} data-solo={shownPreview && !side && !handheld && !narrow ? undefined : ""}>
+          {narrow && previewNode ? previewNode : <>
+            {showPane && !inSide ? <div className={s.paneScroll}>{pane}</div> : chat}
+            {side ? null : previewNode}
+          </>}
         </div>
         {starter}
         {side ? <SideContent side={side}><div className={s.page} data-embedded="" data-side="">{pane}</div></SideContent> : null}

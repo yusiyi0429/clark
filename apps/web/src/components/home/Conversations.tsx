@@ -4,8 +4,9 @@
  * 展示区里的两种对话：
  * - 总管线：伙伴唯一的对话（总线程），一直聊下去；页头左边是伙伴的名字。
  * 两种对话的页头正中都是伙伴的「在场」（Presence，设计 4.2）：形象钉在正中，状态胶囊挂在它下面。
- * - 项目对话（16.3，原来的 Task 管线并进来了）：每个项目一条单独的对话。先聊计划，规划员拆好后在对话里给出开工的选项框；开了以后写开了哪几个子会话，
- *   验收行（过了、受阻、约定都达到、返工）和挂上新 Task 的分隔线也由网页按时间插进这条对话。B 的接口没上时是这个标签页里的假对话（lib/home/pipeline）。
+ * - 项目对话（16.3，原来的 Task 管线并进来了）：每个项目一条单独的对话。先聊计划，规划员拆好后在对话里给出开工的选项框；开了以后在开工的位置挂上
+ *   每个子会话的 thread 小条（设计 6.6），要你出手的那几块（受阻、等合回、等你补、停下有原因的）也由网页按时间插进这条对话（设计 4.3）。
+ *   B 的接口没上时是这个标签页里的假对话（lib/home/pipeline）。
  * 首页输入框发来的话（outbox）进了对应的对话就发出去。
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -25,7 +26,8 @@ import { useAnswerOptionFill } from "@/conversation/answerOptions";
 import { ReactionsProvider } from "@/conversation/Reactions";
 import { InputBar } from "./InputBar";
 import type { Project } from "@/lib/home/projects";
-import type { FeedItem, ProjectFeedItem, WaitingItem } from "@/lib/home/types";
+import type { CardItem } from "@/lib/board/cards";
+import type { FeedItem, ProjectFeedItem, SubSession, WaitingItem } from "@/lib/home/types";
 import type { WorkHomeApi } from "@/lib/home/useWorkHome";
 import { PlanDecision, PlanningLine } from "./PlanDecision";
 import { GoalChangeDecision, feedBlocks, useProjectFeed } from "./TaskFeed";
@@ -33,6 +35,9 @@ import { HandoverRule, HandoverSummary, ProjectPull, TransferHistory, useReceive
 import { noteSeenSequence } from "@/lib/home/transfer";
 import { useViewChrome } from "./view";
 import { usePhone } from "./usePhone";
+import { useSideDetail } from "./SideDetail";
+import { planOrder } from "./SubRows";
+import { ThreadChip, threadOpener } from "./ThreadChip";
 import h from "@/styles/home.module.css";
 import p from "@/styles/presence.module.css";
 
@@ -213,12 +218,50 @@ type PipelineProps = {
  * 规划员在拆——登记了还没开的用登记时记的，开起来以后用这次（排着、在拆的）计划记的；派活单是开拆那一下的；开了哪几个子会话是开工那一下的。
  */
 /**
- * 项目对话里留哪些项目动态（本人 11/16 定 A：只留对话本身）：转交那几行、还没答的「Task 改了」、子会话还开着的问和批准、约定都达到（答过就收起）。
- * 挂上 Task 的分隔线、子会话报告、验收行、会议交接不进对话：子会话状态在左栏和项目详情，结果在子会话页，要处理的在「等你」。
+ * 项目对话里留哪些项目动态：转交那几行、还没答的「Task 改了」、子会话还开着的问和批准、约定都达到（答过就收起），
+ * 和要你出手的那几块（设计 4.3 硬规矩，本人 11/17 改 11/16 的「只留对话本身」）：受阻、等你补、等合回、停下有原因（卡在哪、出错）的报告，
+ * 同一个子会话只留最新那一块。挂上 Task 的分隔线、过了的验收行、返工、会议交接不进对话。
  */
 const CONVERSATION_FEED = new Set<ProjectFeedItem["kind"]>(["handover", "handover_summary", "transfer_declined", "goal_changed", "sub_session_decision", "criteria_met"]);
+/**
+ * 要你出手的那几种比新旧用的键；不是这几种为 null。报告只和同一个子会话的报告比（不管停下有没有原因都算：后来正常停了一次，前面那份就不是最新的了）；
+ * 卡的受阻、等你补、等合回只和这几样比——在卡的子会话里又正常停了一轮，不把还没处理的等合回、受阻挤掉。
+ */
+const handOf = (item: ProjectFeedItem): string | null => {
+  switch (item.kind) {
+    case "card_blocked": case "card_needs_person": return `card:${item.cardId}`;
+    case "card_passed": return item.merge?.state === "needs_merge" ? `card:${item.cardId}` : null;
+    case "sub_session_report": return `report:${item.sub.id}`;
+    default: return null;
+  }
+};
+/** 报告里只有停下有原因的（卡在哪、出错）要你出手。 */
+const needsYou = (item: ProjectFeedItem) => item.kind !== "sub_session_report" || !!item.blocker || item.why === "error";
 export function conversationFeed(feed: readonly ProjectFeedItem[]): ProjectFeedItem[] {
-  return feed.filter((item) => CONVERSATION_FEED.has(item.kind) && !(item.kind === "goal_changed" && item.answer));
+  // 动态从旧到新：每个子会话最后那一块。
+  const latest = new Map(feed.flatMap((item) => { const sub = handOf(item); return sub ? [[sub, item.id] as const] : []; }));
+  return feed.filter((item) => {
+    const sub = handOf(item);
+    if (sub) return latest.get(sub) === item.id && needsYou(item);
+    return CONVERSATION_FEED.has(item.kind) && !(item.kind === "goal_changed" && item.answer);
+  });
+}
+
+/**
+ * 开了工的计划（设计 6.6）：在开工那一下的位置（plan.startedAfterSequence；没记时按最早那张卡建出来的时间排，不放最后）挂这份计划开出的子会话，
+ * 一个一条 thread 小条，按派活单的先后。这份计划还没有卡时为 null。
+ */
+export function startedThreads({ key, workers, cards, subs, anchor, onOpen }: {
+  key: string; workers: readonly Worker[]; cards: readonly CardItem[]; subs: readonly SubSession[]; anchor: number | null; onOpen: (sub: SubSession) => void;
+}): TimedBlock | null {
+  const created = new Map<string, string>(cards.map((card) => [card.id, card.createdAt]));
+  for (const worker of workers) if (worker.kind === "card" && worker.cardId && worker.item) created.set(worker.cardId, worker.item.createdAt);
+  const started = planOrder(subs.filter((sub) => sub.kind === "card" && created.has(sub.id)), created);
+  const first = [...created.values()].sort()[0];
+  if (!first || !started.length) return null;
+  return { key: `started:${key}`, at: first, ...(anchor === null ? {} : { afterSequence: anchor }), node: (
+    <div className={h.threads} data-testid="started-threads">{started.map((sub) => <ThreadChip key={sub.id} sub={sub} onOpen={onOpen} />)}</div>
+  ) };
 }
 
 export function planAnchors(planner: Pick<Worker, "afterSequence"> | undefined, plan: Pick<TCardPlanView, "status" | "afterSequence" | "startedAfterSequence"> | null) {
@@ -262,13 +305,17 @@ function MockPipeline({ task, ...props }: PipelineProps & { task: THomePlanTask 
 }
 
 /**
- * 项目对话（本人 11/16 定 A：像跟 Claude Code 对话，只留对话本身）：本人的话、它的回复、它这一轮的步骤清单和选项框之外，
+ * 项目对话（本人 11/16 定 A：像跟 Claude Code 对话）：本人的话、它的回复、它这一轮的步骤清单和选项框之外，
  * 只插还要本人处理的那一步——规划员在拆（一行）、拆卡失败、拆好的派活单（开工的选项框，开了就收起）、自动开工没开起来、
- * 子会话开着的问和批准、约定都达到、还没答的「Task 改了」、转交那几行。子会话列表、开工记录、报告、验收行都不进对话。
+ * 子会话开着的问和批准、约定都达到、还没答的「Task 改了」、转交那几行；
+ * 和交出去的活的入口（设计 6.6、4.3，本人 11/17）：开工的位置挂每个子会话的 thread 小条，要你出手的那几块（带原来的按钮，下面挂小条，处理完收成一行淡色字）。
  */
 function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, onSpeaking, onSplit, splitFailed, startFailed, onManualStart, trail, blocks: own, onPulled, onSetFolder, onPickFolder, onCreateFolder, onAddFolder, bound = null }: PipelineProps & { data: ConversationData }) {
   const chrome = useViewChrome();
   const handheld = usePhone();
+  // 小条：电脑上在右边开 thread，手机上去那个子会话。
+  const side = useSideDetail();
+  const openThread = useMemo(() => threadOpener(side, go), [side, go]);
   const { work } = api;
   useEscStopsReply(data);
   useEffect(() => { onSpeaking(data.streaming); return () => onSpeaking(false); }, [data.streaming, onSpeaking]);
@@ -318,8 +365,8 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
       else if (item.kind === "transfer_declined") list.push({ key: item.id, at: item.at, node: <p className={h.line} data-testid="transfer-declined"><StateIcon state="stopped" />{item.by.name}没接</p> });
     }
     if (summary && received.history) list.push({ key: `history:${summary.transferId}`, at: "0000-01-01T00:00:00.000Z", node: <TransferHistory history={received.history} from={summary.from} /> });
-    // 拆卡的几块，每件挂着的 Task 一组，项目本身（不挂 Task 的卡和派活单，16.3）一组：规划员在拆、拆卡失败、派活单（开了就收起）。
-    // 按序号插（17.2 第 29 条，项目对话的消息不带时间）：在开拆那一下的序号后面；为 null 放最后。
+    // 拆卡的几块，每件挂着的 Task 一组，项目本身（不挂 Task 的卡和派活单，16.3）一组：规划员在拆、拆卡失败、派活单（开了就收起）、开出的子会话的小条。
+    // 按序号插（17.2 第 29 条，项目对话的消息不带时间）：前三块在开拆那一下的序号后面，小条在开工那一下的后面；为 null 放最后。
     const projectBoard = work.boards[planKey({ projectId: project.id })] ?? null;
     const projectCards = new Set((projectBoard?.cards ?? []).map((card) => card.id));
     const groups: { target: PlanTarget; name: string; of: (worker: Worker) => boolean }[] = [
@@ -352,6 +399,8 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
             onSay={(text) => data.send(text, [])} />
         ) });
       }
+      const started = startedThreads({ key, workers: ofTarget, cards: board?.cards ?? [], subs, anchor: anchors.started, onOpen: openThread });
+      if (started) list.push(started);
     }
     // 自动开工没开起来的（这个标签页里试过的）：那一行「失败」加「手动开始」（弱按钮，5.4.3、9.8：手动开始只有这一处）。
     for (const sub of subs.filter((entry) => startFailed?.has(entry.id) && entry.state === "queued")) {
@@ -366,11 +415,12 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
       return item ? [[sub.id, item] as const] : [];
     }));
     const decisions = kept.filter((item): item is Extract<ProjectFeedItem, { kind: "sub_session_decision" }> => item.kind === "sub_session_decision");
-    const PROJECT_ONLY = new Set<ProjectFeedItem["kind"]>(["goal_linked", "handover", "handover_summary", "transfer_declined", "goal_changed", "sub_session_report", "sub_session_decision","meeting_handoff"]);
-    const checks = kept.filter((item): item is FeedItem => !PROJECT_ONLY.has(item.kind));
-    list.push(...feedBlocks({ items: checks, workers: mine, go, onSay: (text) => data.send(text, []), onChanged: () => void changed(), remoteAsks, decisions }));
+    const PROJECT_ONLY = new Set<ProjectFeedItem["kind"]>(["goal_linked", "handover", "handover_summary", "transfer_declined", "goal_changed", "sub_session_decision", "meeting_handoff"]);
+    const checks = kept.filter((item): item is FeedItem | Extract<ProjectFeedItem, { kind: "sub_session_report" }> => !PROJECT_ONLY.has(item.kind));
+    list.push(...feedBlocks({ items: checks, workers: mine, go, onSay: (text) => data.send(text, []), onChanged: () => void changed(), remoteAsks, decisions,
+      threads: { subs, onOpen: openThread } }));
     return list;
-  }, [mine, tasks, work.boards, work.roles, handheld, changed, data, subs, go, feed, onSplit, splitFailed, startFailed, onManualStart, waiting, own, project, summary, received.history, lastSequence, dropped]);
+  }, [mine, tasks, work.boards, work.roles, handheld, changed, data, subs, go, feed, onSplit, splitFailed, startFailed, onManualStart, waiting, own, project, summary, received.history, lastSequence, dropped, openThread]);
   return (
     <ProjectModeContext.Provider value={mode?.value ?? null}>
     <PendingBoxes>
