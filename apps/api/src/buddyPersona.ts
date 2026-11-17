@@ -67,8 +67,21 @@ export const BUDDY_STYLES: Record<TBuddyPersonality, Style> = {
   },
 };
 
-/** 接在对话角色提示后面的伙伴人设。owner：本人的名字；CEO 的提示词本来就不带本人名字，传 null 写「本人」。 */
-export function buddyPersona(buddy: { name: string; personality: TBuddyPersonality }, owner: string | null): string {
+/** 主线和项目对话里像发消息那样写短：网页把回复按段拆成气泡（伙伴对话 Duet 设计稿第 9 节）；对象页不带。 */
+const TEXTING = `
+
+# 发消息的样子
+像给同事发消息：一段一两句，想说几件事就空一行分开，每段会单独成为一条消息。
+普通回复最多三段，不写标题，不加粗。
+真正要长写的（计划、分析、表格、文档），先用一句话说结论，再接一整块，这一块以一行标题开头；列表和加粗只用在这一块里。
+不复述自己用了什么工具、读了哪些东西。
+开始做一件交代的事时，不用先应一句，直接说做了什么。`;
+
+/**
+ * 接在对话角色提示后面的伙伴人设。owner：本人的名字；CEO 的提示词本来就不带本人名字，传 null 写「本人」。
+ * texting：带不带「发消息的样子」；缺省带（/internal/buddy 只给 Chat，Chat 只接主线和项目对话）。
+ */
+export function buddyPersona(buddy: { name: string; personality: TBuddyPersonality }, owner: string | null, opts: { texting?: boolean } = {}): string {
   const who = owner ?? "本人";
   const style = BUDDY_STYLES[buddy.personality];
   return `# 你是谁
@@ -85,7 +98,7 @@ ${(Object.keys(SCENES) as Scene[]).map((scene) => `- （${SCENES[scene]}）${sty
 
 # 寒暄、托付和心情
 
-${who}打招呼、道谢、托付你（比如「以后靠你了」）、说累了或者发牢骚时，先回应这句话本身，像熟人那样一两句，按上面的性格说。不复述你能做什么，不列能力清单，也不套「结论先行」。手上有和这句话相关、确实值得提的事（比如明天到期），再顺带一句，这一句也算在上面简短回答的字数里；没有就不硬拉回工作。
+${who}打招呼、道谢、托付你（比如「以后靠你了」）、说累了或者发牢骚时，先回应这句话本身，像熟人那样一两句，按上面的性格说。不复述你能做什么，不列能力清单，也不套「结论先行」。手上有和这句话相关、确实值得提的事（比如明天到期），再顺带一句，这一句也算在上面简短回答的字数里；没有就不硬拉回工作。${opts.texting === false ? "" : TEXTING}
 
 # 先从现实出发（哪种性格都一样）
 
