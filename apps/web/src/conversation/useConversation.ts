@@ -113,7 +113,7 @@ export type SentCardRef = CardRef & { kind?: string; title?: string };
 export function pendingUserMessage(sequence: number, content: string, references: SentCardRef[], attachments: Attachment[]): Message {
   const snapshots = references.filter((reference) => reference.title)
     .map(({ cardId, version, kind, title }) => ({ cardId, version, kind: kind ?? "", title: title ?? "" }));
-  return { sequence, role: "user", content,
+  return { sequence, role: "user", content, createdAt: new Date().toISOString(),
     ...(snapshots.length ? { referencesSnapshot: snapshots } : {}),
     ...(attachments.length ? { attachments } : {}) };
 }
@@ -667,7 +667,7 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
       const cut = partial;
       const cutPlan = turnPlan;
       if (cut || cutPlan) setMessages((current) => [...current, { sequence: (current.at(-1)?.sequence ?? 0) + 1, role: "assistant", content: cut,
-        ...(cutPlan ? { plan: { ...cutPlan, collapsed: true } } : {}) }]);
+        createdAt: new Date().toISOString(), ...(cutPlan ? { plan: { ...cutPlan, collapsed: true } } : {}) }]);
     }
     const text = attach ? "" : messageContext && !options.resumeRunId && !options.answers && !options.buddyQuestionId ? `${messageContext}
 
@@ -972,7 +972,7 @@ ${input}` : input;
       // 读不回来时先用本地这份，后台接着读，读到了再换成服务端保存的。
       if (!reloaded) void loadHistory("quiet");
       if (!reloaded && reply) setMessages((current) => [...current, { sequence: (current.at(-1)?.sequence ?? 0) + 1, role: "assistant", content: withNotice(notice, reply),
-        ...(recoveryNote ? { recoveryNote } : {}) }]);
+        createdAt: new Date().toISOString(), ...(recoveryNote ? { recoveryNote } : {}) }]);
       setPartial("");
       // 接上的那一轮不是这次发的：输入条里待发的附件不动。
       if (!attach) setAttachments([]);
@@ -1008,7 +1008,7 @@ ${input}` : input;
         if (!saved && (written || thinking)) {
           const note = stopped ? LOCAL_STOP_NOTE : written ? LOCAL_BREAK_NOTE : LOCAL_EMPTY_NOTE;
           setMessages((current) => [...current, { sequence: (current.at(-1)?.sequence ?? 0) + 1, role: "assistant",
-            content: withNotice(notice, written ? `${reply.trimEnd()}\n\n${note}` : note), ...(runId ? { runId } : {}) }]);
+            content: withNotice(notice, written ? `${reply.trimEnd()}\n\n${note}` : note), createdAt: new Date().toISOString(), ...(runId ? { runId } : {}) }]);
         }
         // 思考还没收成「已思考 N 秒」（正文没开始就断了）：按到现在的用时收起来，挂在这条回答上。
         if (thinking && thoughtSeconds === null) setThought({ text: thinking, seconds: Math.max(1, Math.round((Date.now() - began) / 1000)) });

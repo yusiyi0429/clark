@@ -16,6 +16,7 @@ import { PlanDecision, PlanningLine, dropDrafts, plannerText } from "@/component
 import { splitBody, WORDS_MAX } from "@/lib/board/cloud";
 import { viewOf, scopeOf } from "@/components/home/view";
 import { placeBlocks } from "./WorkTimeline";
+import { pendingUserMessage } from "@/conversation/useConversation";
 import { planAnchors } from "@/components/home/Conversations";
 import { ApprovalDecision, QuestionDecision, localOptions } from "./decisions";
 import { DecisionBox, otherKey } from "./DecisionBox";
@@ -351,6 +352,21 @@ describe("对话里插块和锚点", () => {
     ]);
     expect(mixed.get(0)?.map((block) => block.key)).toEqual(["transfer"]);
     expect(mixed.get(2)?.map((block) => block.key)).toEqual(["planning"]);
+  });
+  it("发话时先放进去的本人消息带时间，按时间插的块不挪到最后", () => {
+    const history = [
+      { sequence: 1, role: "user" as const, content: "早", createdAt: "2020-01-01T01:00:00Z" },
+      { sequence: 2, role: "assistant" as const, content: "好", createdAt: "2020-01-01T03:00:00Z" },
+    ];
+    const blocks = [
+      { key: "accepted", at: "2020-01-01T02:00:00Z", node: null },
+      { key: "meeting", at: "2020-01-01T04:00:00Z", node: null },
+    ];
+    const where = (messages: { createdAt?: string; sequence: number }[]) =>
+      Object.fromEntries([...placeBlocks(messages, blocks)].flatMap(([index, placed]) => placed.map((block) => [block.key, index])));
+    const sent = [...history, pendingUserMessage(3, "新的一句", [], [])];
+    expect(where(sent)).toEqual(where(history));
+    expect(where(sent)).toEqual({ accepted: 0, meeting: 1 });
   });
   it("29 条 B：拆卡那几块按序号插——在拆、派活单插在开拆那一下的后面，开了哪几个子会话插在开工那一下的后面；为 null 放最后", () => {
     const chat = [{ sequence: 1 }, { sequence: 2 }, { sequence: 3 }, { sequence: 4 }];
