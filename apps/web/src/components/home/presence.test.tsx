@@ -145,6 +145,24 @@ describe("页头在场：形象钉在正中，状态胶囊挂在下面（设计 
     expect(css).toMatch(/\[data-reduce-motion='true'\]/);
   });
 
+  it("只有主线页头放形象：项目对话页头正中没有形象，干活时胶囊在页头那一行正中", () => {
+    const project = (extra: Partial<ConversationData> = {}) => ({ ...data(), scope: "project:p1", ...extra }) as ConversationData;
+    const idle = renderToStaticMarkup(<Presence buddy={miles} data={project()} go={vi.fn()} />);
+    expect(idle).not.toContain("data-place");
+    expect(idle).not.toContain('data-testid="presence-pill"');
+    const busy = renderToStaticMarkup(<Presence buddy={miles} data={answering({ scope: "project:p1" })} go={vi.fn()} />);
+    expect(busy).not.toContain("data-place");
+    expect(busy).toMatch(/^<div[^>]*data-presence=""[^>]*data-bare=""[^>]*><div class="[^"]*hang[^"]*"><div[^>]*data-testid="presence-pill"/);
+    // 没有形象时胶囊（30 高）的中线对着这一行的中线，不撑高页头。
+    expect(css).toMatch(/\.presence\[data-bare\] \.hang \{ top: calc\(50% - 15px\); \}/);
+    env.meeting = { listening: true, clock: "12:34", href: "/me/work/meetings/m1" };
+    expect(renderToStaticMarkup(<Presence buddy={miles} data={project()} go={vi.fn()} />)).toMatch(/data-bare=""[^]*● 12:34 在录/);
+    // 主线照旧：形象钉住，没有 data-bare。
+    const main = renderToStaticMarkup(<Presence buddy={miles} data={data()} go={vi.fn()} />);
+    expect(main).toContain('data-place="head"');
+    expect(main).not.toContain("data-bare");
+  });
+
   it("回答中写在做什么、用时和停止；点停止调 stop", () => {
     const steps = [{ id: "1", label: "读本月目标", status: "done" as const }, { id: "2", label: "对一下日程", status: "active" as const }];
     const doing = answering({ steps });

@@ -97,11 +97,12 @@
 .buddyCard { position: relative; flex: none; border-radius: var(--r-card); }
 .buddyCard:hover { background: var(--default-soft); }
 .buddyCard:has(> .buddyHit[aria-current="page"]) { background: var(--default-soft-hover); }
-.buddyHit { display: flex; align-items: center; gap: var(--space-3); width: 100%; min-height: 64px; padding: var(--space-2); border: 0; border-radius: inherit; background: none; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
-.buddySlot { display: grid; flex: none; place-items: center; width: 56px; }
-.buddyText { display: grid; min-width: 0; padding-right: var(--row-32); }
-.buddyName, .buddyRec { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.buddyRec { color: var(--counter); font-variant-numeric: tabular-nums; }
+.buddyHit { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 64px; padding: 0; border: 0; border-radius: inherit; background: none; color: var(--ink); font: inherit; cursor: pointer; }
+/* 在主线时页头那颗是活的，名片这颗变淡（本人 11/17 晚）。 */
+.buddySlot { transition: opacity 200ms var(--ease-swift), filter 200ms var(--ease-swift); }
+.buddySlot[data-dim] { opacity: .3; filter: blur(1.5px); }
+@media (prefers-reduced-motion: reduce) { .buddySlot { transition: none; } }
+:global([data-reduce-motion='true']) .buddySlot { transition: none; }
 .buddyMore { position: absolute; top: 50%; right: var(--space-2); opacity: 0; transform: translateY(-50%); transition: opacity var(--dur-snap) var(--ease-swift); }
 .buddyCard:hover .buddyMore, .buddyMore:focus-within { opacity: 1; }
 
