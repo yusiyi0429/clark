@@ -341,7 +341,7 @@ function ConversationTurnBody({ message, ms, streaming = false, thought, steps }
           </MemoryUsedProvider>
         </div>
       )}
-      {bubbles && !streaming && quick?.message === message ? <AnswerOptions options={quoted.options} send={quick.send} /> : null}
+      {bubbles && !user && !streaming && quick?.sequence === message.sequence ? <AnswerOptions options={quoted.options} send={quick.send} /> : null}
       {bubbles && !user && !streaming && (ms !== undefined || thoughtToggle) ? (
         <div className={b.meta}>
           {ms !== undefined ? <span>用时 {seconds(ms)}</span> : null}

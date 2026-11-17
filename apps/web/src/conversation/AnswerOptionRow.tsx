@@ -2,12 +2,14 @@
 
 import { createContext, type KeyboardEvent } from "react";
 import { chooseAnswerOption } from "./answerOptions";
-import type { Message } from "./useConversation";
 import s from "@/styles/conversation-transcript.module.css";
 import b from "@/styles/conversation-bubbles.module.css";
 
-/** 新首页的两种对话（WorkTimeline）给：最新一条回答是哪条、选项点了怎么发。这条回答把选项画成最后一个气泡下面的一排小胶囊（设计 6.4）。 */
-export const QuickReplyContext = createContext<{ message: Message; send: (text: string) => void } | null>(null);
+/**
+ * 新首页的两种对话（WorkTimeline）给：最新一条回答的序号、选项点了怎么发。这条回答把选项画成最后一个气泡下面的一排小胶囊（设计 6.4）。
+ * 按序号认，不按对象认：重读历史拿到的是新对象，内容没变的回答不重画，还拿着旧的那个。
+ */
+export const QuickReplyContext = createContext<{ sequence: number; send: (text: string) => void } | null>(null);
 
 /**
  * 最新一条回答下的一行轻量选项：点了只把「选择：{方案名}」填进输入框，不发送。

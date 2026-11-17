@@ -122,8 +122,8 @@ describe("快捷回复（设计 6.4）", () => {
     const tree = WorkTimeline({ data: history, blocks: [] });
     direct.on = false;
     const quick = elements(tree).find((element) => element.type === QuickReplyContext || element.type === QuickReplyContext.Provider)!.props.value as
-      { message: Message; send: (text: string) => void };
-    expect(quick.message).toBe(history.messages[1]);
+      { sequence: number; send: (text: string) => void };
+    expect(quick.sequence).toBe(history.messages[1]!.sequence);
     const pills = AnswerOptions({ options: ["维持现状", "正式采用"], send: quick.send }) as ReactElement<{ children: ReactElement<{ onClick: () => void }>[] }>;
     pills.props.children[1].props.onClick();
     expect(send).toHaveBeenCalledWith("正式采用", []);

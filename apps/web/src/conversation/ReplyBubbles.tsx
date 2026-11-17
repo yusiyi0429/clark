@@ -69,6 +69,13 @@ const openCard = signal<string | null>(null);
 /** 正在写的那条回复上一次画到的字、没写完的那段出没出：同一页里它重挂（key 换了）时接着露，不重藏。 */
 let streamed: { markdown: string; shown: boolean } | null = null;
 
+/** 测试之间清掉模块里记着的东西（这一轮出没出、右边开着哪张卡、正在写的那条画到哪）。 */
+export function resetReplyBubbles() {
+  revealed.set(null);
+  openCard.set(null);
+  streamed = null;
+}
+
 /** 伙伴气泡的样子：靠左、--default 底、圆角 18。 */
 export function BuddyBubble({ children, ...rest }: { children: ReactNode } & HTMLAttributes<HTMLDivElement>) {
   return <div className={b.buddy} data-bubble="buddy" {...rest}>{children}</div>;

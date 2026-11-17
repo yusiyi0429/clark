@@ -97,8 +97,9 @@ import { SideDetailContext, type SideDetail } from "@/components/home/SideDetail
 import { Presence } from "@/components/home/Presence";
 import { TransferHistory } from "@/components/home/Transfer";
 import { WorkTimeline } from "@/components/work/WorkTimeline";
-import { BubbleContext, HOLD_MS, ReplyBubbles, RevealContext, TypingBubble, revealTurn } from "./ReplyBubbles";
+import { BubbleContext, HOLD_MS, ReplyBubbles, RevealContext, TypingBubble, resetReplyBubbles } from "./ReplyBubbles";
 import { ConversationTurn, MarkdownBody } from "./Transcript";
+import { AnswerOptions, QuickReplyContext } from "./AnswerOptionRow";
 
 const css = readFileSync(new URL("../styles/conversation-bubbles.module.css", import.meta.url), "utf8");
 const miles = { name: "小天", form: "miles" } as Buddy;
@@ -143,8 +144,8 @@ const data = (extra: Partial<ConversationData> = {}) => ({
 
 afterEach(() => {
   hooks.reset();
-  // 页头的「这一轮出没出」是模块里的值：每个测试从没有出过开始。
-  revealTurn("", 0);
+  // 模块里记着的（这一轮出没出、右边开着哪张卡、正在写的那条画到哪）：每个测试从空的开始。
+  resetReplyBubbles();
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
@@ -412,5 +413,33 @@ describe("出字的边角", () => {
   it("只有选项块、正文还空着：露「•••」", () => {
     const html = renderToStaticMarkup(<WorkTimeline data={data({ partial: "```options\n[{\"label\":\"先做灯塔\"}]\n```", stage: "answering" })} blocks={[]} />);
     expect(html).toContain('data-testid="typing"');
+  });
+});
+
+describe("快捷回复（设计 6.4）", () => {
+  it("重读历史后（新的消息对象、内容一样）胶囊还在最后一个气泡下面，点了照样直接发出", () => {
+    const reply = "两条路都行。\n\n```options\n[{\"label\":\"先做灯塔\"},{\"label\":\"先补发票\"}]\n```";
+    const history = () => [{ sequence: 1, role: "user", content: "先做哪个？", runId: "r1" }, { sequence: 2, role: "assistant", content: reply, runId: "r1" }] as Message[];
+    const send = vi.fn(async () => true);
+    const quickOf = (messages: Message[]) => elements(call("timeline", () => WorkTimeline({ data: data({ streaming: false, status: "complete", thinking: false, messages, send }), blocks: [] })))
+      .find((element) => element.type === QuickReplyContext || element.type === QuickReplyContext.Provider)!.props.value;
+    const shown = history();
+    quickOf(shown);
+    // 切回来、对话重读（quiet）：读回的是新对象，内容不变。ConversationTurn 的 memo 认内容没变不重画，
+    // 这条回答拿着旧的 message 跟着新的上下文重画。
+    const quick = quickOf(history());
+    hooks.provide(BubbleContext, true);
+    hooks.provide(QuickReplyContext, quick);
+    const body = (ConversationTurn as unknown as { type: (props: unknown) => Element }).type({ message: shown[1] });
+    const tree = expand("turn", body);
+    const row = named(tree, "AnswerOptions")[0];
+    expect(row?.props.options).toEqual(["先做灯塔", "先补发票"]);
+    // 在这一组气泡下面。
+    const children = elements(tree);
+    expect(children.indexOf(row!)).toBeGreaterThan(children.findIndex((element) => element.type === ReplyBubbles));
+    // 点一个：选项原文作为本人的话发出去。
+    const pills = AnswerOptions(row!.props as Parameters<typeof AnswerOptions>[0]) as ReactElement<{ children: ReactElement<{ onClick: () => void }>[] }>;
+    pills.props.children[1]!.props.onClick();
+    expect(send).toHaveBeenCalledWith("先补发票", []);
   });
 });

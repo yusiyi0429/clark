@@ -74,8 +74,8 @@ export function WorkTimeline({ data, blocks, modelRule }: { data: ConversationDa
   const lastIndex = data.messages.length - 1;
   const last = data.messages[lastIndex];
   // 最新一条回答的选项画成它最后一个气泡下面的一排小胶囊，点了直接发出（设计 6.4）。
-  const quick = useMemo(() => (!data.streaming && last?.role === "assistant" ? { message: last, send: (text: string) => void data.send(text, []) } : null),
-    [data.streaming, last, data.send]);
+  const latest = !data.streaming && last?.role === "assistant" ? last.sequence : null;
+  const quick = useMemo(() => (latest === null ? null : { sequence: latest, send: (text: string) => void data.send(text, []) }), [latest, data.send]);
   const latestCards = useMemo(() => withoutSupersededCards(data.messages), [data.messages]);
   const placed = useMemo(() => placeBlocks(data.messages, blocks), [data.messages, blocks]);
   // 新首页的对话：答过的提问卡原处收成一行（inline），不另画本人那条问答记录。
