@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * 新首页中间的对话时间线（总管线、Task 管线）：「在做什么」不在这里，在页头的状态胶囊（Presence）；和 ConversationTimeline 一样画对话（同一套零件，不改它们），另外把网页插入的块
+ * 新首页中间的对话时间线（总管线、Task 管线）：「在做什么」和思考摘要不在这里，在页头的状态胶囊（Presence）下面；和 ConversationTimeline 一样画对话（同一套零件，不改它们），另外把网页插入的块
  * （开工的选项框、开了哪几个子会话、验收结果和全部完成）按时间插在对话之间：插在它之前最近的一条消息后面，比第一条消息还早的放在最前；有消息不带时间时放最后。
  * 伙伴的提问卡画成就地答的选项框（AskDecision），不再是「开始回答」弹窗。
  */
@@ -79,7 +79,7 @@ export function WorkTimeline({ data, blocks, modelRule }: { data: ConversationDa
   const ask = useMemo(() => ({ send: data.send, streaming: data.streaming, ...askAnswers(data.messages), inline: true }), [data.send, data.streaming, data.messages]);
   const status = data.streaming ? (
     <ConversationStatusSlot>
-      {data.thinking ? <ConversationThinking stage={data.stage} startedAt={data.startedAt} onStop={data.stop} route={data.route} progress={data.progress} steps={data.steps} thought={data.thought} readScope={data.readScope} row={false} /> : null}
+      {data.thinking ? <ConversationThinking stage={data.stage} startedAt={data.startedAt} onStop={data.stop} route={data.route} progress={data.progress} steps={data.steps} thought={null} readScope={data.readScope} row={false} /> : null}
       {/* 伙伴这一轮的计划清单和出的卡（17.4，同 ConversationTimeline）：写完读回历史后挂在那条回答上。 */}
       {data.plan ? <PlanChecklist entries={data.plan.entries} collapsed={data.plan.collapsed} /> : null}
       {data.turnCards?.length ? <EntryCards cards={data.turnCards} /> : null}
@@ -94,7 +94,6 @@ export function WorkTimeline({ data, blocks, modelRule }: { data: ConversationDa
     <ConversationTurns messages={data.messages} partial={data.streaming ? data.partial : ""} status={status} modelRule={modelRule}
       insertions={blocksAt}
       trailing={!data.streaming && data.localTurn ? <LocalTurnRow turn={data.localTurn} /> : undefined}
-      thought={data.thought?.seconds != null ? { text: data.thought.text, seconds: data.thought.seconds } : null}
       steps={!data.thinking || data.stage === "answering" ? data.steps : null}
       footer={(index) => (index === lastIndex && options.length ? <AnswerOptions scope={data.scope} options={options} /> : null)}
       after={(index) => {

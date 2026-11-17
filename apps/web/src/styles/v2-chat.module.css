@@ -26,9 +26,8 @@
 }
 .inner { display: flow-root; }
 
-/* 新首页伙伴主线、项目对话（页头正中有伙伴，Presence）：对话顶上 56px 淡出，状态胶囊浮在上面；停在最上面时第一条不压在淡出里。 */
-.pane:has(.head [data-presence]) .log {
-  padding-top: 56px;
+/* 新首页伙伴主线、项目对话（页头正中有伙伴，Presence）：离开顶部才淡出顶上 56px，状态胶囊浮在上面；停在最上面不淡出。 */
+.pane:has(.head [data-presence]) .log[data-scrolled] {
   -webkit-mask-image: linear-gradient(to bottom, transparent 0, black 56px);
   mask-image: linear-gradient(to bottom, transparent 0, black 56px);
 }

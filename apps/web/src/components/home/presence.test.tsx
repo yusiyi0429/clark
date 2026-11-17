@@ -67,6 +67,8 @@ vi.mock("./meetingState", () => ({ useHomeMeetingState: () => env.meeting }));
 vi.mock("@/conversation/dictationSignal", () => ({ useDictationSignal: () => env.dictation }));
 
 import { StepList } from "@/components/steps/StepList";
+import { markScrolled } from "@/components/rail/ChatPane";
+import { WorkTimeline } from "@/components/work/WorkTimeline";
 import { Presence, usePresenceState } from "./Presence";
 
 const css = readFileSync(new URL("../../styles/presence.module.css", import.meta.url), "utf8");
@@ -131,8 +133,6 @@ describe("页头在场：形象钉在正中，状态胶囊挂在下面（设计 
     expect(rule("pill")).toContain("var(--hairline)");
     expect(css).not.toMatch(/font-size|font-weight/);
     expect(css.match(/#[0-9a-f]{3,8}\b|rgb\(/gi)).toBeNull();
-    // 只在有在场的对话里，对话顶上 56px 淡出。
-    expect(chatCss).toMatch(/\.pane:has\(\.head \[data-presence\]\) \.log \{[^}]*mask-image: linear-gradient\(to bottom, transparent 0, black 56px\)/);
     // 减少动态效果时胶囊不做入场动画。
     expect(css).toMatch(/prefers-reduced-motion: reduce/);
     expect(css).toMatch(/\[data-reduce-motion='true'\]/);
@@ -184,6 +184,41 @@ describe("页头在场：形象钉在正中，状态胶囊挂在下面（设计 
     const dictating = call({ buddy: miles, data: data(), go });
     expect(markState(dictating)).toBe("listening");
     expect(elements(dictating).some((element) => element.props["data-testid"] === "presence-pill")).toBe(false);
+  });
+
+  it("滚离顶部才淡出：停在最上面不淡出、不多留白", () => {
+    // 对话一滚动就按 scrollTop 记一下有没有离开顶部（不经 React 重画）。
+    const log = { scrollTop: 0, toggleAttribute: vi.fn() };
+    markScrolled(log as unknown as HTMLElement);
+    expect(log.toggleAttribute).toHaveBeenLastCalledWith("data-scrolled", false);
+    log.scrollTop = 120;
+    markScrolled(log as unknown as HTMLElement);
+    expect(log.toggleAttribute).toHaveBeenLastCalledWith("data-scrolled", true);
+    // 只在有在场的对话里、离开顶部时，顶上 56px 淡出；不另加顶部留白。
+    const rules = chatCss.match(/\.pane:has\(\.head \[data-presence\]\)[^{]*\{[^}]*\}/g) ?? [];
+    expect(rules).toHaveLength(1);
+    expect(rules[0]).toMatch(/^\.pane:has\(\.head \[data-presence\]\) \.log\[data-scrolled\] \{/);
+    expect(rules[0]).toContain("mask-image: linear-gradient(to bottom, transparent 0, black 56px)");
+    expect(rules[0]).not.toMatch(/padding/);
+  });
+
+  it("新首页对话里思考只在胶囊下面，对话里没有", () => {
+    const thought = { text: "先看本月目标里挂着哪几件，再对日程。", seconds: null };
+    const timeline = (extra: Partial<ConversationData>) => renderToStaticMarkup(<WorkTimeline data={answering({
+      messages: [{ sequence: 1, role: "user", content: "帮我排一下" }], send: vi.fn(), rescope: vi.fn(), ...extra,
+    } as Partial<ConversationData>)} blocks={[]} />);
+    // 回答中、出字前：对话里没有思考摘要。
+    expect(timeline({ thought })).not.toContain(thought.text);
+    // 出字以后、这一轮结束以后：也没有「已思考 N 秒」。
+    expect(timeline({ thought: { ...thought, seconds: 4 }, partial: "好", thinking: false })).not.toContain("conversation-thought-toggle");
+    expect(timeline({ thought: { ...thought, seconds: 4 }, status: "complete", streaming: false, thinking: false,
+      messages: [{ sequence: 1, role: "user", content: "帮我排一下" }, { sequence: 2, role: "assistant", content: "好" }] } as Partial<ConversationData>)).not.toContain("conversation-thought-toggle");
+    // 胶囊下面那一块里有。
+    hooks.reset();
+    const data = answering({ thought });
+    (button(call({ buddy: miles, data, go: vi.fn() }), "秒")!.props.onClick as () => void)();
+    const detail = elements(call({ buddy: miles, data, go: vi.fn() })).find((element) => element.props["data-testid"] === "presence-detail")!;
+    expect(elements(detail.props.children as ReactNode).find((element) => element.props.text === thought.text)).toBeDefined();
   });
 
   it("回答结束 1.2 秒内是 done，之后 idle", () => {

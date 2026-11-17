@@ -19,6 +19,11 @@ import s from "@/styles/v2-chat.module.css";
 
 const NOOP = () => undefined;
 
+/** 对话离开了顶部没有（data-scrolled）：新首页页头有伙伴时，离开顶部才淡出顶上 56px（v2-chat.module.css）。直接改属性，不让整列重画。 */
+export function markScrolled(log: HTMLElement) {
+  log.toggleAttribute("data-scrolled", log.scrollTop > 0);
+}
+
 export function ChatPane(props: Omit<Parameters<typeof ChatColumn>[0], "data">) {
   const data = useConversation("global");
   return <ChatColumn {...props} data={data} />;
@@ -54,7 +59,7 @@ export function ChatColumn({ data, buddy, head, extra, timeline, above, dock, in
   return (
     <section className={s.pane} data-variant={variant} data-tone={tone} aria-label={`和${name}的对话`} style={{ ["--pane-composer" as string]: `${composerHeight}px` }}>
       {head ? <div className={s.head}>{head}</div> : null}
-      <div className={s.log} ref={scroll.scrollRef} role="log" aria-label={name} aria-live="polite" aria-relevant="additions text">
+      <div className={s.log} ref={scroll.scrollRef} onScroll={(event) => markScrolled(event.currentTarget)} role="log" aria-label={name} aria-live="polite" aria-relevant="additions text">
         <div className={s.inner} ref={scroll.contentRef}>
           {timeline ? timeline(data) : <ConversationTimeline data={data} />}
           <ConversationHistoryState data={data} empty={null} />
