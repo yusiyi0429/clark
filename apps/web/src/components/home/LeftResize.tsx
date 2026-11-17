@@ -11,6 +11,7 @@ import { PanelLeft } from "lucide-react";
 import type { Project } from "@/lib/home/projects";
 import { showUnseen, type SeenMarks } from "@/lib/home/seen";
 import { LEFT_COLLAPSED_ATTR, LEFT_COLLAPSED_KEY } from "@/lib/home/leftCollapse";
+import type { LocalPhase } from "@/lib/local/connection";
 import { ICON } from "./StateIcon";
 import h from "@/styles/home.module.css";
 
@@ -138,6 +139,23 @@ export function leftUnseen({ collapsed, projects, seen, waitingCount, since }: {
   if (!collapsed || !since) return false;
   return waitingCount > since.waiting || projects.some((project) => showUnseen(project.unseen, seen, "project", project.id, project.lastActivity)
     && since.unseen.get(project.id) !== (project.lastActivity ?? ""));
+}
+
+/**
+ * 按钮上的蓝点：收起那一刻（since）记在这一页的内存里，展开就扔掉。等你的件数要等它的几样来源都到齐了再记——
+ * 首页数据、会议（usePartnerMeetings 的 loaded）、本机程序报了连没连上（「这台电脑没连上」那一行）；
+ * 收着刷新时它们先后到，先记就会把本来就有的当成新来的。
+ */
+export function useLeftDot({ collapsed, homeReady, meetingsLoaded, localPhase, projects, seen, waitingCount }: {
+  collapsed: boolean; homeReady: boolean; meetingsLoaded: boolean; localPhase: LocalPhase; projects: Project[]; seen?: SeenMarks; waitingCount: number;
+}): boolean {
+  const settled = homeReady && meetingsLoaded && localPhase !== "checking";
+  const [since, setSince] = useState<LeftSnapshot | null>(null);
+  useEffect(() => {
+    if (!collapsed) setSince(null);
+    else if (since === null && settled) setSince(leftSnapshot(projects, seen, waitingCount));
+  }, [collapsed, since, settled, projects, seen, waitingCount]);
+  return leftUnseen({ collapsed, projects, seen, waitingCount, since });
 }
 
 /** 中间左上角的开合按钮（画在外壳上，所有页面都在）。 */

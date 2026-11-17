@@ -36,7 +36,7 @@ vi.mock("./LeftResize", async (importOriginal) => {
 });
 
 import { HomeShell } from "./HomeShell";
-import { LeftToggle, leftSnapshot, leftUnseen, useLeftCollapsed } from "./LeftResize";
+import { LeftToggle, leftSnapshot, leftUnseen, useLeftCollapsed, useLeftDot } from "./LeftResize";
 import { LEFT_COLLAPSED_ATTR, LEFT_COLLAPSED_SCRIPT } from "@/lib/home/leftCollapse";
 
 const KEY = "tianshu-home-left-collapsed-v1";
@@ -150,6 +150,28 @@ describe("左栏能收起（设计 4.1）", () => {
     expect(dot).toMatch(/<button[^>]*aria-label="展开左栏"[^>]*data-unseen=""[^>]*data-testid="left-toggle"/);
     expect(dot).toContain("<i ");
     expect(renderToStaticMarkup(<LeftToggle collapsed={false} unseen={false} onToggle={() => undefined} />)).not.toContain("data-unseen");
+  });
+
+  it("收着刷新：首页数据先到、会议后到把等你变多，不亮；那之后真来了新的等你，亮；展开清掉", () => {
+    type Input = Parameters<typeof useLeftDot>[0];
+    const dot = (input: Input) => { h.hooks = true; h.index = 0; try { return useLeftDot(input); } finally { h.hooks = false; } };
+    /** 画一次、跑挂载后的 effect、再画一次（effect 里记下的快照在第二次生效）。 */
+    const render = (input: Input) => { dot(input); flush(); return dot(input); };
+    h.states = []; h.effects = [];
+    const base: Input = { collapsed: true, homeReady: false, meetingsLoaded: false, localPhase: "checking", projects: project(false), waitingCount: 0 };
+    expect(render(base)).toBe(false);
+    // 首页数据到了（等你 1 件），会议、本机程序还没报：不记那一刻。
+    expect(render({ ...base, homeReady: true, waitingCount: 1 })).toBe(false);
+    // 本机程序报了没连上（等你多一行「这台电脑没连上」）：还在等会议，不亮。
+    expect(render({ ...base, homeReady: true, localPhase: "offline", waitingCount: 2 })).toBe(false);
+    // 会议到了，等你又多了：数据到齐这一刻才记，本来就有的不算。
+    expect(render({ ...base, homeReady: true, localPhase: "offline", meetingsLoaded: true, waitingCount: 3 })).toBe(false);
+    expect(render({ ...base, homeReady: true, localPhase: "offline", meetingsLoaded: true, waitingCount: 3 })).toBe(false);
+    // 之后真来了新的等你：亮。
+    expect(render({ ...base, homeReady: true, localPhase: "offline", meetingsLoaded: true, waitingCount: 4 })).toBe(true);
+    // 展开清掉；再收起从那一刻重新算。
+    expect(render({ ...base, collapsed: false, homeReady: true, localPhase: "offline", meetingsLoaded: true, waitingCount: 4 })).toBe(false);
+    expect(render({ ...base, homeReady: true, localPhase: "offline", meetingsLoaded: true, waitingCount: 4 })).toBe(false);
   });
 
   it("手机没有收起", () => {

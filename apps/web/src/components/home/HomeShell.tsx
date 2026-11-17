@@ -56,7 +56,7 @@ import { MeetingView } from "./MeetingView";
 import { MeetingsPage, meetingSections, nextMeetingTrail } from "./MeetingsPage";
 import { ProjectInfo } from "./ProjectInfo";
 import { ProjectTrail } from "./ProjectParts";
-import { LeftResize, LeftToggle, RightResize, leftSnapshot, leftUnseen, useFileWidth, useLeftCollapsed, useLeftWidth, useRightWidth, type LeftSnapshot } from "./LeftResize";
+import { LeftResize, LeftToggle, RightResize, useFileWidth, useLeftCollapsed, useLeftDot, useLeftWidth, useRightWidth } from "./LeftResize";
 import { SideDetailContext, type PanelKind, type SideDetail } from "./SideDetail";
 import { seenKey, withSeen, type SeenKind, type SeenMarks } from "@/lib/home/seen";
 import { seenSequence } from "@/lib/home/transfer";
@@ -533,7 +533,7 @@ function HomeFrame({ account }: { account: Account }) {
   const meeting = useHomeMeeting({ account, go });
   // 首页「等你」的件数（11/16 重新设计 4.5）：和首页同一份 focusList，左栏「今天」行、标签页标题写全部件数。
   const recordingMeetingId = meeting.phase.kind === "live" ? meeting.phase.meeting.id : null;
-  const { items: meetingItems } = usePartnerMeetings();
+  const { items: meetingItems, loaded: meetingsLoaded } = usePartnerMeetings();
   const monthExtras = useMonthExtras({ data, api, projects, go });
   const focusNow = Date.now();
   const focus = focusList({ waiting: data.waiting, meetings: meetingItems, offline: machine.disconnected, recordingMeetingId, now: focusNow, ignoredMeetings: data.ignoredMeetings });
@@ -677,15 +677,10 @@ function HomeFrame({ account }: { account: Account }) {
     )}</HomeMeetingContext.Consumer>
   );
   // 左栏收起（设计 4.1，只电脑）：收起期间有新东西时按钮上一颗蓝点——收起那一刻以后项目出了没看过的蓝点，或等你比那一刻多了。
-  // 那一刻记在这一页的内存里（刷新后接着收着的，从读到数据那一刻算）。
+  // 那一刻记在这一页的内存里；收着刷新时等等你的几样来源都到齐了再记（useLeftDot）。
   const leftFold = useLeftCollapsed();
   const collapsed = leftFold.collapsed && !handheld;
-  const [since, setSince] = useState<LeftSnapshot | null>(null);
-  useEffect(() => {
-    if (!collapsed) setSince(null);
-    else if (since === null && api.ready) setSince(leftSnapshot(projects.projects, seenMarks, waitingCount));
-  }, [collapsed, since, api.ready, projects.projects, seenMarks, waitingCount]);
-  const leftDot = leftUnseen({ collapsed, projects: projects.projects, seen: seenMarks, waitingCount, since });
+  const leftDot = useLeftDot({ collapsed, homeReady: api.ready, meetingsLoaded, localPhase: local.phase, projects: projects.projects, seen: seenMarks, waitingCount });
 
   if (handheld) {
     return (
