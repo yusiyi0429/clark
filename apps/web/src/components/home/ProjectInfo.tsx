@@ -3,7 +3,6 @@
 /**
  * 项目详情（新首页设计 16.3「详情」，替换 Task 详情的入口）。文档类页面（5.4.7）：
  * - 本月目标（20 条）：本月挂着的 Task 一件一行，写截止和标准进度，点开逐条看（同原来项目对话页头的目标条）；
- * - 子会话（11/16 从项目对话挪过来）：这个项目的子会话一个一行，写状态，点了进那个子会话看结果；没有子会话整块不画；
  * - 往月目标：只放本月以前的月份，按月分组、近的在上，每行写结果（GET /api/me/projects/:projectId 的 goals：完成 / 延续到 X 月 / 到此为止 / 没完成）；没有往月整块不画；
  * - 文件夹（17.2 第 46 条）：这台电脑上绑的几个文件夹，一个一行，能添加、能移除，第一个是工作目录（本机程序 PUT /v1/projects/:projectId/folder）；
  *   没连上本机程序时不出这一节；
@@ -31,7 +30,6 @@ import { AddFolder, FolderList, firstOf } from "./NewProjectDialog";
 import { useViewChrome } from "./view";
 import { TaskBudget } from "./TaskBudget";
 import { GoalBar } from "./ProjectParts";
-import { SubSessionSummary } from "./SubSessionSummary";
 import { ICON } from "./StateIcon";
 import h from "@/styles/home.module.css";
 
@@ -151,12 +149,6 @@ export function ProjectInfo({ project, period, go, actions, folders = [], folder
             </li>
           ))}
         </ul>
-      </section>
-    ) : null}
-    {project.subSessions.length ? (
-      // 子会话的状态从项目对话挪到这里（本人 11/16 定 A：项目对话只留对话本身），点一行进那个子会话看结果。
-      <section aria-label="子会话" className={h.section}>
-        <SubSessionSummary projects={[project]} grouped={false} go={go} open />
       </section>
     ) : null}
     {local.phase === "ready" ? (
