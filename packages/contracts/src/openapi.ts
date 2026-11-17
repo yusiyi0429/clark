@@ -1234,10 +1234,10 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         put: {
           operationId: "putConversationReaction",
           parameters: [{ name: "scope", in: "path", required: true, schema: { type: "string" } }],
-          summary: "本人给伙伴台（global）、项目对话（project:<id>）里的一条消息挂表情：整组替换，同一个只算一个，最多 3 个，空数组是全取消。只是本人的标记，读历史时随消息带回 reactions",
+          summary: "本人给伙伴台（global）、项目对话（project:<id>）里一条消息的一块挂表情：每块一个，换掉这一块原来的，emoji 为 null 是取消。只是本人的标记，读历史时随消息带回 reactions",
           requestBody: jsonBody({ $ref: "#/components/schemas/ConversationReaction" }),
           responses: {
-            "200": { description: "存下的那组表情", content: { "application/json": { schema: { $ref: "#/components/schemas/ConversationReaction" } } } },
+            "200": { description: "存下的那一块的表情", content: { "application/json": { schema: { $ref: "#/components/schemas/ConversationReaction" } } } },
             "400": errorResponse,
             "401": errorResponse,
             "403": errorResponse,
