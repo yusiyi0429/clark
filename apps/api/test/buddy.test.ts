@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buddyPersona } from "../src/buddyPersona.js";
+import { findForbiddenPhrase } from "../src/promptStyle.js";
 import { createTestApp, TEST_CEO, TEST_MEMBER } from "./helpers.js";
 
 describe("本人的伙伴", () => {
@@ -9,6 +10,9 @@ describe("本人的伙伴", () => {
     expect(persona).toContain("每段会单独成为一条消息");
     expect(persona).toContain("不复述自己用了什么工具");
     expect(persona.indexOf("# 寒暄、托付和心情")).toBeLessThan(persona.indexOf("# 发消息的样子"));
+    // 前面风格段「关键判断可以加粗」在普通回复里也让位于「不加粗」。
+    expect(persona).toContain("普通回复最多三段，不写标题，不加粗；前面说的关键判断加粗，在普通回复里也不用。");
+    expect(findForbiddenPhrase(persona)).toBeNull();
   });
 
   it("texting:false 时不带", () => {

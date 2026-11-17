@@ -119,6 +119,17 @@ describe("右边「会话」面板（设计 4.3）", () => {
     expect(go).toHaveBeenCalledWith("/me/work/topics/t3");
   });
 
+  it("卡按派活先后排，会话跑起来（updatedAt 变新）行不挪", () => {
+    const cardAt = new Map([["c1", "2026-11-17T01:00:00.000Z"], ["c2", "2026-11-17T02:00:00.000Z"]]);
+    const cards = (first: string) => project("p8", "排序", [
+      sub("c1", "先派的", { kind: "card", updatedAt: first }),
+      sub("c2", "后派的", { kind: "card", updatedAt: "2026-11-17T03:00:00.000Z" }),
+    ] as SubSession[]);
+    for (const updatedAt of ["2026-11-17T01:00:00.000Z", "2026-11-17T05:00:00.000Z"]) {
+      expect(text(render({ view: { kind: "project", id: "p8" }, projects: [cards(updatedAt)], cardAt }))).toMatch(/\|先派的\|后派的\|/);
+    }
+  });
+
   it("主线里按项目分组列全部，没挂项目的在「其他」", () => {
     const html = render({ view: { kind: "buddy" } });
     expect(text(html)).toMatch(/\|首页改版\|调研\|改登录页\|胸牌固件\|待机屏\|在跑\|其他\|以前的会话\|/);
