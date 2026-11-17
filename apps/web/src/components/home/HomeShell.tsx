@@ -56,7 +56,7 @@ import { MeetingView } from "./MeetingView";
 import { MeetingsPage, meetingSections, nextMeetingTrail } from "./MeetingsPage";
 import { ProjectInfo } from "./ProjectInfo";
 import { ProjectTrail } from "./ProjectParts";
-import { LeftResize, LeftToggle, RightResize, leftUnseen, useFileWidth, useLeftCollapsed, useLeftWidth, useRightWidth } from "./LeftResize";
+import { LeftResize, LeftToggle, RightResize, leftSnapshot, leftUnseen, useFileWidth, useLeftCollapsed, useLeftWidth, useRightWidth, type LeftSnapshot } from "./LeftResize";
 import { SideDetailContext, type PanelKind, type SideDetail } from "./SideDetail";
 import { seenKey, withSeen, type SeenKind, type SeenMarks } from "@/lib/home/seen";
 import { seenSequence } from "@/lib/home/transfer";
@@ -676,14 +676,15 @@ function HomeFrame({ account }: { account: Account }) {
         top={handheld ? <HomeWaiting data={data} api={api} go={go} phone offline={machine.disconnected} recordingMeetingId={recordingMeetingId} meeting={meeting} /> : null} />
     )}</HomeMeetingContext.Consumer>
   );
-  // 左栏收起（设计 4.1，只电脑）：收起期间有新东西时按钮上一颗蓝点——项目出了没看过的蓝点，或等你比收起那一刻多了（刷新后接着收着的，从读到数据那一刻算）。
+  // 左栏收起（设计 4.1，只电脑）：收起期间有新东西时按钮上一颗蓝点——收起那一刻以后项目出了没看过的蓝点，或等你比那一刻多了。
+  // 那一刻记在这一页的内存里（刷新后接着收着的，从读到数据那一刻算）。
   const leftFold = useLeftCollapsed();
   const collapsed = leftFold.collapsed && !handheld;
-  const [since, setSince] = useState<number | null>(null);
+  const [since, setSince] = useState<LeftSnapshot | null>(null);
   useEffect(() => {
     if (!collapsed) setSince(null);
-    else if (since === null && api.ready) setSince(waitingCount);
-  }, [collapsed, since, api.ready, waitingCount]);
+    else if (since === null && api.ready) setSince(leftSnapshot(projects.projects, seenMarks, waitingCount));
+  }, [collapsed, since, api.ready, projects.projects, seenMarks, waitingCount]);
   const leftDot = leftUnseen({ collapsed, projects: projects.projects, seen: seenMarks, waitingCount, since });
 
   if (handheld) {

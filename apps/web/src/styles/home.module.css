@@ -45,12 +45,13 @@
 .rightHandle:hover::after, .rightHandle[data-dragging]::after, .rightHandle:focus-visible::after { background: var(--hairline-strong); }
 .app[data-resizing] { cursor: col-resize; transition: none; user-select: none; }
 /*
- * 左栏收起（设计 4.1，只电脑）：列宽变 0（跟着列宽过渡），内容等过渡走完再藏（藏了 Tab 走不进去）；拖宽的把手不画。
+ * 左栏收起（设计 4.1，只电脑）：列宽变 0（本人点的跟着列宽过渡），内容等过渡走完再藏（藏了 Tab 走不进去）；拖宽的把手不画。
  * 开合按钮在中间左上角（外壳上，所有页面都在），页头左边一直给它留出位置；收起期间有新东西时右上角一颗蓝点。
  */
-.app[data-left="closed"] { --home-left: 0px; }
-.app[data-left="closed"] .left { visibility: hidden; overflow: hidden; box-shadow: none; transition: visibility 0s linear var(--dur-slow); }
-.app[data-left="closed"] .leftInner { min-width: 240px; }
+/* 收着刷新时首屏脚本先给 <html> 写上 data-home-left（lib/home/leftCollapse），挂载前就按它收起，不先展开再收。 */
+.app[data-left="closed"], :global(html[data-home-left="closed"]) .app:not([data-phone]) { --home-left: 0px; }
+.app[data-left="closed"] .left, :global(html[data-home-left="closed"]) .app:not([data-phone]) .left { visibility: hidden; overflow: hidden; box-shadow: none; transition: visibility 0s linear var(--dur-slow); }
+.app[data-left="closed"] .leftInner, :global(html[data-home-left="closed"]) .app:not([data-phone]) .leftInner { min-width: 240px; }
 .display > .leftToggle { position: absolute; top: calc((var(--row-48) - var(--row-32)) / 2); left: var(--space-2); z-index: 6; }
 .cornerDot[data-tone="accent"] { background: var(--accent); }
 .app:not([data-phone]) .display :is(.viewHead:not([data-flush]), [data-embedded] > header) { padding-left: calc(var(--space-2) * 2 + var(--row-32)); }

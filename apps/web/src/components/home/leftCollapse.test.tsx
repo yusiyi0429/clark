@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { WorkHomeData } from "@/lib/home/types";
@@ -34,9 +36,16 @@ vi.mock("./LeftResize", async (importOriginal) => {
 });
 
 import { HomeShell } from "./HomeShell";
-import { LeftToggle, leftUnseen, useLeftCollapsed } from "./LeftResize";
+import { LeftToggle, leftSnapshot, leftUnseen, useLeftCollapsed } from "./LeftResize";
+import { LEFT_COLLAPSED_ATTR, LEFT_COLLAPSED_SCRIPT } from "@/lib/home/leftCollapse";
 
 const KEY = "tianshu-home-left-collapsed-v1";
+/** <html> 上的属性（首屏脚本写、开合时跟着改）。 */
+const html = () => {
+  const attrs = new Map<string, string>();
+  vi.stubGlobal("document", { documentElement: { setAttribute: (key: string, value: string) => attrs.set(key, value), removeAttribute: (key: string) => attrs.delete(key) } });
+  return attrs;
+};
 const run = () => { h.hooks = true; h.index = 0; try { return useLeftCollapsed(); } finally { h.hooks = false; } };
 const flush = () => h.effects.splice(0).forEach((effect) => effect());
 /** 新打开一页：状态清空，挂载后的 effect 跑一次。 */
@@ -48,17 +57,20 @@ afterEach(() => { vi.unstubAllGlobals(); h.path = "/me/work"; h.phone = false; h
 describe("左栏能收起（设计 4.1）", () => {
   it("收起记在这台电脑上", () => {
     const store = new Map<string, string>();
+    const attrs = html();
     vi.stubGlobal("localStorage", { getItem: (key: string) => store.get(key) ?? null, setItem: (key: string, value: string) => store.set(key, value), removeItem: (key: string) => store.delete(key) });
     expect(open().collapsed).toBe(false);
     run().toggle();
     expect(run().collapsed).toBe(true);
     expect(store.has(KEY)).toBe(true);
+    expect(attrs.get(LEFT_COLLAPSED_ATTR)).toBe("closed");
     // 刷新以后照样收着；再展开就不记了。
     const again = open();
     expect(again.collapsed).toBe(true);
     again.toggle();
     expect(run().collapsed).toBe(false);
     expect(store.has(KEY)).toBe(false);
+    expect(attrs.has(LEFT_COLLAPSED_ATTR)).toBe(false);
     // 存不了（隐私模式）：照样能收起，只是不记。
     vi.stubGlobal("localStorage", { getItem: () => { throw new Error("blocked"); }, setItem: () => { throw new Error("blocked"); }, removeItem: () => { throw new Error("blocked"); } });
     const blocked = open();
@@ -84,24 +96,60 @@ describe("左栏能收起（设计 4.1）", () => {
     expect(open).toContain('data-testid="left-resize"');
   });
 
-  it("收起时有新东西，按钮上一个蓝点；展开清掉", () => {
-    const data = { period: "2026-11", projects: [{ projectId: "p1", name: "首页改版", lastActivityAt: "2026-11-17T01:00:00.000Z", budget: null, goals: [], transfer: null, unseen: true,
+  it("刷新不闪：首屏脚本在画出来之前按这台电脑记的给 <html> 写上收起", () => {
+    const run = (stored: string | null | Error) => {
+      const attrs = new Map<string, string>();
+      const document = { documentElement: { setAttribute: (key: string, value: string) => attrs.set(key, value) } };
+      const localStorage = { getItem: (key: string) => { if (stored instanceof Error) throw stored; return key === KEY ? stored : null; } };
+      new Function("document", "localStorage", LEFT_COLLAPSED_SCRIPT)(document, localStorage);
+      return attrs.get(LEFT_COLLAPSED_ATTR) ?? null;
+    };
+    expect(run("1")).toBe("closed");
+    expect(run(null)).toBeNull();
+    expect(run(new Error("blocked"))).toBeNull();
+    // 收着时外壳在挂载前就按 <html> 上那个属性收起（不等挂载后再收、不放过渡）；手机不受影响。
+    const css = readFileSync(fileURLToPath(new URL("../../styles/home.module.css", import.meta.url)), "utf8");
+    expect(css).toContain(`:global(html[${LEFT_COLLAPSED_ATTR}="closed"]) .app:not([data-phone])`);
+  });
+
+  const project = (unseen: boolean, lastActivityAt = "2026-11-17T01:00:00.000Z") => {
+    const data = { period: "2026-11", projects: [{ projectId: "p1", name: "首页改版", lastActivityAt, budget: null, goals: [], transfer: null, unseen,
       summary: { running: 0, waiting: 0, queued: 0, done: 0, doneToday: 0, needsYou: 0 }, pipeline: { conversationId: null, scope: "project:p1" }, planning: false, subSessions: [], items: [] }],
       archivedCount: 0, month: { missions: [] }, waiting: [], other: { subSessions: [], items: [] } } as unknown as WorkHomeData;
-    const unseen = data.projects.map((project) => fromHome(project, data, new Map()));
-    const quiet = unseen.map((project) => ({ ...project, unseen: false }));
-    // 等你比收起那一刻多了：亮；没多：不亮。
-    expect(leftUnseen({ collapsed: true, projects: quiet, waitingCount: 3, since: 2 })).toBe(true);
-    expect(leftUnseen({ collapsed: true, projects: quiet, waitingCount: 2, since: 2 })).toBe(false);
-    // 哪个项目出了没看过的蓝点：亮；刚看过的（同一次）不算。
-    expect(leftUnseen({ collapsed: true, projects: unseen, waitingCount: 0, since: 0 })).toBe(true);
-    expect(leftUnseen({ collapsed: true, projects: unseen, seen: new Map([["project:p1", "2026-11-17T01:00:00.000Z"]]), waitingCount: 0, since: 0 })).toBe(false);
-    // 展开就清掉。
-    expect(leftUnseen({ collapsed: false, projects: unseen, waitingCount: 9, since: 0 })).toBe(false);
+    return data.projects.map((entry) => fromHome(entry, data, new Map()));
+  };
+
+  it("收起那一刻已有没看的项目，不亮", () => {
+    const since = leftSnapshot(project(true), undefined, 2);
+    expect(leftUnseen({ collapsed: true, projects: project(true), waitingCount: 2, since })).toBe(false);
+    // 刷新后还没读到数据（还没记下那一刻）：不亮。
+    expect(leftUnseen({ collapsed: true, projects: project(true), waitingCount: 5, since: null })).toBe(false);
+  });
+
+  it("收起期间项目来了新的，亮", () => {
+    const quiet = leftSnapshot(project(false), undefined, 0);
+    expect(leftUnseen({ collapsed: true, projects: project(true), waitingCount: 0, since: quiet })).toBe(true);
+    // 收起时已经没看的那个，又来了更新的：亮。
+    const already = leftSnapshot(project(true), undefined, 0);
+    expect(leftUnseen({ collapsed: true, projects: project(true, "2026-11-17T02:00:00.000Z"), waitingCount: 0, since: already })).toBe(true);
+    // 刚看过的（同一次停下）不算。
+    expect(leftUnseen({ collapsed: true, projects: project(true), seen: new Map([["project:p1", "2026-11-17T01:00:00.000Z"]]), waitingCount: 0, since: quiet })).toBe(false);
+  });
+
+  it("等你件数变多，亮", () => {
+    const since = leftSnapshot(project(false), undefined, 2);
+    expect(leftUnseen({ collapsed: true, projects: project(false), waitingCount: 3, since })).toBe(true);
+    expect(leftUnseen({ collapsed: true, projects: project(false), waitingCount: 2, since })).toBe(false);
+    expect(leftUnseen({ collapsed: true, projects: project(false), waitingCount: 1, since })).toBe(false);
+  });
+
+  it("展开清掉", () => {
+    const since = leftSnapshot(project(false), undefined, 0);
+    expect(leftUnseen({ collapsed: false, projects: project(true), waitingCount: 9, since })).toBe(false);
     const dot = renderToStaticMarkup(<LeftToggle collapsed unseen onToggle={() => undefined} />);
     expect(dot).toMatch(/<button[^>]*aria-label="展开左栏"[^>]*data-unseen=""[^>]*data-testid="left-toggle"/);
     expect(dot).toContain("<i ");
-    expect(renderToStaticMarkup(<LeftToggle collapsed unseen={false} onToggle={() => undefined} />)).not.toContain("data-unseen");
+    expect(renderToStaticMarkup(<LeftToggle collapsed={false} unseen={false} onToggle={() => undefined} />)).not.toContain("data-unseen");
   });
 
   it("手机没有收起", () => {

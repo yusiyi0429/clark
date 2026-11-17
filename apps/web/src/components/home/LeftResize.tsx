@@ -10,6 +10,7 @@ import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type Poin
 import { PanelLeft } from "lucide-react";
 import type { Project } from "@/lib/home/projects";
 import { showUnseen, type SeenMarks } from "@/lib/home/seen";
+import { LEFT_COLLAPSED_ATTR, LEFT_COLLAPSED_KEY } from "@/lib/home/leftCollapse";
 import { ICON } from "./StateIcon";
 import h from "@/styles/home.module.css";
 
@@ -100,30 +101,43 @@ function ColumnResize({ control, side, label }: { control: Control; side: "left"
 export const LeftResize = ({ control }: { control: Control }) => <ColumnResize control={control} side="left" label="左栏宽度" />;
 export const RightResize = ({ control }: { control: Control }) => <ColumnResize control={control} side="right" label="右栏宽度" />;
 
-const COLLAPSED = "tianshu-home-left-collapsed-v1";
-
-/** 左栏收没收起：挂载后读这台电脑记的（首帧按展开，和服务端一致），开合时记下；存不了就只在这一页。 */
+/**
+ * 左栏收没收起：挂载后读这台电脑记的（首帧按展开，和服务端一致；收着时首屏脚本已经给 <html> 写上了，画面不先展开），
+ * 开合时记下、跟着改 <html> 上那个属性；存不了就只在这一页。
+ */
 export function useLeftCollapsed(): { collapsed: boolean; toggle(): void } {
   const [collapsed, setCollapsed] = useState(false);
   useEffect(() => {
-    try { setCollapsed(localStorage.getItem(COLLAPSED) === "1"); } catch { /* 读不了按展开 */ }
+    try { setCollapsed(localStorage.getItem(LEFT_COLLAPSED_KEY) === "1"); } catch { /* 读不了按展开 */ }
   }, []);
   const toggle = useCallback(() => {
     const next = !collapsed;
     setCollapsed(next);
-    try { if (next) localStorage.setItem(COLLAPSED, "1"); else localStorage.removeItem(COLLAPSED); } catch { /* 存不了就只在这一页 */ }
+    if (next) document.documentElement.setAttribute(LEFT_COLLAPSED_ATTR, "closed"); else document.documentElement.removeAttribute(LEFT_COLLAPSED_ATTR);
+    try { if (next) localStorage.setItem(LEFT_COLLAPSED_KEY, "1"); else localStorage.removeItem(LEFT_COLLAPSED_KEY); } catch { /* 存不了就只在这一页 */ }
   }, [collapsed]);
   return { collapsed, toggle };
 }
 
+/** 收起那一刻：等你的件数，和已经没看的项目（各记那一刻的最近动静）。 */
+export type LeftSnapshot = { waiting: number; unseen: ReadonlyMap<string, string> };
+
+export function leftSnapshot(projects: Project[], seen: SeenMarks | undefined, waitingCount: number): LeftSnapshot {
+  const unseen = new Map(projects.filter((project) => showUnseen(project.unseen, seen, "project", project.id, project.lastActivity))
+    .map((project) => [project.id, project.lastActivity ?? ""] as const));
+  return { waiting: waitingCount, unseen };
+}
+
 /**
- * 收起期间有新东西（按钮上一颗蓝点）：哪个项目出了没看过的蓝点（同左栏的「刚看过」），或者等你的件数比收起那一刻（since）多了。展开就没有。
+ * 收起期间有新东西（按钮上一颗蓝点，设计 4.1）：哪个项目出了没看过的蓝点（同左栏的「刚看过」），而收起那一刻（since）它没有、或那之后又有了新动静；
+ * 或者等你的件数比那一刻多了。收起那一刻已经没看的不算。还没记下那一刻（刷新后数据没到）、展开了都不亮。
  */
 export function leftUnseen({ collapsed, projects, seen, waitingCount, since }: {
-  collapsed: boolean; projects: Project[]; seen?: SeenMarks; waitingCount: number; since: number | null;
+  collapsed: boolean; projects: Project[]; seen?: SeenMarks; waitingCount: number; since: LeftSnapshot | null;
 }): boolean {
-  if (!collapsed) return false;
-  return (since !== null && waitingCount > since) || projects.some((project) => showUnseen(project.unseen, seen, "project", project.id, project.lastActivity));
+  if (!collapsed || !since) return false;
+  return waitingCount > since.waiting || projects.some((project) => showUnseen(project.unseen, seen, "project", project.id, project.lastActivity)
+    && since.unseen.get(project.id) !== (project.lastActivity ?? ""));
 }
 
 /** 中间左上角的开合按钮（画在外壳上，所有页面都在）。 */
