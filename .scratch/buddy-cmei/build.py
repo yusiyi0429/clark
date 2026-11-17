@@ -250,7 +250,7 @@ airpod = (f'<g data-part="airpod-r"><rect x="{ax - 4 * k:.1f}" y="{ay + 4 * k:.1
 clips.append('<clipPath id="{id}-lip"><rect x="0" y="0" width="900" height="876"/></clipPath>')   # 下沿和胶囊上沿一样高
 inner = (f'<defs>{"".join(clips)}</defs><g data-part="miles" clip-path="url(#{{id}}-lip)"><g data-part="body" data-pivot="388 1182"><g data-part="head" data-pivot="444 806">'
          f'{bust}{eye_svg["l"]}{eye_svg["r"]}{closed_svg}{mouth_svg}{open_svg}{airpod}</g></g>{hands}</g>')
-ART = {"viewBox": "20 140 860 1080", "torsoCx": 447, "lipY": 900, "figureWidth": 773, "topY": 167, "gazeUnit": 8}
+ART = {"viewBox": "20 140 860 1080", "torsoCx": 447, "lipY": 900, "figureWidth": 773, "topY": 167, "gazeUnit": 8, "head": "19 -14 890 890"}
 art_ts = "{ " + ", ".join(f'{k}: {json.dumps(v)}' for k, v in ART.items()) + " }"
 doc = """/**
  * C妹 的伙伴形象（2026-11-03 设计稿，待定稿）：一比一取自孙铭泽提供并确认有授权的原图 source/c-mei-sheet.webp。
@@ -264,7 +264,7 @@ doc = """/**
  * 由 .scratch/buddy-cmei/build.py 生成，别手改。
  */""".replace("`", "\\`")
 out_dir = HERE
-open(os.path.join(out_dir, "cmeiArt.ts"), "w").write(f"{doc}\n\n/** 摆位用的几个量：除了 gazeUnit，和 MILES_ART 相同。 */\nexport const CMEI_ART = {art_ts} as const;\n\nexport const CMEI_SVG = `{inner}`;\n")
+open(os.path.join(out_dir, "cmeiArt.ts"), "w").write(f"{doc}\n\n/** 摆位用的几个量：除了 gazeUnit 和 Q 版的取景框 head（头连头发、呆毛、发带的外框 x 94–833、y 66–712，四边留约 75，往下补成正方形、底边齐画的下沿 876），和 MILES_ART 相同。 */\nexport const CMEI_ART = {art_ts} as const;\n\nexport const CMEI_SVG = `{inner}`;\n")
 # 整张图的画布比摆位用的 viewBox 往上多留 100：放大后呆毛高出 topY
 open(os.path.join(out_dir, "cmei.svg"), "w").write(f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="20 40 860 1080" width="860" height="1080">{inner.replace("{id}", "cmei")}</svg>\n')
 print("cmeiArt.ts", os.path.getsize(os.path.join(out_dir, "cmeiArt.ts")), "bytes")

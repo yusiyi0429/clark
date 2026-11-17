@@ -14,14 +14,19 @@
  * - 平时（待机）：头摆正，随机眨眼、偶尔转头看一眼；比耶的手举 9–16 秒就放进胶囊里歇 5–10 秒。
  * - 在听：头微微侧过来、目光朝向说话的人，耳机跟着声音亮；在说：嘴跟着音节开合。
  *
+ * - Q 版圆形头像（shape: circle，伙伴名片和页头用，11/17 设计 5.1）：不要胶囊、流光、名字、开口亮线和升起，圆里是整颗头
+ *   （画的 head 取景框）。只留眨眼、目光和说话的嘴；在想、正在输入、做完了这几种样子在 coagent-miles.module.css 里。
+ *
  * 动画用 WAAPI，跑完把终态写回元素再撤掉；减少动效时直接摆好终态，只剩名字和流光的静帧。
  */
 
-export type MilesPose = "idle" | "listening" | "speaking";
+/** thinking、typing、done 只有页头和名片的 Q 版用（设计 5.2）；正在输入时嘴跟着动，和在说一样。 */
+export type MilesPose = "idle" | "listening" | "speaking" | "thinking" | "typing" | "done";
+export type MilesShape = "capsule" | "circle";
 
 /** 一种探出胶囊的形象：摆位常量和画（milesArt、cmeiArt 的格式，id 写成 {id}-…），没起名字时胶囊上写的字。 */
 export interface MilesFigure {
-  art: { viewBox: string; torsoCx: number; lipY: number; figureWidth: number; topY: number; gazeUnit: number };
+  art: { viewBox: string; torsoCx: number; lipY: number; figureWidth: number; topY: number; gazeUnit: number; head: string };
   svg: string;
   name: string;
 }
@@ -118,7 +123,7 @@ function pivotOf(node: Element): number[] {
   return (node.getAttribute("data-pivot") ?? "0 0").split(/[ ,]+/).map(Number);
 }
 
-export function mountMiles(svg: SVGSVGElement, { figure, idPrefix, classes, name: initialName, pose: initialPose, reduced, size = "small" }: {
+export function mountMiles(svg: SVGSVGElement, { figure, idPrefix, classes, name: initialName, pose: initialPose, reduced, size = "small", shape = "capsule" }: {
   /** 挂哪一种形象（Miles、C妹）。 */
   figure: MilesFigure;
   idPrefix: string;
@@ -128,7 +133,10 @@ export function mountMiles(svg: SVGSVGElement, { figure, idPrefix, classes, name
   reduced: boolean;
   /** 胶囊哪一档：页头那颗（header）名字和对话正文一样大。 */
   size?: MilesCapsuleSize;
+  /** circle：Q 版圆形头像，svg 的 viewBox 由调用方按画的 head 写好。 */
+  shape?: MilesShape;
 }): MilesRig {
+  const circle = shape === "circle";
   const id = (name: string) => `${idPrefix}-${name}`;
   const { scale, visH, cut, capTop } = stage(figure.art);
   const cap = CAPSULES[size];
@@ -145,6 +153,7 @@ export function mountMiles(svg: SVGSVGElement, { figure, idPrefix, classes, name
   let level = 0;
   let target = 0;
   let syllable = 0;
+  const talking = () => pose === "speaking" || pose === "typing";
   const timers = new Set<number>();
   const live = new Set<Animation>();
 
@@ -181,12 +190,12 @@ export function mountMiles(svg: SVGSVGElement, { figure, idPrefix, classes, name
     <linearGradient id="${id("lip")}" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset="0.5" stop-color="#fff" stop-opacity="0.95"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>`;
   el("clipPath", { id: id("above") }, svg).appendChild(el("rect", { x: -40, y: -60, width: 2 * CX + 80, height: capTop + 60.5 }));
 
-  // 形象：只露出胶囊上沿以上的部分
-  const rise = el("g", {}, el("g", { "clip-path": `url(#${id("above")})` }, svg));
+  // 形象：只露出胶囊上沿以上的部分（圆里不裁，整颗头都在）
+  const rise = el("g", {}, el("g", circle ? {} : { "clip-path": `url(#${id("above")})` }, svg));
   const squash = el("g", {}, rise);
   for (const node of [rise, squash]) { node.style.transformBox = "view-box"; node.style.transformOrigin = `${CX}px ${cut}px`; }
   const [vx, vy, vw, vh] = figure.art.viewBox.split(" ").map(Number);
-  const art = el("svg", {
+  const art = el("svg", circle ? { viewBox: figure.art.viewBox, x: vx, y: vy, width: vw, height: vh, overflow: "visible" } : {
     viewBox: figure.art.viewBox,
     x: CX - (figure.art.torsoCx - vx) * scale,
     y: cut - (figure.art.lipY - vy) * scale,
@@ -200,7 +209,7 @@ export function mountMiles(svg: SVGSVGElement, { figure, idPrefix, classes, name
   const head = part("head"), body = part("body"), arm = part("arm-peace");
   wrap(head, classes.headPose, pivotOf(head));
   const look = wrap(head, "", pivotOf(head));
-  wrap(body, classes.breathe, pivotOf(body));
+  wrap(body, circle ? "" : classes.breathe, pivotOf(body));
   const lift = wrap(arm, "", pivotOf(arm));
   const wiggle = wrap(arm, "", pivotOf(arm));
   const shell = (node: Element, origin: string) => { const g = wrap(node, ""); g.style.transformBox = "fill-box"; g.style.transformOrigin = origin; return g; };
@@ -229,26 +238,27 @@ export function mountMiles(svg: SVGSVGElement, { figure, idPrefix, classes, name
   el("circle", { cx: podBox.x + podBox.width * 0.5, cy: podBox.y + podBox.height * 0.35, r: Math.max(podBox.width, podBox.height) * 1.2, fill: `url(#${id("air")})` }, airglow);
   pod.parentNode?.insertBefore(airglow, pod);
 
-  // 胶囊玻璃
+  // 胶囊玻璃、名字、开口那道亮线：都挂在 chrome 里；圆里不要，chrome 不挂进页面。
+  const chrome = el("g", {}, circle ? undefined : svg);
   const capShapes = [
-    el("path", {}, el("clipPath", { id: id("cap") }, svg)),
-    el("path", { fill: `url(#${id("glass")})` }, svg),
-    el("path", { fill: `url(#${id("tint")})`, opacity: 0.5 }, svg),
+    el("path", {}, el("clipPath", { id: id("cap") }, chrome)),
+    el("path", { fill: `url(#${id("glass")})` }, chrome),
+    el("path", { fill: `url(#${id("tint")})`, opacity: 0.5 }, chrome),
   ];
-  capShapes.push(el("path", { fill: `url(#${id("speak")})` }, el("g", { class: classes.speakGlass }, svg)));
-  const soft = el("g", { style: "filter: blur(1.6px)" }, el("g", { "clip-path": `url(#${id("cap")})` }, svg));
+  capShapes.push(el("path", { fill: `url(#${id("speak")})` }, el("g", { class: classes.speakGlass }, chrome)));
+  const soft = el("g", { style: "filter: blur(1.6px)" }, el("g", { "clip-path": `url(#${id("cap")})` }, chrome));
   const wavePaths = WAVE_COLORS.map((color) => el("path", { fill: `rgba(${color}, 0.55)` }, soft));
-  capShapes.push(el("path", { fill: `url(#${id("sheen")})` }, svg));
-  const edge = el("path", { fill: "none", stroke: `url(#${id("edge")})`, "stroke-width": 1 }, svg);
-  const rim = el("path", { fill: "none", stroke: "rgb(31 42 61 / 13%)", "stroke-width": 0.75 }, svg);
+  capShapes.push(el("path", { fill: `url(#${id("sheen")})` }, chrome));
+  const edge = el("path", { fill: "none", stroke: `url(#${id("edge")})`, "stroke-width": 1 }, chrome);
+  const rim = el("path", { fill: "none", stroke: "rgb(31 42 61 / 13%)", "stroke-width": 0.75 }, chrome);
 
-  const name = el("text", { fill: INK, style: `font: ${nameFont}` }, svg);
+  const name = el("text", { fill: INK, style: `font: ${nameFont}` }, chrome);
 
   // 开口那道亮线
-  const lip = el("g", { opacity: 0.5 }, svg);
+  const lip = el("g", { opacity: 0.5 }, chrome);
   const lipLine = el("path", { stroke: `url(#${id("lip")})`, "stroke-width": 1.5, fill: "none" }, lip);
 
-  rise.style.transform = `translateY(${sink}px)`;
+  if (!circle) rise.style.transform = `translateY(${sink}px)`;
 
   // ── 流光 ──
   let seed = 20260924;
@@ -317,6 +327,7 @@ export function mountMiles(svg: SVGSVGElement, { figure, idPrefix, classes, name
       name.setAttribute("x", String(CX - (glyphs.actualBoundingBoxRight - glyphs.actualBoundingBoxLeft) / 2));
     }
     name.setAttribute("y", String(capCy + (glyphs.actualBoundingBoxAscent - glyphs.actualBoundingBoxDescent) / 2));
+    if (circle) return width;
     svg.setAttribute("viewBox", `${CX - width / 2} ${TOP} ${width} ${milesBoxHeight(size, figure.art)}`);
     const path = stadium(CX, capCy, width, cap.h);
     capShapes.forEach((node) => node.setAttribute("d", path));
@@ -338,7 +349,7 @@ export function mountMiles(svg: SVGSVGElement, { figure, idPrefix, classes, name
   };
   const startWave = () => {
     cancelAnimationFrame(frame);
-    if (reduced || document.visibilityState !== "visible") return;
+    if (circle || reduced || document.visibilityState !== "visible") return;
     last = performance.now();
     frame = requestAnimationFrame(loop);
   };
@@ -356,14 +367,14 @@ export function mountMiles(svg: SVGSVGElement, { figure, idPrefix, classes, name
   // 在说：天枢这边没有说话的声音，按音节模拟；在听：用麦克风那条流的响度。起得快落得慢。
   const tick = () => {
     if (!out) target = 0;
-    else if (pose === "speaking") {
+    else if (talking()) {
       syllable -= 1;
       if (syllable <= 0) { syllable = 1 + Math.floor(random() * 3); target = random() < 0.16 ? 0 : 0.35 + random() * 0.65; }
     } else target = inputLevel;
     level += (target - level) * (target > level ? 0.6 : 0.25);
     const k = Math.max(0, Math.min(1, level));
     airglow.style.opacity = pose === "listening" && out ? String(0.2 + k * 0.7) : "0";
-    talk(pose === "speaking" && out ? (reduced ? 0.6 : k) : 0);
+    talk(talking() && out ? (reduced ? 0.6 : k) : 0);
   };
   const levelTimer = window.setInterval(tick, 90);
 
@@ -374,7 +385,7 @@ export function mountMiles(svg: SVGSVGElement, { figure, idPrefix, classes, name
     if (twice) later(() => blink(false), 230);
   };
   const glance = () => {
-    if (reduced || !out || pose === "speaking") return;
+    if (reduced || !out || (pose !== "idle" && pose !== "listening")) return;
     const [dx, dy, turn] = GLANCES[Math.floor(random() * GLANCES.length)];
     const hold = 900 + random() * 700;
     const at = (x: number, y: number) => `translate(calc(var(--g) * ${x}), calc(var(--g) * ${y}))`;
@@ -398,10 +409,12 @@ export function mountMiles(svg: SVGSVGElement, { figure, idPrefix, classes, name
     play(lift, [{ transform: HAND_DOWN }, { transform: "translate(0px, -14px) rotate(3deg)", offset: 0.72 }, { transform: "translate(0px, 0px) rotate(0deg)" }], { duration: 480, easing: "cubic-bezier(.2,.8,.3,1)" });
   };
   const loops = () => {
-    const blinks = () => later(() => { blink(random() < 0.2); blinks(); }, pose === "speaking" ? 3000 + random() * 3000 : 5000 + random() * 3000);
+    const blinks = () => later(() => { blink(random() < 0.2); blinks(); }, talking() ? 3000 + random() * 3000 : 5000 + random() * 3000);
     const glances = () => later(() => { glance(); glances(); }, 3000 + random() * 2000);
     const hands = () => later(() => { if (handUp) lowerHand(); else raiseHand(); hands(); }, handUp ? 9000 + random() * 7000 : 5000 + random() * 5000);
     blinks();
+    // 圆里只在状态变的那一刻动：平时只眨眼，不东张西望、不放手。
+    if (circle) return;
     glances();
     hands();
   };
@@ -409,6 +422,7 @@ export function mountMiles(svg: SVGSVGElement, { figure, idPrefix, classes, name
   // ── 出来 ──
   const enter = () => {
     out = true;
+    if (circle) { if (!reduced) loops(); return; }
     if (reduced) {
       rise.style.transform = "translateY(0px)";
       lip.style.opacity = "1";

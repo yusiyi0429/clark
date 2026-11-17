@@ -43,6 +43,24 @@ describe("伙伴形象 Miles", () => {
   });
 });
 
+describe("Q 版圆形头像", () => {
+  it("圆里只有整颗头：取景框是 head、不写名字、不定胶囊的宽高，姿势照传", () => {
+    for (const pose of ["thinking", "typing", "done"] as const) {
+      const html = renderToStaticMarkup(<PresenceCapsule skin="miles" pose={pose} level={0} shape="circle" />);
+      expect(html).toMatch(new RegExp(`data-skin="miles"[^>]*data-pose="${pose}"[^>]*data-shape="circle"`));
+      expect(html).toContain(`viewBox="${MILES_ART.head}"`);
+      expect(html).not.toContain("style=");
+    }
+    expect(renderToStaticMarkup(<PresenceCapsule skin="cmei" pose="idle" level={0} shape="circle" />)).toContain(`viewBox="${CMEI_ART.head}"`);
+  });
+
+  it("胶囊那一块照旧：没有 data-shape，宽高写在元素上", () => {
+    const html = renderToStaticMarkup(<PresenceCapsule skin="miles" pose="idle" level={0} />);
+    expect(html).not.toContain("data-shape");
+    expect(html).toContain('style="width:70px;height:66px"');
+  });
+});
+
 describe("伙伴形象 C妹", () => {
   it("选了 C妹 的胶囊换成她那一块，和 Miles 一样大（小号 70×66，页头那颗 72 高），姿势、退场和读屏那句照旧", () => {
     const html = renderToStaticMarkup(<PresenceCapsule skin="cmei" pose="listening" leaving />);
@@ -53,7 +71,7 @@ describe("伙伴形象 C妹", () => {
   });
 
   it("摆位常量和 Miles 一样（胶囊里一样大、一样的位置），只有转眼的一格小一些：她的眼珠小", () => {
-    expect({ ...CMEI_ART, gazeUnit: MILES_ART.gazeUnit }).toEqual(MILES_ART);
+    expect({ ...CMEI_ART, gazeUnit: MILES_ART.gazeUnit, head: MILES_ART.head }).toEqual(MILES_ART);
     expect(CMEI_ART.gazeUnit).toBe(8);
   });
 
