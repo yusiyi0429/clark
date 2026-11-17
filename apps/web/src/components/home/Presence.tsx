@@ -2,7 +2,8 @@
 
 /**
  * 页头正中伙伴的「在场」（设计 4.2、5.2）：只在新首页的伙伴主线和项目对话里。
- * 形象钉在页头正中，任何时候不挪；状态胶囊挂在它正下方、居中、只变长短，浮在对话上，不撑高页头。空闲时只有形象。
+ * 主线：形象钉在页头正中，任何时候不挪；状态胶囊挂在它正下方、居中、只变长短，浮在对话上，不撑高页头。空闲时只有形象。
+ * 项目对话是纯干活的，不放形象（本人 11/17 晚）：胶囊照旧挂在页头正中下面、和主线同一个位置，只是上面没有形象。
  * - 开会录音：形象在听，胶囊写「● 12:34 在录」，点了去会议页；听写开着：形象在听，没有胶囊。
  * - 回答中：胶囊写在做什么（没有就不写）· 用时 · 停止；出字以后没有具体在做的写「在回答 · 用时」。点胶囊在下面落一小块步骤和思考摘要，再点收回。
  */
@@ -106,9 +107,10 @@ export function Presence({ buddy, data, go }: { buddy: Buddy | null; data: Conve
       </>
     );
   }
+  const figure = data.scope === "global";
   return (
     <div className={p.presence} data-presence="">
-      <HeadMark buddy={buddy} state={state} meeting={meeting.listening} />
+      {figure ? <HeadMark buddy={buddy} state={state} meeting={meeting.listening} /> : null}
       {pill ? <div className={p.hang}>{pill}</div> : null}
     </div>
   );

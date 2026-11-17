@@ -222,11 +222,19 @@ describe("蓝点点了就藏（25 条，组件）", () => {
   });
 });
 
-describe("左栏：伙伴名片（设计 4.1）", () => {
-  it("伙伴名片：形象、名字，点了进主线", () => {
+describe("左栏：伙伴名片（设计 4.1；本人 11/17 晚：只放形象、居中放大，主线时变淡）", () => {
+  const card = (html: string) => html.match(/<button[^>]*data-testid="buddy-entry"[^>]*>([^]*?)<\/button>/)?.[1] ?? "";
+  const cardCss = readFileSync(fileURLToPath(new URL("../../styles/home.module.css", import.meta.url)), "utf8");
+  const markCss = readFileSync(fileURLToPath(new URL("../../styles/buddy-mark.module.css", import.meta.url)), "utf8");
+  /** 以这个选择器开头的那一行规则。 */
+  const rule = (css: string, selector: string) => css.split("\n").find((line) => line.startsWith(`${selector} {`)) ?? "";
+
+  it("伙伴名片：只放形象（名字只在读屏里），点了进主线", () => {
     const go = vi.fn();
     const html = render({ buddy: { name: "小天", form: "classic" } as never, go });
-    expect(html).toMatch(/<button[^>]*aria-label="小天"[^>]*data-testid="buddy-entry"[^>]*>.*data-place="card".*小天/);
+    expect(html).toMatch(/<button[^>]*aria-label="小天"[^>]*data-testid="buddy-entry"/);
+    expect(card(html)).toContain('data-place="card"');
+    expect(card(html)).not.toContain("小天");
     expect(html).toContain('data-state="idle"');
     expect(html).not.toContain('data-place="stage"');
     expect(html).not.toContain("在录");
@@ -236,10 +244,36 @@ describe("左栏：伙伴名片（设计 4.1）", () => {
     expect(render({ view: { kind: "buddy" } })).toMatch(/aria-current="page"[^>]*data-testid="buddy-entry"/);
   });
 
-  it("开会录音时名片下面一行「● 12:34 在录」（名片自己读外壳的开会状态）", () => {
+  it("形象在名片里水平、垂直居中，大一号：胶囊 80×30（128×48 缩 0.625），Q 版圆 56；「⋯」贴右不挤形象", () => {
+    expect(rule(cardCss, ".buddyHit")).toMatch(/justify-content: center/);
+    expect(rule(cardCss, ".buddyHit")).toMatch(/align-items: center/);
+    // 名片照旧 64 高：上下不留内边距，56 的圆也不把名片撑高。
+    expect(rule(cardCss, ".buddyHit")).toMatch(/min-height: 64px; padding: 0;/);
+    expect(rule(cardCss, ".buddyMore")).toMatch(/position: absolute/);
+    expect(cardCss).not.toMatch(/\.buddyText|\.buddyName|\.buddyRec/);
+    expect(rule(markCss, '.mark[data-place="card"]')).toMatch(/--coagent-capsule-width: 128px; --coagent-capsule-height: 48px; width: 80px; height: 30px;/);
+    expect(rule(markCss, '.mark[data-place="card"] .scale')).toMatch(/transform: scale\(\.625\)/);
+    expect(rule(markCss, '.mark[data-place="card"][data-shape="circle"]')).toMatch(/width: 56px; height: 56px;/);
+    // 页头那颗不变。
+    expect(rule(markCss, '.mark[data-place="head"]')).toMatch(/width: 64px; height: 24px;/);
+  });
+
+  it("在主线时名片形象变淡、停在不动的空闲；离开主线恢复；减少动态效果时不过渡", () => {
+    const meeting = { listening: true, clock: "12:34", href: null };
+    const off = render({});
+    expect(off).not.toContain("data-dim");
+    const on = render({ view: { kind: "buddy" } }, meeting);
+    expect(card(on)).toMatch(/data-dim=""[^>]*>.*data-place="card"[^>]*data-state="idle"/);
+    expect(rule(cardCss, ".buddySlot")).toMatch(/transition: opacity 200ms[^;]*, filter 200ms/);
+    expect(rule(cardCss, ".buddySlot[data-dim]")).toMatch(/opacity: \.3; filter: blur\(1\.5px\);/);
+    expect(cardCss).toMatch(/@media \(prefers-reduced-motion: reduce\) \{[^}]*\.buddySlot \{ transition: none; \}/);
+    expect(cardCss).toMatch(/:global\(\[data-reduce-motion='true'\]\) \.buddySlot \{ transition: none; \}/);
+  });
+
+  it("开会录音时名片形象在听，名片里不写「在录」（会议行有自己的走秒）", () => {
     const html = render({}, { listening: true, clock: "12:34", href: null }).replace(/<!-- -->/g, "");
-    expect(html).toMatch(/data-testid="buddy-entry".*data-state="listening".*● 12:34 在录/);
-    expect(render({})).not.toContain("在录");
+    expect(card(html)).toContain('data-state="listening"');
+    expect(html).not.toContain("在录");
   });
 
   it("开会那一颗在「会议」行行尾，和行按钮并排（不套在按钮里），下一场照旧写在它前面", () => {

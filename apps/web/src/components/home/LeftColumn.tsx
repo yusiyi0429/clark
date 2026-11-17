@@ -2,7 +2,7 @@
 
 /**
  * 左栏（新首页设计 9.1–9.4、5.4.2；11/17 设计 4.1）：
- * 1. 伙伴名片：64 高，左边形象、右边伙伴名；点了进伙伴主线（总管线），在主线时是选中底。鼠标移上去右边出「⋯」，点开「伙伴」二级页。
+ * 1. 伙伴名片：64 高，只放形象、居中；点了进伙伴主线（总管线），在主线时是选中底、形象变淡。鼠标移上去右边出「⋯」，点开「伙伴」二级页。
  * 2. 「今天」行：House +「11 月 7 日 周六」，就是首页（Esc 也回这里）；不在首页时行尾是等你的计数。下面「会议」（行尾是开会那一颗）、「本月」。
  * 3. 「项目」组头（右边「+」就地新建，左边一个归档图标「已归档 N」，点了在项目后面列出已归档的项目，本人 11/16）→ 项目行（16.2，有等你的在前、本月有目标的按截止、其余按最近活动）→「其他」。
  *    项目行只有项目自己：名字（转交中、预算 80% 时多一行小字），行尾一颗点、信息按钮、「…」；子会话在右边的会话面板。
@@ -41,9 +41,10 @@ import h from "@/styles/home.module.css";
 export const deleteProjectFail = (error: unknown) => conflictText(error, { PROJECT_BUSY: null, PROJECT_TRANSFERRING: "正在转交" }, "没删成");
 
 /**
- * 伙伴名片（设计 4.1）：64 高，左边形象槽、右边伙伴名；点了进伙伴主线，在主线时是选中底；鼠标移上去右边出「⋯」进「伙伴」二级页。
- * 开会录音、听写时形象「在听」、跟着响度动（响度一秒十几次，只让名片这一块跟着重画），开会录音时名字下面一行「● 12:34 在录」；其余时候不动。
- * 开会状态名片自己读外壳给的（HomeMeetingProvider）：走秒时只有名片跟着重画，左栏其余部分不动。
+ * 伙伴名片（设计 4.1；本人 11/17 晚）：64 高，只放形象、水平垂直都居中（名字只给读屏）；点了进伙伴主线，在主线时是选中底；
+ * 鼠标移上去右边出「⋯」进「伙伴」二级页（贴右浮着，不挤形象）。
+ * 开会录音、听写时形象「在听」、跟着响度动（响度一秒十几次，只让名片这一块跟着重画）；其余时候不动。
+ * 在主线时页头有一颗活的形象，名片这颗变淡、停在空闲。
  */
 function BuddyCard({ buddy, name, view, go }: { buddy: Buddy | null; name: string; view: View; go: (href: string) => void }) {
   const dictation = useDictationSignal();
@@ -52,13 +53,12 @@ function BuddyCard({ buddy, name, view, go }: { buddy: Buddy | null; name: strin
   const inMeeting = meeting.listening;
   const level = inMeeting ? meetingLevel : dictation?.level ?? 0;
   const current = view.kind === "buddy";
+  const listening = !current && (inMeeting || !!dictation);
   return (
     <div className={h.buddyCard}>
       <button type="button" className={h.buddyHit} aria-label={name} aria-current={current ? "page" : undefined} onClick={() => go(BUDDY_HREF)} data-testid="buddy-entry">
-        <span className={h.buddySlot}><BuddyMark buddy={buddy} place="card" state={inMeeting || dictation ? "listening" : "idle"} level={level} /></span>
-        <span className={h.buddyText}>
-          <span className={h.buddyName}>{name}</span>
-          {meeting.clock ? <span className={h.buddyRec}>● {meeting.clock} 在录</span> : null}
+        <span className={h.buddySlot} data-dim={current ? "" : undefined}>
+          <BuddyMark buddy={buddy} place="card" state={listening ? "listening" : "idle"} level={level} />
         </span>
       </button>
       <span className={h.buddyMore}>
