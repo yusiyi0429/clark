@@ -53,7 +53,7 @@ import { TEAM_DELIVERY_CHANGED } from "@/lib/home/teamDelivery";
 import { LeftColumn } from "./LeftColumn";
 import { SeenContext, subIcon, type RowActions } from "./SubRows";
 import { ThreadPane } from "./ThreadPane";
-import { threadOpener } from "./ThreadChip";
+import { inCenter, threadOpener } from "./ThreadChip";
 import { ForeignTaskInfo, TaskInfo } from "./TaskInfo";
 import { MissionInfo } from "./MissionInfo";
 import { MeetingView } from "./MeetingView";
@@ -78,7 +78,6 @@ import { useHomeArrival } from "@/components/onboarding/useHomeArrival";
 import { ICON } from "./StateIcon";
 import { useTabTitle } from "./useTabTitle";
 import { HomeMeetingProvider, MeetingControl, useHomeMeeting } from "./MeetingControl";
-import { HomeMeetingContext } from "./meetingState";
 import h from "@/styles/home.module.css";
 import { linkPerson } from "@/lib/local/link";
 import { useAppearance } from "@/lib/appearance";
@@ -148,8 +147,8 @@ function HomeFrame({ account }: { account: Account }) {
   const side = useMemo<SideDetail | null>(() => (handheld ? null : {
     open: slot === "detail", node: slot === "detail" || slot === "file" ? sideNode : null, shown: slot, show, wide: slot === "file" && wide, setWide,
     toggle: (open) => { const next = open ?? slot !== "detail"; if (next) show("detail"); else if (slot === "detail") show(null); },
-    openThread: (subject) => { setThread(subject); show("thread"); },
-  }), [handheld, slot, sideNode, show, wide]);
+    openThread: (subject) => { if (inCenter(viewOf(pathname), subject)) return; setThread(subject); show("thread"); },
+  }), [handheld, slot, sideNode, show, wide, pathname]);
   useEffect(() => { setSheet(false); }, [pathname]);
   // 换了展示区的内容：焦点落到页头上（5.2 交互状态）。新内容自己抢了焦点（选项框、输入框）就不动；第一次打开页面不动。
   const firstPath = useRef(true);
@@ -473,6 +472,7 @@ function HomeFrame({ account }: { account: Account }) {
     return () => window.removeEventListener(SPLIT_EVENT, handler);
   }, []);
   const allCards = useMemo(() => Object.values(work.boards).flatMap((board) => board.cards), [work.boards]);
+  const cardAt = useMemo(() => new Map(allCards.map((card) => [card.id, card.createdAt])), [allCards]);
   useAutoReturn(local.runner, here, allCards, local.sessions, changed);
 
   // ---- 后台任务 ----
@@ -662,22 +662,20 @@ function HomeFrame({ account }: { account: Account }) {
     .filter((project) => projectWorking(project, work.workers, speaking && view.kind === "project" && view.id === project.id))
     .map((project) => project.id)), [projects.projects, work.workers, speaking, view]);
 
-  // 名片上的「在听」和走秒读外壳给的开会状态（HomeMeetingProvider）：走秒时只有左栏跟着重画。
+  // 名片上的「在听」和走秒由名片自己读外壳给的开会状态（HomeMeetingProvider）：走秒时只有名片跟着重画。
   const left = (
-    <HomeMeetingContext.Consumer>{(state) => (
-      <LeftColumn data={data} view={view} buddy={buddy} go={go} phone={handheld} account={account} month={month} onRetryPlan={api.planFailed ? () => void api.retryPlan() : null}
-        projects={projects.projects} archived={projects.archived} actions={rowActions} folderLimit={projects.folderLimit}
-        onCreate={async (name, folderIds) => {
-          const id = await projects.actions.create(name);
-          // 项目建好了、文件夹没绑上：照样进项目页，提示一句，文件夹在详情里再加。
-          if (folderIds.length) await projects.actions.setFolders(id, folderIds, name).catch(() => showWorkspaceToast({ text: "文件夹没绑上" }));
-          return id;
-        }} working={working} seen={seenMarks} onOpen={markSeen}
-        meeting={{ slot: <MeetingControl meeting={meeting} />, listening: state.listening, clock: state.clock }}
-        today={todayLabel(work.plan?.today ?? null)} machine={machineDot} trail={handheld ? backgroundButton : null}
-        waitingCount={waitingCount} meetingsTrail={meetingsTrail} monthTrail={monthTrail}
-        top={handheld ? <HomeWaiting data={data} api={api} go={go} phone offline={machine.disconnected} recordingMeetingId={recordingMeetingId} meeting={meeting} /> : null} />
-    )}</HomeMeetingContext.Consumer>
+    <LeftColumn data={data} view={view} buddy={buddy} go={go} phone={handheld} account={account} month={month} onRetryPlan={api.planFailed ? () => void api.retryPlan() : null}
+      projects={projects.projects} archived={projects.archived} actions={rowActions} folderLimit={projects.folderLimit}
+      onCreate={async (name, folderIds) => {
+        const id = await projects.actions.create(name);
+        // 项目建好了、文件夹没绑上：照样进项目页，提示一句，文件夹在详情里再加。
+        if (folderIds.length) await projects.actions.setFolders(id, folderIds, name).catch(() => showWorkspaceToast({ text: "文件夹没绑上" }));
+        return id;
+      }} working={working} seen={seenMarks} onOpen={markSeen}
+      meetingSlot={<MeetingControl meeting={meeting} />}
+      today={todayLabel(work.plan?.today ?? null)} machine={machineDot} trail={handheld ? backgroundButton : null}
+      waitingCount={waitingCount} meetingsTrail={meetingsTrail} monthTrail={monthTrail}
+      top={handheld ? <HomeWaiting data={data} api={api} go={go} phone offline={machine.disconnected} recordingMeetingId={recordingMeetingId} meeting={meeting} /> : null} />
   );
   // 左栏收起（设计 4.1，只电脑）：收起期间有新东西时按钮上一颗蓝点——收起那一刻以后项目出了没看过的蓝点，或等你比那一刻多了。
   // 那一刻记在这一页的内存里；收着刷新时等等你的几样来源都到齐了再记（useLeftDot）。
@@ -689,7 +687,7 @@ function HomeFrame({ account }: { account: Account }) {
   // 点行、「…」里的「标为已读」、小条上的蓝点、thread 打开时照左栏的「刚看过」记（seen，挂在外壳上）。
   const sessionsPanel = (phone: boolean) => (
     <SessionsPanel view={view} projects={projects.all} other={data.other.subSessions} archivedSubs={projects.archivedSubs} actions={rowActions} go={go}
-      items={items} onStop={stop} resources={work.resources} handheld={phone} onOpenSub={phone ? undefined : threadOpener(side, go)} />
+      items={items} onStop={stop} resources={work.resources} handheld={phone} onOpenSub={phone ? undefined : threadOpener(side, go)} cardAt={cardAt} />
   );
   const seen = useMemo(() => ({ seen: seenMarks, onOpen: markSeen }), [seenMarks, markSeen]);
   const threadSub = slot === "thread" && thread ? subs.find((sub) => sub.kind === thread.kind && sub.id === thread.id) ?? null : null;

@@ -55,8 +55,8 @@
 .display > .leftToggle { position: absolute; top: calc((var(--row-48) - var(--row-32)) / 2); left: var(--space-2); z-index: 6; }
 .cornerDot[data-tone="accent"] { background: var(--accent); }
 .app:not([data-phone]) .display :is(.viewHead:not([data-flush]), [data-embedded] > header) { padding-left: calc(var(--space-2) * 2 + var(--row-32)); }
-/* 对话页（伙伴主线、项目对话）的页头在居中的正文列里：列离左边不够远时让出按钮的位置；对话列页头上沿留 14（v2-chat .head），按钮跟着下移对齐。 */
-.app:not([data-phone]) .convo :has(> .viewHead[data-flush]) { padding-left: max(var(--gutter), calc(var(--space-2) * 2 + var(--row-32))); }
+/* 对话页（伙伴主线、项目对话）的页头在居中的正文列里：列离左边不够远时让出按钮的位置，右边留一样宽，正中的形象不偏；对话列页头上沿留 14（v2-chat .head），按钮跟着下移对齐。 */
+.app:not([data-phone]) .convo :has(> .viewHead[data-flush]) { padding-inline: max(var(--gutter), calc(var(--space-2) * 2 + var(--row-32))); }
 .display:has(.convo .viewHead[data-flush]) > .leftToggle { top: calc(14px + (var(--row-48) - var(--row-32)) / 2); }
 /* 展示区和对话都是单列 grid：列宽给 minmax(0, 1fr)，里面的长标题、代码块不能把这一列撑得比展示区宽（不出横向滚动、不压到右栏）。 */
 .display { position: relative; min-width: 0; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); }

@@ -25,7 +25,7 @@ import { createMockRunner } from "@/lib/local/mock";
 import { SeenContext } from "./SubRows";
 import { SessionsPanel } from "./SessionsPanel";
 import type { SideDetail } from "./SideDetail";
-import { ThreadChip, threadOpener } from "./ThreadChip";
+import { ThreadChip, inCenter, threadOpener } from "./ThreadChip";
 
 const sub = (extra: Partial<SubSession> = {}) => ({
   id: "t1", kind: "topic", letter: null, title: "首页手机检查", state: "running", unseen: false, waiting: null, queueReason: null, holdUntil: null, role: null,
@@ -57,6 +57,15 @@ describe("thread 小条（设计 6.6）", () => {
     (tap.props.get("thread-chip")?.onClick as () => void)();
     expect(panel.openThread).toHaveBeenCalledWith(expect.objectContaining({ kind: "topic", id: "t1" }));
     expect(go).not.toHaveBeenCalled();
+  });
+
+  it("中间已经是这个子会话：再点它的行或小条不在右边再开一份", () => {
+    expect(inCenter({ kind: "topic", id: "t1" }, { kind: "topic", id: "t1" })).toBe(true);
+    expect(inCenter({ kind: "card", id: "c1" }, { kind: "card", id: "c1" })).toBe(true);
+    // 别的子会话、同 id 不同种、项目对话：照常开。
+    expect(inCenter({ kind: "topic", id: "t2" }, { kind: "topic", id: "t1" })).toBe(false);
+    expect(inCenter({ kind: "card", id: "t1" }, { kind: "topic", id: "t1" })).toBe(false);
+    expect(inCenter({ kind: "project", id: "t1" }, { kind: "topic", id: "t1" })).toBe(false);
   });
 
   it("手机上点小条全屏打开", () => {

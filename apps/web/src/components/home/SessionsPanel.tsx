@@ -45,7 +45,7 @@ export function subStatus(sub: Pick<SubSession, "state" | "waiting" | "stopWhy">
   return STATUS[icon] ?? null;
 }
 
-export function SessionsPanel({ view, projects, other, archivedSubs, actions, go, items, onStop, resources, handheld = false, onOpenSub }: {
+export function SessionsPanel({ view, projects, other, archivedSubs, actions, go, items, onStop, resources, handheld = false, onOpenSub, cardAt }: {
   view: View;
   projects: Project[];
   other: SubSession[];
@@ -58,13 +58,15 @@ export function SessionsPanel({ view, projects, other, archivedSubs, actions, go
   handheld?: boolean;
   /** 点一行；不给就去那个子会话。 */
   onOpenSub?: (sub: SubSession) => void;
+  /** 卡的建出时间（派活先后，planOrder）：会话跑起来行不挪。 */
+  cardAt?: ReadonlyMap<string, string>;
 }) {
   const [archivedOpen, setArchivedOpen] = useState(false);
   const local = useContext(LocalContext);
   const scoped = panelProject(view, projects);
   const open = onOpenSub ?? ((sub: SubSession) => go(subHref(sub)));
   const rows = (subs: SubSession[]) => (
-    <ul className={h.subs}>{planOrder(subs).map((sub) => <SubRow key={subKey(sub)} sub={sub} view={view} go={() => open(sub)} status={subStatus(sub)} />)}</ul>
+    <ul className={h.subs}>{planOrder(subs, cardAt).map((sub) => <SubRow key={subKey(sub)} sub={sub} view={view} go={() => open(sub)} status={subStatus(sub)} />)}</ul>
   );
   // 同原来项目行上的「+」：有菜单动作、项目没归档；这台电脑的本机程序连着却开不了自由子会话（protocol < 4）时不出，手机、没连上照出。
   const canAddTo = (project: Project) => !!actions && !project.archived && !(local?.phase === "ready" && !local.runner.freeSessions);

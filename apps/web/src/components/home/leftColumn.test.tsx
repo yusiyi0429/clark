@@ -6,6 +6,7 @@ import type { THomeItem } from "@warmap/contracts";
 import type { HomeProject, SubSession, WorkHomeData } from "@/lib/home/types";
 import { fromHome, projectWorking } from "@/lib/home/projects";
 import { LeftColumn } from "./LeftColumn";
+import { HomeMeetingContext, type HomeMeetingState } from "./meetingState";
 import { SeenContext, Subs, planOrder, subDot, subIcon } from "./SubRows";
 import { scopeOf, viewOf } from "./view";
 
@@ -26,12 +27,14 @@ vi.mock("react/jsx-dev-runtime", async (importOriginal) => {
 
 const data = { period: "2026-11", projects: [], archivedCount: 0, month: { missions: [] }, waiting: [], other: { subSessions: [], items: [] } } as unknown as WorkHomeData;
 const projectsOf = (used: WorkHomeData) => used.projects.map((project) => fromHome(project, used, new Map()));
-const render = (extra: Partial<Parameters<typeof LeftColumn>[0]>) => {
+const render = (extra: Partial<Parameters<typeof LeftColumn>[0]>, meeting: HomeMeetingState = { listening: false, clock: null, href: null }) => {
   const used = extra.data ?? data;
   return renderToStaticMarkup(
-    <LeftColumn data={used} view={{ kind: "home" }} buddy={null} go={() => undefined} phone={false}
-      account={{ displayName: "孙铭泽", role: "member" }} today="11 月 7 日 周六"
-      projects={projectsOf(used)} archived={[]} onCreate={async () => "x"} {...extra} />,
+    <HomeMeetingContext.Provider value={meeting}>
+      <LeftColumn data={used} view={{ kind: "home" }} buddy={null} go={() => undefined} phone={false}
+        account={{ displayName: "孙铭泽", role: "member" }} today="11 月 7 日 周六"
+        projects={projectsOf(used)} archived={[]} onCreate={async () => "x"} {...extra} />
+    </HomeMeetingContext.Provider>,
   );
 };
 
@@ -233,14 +236,14 @@ describe("左栏：伙伴名片（设计 4.1）", () => {
     expect(render({ view: { kind: "buddy" } })).toMatch(/aria-current="page"[^>]*data-testid="buddy-entry"/);
   });
 
-  it("开会录音时名片下面一行「● 12:34 在录」", () => {
-    const html = render({ meeting: { slot: null, listening: true, clock: "12:34" } }).replace(/<!-- -->/g, "");
+  it("开会录音时名片下面一行「● 12:34 在录」（名片自己读外壳的开会状态）", () => {
+    const html = render({}, { listening: true, clock: "12:34", href: null }).replace(/<!-- -->/g, "");
     expect(html).toMatch(/data-testid="buddy-entry".*data-state="listening".*● 12:34 在录/);
-    expect(render({ meeting: { slot: null, listening: false, clock: null } })).not.toContain("在录");
+    expect(render({})).not.toContain("在录");
   });
 
   it("开会那一颗在「会议」行行尾，和行按钮并排（不套在按钮里），下一场照旧写在它前面", () => {
-    const html = render({ meetingsTrail: "14:30", meeting: { slot: <span data-testid="meeting-slot" />, listening: false, clock: null } });
+    const html = render({ meetingsTrail: "14:30", meetingSlot: <span data-testid="meeting-slot" /> });
     expect(html).toMatch(/data-testid="meetings-row">(?:(?!<\/button>)[^])*14:30(?:(?!<\/button>)[^])*<\/button><span data-testid="meeting-slot"><\/span>/);
   });
 });

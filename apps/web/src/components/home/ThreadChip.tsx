@@ -12,11 +12,16 @@ import { subStatus } from "./SessionsPanel";
 import type { SideDetail } from "./SideDetail";
 import { StateIcon } from "./StateIcon";
 import { SeenContext, subHref, subIcon } from "./SubRows";
+import type { View } from "./view";
 import h from "@/styles/home.module.css";
 
 /** 点小条、点会话面板里的行：有右边的面板位（电脑上的新首页）在右边开 thread，没有就去那个子会话。 */
 export const threadOpener = (side: SideDetail | null, go: (href: string) => void) => (sub: Pick<SubSession, "kind" | "id">) =>
   (side ? side.openThread({ kind: sub.kind, id: sub.id }) : go(subHref(sub)));
+
+/** 中间展示区现在就是这个子会话（同一张卡 / 同一个专题）：再点它的行或小条不在右边再开一份。 */
+export const inCenter = (view: View, sub: Pick<SubSession, "kind" | "id">) =>
+  (view.kind === "card" || view.kind === "topic") && view.kind === sub.kind && view.id === sub.id;
 
 export function ThreadChip({ sub, onOpen }: { sub: SubSession; onOpen: (sub: SubSession) => void }) {
   const opened = useContext(SeenContext);

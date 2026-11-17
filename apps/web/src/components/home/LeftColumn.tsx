@@ -23,6 +23,7 @@ import type { WorkHomeData } from "@/lib/home/types";
 import { PersonAvatar } from "@/components/avatar/PersonAvatar";
 import { useDictationSignal } from "@/conversation/dictationSignal";
 import { useListeningLevel } from "@/components/coagent/presence";
+import { useHomeMeetingState } from "./meetingState";
 import { PersonRow } from "./PersonMenu";
 import { NewProjectDialog } from "./NewProjectDialog";
 import { isTruncated, useNameTip } from "./NameTip";
@@ -39,17 +40,16 @@ import h from "@/styles/home.module.css";
 /** 菜单里没成时就地写的话（B 契约 c3366f28 的 409）。 */
 export const deleteProjectFail = (error: unknown) => conflictText(error, { PROJECT_BUSY: null, PROJECT_TRANSFERRING: "正在转交" }, "没删成");
 
-/** 开会：「会议」行行尾那一颗（MeetingControl）、开着会在录音、在录时的走秒（名片下面那一行）。 */
-export type CardMeeting = { slot: ReactNode; listening: boolean; clock: string | null };
-
 /**
  * 伙伴名片（设计 4.1）：64 高，左边形象槽、右边伙伴名；点了进伙伴主线，在主线时是选中底；鼠标移上去右边出「⋯」进「伙伴」二级页。
  * 开会录音、听写时形象「在听」、跟着响度动（响度一秒十几次，只让名片这一块跟着重画），开会录音时名字下面一行「● 12:34 在录」；其余时候不动。
+ * 开会状态名片自己读外壳给的（HomeMeetingProvider）：走秒时只有名片跟着重画，左栏其余部分不动。
  */
-function BuddyCard({ buddy, name, view, go, meeting }: { buddy: Buddy | null; name: string; view: View; go: (href: string) => void; meeting: CardMeeting | null }) {
+function BuddyCard({ buddy, name, view, go }: { buddy: Buddy | null; name: string; view: View; go: (href: string) => void }) {
   const dictation = useDictationSignal();
   const meetingLevel = useListeningLevel();
-  const inMeeting = Boolean(meeting?.listening);
+  const meeting = useHomeMeetingState();
+  const inMeeting = meeting.listening;
   const level = inMeeting ? meetingLevel : dictation?.level ?? 0;
   const current = view.kind === "buddy";
   return (
@@ -58,7 +58,7 @@ function BuddyCard({ buddy, name, view, go, meeting }: { buddy: Buddy | null; na
         <span className={h.buddySlot}><BuddyMark buddy={buddy} place="card" state={inMeeting || dictation ? "listening" : "idle"} level={level} /></span>
         <span className={h.buddyText}>
           <span className={h.buddyName}>{name}</span>
-          {meeting?.clock ? <span className={h.buddyRec}>● {meeting.clock} 在录</span> : null}
+          {meeting.clock ? <span className={h.buddyRec}>● {meeting.clock} 在录</span> : null}
         </span>
       </button>
       <span className={h.buddyMore}>
@@ -68,12 +68,12 @@ function BuddyCard({ buddy, name, view, go, meeting }: { buddy: Buddy | null; na
   );
 }
 
-export function LeftColumn({ data, view, buddy, go, phone, account, today, machine = null, trail, top, month, onRetryPlan, projects, archived, actions = null, onCreate, folderLimit = LOCAL_PROJECT_FOLDER_LIMIT, working, seen, onOpen, meeting = null, waitingCount = data.waiting.length, meetingsTrail = null, monthTrail = null }: {
+export function LeftColumn({ data, view, buddy, go, phone, account, today, machine = null, trail, top, month, onRetryPlan, projects, archived, actions = null, onCreate, folderLimit = LOCAL_PROJECT_FOLDER_LIMIT, working, seen, onOpen, meetingSlot = null, waitingCount = data.waiting.length, meetingsTrail = null, monthTrail = null }: {
   data: WorkHomeData;
   /** 「今天」行行尾等你的件数：和首页同一份清单（focusList）的全部件数，不是露出来的 5 件。 */
   waitingCount?: number;
-  /** 开会：「会议」行行尾那一颗、名片上的「在听」和走秒；不给就没有。 */
-  meeting?: CardMeeting | null;
+  /** 开会：「会议」行行尾那一颗（MeetingControl）；不给就没有。 */
+  meetingSlot?: ReactNode;
   view: View;
   buddy: Buddy | null;
   go: (href: string) => void;
@@ -124,7 +124,7 @@ export function LeftColumn({ data, view, buddy, go, phone, account, today, machi
     <SeenContext.Provider value={{ seen, onOpen }}>
     <ActionsContext.Provider value={actions}>
     <nav className={h.leftInner} aria-label="导航">
-      <BuddyCard buddy={buddy} name={name} view={view} go={go} meeting={meeting} />
+      <BuddyCard buddy={buddy} name={name} view={view} go={go} />
       {phone ? (
         <div className={h.today} data-phone="" data-testid="today-row">
           <span className={h.todayIcon}><House {...ICON} /></span><span className={h.todayText}>{today}</span>
@@ -144,7 +144,7 @@ export function LeftColumn({ data, view, buddy, go, phone, account, today, machi
           <span className={h.todayIcon}><CalendarDays {...ICON} /></span><span className={h.todayText}>会议</span>
           {meetingsTrail ? <span className={h.rowTrail}>{meetingsTrail}</span> : null}
         </button>
-        {meeting?.slot}
+        {meetingSlot}
       </div>
       <button type="button" className={h.today} aria-current={view.kind === "month" ? "page" : undefined} onClick={() => go(monthHref(data.period))} data-testid="month-row">
         <span className={h.todayIcon}><Target {...ICON} /></span><span className={h.todayText}>本月</span>
