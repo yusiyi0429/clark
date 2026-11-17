@@ -167,10 +167,12 @@ describe("右边「会话」面板（设计 4.3）", () => {
       sub("s4", "丁", { state: "waiting", waiting: null, stopWhy: "error", updatedAt: "2026-11-17T01:03:00.000Z" }),
       sub("s5", "戊", { state: "waiting", waiting: null, stopWhy: "turn_done", updatedAt: "2026-11-17T01:04:00.000Z" }),
       sub("s6", "己", { state: "queued", updatedAt: "2026-11-17T01:05:00.000Z" }),
+      // 第一次验收没过、还在改（契约 failed）：点画在跑（5.4.2），字也写「在跑」。
+      sub("s7", "庚", { state: "failed", updatedAt: "2026-11-17T01:06:00.000Z" }),
     ];
     const html = render({ view: { kind: "project", id: "p9" }, projects: [project("p9", "试", subs)] });
-    expect(text(html)).toMatch(/\|甲\|在跑\|乙\|等你\|丙\|已交回\|丁\|失败\|戊\|己\|/);
-    expect(html.match(/data-testid="sub-status"/g)).toHaveLength(4);
+    expect(text(html)).toMatch(/\|甲\|在跑\|乙\|等你\|丙\|已交回\|丁\|失败\|戊\|己\|庚\|在跑\|/);
+    expect(html.match(/data-testid="sub-status"/g)).toHaveLength(5);
   });
 
   it("「已归档 N」点开能恢复", () => {

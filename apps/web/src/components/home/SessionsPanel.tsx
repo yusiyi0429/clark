@@ -17,8 +17,8 @@ import type { BackgroundItem, SubSession } from "@/lib/home/types";
 import { LocalContext } from "@/lib/local/LocalRunnerProvider";
 import type { Resources } from "@/lib/work/useWork";
 import { BackgroundPanel, BackgroundTasks, MachineBlock } from "./BackgroundPanel";
-import { ICON } from "./StateIcon";
-import { ActionsContext, ArchivedSubRow, SubRow, planOrder, subHref, subKey, type RowActions } from "./SubRows";
+import { ICON, type IconState } from "./StateIcon";
+import { ActionsContext, ArchivedSubRow, SubRow, planOrder, subHref, subIcon, subKey, type RowActions } from "./SubRows";
 import type { View } from "./view";
 import h from "@/styles/home.module.css";
 
@@ -34,15 +34,15 @@ export function panelProject(view: View, projects: readonly Project[]): Project 
 }
 
 /**
- * 会话行的短状态（设计 4.3）：在跑、等你（在等本人批准、回答、拿主意、补、合回）、已交回（做完了）、失败（出错停下）；别的（排队、做完一轮、本人停的、第一次验收没过在改）不写。
+ * 会话行的短状态（设计 4.3），跟着行上的图标走（subIcon，同左栏和页头细环的认法）：在跑（含第一次验收没过、还在改的，5.4.2）、
+ * 等你（在等本人批准、回答、拿主意、补、合回）、已交回（做完了）、失败（出错停下）；别的（排队、做完一轮、本人停的）不写。
  * 在跑不写几分钟：首页数据里子会话没有这一轮的开始时间。
  */
+const STATUS: Partial<Record<IconState, string>> = { running: "在跑", waiting: "等你", done: "已交回" };
 export function subStatus(sub: Pick<SubSession, "state" | "waiting" | "stopWhy">): string | null {
-  if (sub.state === "running") return "在跑";
-  if (sub.state === "done") return "已交回";
-  if (sub.state === "waiting" && sub.waiting) return "等你";
-  if (sub.state === "waiting" && sub.stopWhy === "error") return "失败";
-  return null;
+  const icon = subIcon(sub).state;
+  if (icon === "stopped") return sub.stopWhy === "error" ? "失败" : null;
+  return STATUS[icon] ?? null;
 }
 
 export function SessionsPanel({ view, projects, other, archivedSubs, actions, go, items, onStop, resources, handheld = false, onOpenSub }: {
@@ -101,7 +101,7 @@ export function SessionsPanel({ view, projects, other, archivedSubs, actions, go
                 {`已归档 ${archived.length}`}
               </button>
             ) : null}
-            {archivedOpen && archived.length ? <ul className={h.subs} data-archived="">{archived.map((sub) => <ArchivedSubRow key={subKey(sub)} sub={sub} go={go} />)}</ul> : null}
+            {archivedOpen && archived.length ? <ul className={h.subs}>{archived.map((sub) => <ArchivedSubRow key={subKey(sub)} sub={sub} go={go} />)}</ul> : null}
           </div>
         ) : null}
         {handheld ? <BackgroundPanel items={items} resources={resources} onStop={onStop} handheld /> : <>

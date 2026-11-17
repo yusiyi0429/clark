@@ -658,9 +658,8 @@ button.bgLabel:hover { background: var(--default-soft); }
 .sessionsList { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; padding: var(--space-2); }
 .sessionsGroup { margin: 0; padding: var(--space-2) var(--space-2) 2px; overflow: hidden; color: var(--ink-faint); text-overflow: ellipsis; white-space: nowrap; }
 .sessionsList > section:first-child .sessionsGroup { padding-top: 0; }
-/* 面板里子会话是正文：名字用 --ink（深色下 --ink-muted 和 --ink-faint 一样，组名靠这个分开）；已归档的照旧淡。 */
-.sessions .sub { color: var(--ink); }
-.sessions .subs[data-archived] .sub { color: var(--ink-faint); }
+/* 面板里子会话是正文：名字用 --ink（深色下 --ink-muted 和 --ink-faint 一样，组名靠这个分开）；做完的、已归档的照左栏淡。 */
+.sessions .sub:not([data-state="done"]) { color: var(--ink); }
 .subStatus { flex: none; color: var(--ink-faint); white-space: nowrap; }
 /* 「…」出来时盖在行尾，短状态同状态点一起让开。 */
 .subItem:is(:hover, :focus-within, :has(> .rowMore[data-open])) .subStatus { visibility: hidden; }
