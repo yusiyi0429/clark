@@ -983,13 +983,14 @@ describe("controlled Pi conversation adapter public behavior", () => {
 });
 
 describe("伙伴的名字和性格进人设（spec 5.5、伙伴性格设计稿）", () => {
-  async function prompts(viewer: { personId: string; displayName: string; role: "ceo" | "member"; buddy?: { name: string; personality: TBuddyPersonality } }) {
+  async function prompts(viewer: { personId: string; displayName: string; role: "ceo" | "member"; buddy?: { name: string; personality: TBuddyPersonality } },
+    scope = "signal:11111111-1111-4111-8111-111111111111") {
     const seen: string[] = [];
     const runtime = await createPiConversationRuntime({ peopleDirectory: loadPeopleDirectory(testEnv),
       baseUrl: "https://provider.invalid/v1/responses", apiKey: "test-key", modelId: "fake-light",
       streamSimple: (_model, context) => { seen.push(context.systemPrompt ?? ""); return stream(message([{ type: "text", text: "在。" }], "stop")); } });
     try {
-      await runtime.run({ scope: "signal:11111111-1111-4111-8111-111111111111", viewer, message: "你叫什么", currentObject: null,
+      await runtime.run({ scope, viewer, message: "你叫什么", currentObject: null,
         referencesSnapshot: [], runtimeEntries: [], piSessionId: randomUUID(), signal: new AbortController().signal, emit: () => undefined });
     } finally { await runtime.close?.(); }
     return seen.join("\n");
@@ -1008,5 +1009,14 @@ describe("伙伴的名字和性格进人设（spec 5.5、伙伴性格设计稿�
     const plain = await prompts(MEMBER_VIEWER);
     expect(plain).not.toContain("# 说话的样子");
     expect(plain).not.toContain("的伙伴，一直跟着");
+  });
+
+  it("本机对话：主线、项目带，对象页不带", async () => {
+    const buddy = { ...MEMBER_VIEWER, buddy: { name: "团团", personality: "steady" as const } };
+    expect(await prompts(buddy, "global")).toContain("# 发消息的样子");
+    expect(await prompts(buddy, "project:11111111-1111-4111-8111-111111111111")).toContain("# 发消息的样子");
+    const object = await prompts(buddy);
+    expect(object).toContain("你叫团团");
+    expect(object).not.toContain("# 发消息的样子");
   });
 });

@@ -1257,8 +1257,10 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
         : isCeo ? CEO_SYSTEM_PROMPT
         : driSystemPrompt(input.viewer.displayName);
       // 本人选了伙伴：接上伙伴的人设（名字、性格、寒暄怎么接、底线），CEO 的提示词本来就不带本人名字。
+      // 「发消息的样子」只给主线和项目对话（网页在这两处把回复拆成气泡），对象页不带。
+      const texting = input.scope === "global" || input.scope.startsWith("project:");
       const basePrompt = input.viewer.buddy
-        ? `${rolePromptBase}\n\n${buddyPersona(input.viewer.buddy, isCeo ? null : input.viewer.displayName)}`
+        ? `${rolePromptBase}\n\n${buddyPersona(input.viewer.buddy, isCeo ? null : input.viewer.displayName, { texting })}`
         : rolePromptBase;
       // 三层取用、深聊转议题的说明只在有这些工具时拼上（在表达要求之后，快答档裁剪检索条款时不受影响）。
       // 分段时以前的对话靠会话目录和两个回看工具：系统提示里那一句换成指向它们（只随开关变，不随轮次变）。

@@ -1,7 +1,22 @@
 import { describe, expect, it } from "vitest";
+import { buddyPersona } from "../src/buddyPersona.js";
 import { createTestApp, TEST_CEO, TEST_MEMBER } from "./helpers.js";
 
 describe("本人的伙伴", () => {
+  it("人设里有「发消息的样子」，缺省带", () => {
+    const persona = buddyPersona({ name: "团团", personality: "steady" }, "测试乙");
+    expect(persona).toContain("# 发消息的样子");
+    expect(persona).toContain("每段会单独成为一条消息");
+    expect(persona).toContain("不复述自己用了什么工具");
+    expect(persona.indexOf("# 寒暄、托付和心情")).toBeLessThan(persona.indexOf("# 发消息的样子"));
+  });
+
+  it("texting:false 时不带", () => {
+    const persona = buddyPersona({ name: "团团", personality: "steady" }, "测试乙", { texting: false });
+    expect(persona).not.toContain("# 发消息的样子");
+    expect(persona).toContain("# 寒暄、托付和心情");
+  });
+
   it("独立 Chat 经 /internal/buddy 取伙伴的人设：和本地对话同一段，按性格换；没选伙伴是 null；要内部令牌", async () => {
     const token = "internal-chat-test";
     const t = await createTestApp({ internalChatToken: token });
