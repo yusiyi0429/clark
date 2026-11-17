@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * 新首页中间的对话时间线（总管线、Task 管线）：和 ConversationTimeline 一样画对话（同一套零件，不改它们），另外把网页插入的块
+ * 新首页中间的对话时间线（总管线、Task 管线）：「在做什么」不在这里，在页头的状态胶囊（Presence）；和 ConversationTimeline 一样画对话（同一套零件，不改它们），另外把网页插入的块
  * （开工的选项框、开了哪几个子会话、验收结果和全部完成）按时间插在对话之间：插在它之前最近的一条消息后面，比第一条消息还早的放在最前；有消息不带时间时放最后。
  * 伙伴的提问卡画成就地答的选项框（AskDecision），不再是「开始回答」弹窗。
  */
@@ -11,8 +11,8 @@ import { ConversationStatusSlot, ConversationThinking, ConversationTurns, LocalT
 import { AnswerOptions } from "@/conversation/AnswerOptionRow";
 import { EntryCards } from "@/conversation/EntryCards";
 import { PlanChecklist } from "@/components/cards/PlanChecklist";
-import { ActivityLine, planDoing } from "@/components/cards/ActivityLine";
-import { StepList, type Step } from "@/components/steps/StepList";
+import { planDoing } from "@/components/cards/ActivityLine";
+import type { Step } from "@/components/steps/StepList";
 import { AskContext, askAnswers } from "@/conversation/AskPanel";
 import { parseAnswerOptions } from "@/conversation/answerOptions";
 import { RescopeContext } from "@/conversation/ScopeChip";
@@ -21,7 +21,7 @@ import type { ConversationData, ThinkingStage, TurnProgress } from "@/conversati
 import { AskDecision, BuddyQuestionDecision } from "./decisions";
 
 /**
- * 「在做什么」那一行写哪句（照 Claude Code 的先后：系统状态 > 正在跑的那一步 > 等着的阶段词）：连不上、等网络 > 在跑的那一步 >
+ * 「在做什么」写哪句（页头的状态胶囊，Presence；照 Claude Code 的先后：系统状态 > 正在跑的那一步 > 等着的阶段词）：连不上、等网络 > 在跑的那一步 >
  * 在查什么（工具开始时报的）> 计划里在做的那条 > 阶段词（正在查资料、正在整理回答）；都没有就只有动画和用时，不写笼统的「正在思考」。
  */
 export function conversationDoing({ stage, steps, progress, plan }: { stage: ThinkingStage; steps: readonly Step[]; progress?: TurnProgress; plan?: TBuddyPlan | null }): string | null {
@@ -82,8 +82,6 @@ export function WorkTimeline({ data, blocks, modelRule }: { data: ConversationDa
       {data.thinking ? <ConversationThinking stage={data.stage} startedAt={data.startedAt} onStop={data.stop} route={data.route} progress={data.progress} steps={data.steps} thought={data.thought} readScope={data.readScope} row={false} /> : null}
       {/* 伙伴这一轮的计划清单和出的卡（17.4，同 ConversationTimeline）：写完读回历史后挂在那条回答上。 */}
       {data.plan ? <PlanChecklist entries={data.plan.entries} collapsed={data.plan.collapsed} /> : null}
-      {/* 「在做什么」那一行（照 Claude Code，本人 11/16）：清单下面，没有清单就在这一轮最后；这一轮的步骤收在 › 里。 */}
-      <ActivityLine text={conversationDoing(data)} since={new Date(data.startedAt).toISOString()} detail={data.steps.length ? <StepList steps={data.steps} /> : null} />
       {data.turnCards?.length ? <EntryCards cards={data.turnCards} /> : null}
     </ConversationStatusSlot>
   ) : null;

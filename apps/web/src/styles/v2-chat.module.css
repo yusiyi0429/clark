@@ -26,6 +26,13 @@
 }
 .inner { display: flow-root; }
 
+/* 新首页伙伴主线、项目对话（页头正中有伙伴，Presence）：对话顶上 56px 淡出，状态胶囊浮在上面；停在最上面时第一条不压在淡出里。 */
+.pane:has(.head [data-presence]) .log {
+  padding-top: 56px;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, black 56px);
+  mask-image: linear-gradient(to bottom, transparent 0, black 56px);
+}
+
 /* 输入框那一块是实心底（同子会话）：从框上沿到窗口底边整条盖住，对话不从框下面透出来；框离底 16 加安全区。 */
 .composer [data-composer] {
   position: absolute;

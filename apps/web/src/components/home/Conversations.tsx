@@ -2,7 +2,8 @@
 
 /**
  * 展示区里的两种对话：
- * - 总管线：伙伴唯一的对话（总线程），一直聊下去；页头标题是伙伴的名字（伙伴只在左栏的伙伴台上，说话时台上的它在动）。
+ * - 总管线：伙伴唯一的对话（总线程），一直聊下去；页头左边是伙伴的名字。
+ * 两种对话的页头正中都是伙伴的「在场」（Presence，设计 4.2）：形象钉在正中，状态胶囊挂在它下面。
  * - 项目对话（16.3，原来的 Task 管线并进来了）：每个项目一条单独的对话。先聊计划，规划员拆好后在对话里给出开工的选项框；开了以后写开了哪几个子会话，
  *   验收行（过了、受阻、约定都达到、返工）和挂上新 Task 的分隔线也由网页按时间插进这条对话。B 的接口没上时是这个标签页里的假对话（lib/home/pipeline）。
  * 首页输入框发来的话（outbox）进了对应的对话就发出去。
@@ -33,6 +34,7 @@ import { noteSeenSequence } from "@/lib/home/transfer";
 import { useViewChrome } from "./view";
 import { usePhone } from "./usePhone";
 import h from "@/styles/home.module.css";
+import p from "@/styles/presence.module.css";
 
 import { StateIcon } from "./StateIcon";
 import { HeroButton } from "@/components/HeroButton";
@@ -45,6 +47,7 @@ import { usePartnerWorkEvents } from "./PartnerWorkEvents";
 import { usePartnerTeam } from "./PartnerTeam";
 import { usePartnerMeetingFeed } from "./PartnerMeetings";
 import { useMeetingWorkHandoffFeed } from "../meeting/MeetingWorkHandoffs";
+import { Presence } from "./Presence";
 
 /** 首页输入框发来、等着进对话的一句。 */
 /** files：首页输入框带的附件，到了那条对话再传（14.5）。 */
@@ -151,10 +154,10 @@ export function BuddyView({ buddy, outbox, consume, onSpeaking, waiting, go, con
         <ChatColumn data={data} buddy={buddy} tone="light"
           head={(
             <>
-              <header className={h.viewHead} data-flush="">
-                {chrome.lead}
-                <h1 className={h.viewTitle} tabIndex={-1}>{name}</h1>
-                {chrome.trail}
+              <header className={`${h.viewHead} ${p.head}`} data-flush="">
+                <div className={p.side}>{chrome.lead}<h1 className={h.viewTitle} tabIndex={-1}>{name}</h1></div>
+                <Presence buddy={buddy} data={data} go={go} />
+                <div className={p.side} data-end="">{chrome.trail}</div>
               </header>
             </>
           )}
@@ -375,12 +378,10 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
         <ChatColumn data={data} buddy={buddy} label={project.name} tone="light"
           head={(
             <>
-              <header className={h.viewHead} data-flush="">
-                {chrome.lead}
-                <h1 className={h.viewTitle} tabIndex={-1}>{project.name}</h1>
-                {pull}
-                {trail}
-                {chrome.trail}
+              <header className={`${h.viewHead} ${p.head}`} data-flush="">
+                <div className={p.side}>{chrome.lead}<h1 className={h.viewTitle} tabIndex={-1}>{project.name}</h1></div>
+                <Presence buddy={buddy} data={data} go={go} />
+                <div className={p.side} data-end="">{pull}{trail}{chrome.trail}</div>
               </header>
             </>
           )}

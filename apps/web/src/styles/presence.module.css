@@ -1,0 +1,56 @@
+/*
+ * 页头在场（设计 4.2、components/home/Presence.tsx）：新首页伙伴主线、项目对话的页头。
+ * 页头三栏：左边标题、正中伙伴、右边按钮；两边等宽，正中那一栏永远在正中，标题再长也只在左边那栏里省略。
+ * 状态胶囊绝对定位挂在形象下面，形象的位置不因它出现、变长短而挪；也不把页头撑高。
+ */
+.head[data-flush] { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+.side { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.side[data-end] { justify-content: flex-end; }
+
+/* 形象槽 40 高：横放胶囊（24 高）和 Q 版圆（40）都在正中，胶囊挂的高度一样。 */
+.presence { position: relative; z-index: 4; display: grid; place-items: center; min-height: 40px; }
+
+.hang { position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; }
+
+/* 磨砂：对话从它下面滚过去。 */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100vw - 32px);
+  height: 30px;
+  padding: 0 6px 0 12px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--surface) 82%, transparent);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 0 0 1px var(--hairline), var(--elev-2);
+  color: var(--ink-muted);
+  white-space: nowrap;
+  animation: pillIn 260ms cubic-bezier(.32, .72, 0, 1);
+}
+.pill[data-rec] { padding-right: 12px; color: var(--counter); }
+.hit { display: inline-flex; align-items: center; min-width: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; white-space: pre; }
+.what { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+button.hit { cursor: pointer; }
+.time { flex: none; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
+.pill[data-rec] .hit { font-variant-numeric: tabular-nums; }
+.stop { flex: none; padding: 3px 8px; border: 0; border-radius: 999px; background: none; color: var(--ink-faint); font: inherit; cursor: pointer; }
+.stop:hover { background: var(--default-soft-hover); color: var(--ink); }
+.hit:focus-visible, .stop:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 999px; }
+
+/* 点胶囊落下来的一小块：这一轮的步骤和思考摘要。 */
+.detail {
+  width: min(360px, calc(100vw - 32px));
+  max-height: 50vh;
+  overflow-y: auto;
+  padding: 10px 14px;
+  border-radius: var(--r-inset);
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--hairline), var(--elev-2);
+  color: var(--ink-muted);
+}
+
+@keyframes pillIn { from { opacity: 0; transform: translateY(-4px) scale(.96); } }
+@media (prefers-reduced-motion: reduce) { .pill { animation: none; } }
+:global([data-reduce-motion='true']) .pill { animation: none; }
