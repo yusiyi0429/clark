@@ -4,7 +4,7 @@ import { ChevronRight } from "lucide-react";
 import type { Project } from "@/lib/home/projects";
 import type { SubSession } from "@/lib/home/types";
 import { StateIcon } from "./StateIcon";
-import { subHref, subIcon, subKey } from "./LeftColumn";
+import { subHref, subIcon, subKey } from "./SubRows";
 import { subStage } from "./PlanDecision";
 import s from "@/styles/sub-session-summary.module.css";
 

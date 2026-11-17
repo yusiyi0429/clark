@@ -1,19 +1,35 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { THomeItem } from "@warmap/contracts";
 import type { HomeProject, SubSession, WorkHomeData } from "@/lib/home/types";
 import { fromHome, projectWorking } from "@/lib/home/projects";
-import { LeftColumn, STAGE_BASE, STAGE_RATIO, planOrder, stageScale, subDot, subIcon, subsSummary } from "./LeftColumn";
+import { LeftColumn } from "./LeftColumn";
+import { SeenContext, Subs, planOrder, subDot, subIcon } from "./SubRows";
 import { scopeOf, viewOf } from "./view";
+
+/** 没有 jsdom：带 data-testid 的原生元素的 props 从 JSX 运行时截下来，直接调它们的处理器。 */
+const tap = vi.hoisted(() => ({ props: new Map<string, Record<string, unknown>>() }));
+const capture = vi.hoisted(() => <T,>(fn: T) => ((type: unknown, props: Record<string, unknown>, ...rest: unknown[]) => {
+  if (typeof type === "string" && typeof props?.["data-testid"] === "string") tap.props.set(props["data-testid"] as string, props);
+  return (fn as unknown as (...args: unknown[]) => unknown)(type, props, ...rest);
+}) as unknown as T);
+vi.mock("react/jsx-runtime", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react/jsx-runtime")>();
+  return { ...actual, jsx: capture(actual.jsx), jsxs: capture(actual.jsxs) };
+});
+vi.mock("react/jsx-dev-runtime", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react/jsx-dev-runtime")>();
+  return { ...actual, jsxDEV: capture(actual.jsxDEV) };
+});
 
 const data = { period: "2026-11", projects: [], archivedCount: 0, month: { missions: [] }, waiting: [], other: { subSessions: [], items: [] } } as unknown as WorkHomeData;
 const projectsOf = (used: WorkHomeData) => used.projects.map((project) => fromHome(project, used, new Map()));
 const render = (extra: Partial<Parameters<typeof LeftColumn>[0]>) => {
   const used = extra.data ?? data;
   return renderToStaticMarkup(
-    <LeftColumn data={used} view={{ kind: "home" }} buddy={null} speaking={false} go={() => undefined} phone={false}
+    <LeftColumn data={used} view={{ kind: "home" }} buddy={null} go={() => undefined} phone={false}
       account={{ displayName: "孙铭泽", role: "member" }} today="11 月 7 日 周六"
       projects={projectsOf(used)} archived={[]} onCreate={async () => "x"} {...extra} />,
   );
@@ -111,30 +127,15 @@ describe("左栏：项目（16.2）", () => {
     expect(html).not.toContain("已完成");
   });
 
-  it("有子会话：项目名后面紧跟箭头（aria-expanded 在箭头上），默认收起；下面一行「N 个子会话 · N 个受阻 · N 个未读」，不列出来（49 条）", () => {
-    const sub = (id: string, state: string, waiting: unknown = null, unseen = false) => ({ id, kind: "card", title: `卡${id}`, state, waiting, updatedAt: "a", queueReason: null, holdUntil: null, unseen });
-    const html = render({ data: withTask([], { subSessions: [sub("1", "running"), sub("2", "waiting", "verdict"), sub("3", "done", null, true), sub("4", "waiting", null, true), sub("5", "failed")] as never }) });
-    expect(html).toMatch(/首页改版<\/span><\/span><\/button><button[^>]*aria-expanded="false" aria-label="首页改版 的子会话"[^>]*data-fold=""/);
-    expect(html.replace(/<!-- -->/g, "")).toMatch(/data-testid="tree-subs"><span class="[^"]*">5 个子会话 · <span data-tone="warning">1 个受阻<\/span> · <span data-tone="accent">2 个未读<\/span><\/span><\/button>/);
-    expect(html).not.toMatch(/data-testid="tree-subs"[^>]*aria-expanded/);
-    expect(html).not.toContain("卡1");
-  });
-
-  it("为 0 的那段不写；没有子会话的项目不画箭头、不画那一行", () => {
-    const sub = (id: string) => ({ id, kind: "card", title: `卡${id}`, state: "running", waiting: null, updatedAt: "a", queueReason: null, holdUntil: null, unseen: false });
-    const html = render({ data: withTask([], { subSessions: [sub("1"), sub("2")] as never }) }).replace(/<!-- -->/g, "");
-    expect(html).toMatch(/data-testid="tree-subs"><span class="[^"]*">2 个子会话<\/span><\/button>/);
-    const none = render({ data: withTask([]) });
-    expect(none).not.toContain("tree-subs");
-    expect(none).not.toContain("tree-subs-toggle");
-    expect(none).not.toContain("data-fold");
-  });
-
-  it("受阻 = 等你拿主意（连续两次没过）；failed（第一次没过）不算；未读同蓝点（刚看过的不算、在跑和等你的不算）", () => {
-    const sub = (id: string, state: string, waiting: unknown = null, unseen = false) => ({ id, kind: "card", state, waiting, updatedAt: "2026-11-09T03:00:00Z", unseen }) as unknown as SubSession;
-    const list = [sub("1", "failed"), sub("2", "waiting", "verdict", true), sub("3", "waiting", "question", true), sub("4", "done", null, true), sub("5", "waiting", null, true), sub("6", "running", null, true)];
-    expect(subsSummary(list)).toEqual({ total: 6, blocked: 1, unread: 2 });
-    expect(subsSummary(list, new Map([["sub:4", "2026-11-09T03:00:00Z"]]))).toEqual({ total: 6, blocked: 1, unread: 1 });
+  it("项目行只有名字和点：没有箭头、没有「N 个子会话」、没有「+」", () => {
+    const sub = (id: string, state: string, unseen = false) => ({ id, kind: "card", title: `卡${id}`, state, waiting: null, updatedAt: "a", queueReason: null, holdUntil: null, unseen });
+    const actions = { renameProject: vi.fn(), archiveProject: vi.fn(), deleteProject: vi.fn(), renameSub: vi.fn(), archiveSub: vi.fn(), deleteSub: vi.fn() };
+    const html = render({ data: withTask([], { subSessions: [sub("1", "running"), sub("2", "done", true)] as never, unseen: true }), actions }).replace(/<!-- -->/g, "");
+    expect(html).toContain("首页改版");
+    expect(html).toContain('data-testid="project-unseen"');
+    expect(html).toContain('data-testid="project-info"');
+    expect(html).toContain('aria-label="首页改版 更多"');
+    for (const gone of ["data-fold", "tree-subs", "子会话", "卡1", "tree-sub", "project-new-sub"]) expect(html).not.toContain(gone);
   });
 
   it("有已归档的（本人 11/16 藏起来）：树里不占一行，「项目」组头「+」左边一个图标「已归档 N」，默认不列", () => {
@@ -144,10 +145,19 @@ describe("左栏：项目（16.2）", () => {
     expect(html).not.toContain('data-testid="tree-project"');
   });
 
-  it("待归位的事项进「其他」：没有会话也画这一组", () => {
+  it("待归位的事项进「其他」：没有会话也画这一组；老的不归项目的会话不在这里（挪去右边）", () => {
     expect(render({})).not.toContain('aria-label="其他"');
+    const old = { id: "c9", kind: "card", title: "老会话", state: "done", waiting: null, updatedAt: "a", queueReason: null, holdUntil: null, unseen: false };
+    expect(render({ data: { ...data, other: { subSessions: [old], items: [] } } as never })).not.toContain('aria-label="其他"');
     const html = render({ data: { ...data, other: { subSessions: [], items: [item("00000000-0000-4000-8000-000000000003", "整理会议纪要", { dueDate: "2026-11-09" })] } } });
     expect(html).toMatch(/aria-label="其他".*其他.*data-testid="tree-item".*整理会议纪要.*11\/09/);
+  });
+
+  it("已归档只列项目", () => {
+    const archived = projectsOf(withTask([])).map((project) => ({ ...project, archived: true }));
+    const archivedSubs = [{ kind: "topic", id: "t1", title: "选型", projectId: "p1", projectName: "首页改版", archivedAt: "2026-11-09T02:00:00.000Z" }];
+    const html = render({ data: withTask([]), projects: [], archived, ...({ archivedSubs } as object) });
+    expect(html).toMatch(/aria-label="已归档 1"[^>]*data-testid="tree-archived"/);
   });
 });
 
@@ -159,6 +169,11 @@ describe("会话的先后（照派活单）", () => {
     expect(planOrder(list, at).map((entry) => entry.id)).toEqual(["c1", "c2", "c3", "t1"]);
   });
 });
+
+/** 子会话行（挪去右边的会话面板）：直接画 SubRows 的 Subs。 */
+const subs = (list: SubSession[], seen?: Map<string, string>) => renderToStaticMarkup(
+  <SeenContext.Provider value={{ seen }}><Subs subs={list} view={{ kind: "home" }} go={() => undefined} flat /></SeenContext.Provider>,
+);
 
 describe("子会话的状态点（18.10）", () => {
   it("停着、不在等什么的：一轮做完读「做完一轮」，真停了（本人停、强停、本机程序重启）和云端没报原因的读「已停下」", () => {
@@ -172,7 +187,7 @@ describe("子会话的状态点（18.10）", () => {
   it("本人 11/16：行首不画字母方块；行尾在跑灰点、停了蓝点、要介入黄点，排队的行尾什么都不画（47 条）；读屏按状态读", () => {
     const sub = (id: string, state: string, waiting: unknown = null, queueReason: unknown = null, unseen = false) =>
       ({ id, kind: "card", title: `卡${id}`, state, waiting, updatedAt: id, queueReason, holdUntil: null, sessionId: null, unseen });
-    const html = render({ data: { ...data, other: { subSessions: [sub("1", "running"), sub("2", "waiting", null, null, true), sub("3", "waiting", "approval"), sub("4", "queued", null, "prior_cards"), sub("5", "waiting")], items: [] } } as never });
+    const html = subs([sub("1", "running"), sub("2", "waiting", null, null, true), sub("3", "waiting", "approval"), sub("4", "queued", null, "prior_cards"), sub("5", "waiting")] as never);
     const rows = html.split('data-testid="tree-sub"').slice(1);
     expect(html).not.toContain("sub-letter");
     expect(rows).toHaveLength(5);
@@ -191,12 +206,11 @@ describe("子会话的状态点（18.10）", () => {
 
 describe("蓝点点了就藏（25 条，组件）", () => {
   const sub = (updatedAt: string) => ({ id: "c2", kind: "card", title: "卡2", state: "waiting", waiting: null, updatedAt, queueReason: null, holdUntil: null, sessionId: null, unseen: true });
-  const other = (updatedAt: string) => ({ ...data, other: { subSessions: [sub(updatedAt)], items: [] } }) as never;
   it("刚看过的（同一次停下）不画蓝点；之后来了更新的停下又画；刷新后没有这一页的记录，照云端画", () => {
     const seen = new Map([["sub:c2", "2026-11-09T03:00:00Z"]]);
-    expect(render({ data: other("2026-11-09T03:00:00Z"), seen })).not.toContain("sub-dot");
-    expect(render({ data: other("2026-11-09T03:05:00Z"), seen })).toMatch(/data-tone="stopped"[^>]*aria-label="已停下"/);
-    expect(render({ data: other("2026-11-09T03:00:00Z") })).toMatch(/data-tone="stopped"[^>]*aria-label="已停下"/);
+    expect(subs([sub("2026-11-09T03:00:00Z")] as never, seen)).not.toContain("sub-dot");
+    expect(subs([sub("2026-11-09T03:05:00Z")] as never, seen)).toMatch(/data-tone="stopped"[^>]*aria-label="已停下"/);
+    expect(subs([sub("2026-11-09T03:00:00Z")] as never)).toMatch(/data-tone="stopped"[^>]*aria-label="已停下"/);
   });
   it("项目行同理：刚看过的不画，看过以后又有新回复的画", () => {
     const seen = new Map([["project:p1", "2026-11-07T01:00:00.000Z"]]);
@@ -205,11 +219,29 @@ describe("蓝点点了就藏（25 条，组件）", () => {
   });
 });
 
-describe("伙伴台「亮着」（17.2）：只在伙伴对话里", () => {
-  it("别的页不亮；伙伴对话里空闲是 idle，回话流着是 speaking（在说或在想）", () => {
-    expect(render({})).not.toContain("data-glow");
-    expect(render({ view: { kind: "buddy" } })).toContain('data-glow="idle"');
-    expect(render({ view: { kind: "buddy" }, speaking: true })).toContain('data-glow="speaking"');
+describe("左栏：伙伴名片（设计 4.1）", () => {
+  it("伙伴名片：形象、名字，点了进主线", () => {
+    const go = vi.fn();
+    const html = render({ buddy: { name: "小天", form: "classic" } as never, go });
+    expect(html).toMatch(/<button[^>]*aria-label="小天"[^>]*data-testid="buddy-entry"[^>]*>.*data-place="card".*小天/);
+    expect(html).toContain('data-state="idle"');
+    expect(html).not.toContain('data-place="stage"');
+    expect(html).not.toContain("在录");
+    (tap.props.get("buddy-entry")?.onClick as () => void)();
+    expect(go).toHaveBeenCalledWith("/me/work/buddy");
+    expect(render({})).not.toMatch(/aria-current="page"[^>]*data-testid="buddy-entry"/);
+    expect(render({ view: { kind: "buddy" } })).toMatch(/aria-current="page"[^>]*data-testid="buddy-entry"/);
+  });
+
+  it("开会录音时名片下面一行「● 12:34 在录」", () => {
+    const html = render({ meeting: { slot: null, listening: true, clock: "12:34" } }).replace(/<!-- -->/g, "");
+    expect(html).toMatch(/data-testid="buddy-entry".*data-state="listening".*● 12:34 在录/);
+    expect(render({ meeting: { slot: null, listening: false, clock: null } })).not.toContain("在录");
+  });
+
+  it("开会那一颗在「会议」行行尾，和行按钮并排（不套在按钮里），下一场照旧写在它前面", () => {
+    const html = render({ meetingsTrail: "14:30", meeting: { slot: <span data-testid="meeting-slot" />, listening: false, clock: null } });
+    expect(html).toMatch(/data-testid="meetings-row">(?:(?!<\/button>)[^])*14:30(?:(?!<\/button>)[^])*<\/button><span data-testid="meeting-slot"><\/span>/);
   });
 });
 
@@ -275,16 +307,5 @@ describe("左栏：项目在后台干活的灰点", () => {
     expect(css).toContain('.subDot[data-tone="running"] i { animation: workingBreath 1.4s ease-in-out infinite; }');
     expect(css).toContain("@keyframes workingBreath { 50% { opacity: .3; } }");
     expect(css).toContain("@media (prefers-reduced-motion: reduce) { .subDot i { animation: none !important; } }");
-  });
-});
-
-describe("伙伴形象跟着台子缩放（17.2 第 15 条）", () => {
-  it("台子 5:3：按 1440 时（宽 255）的比例走，不比原来的小；矮屏台子比 5:3 还扁时跟着高度缩", () => {
-    expect(stageScale(242, 242 * STAGE_RATIO)).toBe(1);
-    expect(stageScale(STAGE_BASE, STAGE_BASE * STAGE_RATIO)).toBe(1);
-    expect(stageScale(344, 344 * STAGE_RATIO)).toBeCloseTo(344 / 255);
-    expect(stageScale(344, 344 * STAGE_RATIO / 2)).toBeCloseTo((344 / 255) / 2);
-    expect(stageScale(242, 242 * STAGE_RATIO / 2)).toBeCloseTo(0.5);
-    expect(stageScale(0, 0)).toBe(1);
   });
 });

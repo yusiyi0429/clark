@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * 伙伴台上的「开会」（设计 2026-11-12 第二节）：伙伴就是陪你开会、替你记的那个，入口和会中状态都在伙伴台右下角。
+ * 「开会」（设计 2026-11-12 第二节；11/17 设计 4.1 起在左栏「会议」行行尾）：伙伴就是陪你开会、替你记的那个。
  * - 平时：一颗小图标按钮（AudioLines），点开小弹层——我主持、现在能开的已约会议排最上（点一行就开那场），下面「新的一场」：
  *   「现场 | 远程」二选一，标题、关于（挂点）预填好，CEO 多一行主持人，远程多一行参会人；焦点在主按钮上，回车就开，Esc 关；
  *   左下「预约会议」打开约会议侧栏（以后开的会）。
@@ -15,7 +15,7 @@
  * 服务端的录音、转写、会后抽取这条链一点不动，只接已有接口：POST /api/meetings、/api/meetings/:id/recordings…、GET /api/me/meetings、
  * GET /api/world-anchor-options、/api/actions/execute 的 meeting.end。
  */
-import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { Popover } from "@heroui/react";
 import { Button as Pressable } from "react-aria-components";
 import { ArrowUpRight, AudioLines, Pencil, X } from "lucide-react";
@@ -37,6 +37,7 @@ import { refreshWorkspace } from "@/lib/toast";
 import { announceMeeting, defaultMeetingTitle, elapsed, meetingHref, meetingSpan, startableMeetings } from "@/lib/home/meeting";
 import { usePartnerMeetings } from "@/lib/home/partnerMeetingFeed";
 import { ICON } from "./StateIcon";
+import { HomeMeetingContext, useHomeMeetingState, type HomeMeetingState } from "./meetingState";
 import h from "@/styles/home.module.css";
 import s from "./partner-meetings.module.css";
 
@@ -246,7 +247,7 @@ export function useHomeMeeting({ account, go }: { account: Account; go: (href: s
   }, [organizing, setPhase]);
 
   const dismiss = useCallback(() => setPhase({ kind: "idle" }), [setPhase]);
-  /** 打开这场会的会议页（新首页里的 /me/work/meetings/:id），伙伴台上的胶囊收起。 */
+  /** 打开这场会的会议页（新首页里的 /me/work/meetings/:id），「会议」行上的胶囊收起。 */
   const open = useCallback(() => {
     if (!meeting) return;
     go(meetingHref(meeting.id));
@@ -255,7 +256,7 @@ export function useHomeMeeting({ account, go }: { account: Account; go: (href: s
 
   return {
     phase, start, resume, end, dismiss, open, account, navigate: go,
-    /** 伙伴台上伙伴在听、光跟着响度动。 */
+    /** 开着会在录音：伙伴在听、跟着响度动。 */
     listening: phase.kind === "live" && status === "recording",
     /** 开着会（标签页标题前加「● 」）。 */
     live: phase.kind === "live",
@@ -274,13 +275,25 @@ function useTick(on: boolean) {
   return now;
 }
 
-/** 伙伴台右下角那一颗：平时是图标按钮，开着会是走秒胶囊。 */
+/**
+ * 外壳给名片、页头的开会状态（meetingState）：在录时每秒走一次，只让读它的地方跟着重画。
+ * 「会议」行上的走秒胶囊也读这一份，和名片上的「● 12:34 在录」同一秒变。
+ */
+export function HomeMeetingProvider({ meeting, children }: { meeting: HomeMeeting; children: ReactNode }) {
+  const live = meeting.listening && meeting.phase.kind === "live" ? meeting.phase.meeting : null;
+  const now = useTick(Boolean(live));
+  const value: HomeMeetingState = { listening: meeting.listening, clock: live ? elapsed(now - live.startedAt) : null, href: live ? meetingHref(live.id) : null };
+  return <HomeMeetingContext.Provider value={value}>{children}</HomeMeetingContext.Provider>;
+}
+
+/** 「会议」行行尾那一颗：平时是图标按钮，开着会是走秒胶囊。 */
 export function MeetingControl({ meeting, inline = false }: { meeting: HomeMeeting; inline?: boolean }) {
   const { phase } = meeting;
   const [open, setOpen] = useState(false);
   const [booking, setBooking] = useState(false);
   const slot = inline ? s.inlineSlot : h.meetSlot;
   const now = useTick(phase.kind === "live" || phase.kind === "organizing");
+  const shared = useHomeMeetingState().clock;
   useEffect(() => { if (phase.kind === "organizing" || phase.kind === "ready") setOpen(false); }, [phase.kind]);
 
   if (phase.kind === "organizing") {
@@ -296,7 +309,7 @@ export function MeetingControl({ meeting, inline = false }: { meeting: HomeMeeti
     const quiet = !phase.broken && !phase.meeting.audio;
     trigger = (
       <Pressable className={h.meetPill} data-state={phase.broken ? "broken" : quiet ? "quiet" : "live"} aria-label={`会议中 · ${phase.meeting.title}`} data-testid="meeting-pill">
-        <i aria-hidden />{phase.broken ? "会议中 · 录音断了" : `${elapsed(now - phase.meeting.startedAt)}${quiet ? " · 没录上音" : ""}`}
+        <i aria-hidden />{phase.broken ? "会议中 · 录音断了" : `${shared ?? elapsed(now - phase.meeting.startedAt)}${quiet ? " · 没录上音" : ""}`}
       </Pressable>
     );
     body = (
