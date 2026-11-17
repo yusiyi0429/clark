@@ -324,3 +324,46 @@ describe("一轮没完成时，已经写出的内容留在界面上", () => {
   });
 });
 
+/** 跳顶（11/17 A）：网页先放进对话的消息没有时间，按时间插的块就全挪到最后一条后面；读回历史又挪回去。 */
+describe("网页先放进对话的消息带时间", () => {
+  const stamped = (message: { createdAt?: string } | undefined) => Number.isFinite(Date.parse(message?.createdAt ?? ""));
+  /** 读一下就停、本页停下或被打断时断开的事件流。 */
+  const abortable = (delta: string) => async (_url: string, init: RequestInit) => {
+    let reads = 0;
+    return { ok: true, status: 200, body: { getReader: () => ({
+      read: () => (reads++ === 0 ? Promise.resolve({ done: false, value: sse({ type: "message", delta }) })
+        : new Promise((_resolve, fail) => init.signal?.addEventListener("abort", () => fail(Object.assign(new Error("aborted"), { name: "AbortError" }))))),
+    }) } };
+  };
+
+  it.each([
+    ["一轮写完、读不回历史", async () => {
+      vi.stubGlobal("fetch", vi.fn()
+        .mockResolvedValueOnce(streamResponse([sse({ type: "message", delta: "写完了" }), sse({ type: "done", status: "completed" })]))
+        .mockResolvedValue({ ok: false, status: 404, json: async () => ({}) }));
+      expect(await snapshot().send("问一句", [])).toBe(true);
+      return snapshot().messages;
+    }],
+    ["停下时服务端没存下这一轮", async () => {
+      vi.stubGlobal("fetch", vi.fn().mockImplementationOnce(abortable("写了一段"))
+        .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ runId: RUN, status: "aborted" }) }).mockResolvedValueOnce(history([])));
+      const sending = snapshot().send("问一句", []);
+      await vi.waitFor(() => expect(snapshot().partial).toBe("写了一段"));
+      snapshot().stop();
+      await sending;
+      return snapshot().messages;
+    }],
+    ["回复中本人再发，已写出的先留在原处", async () => {
+      vi.stubGlobal("fetch", vi.fn().mockImplementationOnce(abortable("写了一段")).mockReturnValue(new Promise(() => undefined)));
+      void snapshot().send("问一句", []);
+      await vi.waitFor(() => expect(snapshot().partial).toBe("写了一段"));
+      void snapshot().send("再问一句", []);
+      return snapshot().messages;
+    }],
+  ])("网页本地补进去的伙伴回答也带时间（%s）", async (_name, run) => {
+    const messages = await run();
+    expect(messages.some((message) => message.role === "assistant")).toBe(true);
+    for (const message of messages) expect(stamped(message), JSON.stringify(message)).toBe(true);
+  });
+});
+
