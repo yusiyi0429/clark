@@ -216,6 +216,15 @@ describe("要你出手的事回到项目对话（设计 4.3 硬规矩，本人 1
     }
   });
 
+  it("卡等合回、受阻时又在子会话里正常停了一轮：那一块照旧留在项目对话里，带原来的按钮", () => {
+    const stop = (id: string, at: string, cardId: string) => ({ ...report, id, at, sub: { kind: "card" as const, id: cardId, letter: "B", title: "x" }, why: "turn_done" as const, blocker: null });
+    const kept = conversationFeed([blocked, merge, stop("s1", "2026-11-07T06:00:00Z", CARD), stop("s3", "2026-11-07T06:00:00Z", CARD3)]);
+    expect(kept.map((entry) => entry.id)).toEqual(["b1", "p1"]);
+    const html = draw(kept as Parameters<typeof feedBlocks>[0]["items"], open);
+    expect(text(html)).toMatch(/再改一轮.*推荐.*我去看看/);
+    expect(text(html)).toContain("接口 验收过了（3/3），无法合回");
+  });
+
   it("停着等的报告之后又正常停了一次：旧的那块不再算要你出手", () => {
     const later = { ...report, id: "r2", at: "2026-11-07T06:30:00Z", why: "turn_done" as const, summary: "都查完了", blocker: null };
     expect(conversationFeed([report, later]).map((entry) => entry.id)).toEqual([]);

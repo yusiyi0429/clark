@@ -223,12 +223,15 @@ type PipelineProps = {
  * 同一个子会话只留最新那一块。挂上 Task 的分隔线、过了的验收行、返工、会议交接不进对话。
  */
 const CONVERSATION_FEED = new Set<ProjectFeedItem["kind"]>(["handover", "handover_summary", "transfer_declined", "goal_changed", "sub_session_decision", "criteria_met"]);
-/** 要你出手的那几种是哪个子会话的；不是这几种为 null。子会话的报告不管停下有没有原因都算（后来正常停了一次，前面那块就不是最新的了）。 */
+/**
+ * 要你出手的那几种比新旧用的键；不是这几种为 null。报告只和同一个子会话的报告比（不管停下有没有原因都算：后来正常停了一次，前面那份就不是最新的了）；
+ * 卡的受阻、等你补、等合回只和这几样比——在卡的子会话里又正常停了一轮，不把还没处理的等合回、受阻挤掉。
+ */
 const handOf = (item: ProjectFeedItem): string | null => {
   switch (item.kind) {
-    case "card_blocked": case "card_needs_person": return item.cardId;
-    case "card_passed": return item.merge?.state === "needs_merge" ? item.cardId : null;
-    case "sub_session_report": return item.sub.id;
+    case "card_blocked": case "card_needs_person": return `card:${item.cardId}`;
+    case "card_passed": return item.merge?.state === "needs_merge" ? `card:${item.cardId}` : null;
+    case "sub_session_report": return `report:${item.sub.id}`;
     default: return null;
   }
 };
