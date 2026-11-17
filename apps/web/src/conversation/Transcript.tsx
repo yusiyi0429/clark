@@ -30,7 +30,7 @@ import c from "@/styles/card-references.module.css";
 
 const seconds = (ms: number) => `${Math.max(1, Math.round(ms / 1000))} 秒`;
 /** 现场行的用时（5.4.3）：过 60 秒写「1 分 12 秒」。 */
-const liveClock = (ms: number) => { const total = Math.max(1, Math.round(ms / 1000)); return total < 60 ? `${total} 秒` : `${Math.floor(total / 60)} 分${total % 60 ? ` ${total % 60} 秒` : "钟"}`; };
+export const liveClock = (ms: number) => { const total = Math.max(1, Math.round(ms / 1000)); return total < 60 ? `${total} 秒` : `${Math.floor(total / 60)} 分${total % 60 ? ` ${total % 60} 秒` : "钟"}`; };
 /** 预计：不到 1 分钟写「约 40 秒」，再长写「约 3 分钟」。 */
 const aboutText = (sec: number) => (sec < 60 ? `约 ${sec} 秒` : `约 ${Math.round(sec / 60)} 分钟`);
 

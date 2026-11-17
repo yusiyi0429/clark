@@ -99,7 +99,7 @@ describe("子会话：「在做什么」那一行", () => {
   });
 });
 
-describe("伙伴对话、项目对话：「在做什么」那一行", () => {
+describe("伙伴对话、项目对话：「在做什么」写哪句（写在页头的状态胶囊里）", () => {
   const data = (extra: Partial<ConversationData>) => ({
     scope: "global", messages: [{ sequence: 1, role: "user", content: "帮我排一下" }], partial: "", streaming: true, thinking: true, stage: "thinking",
     startedAt: Date.now() - 12_000, steps: [], send: vi.fn(), rescope: vi.fn(), stop: vi.fn(), ...extra,
@@ -117,16 +117,13 @@ describe("伙伴对话、项目对话：「在做什么」那一行", () => {
     expect(conversationDoing({ stage: "thinking", steps: [], progress: undefined, plan: null })).toBeNull();
   });
 
-  it("回答进行中：计划清单下面一行；原来那一行的阶段和用时不再另画一遍；步骤收进 ›", () => {
+  it("「在做什么」不在对话里", () => {
+    // 挪进页头的状态胶囊（设计 6.3.1）；计划清单还在这一轮下面，原来那一行的阶段和用时也不另画。
     const html = render({ plan: { entries: plan, collapsed: false }, steps: [{ id: "1", label: "读本月目标", status: "active" }] });
-    expect(html.indexOf("activity-line")).toBeGreaterThan(html.indexOf("plan-checklist"));
+    expect(html).toContain("plan-checklist");
+    expect(html).not.toContain("activity-line");
     expect(html).not.toContain('data-testid="conversation-thinking"');
-    expect(text(html)).toMatch(/\|读本月目标\|12 秒\|/);
-    expect(html).toMatch(/aria-expanded="false"/);
-  });
-
-  it("没有清单时在这一轮最后；这一轮结束（不在回答了）就没有", () => {
-    expect(render({})).toContain("activity-line");
-    expect(render({ streaming: false, thinking: false })).not.toContain("activity-line");
+    expect(text(html)).not.toContain("读本月目标");
+    expect(render({})).not.toContain("activity-line");
   });
 });
