@@ -5,12 +5,13 @@
  * C妹（用户 11/04 让接入）也是这样一块：一比一取自有授权的原图，和 Miles 同一套动作、同样大小，只换画。
  * 对话层页头那颗大一号（size: header）：28 高，名字和对话正文一样大（用户 11/03 定）。
  * 出现的时机、姿势和其他形象一样，由 PresenceCapsule 转过来；画和动作在 milesRig 里，这里只把它挂上、跟着姿势和声音走。
+ * Q 版圆形头像（shape: circle，11/17 设计 5.1）：没有胶囊，圆里是整颗头（画的 head 取景框），大小由放它的地方定。
  */
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { CMEI_ART, CMEI_SVG } from "./cmeiArt";
 import { MILES_ART, MILES_SVG } from "./milesArt";
-import { milesBoxHeight, milesCapsuleWidth, mountMiles, type MilesCapsuleSize, type MilesFigure, type MilesPose, type MilesRig } from "./milesRig";
+import { milesBoxHeight, milesCapsuleWidth, mountMiles, type MilesCapsuleSize, type MilesFigure, type MilesPose, type MilesRig, type MilesShape } from "./milesRig";
 import type { FigureSkin } from "./skin";
 import m from "@/styles/coagent-miles.module.css";
 
@@ -21,7 +22,7 @@ const FIGURES: Record<FigureSkin, MilesFigure> = {
   cmei: { art: CMEI_ART, svg: CMEI_SVG, name: "Mia" },
 };
 
-export function MilesCapsule({ skin, name, pose, level, leaving, size = "small", children }: {
+export function MilesCapsule({ skin, name, pose, level, leaving, size = "small", shape = "capsule", children }: {
   /** 挂哪一种形象。 */
   skin: FigureSkin;
   /** 伙伴名字，写在胶囊上；空着时写形象自己的名字（Miles 写「Miles」，C妹 写「Mia」）。 */
@@ -32,6 +33,8 @@ export function MilesCapsule({ skin, name, pose, level, leaving, size = "small",
   leaving: boolean;
   /** 胶囊哪一档（页头那颗大一号）。 */
   size?: MilesCapsuleSize;
+  /** circle：Q 版圆形头像。 */
+  shape?: MilesShape;
   /** 读屏念的那句（PresenceCapsule 给）。 */
   children?: ReactNode;
 }) {
@@ -55,20 +58,22 @@ export function MilesCapsule({ skin, name, pose, level, leaving, size = "small",
       pose: poseRef.current,
       reduced,
       size,
+      shape,
       classes: { headPose: m.headPose, gaze: m.gaze, breathe: m.breathe, speakGlass: m.speakGlass },
     });
     rig.current = mounted;
     return () => { mounted.destroy(); rig.current = null; };
-  }, [idPrefix, skin, size]);
+  }, [idPrefix, skin, size, shape]);
 
   useEffect(() => { if (rig.current) setWidth(rig.current.setName(name)); }, [name]);
   useEffect(() => { rig.current?.setPose(pose); }, [pose]);
   useEffect(() => { rig.current?.setLevel(level); }, [level]);
   useEffect(() => { if (leaving) rig.current?.leave(); }, [leaving]);
 
+  const circle = shape === "circle";
   return (
-    <div className={m.miles} style={{ width, height: milesBoxHeight(size, FIGURES[skin].art) }} data-skin={skin} data-pose={pose} data-leaving={leaving || undefined}>
-      <svg ref={svg} className={m.unit} aria-hidden focusable="false" />
+    <div className={m.miles} style={circle ? undefined : { width, height: milesBoxHeight(size, FIGURES[skin].art) }} data-skin={skin} data-pose={pose} data-leaving={leaving || undefined} data-shape={circle ? "circle" : undefined}>
+      <svg ref={svg} className={m.unit} viewBox={circle ? FIGURES[skin].art.head : undefined} aria-hidden focusable="false" />
       {children}
     </div>
   );

@@ -207,6 +207,7 @@ for side, e in eyes.items():
     a_base = (ndimage.binary_dilation(e["opening"] | e["lash"], iterations=3) & ~HAIR).astype(float)   # 盖住底图补过洞的那一圈（头发除外）
     a_lash = band_zone.astype(float)                             # 只压眼珠范围里那截上眼线
     lash_rgb = p1
+    e["a_base"] = a_base
     cid = "{id}-open-" + side
     clips.append(f'<clipPath id="{cid}"><path d="{path_of(e["opening"])}"/></clipPath>')
     eye_svg[side] = (f'<g data-part="eye-{side}">{layer(base_e, a_base, box)}'
@@ -226,11 +227,15 @@ open_m = roi_mask(OPEN_ROI) & (np.sqrt(((lab2 - color.rgb2lab(SKIN[None, None]))
 open_m = ndimage.binary_opening(open_m, iterations=1)
 open_svg = f'<g data-part="mouth-open" display="none">{layer(p2, ink_alpha(p2, ndimage.binary_dilation(open_m, iterations=1), 0.35), OPEN_ROI)}</g>'
 closed_svg = ""
-lab4 = color.rgb2lab(p4)
+# 闭眼（笑眼，11/17）：除了描线，还整块盖住底图补过洞的那一圈（和眼白那层同一个范围 a_base），用第 4 格的原图像素，
+# 显示闭眼、藏起睁眼时不露出底图补的洞（右眼那里补得发糊）。第 4 格按眼睛周围一圈对齐：(4, 587) 比整格相位相关的接缝更小。
+p4e = crop((P1[0] + 4, P1[1] + 587, P1[2] + 4, P1[3] + 587))
+lab4 = color.rgb2lab(p4e)
 for side, e in eyes.items():
     zone = roi_mask(e["box"]) & ((lab4[..., 0] < 55) & (((np.degrees(np.arctan2(lab4[..., 2], lab4[..., 1])) + 360) % 360) < 60))
     zone = ndimage.binary_dilation(zone, iterations=1) & roi_mask(e["box"])
-    closed_svg += f'<g data-part="eye-{side}-closed" display="none">{layer(p4, ink_alpha(p4, zone, 0.5), e["box"])}</g>'
+    x0, y0, x1, y1 = e["box"]
+    closed_svg += f'<g data-part="eye-{side}-closed" display="none">{layer(p4e, np.maximum(e["a_base"], ink_alpha(p4e, zone, 0.5)), (x0 - 4, y0 - 4, x1 + 4, y1 + 4))}</g>'
 
 # 手：两只扒在胶囊沿上的手，往下补 16 行（举手回弹时不露平切口）
 HB = (HANDS_ROI[0], HANDS_ROI[1], HANDS_ROI[2], H)
@@ -250,7 +255,7 @@ airpod = (f'<g data-part="airpod-r"><rect x="{ax - 4 * k:.1f}" y="{ay + 4 * k:.1
 clips.append('<clipPath id="{id}-lip"><rect x="0" y="0" width="900" height="876"/></clipPath>')   # 下沿和胶囊上沿一样高
 inner = (f'<defs>{"".join(clips)}</defs><g data-part="miles" clip-path="url(#{{id}}-lip)"><g data-part="body" data-pivot="388 1182"><g data-part="head" data-pivot="444 806">'
          f'{bust}{eye_svg["l"]}{eye_svg["r"]}{closed_svg}{mouth_svg}{open_svg}{airpod}</g></g>{hands}</g>')
-ART = {"viewBox": "20 140 860 1080", "torsoCx": 447, "lipY": 900, "figureWidth": 773, "topY": 167, "gazeUnit": 8}
+ART = {"viewBox": "20 140 860 1080", "torsoCx": 447, "lipY": 900, "figureWidth": 773, "topY": 167, "gazeUnit": 8, "head": "19 -14 890 890"}
 art_ts = "{ " + ", ".join(f'{k}: {json.dumps(v)}' for k, v in ART.items()) + " }"
 doc = """/**
  * C妹 的伙伴形象（2026-11-03 设计稿，待定稿）：一比一取自孙铭泽提供并确认有授权的原图 source/c-mei-sheet.webp。
@@ -264,7 +269,7 @@ doc = """/**
  * 由 .scratch/buddy-cmei/build.py 生成，别手改。
  */""".replace("`", "\\`")
 out_dir = HERE
-open(os.path.join(out_dir, "cmeiArt.ts"), "w").write(f"{doc}\n\n/** 摆位用的几个量：除了 gazeUnit，和 MILES_ART 相同。 */\nexport const CMEI_ART = {art_ts} as const;\n\nexport const CMEI_SVG = `{inner}`;\n")
+open(os.path.join(out_dir, "cmeiArt.ts"), "w").write(f"{doc}\n\n/** 摆位用的几个量：除了 gazeUnit 和 Q 版的取景框 head（头连头发、呆毛、发带的外框 x 94–833、y 66–712，四边留约 75，往下补成正方形、底边齐画的下沿 876），和 MILES_ART 相同。 */\nexport const CMEI_ART = {art_ts} as const;\n\nexport const CMEI_SVG = `{inner}`;\n")
 # 整张图的画布比摆位用的 viewBox 往上多留 100：放大后呆毛高出 topY
 open(os.path.join(out_dir, "cmei.svg"), "w").write(f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="20 40 860 1080" width="860" height="1080">{inner.replace("{id}", "cmei")}</svg>\n')
 print("cmeiArt.ts", os.path.getsize(os.path.join(out_dir, "cmeiArt.ts")), "bytes")

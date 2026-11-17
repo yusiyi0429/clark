@@ -61,6 +61,18 @@
 .mark[data-place="stage"]:is([data-skin="miles"], [data-skin="cmei"])[data-listening] { scale: max(1, calc(1.16 * var(--stage-room, 1))); }
 .mark[data-place="stage"][data-skin="cmei"] { translate: 0 6px; }
 
+/*
+ * 新首页页头正中（head）、左上角伙伴名片（card），设计 5.1：横放胶囊按 48 高画（眼睛、耳朵照 48 画），
+ * 页头缩一半成 64×24，名片缩到 22/48 成 56×22。Miles、C妹 是 Q 版圆：页头直径 40，名片直径 48，铺满这一格。
+ */
+.mark[data-place="head"] { --coagent-capsule-width: 128px; --coagent-capsule-height: 48px; width: 64px; height: 24px; }
+.mark[data-place="head"] .scale { transform: scale(.5); }
+.mark[data-place="card"] { --coagent-capsule-width: calc(56px * 48 / 22); --coagent-capsule-height: 48px; width: 56px; height: 22px; }
+.mark[data-place="card"] .scale { transform: scale(calc(22 / 48)); }
+.mark[data-place="head"][data-shape="circle"] { width: 40px; height: 40px; }
+.mark[data-place="card"][data-shape="circle"] { width: 48px; height: 48px; }
+.mark[data-shape="circle"] .scale { width: 100%; height: 100%; transform: none; }
+
 @media (prefers-reduced-motion: reduce) {
   .mark[data-place="sheet"], .mark[data-place="stage"] { transition: none; }
   .mark[data-place="stage"][data-listening], .mark[data-place="stage"]:is([data-skin="miles"], [data-skin="cmei"])[data-listening] { scale: none; }
