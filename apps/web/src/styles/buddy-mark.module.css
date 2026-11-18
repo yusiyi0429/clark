@@ -50,14 +50,14 @@
  * 横放胶囊都按 128×48 画（眼睛、耳朵照 48 画）再整体缩。Miles、C妹 是 Q 版圆，铺满这一格。
  * - 页头：大小只看页头上的 --head-figure（圆的直径，不带单位，没给时 64）。圆就是这么大；胶囊按 96:36 跟着等比（64 时缩 .75 成 96×36），
  *   页头另给 --head-capsule 时按它缩（手机 .625，80×30）。
- * - 门牌：圆 36，胶囊缩 .4375 成 56×21（熊猫这类再小就难看了）。
+ * - 门牌：圆 44，胶囊缩 .5625 成 72×27（本人 11/18 门牌只放形象后放大）。
  */
 .mark[data-place="head"] { --coagent-capsule-width: 128px; --coagent-capsule-height: 48px; --head-k: var(--head-capsule, calc(var(--head-figure, 64) * 3 / 256)); width: calc(128px * var(--head-k)); height: calc(48px * var(--head-k)); }
 .mark[data-place="head"] .scale { transform: scale(var(--head-k)); }
-.mark[data-place="card"] { --coagent-capsule-width: 128px; --coagent-capsule-height: 48px; width: 56px; height: 21px; }
-.mark[data-place="card"] .scale { transform: scale(.4375); }
+.mark[data-place="card"] { --coagent-capsule-width: 128px; --coagent-capsule-height: 48px; width: 72px; height: 27px; }
+.mark[data-place="card"] .scale { transform: scale(.5625); }
 .mark[data-place="head"][data-shape="circle"] { width: calc(var(--head-figure, 64) * 1px); height: calc(var(--head-figure, 64) * 1px); }
-.mark[data-place="card"][data-shape="circle"] { width: 36px; height: 36px; }
+.mark[data-place="card"][data-shape="circle"] { width: 44px; height: 44px; }
 .mark[data-shape="circle"] .scale { width: 100%; height: 100%; transform: none; }
 /* 门牌（still）：不出场、不眨眼、不过渡。 */
 .mark[data-still] * { animation: none; transition: none; }

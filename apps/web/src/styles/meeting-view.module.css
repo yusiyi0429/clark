@@ -4,11 +4,22 @@
  * 会议屏幕挪进新首页后只在这一页的根上生效：整份 ts-design/styles.css 引进新首页会带变别的页面，所以只抄这几条。
  * ts-design 升级时对照这几条跟着改。
  */
-.root { font-size: 16px; line-height: 1.6; }
+/* 工作区自带 z-index: 70（老界面要盖住总览）：这里关在自己的层里，展示区左上角的收起按钮（z-index: 6）露在会议页上面、点得到（本人 11/18）。 */
+.root { isolation: isolate; font-size: 16px; line-height: 1.6; }
 /* 高度由 detail-frame 的 .reader（flex: 1）给，这里不写 height。 */
 .root :global(.ts-detail) { overflow: auto; overscroll-behavior: contain; padding: 0 0 var(--ts-content-bottom, 24px); scroll-padding-bottom: var(--ts-content-bottom, 24px); outline: none; }
 .root :global(.ts-row) { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .root :global(.ts-between) { justify-content: space-between; }
+
+/*
+ * 看材料（本人 11/18）：预览框占满页头下面到窗口底部，和正文同宽。阅读页从上往下一路排成竖的 flex（阅读区 → 材料列 → 材料区 → 阅读器 → 文档），
+ * 最里面的预览框（iframe）把剩下的高度都占了；材料比窗口长时照旧整页滚。阅读器左右不再另缩一圈，底部留白交给阅读页。
+ */
+.root :global(.ts-detail:has([data-material-scroll])) { display: flex; flex-direction: column; }
+.root :global(.ts-detail:has([data-material-scroll]) > :not(header)) { display: flex; flex: 1 0 auto; flex-direction: column; padding-bottom: 0; }
+.root :global(.ts-detail:has([data-material-scroll]) :is([data-material-column], [data-material-scope], [data-material-scroll], [data-material-scroll] > article:has(> iframe))) { display: flex; flex: 1 0 auto; flex-direction: column; width: 100%; }
+.root :global(.ts-detail:has([data-material-scroll]) [data-material-scroll] > article > iframe) { flex: 1 0 auto; }
+.root :global(.ts-detail [data-material-scroll]) { padding-inline: 0; padding-bottom: 0; }
 
 /*
  * 新首页深色：阅读页底色（顶栏渐变 header-capsule 的 ::before 也读它）换成新首页的面板色。

@@ -229,12 +229,15 @@ describe("左栏：伙伴门牌（本人 11/18 方案 A：对话顶上为主，�
   /** 以这个选择器开头的那一行规则。 */
   const rule = (css: string, selector: string) => css.split("\n").find((line) => line.startsWith(`${selector} {`)) ?? "";
 
-  it("名片是一行门牌：形象加名字，没有 data-dim，主线时只有选中", () => {
+  it("门牌只有形象，没有名字文字，形象是 card 位", () => {
     const go = vi.fn();
     const html = render({ buddy: { name: "小天", form: "classic" } as never, go });
+    // 读屏名称仍是伙伴名。
     expect(html).toMatch(/<button[^>]*aria-label="小天"[^>]*data-testid="buddy-entry"/);
-    // 一行：左边小形象，右边伙伴名字。
-    expect(card(html)).toMatch(/data-place="card"[^]*<span class="[^"]*buddyName[^"]*">小天<\/span>$/);
+    // 本人 11/18：门牌里只有形象（card 位），不写名字。
+    expect(card(html)).toMatch(/^<span[^>]*data-place="card"/);
+    expect(card(html)).not.toContain("小天");
+    expect(card(html)).not.toContain("buddyName");
     (tap.props.get("buddy-entry")?.onClick as () => void)();
     expect(go).toHaveBeenCalledWith("/me/work/buddy");
     // 主线时只有选中（aria-current + 现有的选中底），不变淡、不模糊。
@@ -242,19 +245,17 @@ describe("左栏：伙伴门牌（本人 11/18 方案 A：对话顶上为主，�
     expect(render({})).not.toMatch(/aria-current="page"[^>]*data-testid="buddy-entry"/);
     expect(on).toMatch(/aria-current="page"[^>]*data-testid="buddy-entry"/);
     expect(on).not.toContain("data-dim");
-    expect(cardCss).not.toMatch(/data-dim|\.buddySlot|blur\(/);
+    expect(cardCss).not.toMatch(/data-dim|\.buddySlot|\.buddyName|blur\(/);
     expect(rule(cardCss, ".buddyCard:has(> .buddyHit[aria-current=\"page\"])")).toContain("background: var(--default-soft-hover)");
-    // 48 高一行，形象在左、上下居中；名字用 --ink，不写字号字重；「⋯」照旧贴右浮着。
-    expect(rule(cardCss, ".buddyHit")).toMatch(/align-items: center/);
+    // 48 高一行，形象水平、垂直都居中；「⋯」贴右浮着，不把形象挤偏（左右不留不对称的内边距）。
+    expect(rule(cardCss, ".buddyHit")).toMatch(/align-items: center; justify-content: center;/);
     expect(rule(cardCss, ".buddyHit")).toMatch(/height: var\(--row-48\)/);
-    expect(rule(cardCss, ".buddyHit")).not.toMatch(/justify-content: center/);
-    expect(rule(cardCss, ".buddyName")).toContain("color: var(--ink)");
-    expect(rule(cardCss, ".buddyName")).not.toMatch(/font-size|font-weight/);
+    expect(rule(cardCss, ".buddyHit")).toMatch(/padding: 0;/);
     expect(rule(cardCss, ".buddyMore")).toMatch(/position: absolute/);
-    // 小形象：胶囊 56×21（128×48 缩 .4375），Q 版圆 36。
-    expect(rule(markCss, '.mark[data-place="card"]')).toMatch(/--coagent-capsule-width: 128px; --coagent-capsule-height: 48px; width: 56px; height: 21px;/);
-    expect(rule(markCss, '.mark[data-place="card"] .scale')).toMatch(/transform: scale\(\.4375\)/);
-    expect(rule(markCss, '.mark[data-place="card"][data-shape="circle"]')).toMatch(/width: 36px; height: 36px;/);
+    // 形象放大：胶囊 72×27（128×48 缩 .5625），Q 版圆 44。
+    expect(rule(markCss, '.mark[data-place="card"]')).toMatch(/--coagent-capsule-width: 128px; --coagent-capsule-height: 48px; width: 72px; height: 27px;/);
+    expect(rule(markCss, '.mark[data-place="card"] .scale')).toMatch(/transform: scale\(\.5625\)/);
+    expect(rule(markCss, '.mark[data-place="card"][data-shape="circle"]')).toMatch(/width: 44px; height: 44px;/);
   });
 
   it("门牌形象不动：开会、在想时都是静止", () => {
