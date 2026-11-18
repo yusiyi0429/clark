@@ -26,10 +26,21 @@
 }
 .inner { display: flow-root; }
 
-/* 新首页伙伴主线、项目对话（页头正中有伙伴，Presence）：离开顶部才淡出顶上 56px，状态胶囊浮在上面；停在最上面不淡出。 */
+/*
+ * 新首页伙伴主线、项目对话（页头正中有在场，Presence；本人 11/18）：页头叠在对话上，没有整条实底，对话区一直延到面板顶。
+ * 停在最上面时对话上沿让出原来页头占的高（上 14 + 页头块 + 下 4 + 12），第一条完整出现在形象下面。
+ * 页头块：项目对话 48；主线 88，手机 72（presence.module.css）。页头只有自己的按钮、标题、形象接点击，别处的滚轮和点击落到对话上。
+ * 离开顶部只淡出这一层：标题那一行（14 + 48）看不见，往下 20 渐显；形象身后另垫一块底（presence.module.css）。
+ */
+.pane:has(.head [data-presence]) { --head-block: 48px; }
+.pane:has(.head [data-presence][data-stage]) { --head-block: 88px; }
+:global([data-phone]) .pane:has(.head [data-presence][data-stage]) { --head-block: 72px; }
+.pane:has(.head [data-presence]) > .head { position: absolute; top: 0; left: 0; right: 0; z-index: 2; pointer-events: none; }
+.pane:has(.head [data-presence]) > .head > * > * { pointer-events: auto; }
+.pane:has(.head [data-presence]) > .log { padding-top: calc(var(--head-block) + 30px); }
 .pane:has(.head [data-presence]) .log[data-scrolled] {
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0, black 56px);
-  mask-image: linear-gradient(to bottom, transparent 0, black 56px);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 62px, black 82px);
+  mask-image: linear-gradient(to bottom, transparent 62px, black 82px);
 }
 
 /* 输入框那一块是实心底（同子会话）：从框上沿到窗口底边整条盖住，对话不从框下面透出来；框离底 16 加安全区。 */
