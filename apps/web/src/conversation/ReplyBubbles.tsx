@@ -18,7 +18,8 @@ import { SideContent, useSideDetail } from "@/components/home/SideDetail";
 import { ICON } from "@/components/home/StateIcon";
 import { calendarDate, clock, monthDayTime } from "@/lib/companyTime";
 import { splitReply } from "./replySegments";
-import { MarkdownBody } from "./Transcript";
+import { ARRIVAL_SETTLE_MS, MarkdownBody, TURN_PARTS, type MarkdownParts } from "./Transcript";
+import { ThreadNamesContext, rehypeThreadNames, type ThreadName } from "./threadNames";
 import b from "@/styles/conversation-bubbles.module.css";
 import ts from "@/styles/conversation-transcript.module.css";
 import vs from "@/styles/v2-session.module.css";
@@ -180,15 +181,39 @@ export function ReplyBubbles({ markdown, streaming, at, edge, actions }: {
   );
 }
 
+/** 带会话名下划线的那套部件，按名字列表记住：同一份名字是同一个引用（MarkdownBody 不重新解析）；没有名字就是 TURN_PARTS 本身。 */
+const withNames = new WeakMap<readonly ThreadName[], MarkdownParts>();
+function threadParts(names: readonly ThreadName[]): MarkdownParts {
+  if (!names.length) return TURN_PARTS;
+  let parts = withNames.get(names);
+  if (!parts) withNames.set(names, (parts = { ...TURN_PARTS, rehypePlugins: [rehypeThreadNames(names), ...TURN_PARTS.rehypePlugins] }));
+  return parts;
+}
+/**
+ * 气泡的正文部件：伙伴主线上（有 ThreadNamesContext）写完的气泡认会话名。在这里写过的，写完再等 ARRIVAL_SETTLE_MS，
+ * 到达淡入的那几段合并成普通文字以后再换（换的时候不重挂已经出过的字、不重新淡入）；读历史来的一挂上就认。
+ */
+function useSettledThreadParts(open: boolean): MarkdownParts {
+  const names = useContext(ThreadNamesContext);
+  const [settled, setSettled] = useState(!open);
+  useEffect(() => {
+    if (open || settled) return;
+    const timer = setTimeout(() => setSettled(true), ARRIVAL_SETTLE_MS);
+    return () => clearTimeout(timer);
+  }, [open, settled]);
+  return open || !settled ? TURN_PARTS : threadParts(names);
+}
+
 /** 本人能按块点表情时块上的标记（第几块、按块悬停）。 */
 type PartMark = { "data-reaction-part": number; "data-reactable": string } | undefined;
 
-/** 一个气泡：整段显示（本人 11/18 去掉了收起和「展开」）。open：还在写。 */
+/** 一个气泡：整段显示（本人 11/18 去掉了收起和「展开」）。open：还在写（还在写时不认会话名）。 */
 function TextBubble({ markdown, open, delay, edge, part }: { markdown: string; open: boolean; delay: number | null; edge?: ReactNode; part: PartMark }) {
+  const parts = useSettledThreadParts(open);
   return (
     <BuddyBubble {...part} {...enter(delay)}>
       <div className={ts.prose}>
-        <MarkdownBody text={markdown} streaming={open} />
+        <MarkdownBody text={markdown} streaming={open} parts={parts} />
       </div>
       {edge}
     </BuddyBubble>
@@ -227,6 +252,8 @@ function overflows(element: HTMLElement): boolean {
 function ReplyCard({ markdown, title, summary, open, at, delay, edge, part }: { markdown: string; title: string; summary: string; open: boolean; at?: string; delay: number | null; edge?: ReactNode; part: PartMark }) {
   const side = useSideDetail();
   const id = useId();
+  // 卡片写完才挂全文（还在写时是壳子），全文没有到达淡入：直接认会话名。
+  const parts = threadParts(useContext(ThreadNamesContext));
   const [inPlace, setInPlace] = useState(false);
   const full = useRef<HTMLDivElement>(null);
   const [fold, setFold] = useState(false);
@@ -268,19 +295,19 @@ function ReplyCard({ markdown, title, summary, open, at, delay, edge, part }: { 
       {open ? <div className={`${b.typing} ${b.cardTyping}`} data-testid="card-typing" aria-hidden><i /><i /><i /></div> : fold && summary && !inPlace ? <FadeText as="div" className={b.summary}>{summary}</FadeText> : null}
       {open || inPlace ? null : (
         <div ref={full} className={`${ts.prose} ${b.cardFull}`} data-fold={fold ? "" : undefined} style={{ maxHeight: `${fold ? CARD_FULL_LINES - 1 : CARD_FULL_LINES}lh` }}>
-          <MarkdownBody text={withoutTitle(markdown, title)} streaming={false} />
+          <MarkdownBody text={withoutTitle(markdown, title)} streaming={false} parts={parts} />
         </div>
       )}
-      {inPlace ? <div className={`${ts.prose} ${b.cardBody}`}><MarkdownBody text={withoutTitle(markdown, title)} streaming={false} /></div> : null}
+      {inPlace ? <div className={`${ts.prose} ${b.cardBody}`}><MarkdownBody text={withoutTitle(markdown, title)} streaming={false} parts={parts} /></div> : null}
       {open || inPlace || !fold ? null : <div className={b.acts}><button type="button" className={b.open} onClick={show}>打开</button></div>}
-      {side && panel ? <SideContent side={side} kind="file"><CardPreview title={title} markdown={markdown} onClose={close} /></SideContent> : null}
+      {side && panel ? <SideContent side={side} kind="file"><CardPreview title={title} markdown={markdown} parts={parts} onClose={close} /></SideContent> : null}
       {edge}
     </section>
   );
 }
 
 /** 右边那一格里的全文：照文件预览的样子，页头名字和关闭，Esc 关。 */
-function CardPreview({ title, markdown, onClose }: { title: string; markdown: string; onClose: () => void }) {
+function CardPreview({ title, markdown, parts, onClose }: { title: string; markdown: string; parts: MarkdownParts; onClose: () => void }) {
   const root = useRef<HTMLElement>(null);
   useEffect(() => { root.current?.focus(); }, [markdown]);
   useEffect(() => {
@@ -303,7 +330,7 @@ function CardPreview({ title, markdown, onClose }: { title: string; markdown: st
         <HeroButton variant="ghost" size="sm" isIconOnly aria-label="关闭" title="关闭" onPress={onClose}><X {...ICON} /></HeroButton>
       </header>
       <div className={vs.previewBody}>
-        <article className={`${ts.prose} ${vs.md} ${vs.previewDoc}`}><MarkdownBody text={withoutTitle(markdown, title)} streaming={false} /></article>
+        <article className={`${ts.prose} ${vs.md} ${vs.previewDoc}`}><MarkdownBody text={withoutTitle(markdown, title)} streaming={false} parts={parts} /></article>
       </div>
     </aside>
   );

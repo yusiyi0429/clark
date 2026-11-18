@@ -98,7 +98,8 @@ import { Presence } from "@/components/home/Presence";
 import { TransferHistory } from "@/components/home/Transfer";
 import { WorkTimeline } from "@/components/work/WorkTimeline";
 import { BubbleContext, CARD_FULL_LINES, HOLD_MS, ReplyBubbles, RevealContext, TypingBubble, resetReplyBubbles } from "./ReplyBubbles";
-import { ConversationTurn, ConversationTurns, MarkdownBody } from "./Transcript";
+import { ARRIVAL_SETTLE_MS, ConversationTurn, ConversationTurns, MarkdownBody, TURN_PARTS, type MarkdownParts } from "./Transcript";
+import { ThreadNamesContext, type ThreadName } from "./threadNames";
 import { AnswerOptions, QuickReplyContext } from "./AnswerOptionRow";
 
 const css = readFileSync(new URL("../styles/conversation-bubbles.module.css", import.meta.url), "utf8");
@@ -607,5 +608,62 @@ describe("浅色下对话看得清（本人 11/18）", () => {
     expect(declared(".prose code", "color")).toBe("var(--ink)");
     expect(declared(".prose td", "border-bottom-color")).toBe("var(--hairline)");
     expect(declared(".prose th", "border-bottom-color")).toBe("var(--hairline)");
+  });
+});
+
+describe("伙伴话里的会话名（本人 11/18）", () => {
+  const NAMES: ThreadName[] = [{ key: "topic:00000000-0000-4000-8000-0000000000a1", title: "首页深色方案" }];
+  const REPLY = "我开了首页深色方案去做，做完告诉你。";
+  const bodyOf = (tree: ReactNode) => elements(tree).find((element) => element.type === MarkdownBody)!;
+
+  it("出字过程中不加下划线；这一轮结束时已经出过的字不重新淡入", () => {
+    vi.useFakeTimers();
+    hooks.provide(ThreadNamesContext, NAMES);
+    const bubbles = (markdown: string, streaming: boolean) => call("bubbles", () => ReplyBubbles({ markdown, streaming }));
+    const html = (body: Element) => renderToStaticMarkup(<MarkdownBody text={REPLY} streaming={false} parts={body.props.parts as MarkdownParts} />);
+    bubbles("我开了首页", true);
+    vi.advanceTimersByTime(HOLD_MS);
+    // 还在写的气泡：用的还是对话本来那套部件，画出来没有会话名。
+    const open = named(bubbles(REPLY, true), "TextBubble")[0]!;
+    expect(open.props.open).toBe(true);
+    const during = bodyOf(expand("bubble", open));
+    expect(during.props.streaming).toBe(true);
+    expect(during.props.parts).toBe(TURN_PARTS);
+    // 写完：到达淡入的那几段合并（ARRIVAL_SETTLE_MS）之前不换部件，已经出过的字不重挂、不重新淡入。
+    expect(ARRIVAL_SETTLE_MS).toBe(400);
+    const closed = named(bubbles(REPLY, false), "TextBubble")[0]!;
+    expect(closed.props.open).toBe(false);
+    expect(bodyOf(expand("bubble", closed)).props.parts).toBe(TURN_PARTS);
+    vi.advanceTimersByTime(ARRIVAL_SETTLE_MS - 1);
+    expect(html(bodyOf(expand("bubble", closed)))).not.toContain("data-thread");
+    // 稳下来以后：带会话名的部件，同一份名字是同一个引用（不重新解析）。
+    vi.advanceTimersByTime(1);
+    const after = bodyOf(expand("bubble", closed));
+    expect(after.props.parts).not.toBe(TURN_PARTS);
+    expect(html(after)).toContain('data-thread="topic:00000000-0000-4000-8000-0000000000a1"');
+    expect(bodyOf(expand("bubble", closed)).props.parts).toBe(after.props.parts);
+    // 读历史来的气泡没有在这里写过：一挂上就有。
+    hooks.reset();
+    hooks.provide(ThreadNamesContext, NAMES);
+    const history = named(call("history", () => ReplyBubbles({ markdown: REPLY, streaming: false })), "TextBubble")[0]!;
+    expect(html(bodyOf(expand("history-bubble", history)))).toContain("data-thread");
+  });
+
+  it("项目对话、别的对话页不加", () => {
+    // 没有 ThreadNamesContext（项目对话、对象页对话、转交历史）：气泡、卡片全文用的还是 TURN_PARTS 本身。
+    const tree = call("bubbles", () => ReplyBubbles({ markdown: `${REPLY}\n\n## 首页深色方案\n\n首页深色方案的说明。`, streaming: false }));
+    expect(bodyOf(expand("bubble", named(tree, "TextBubble")[0]!)).props.parts).toBe(TURN_PARTS);
+    const card = named(tree, "ReplyCard")[0]!;
+    measureCard("card", card, FITS);
+    expect(bodyOf(expand("card", card)).props.parts).toBe(TURN_PARTS);
+    expect(inBubbles(<ConversationTurn message={assistant(REPLY)} />)).not.toContain("data-thread");
+    // 伙伴主线给了名字：卡片全文里也加。
+    hooks.provide(ThreadNamesContext, NAMES);
+    const withNames = call("bubbles2", () => ReplyBubbles({ markdown: `${REPLY}\n\n## 首页深色方案\n\n首页深色方案的说明。`, streaming: false }));
+    const card2 = named(withNames, "ReplyCard")[0]!;
+    measureCard("card2", card2, FITS);
+    const full = bodyOf(expand("card2", card2));
+    expect(full.props.parts).not.toBe(TURN_PARTS);
+    expect(renderToStaticMarkup(<MarkdownBody text={full.props.text as string} streaming={false} parts={full.props.parts as MarkdownParts} />)).toContain('data-thread="topic:00000000-0000-4000-8000-0000000000a1"');
   });
 });

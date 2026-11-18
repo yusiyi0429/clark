@@ -9,8 +9,8 @@
  *   B 的接口没上时是这个标签页里的假对话（lib/home/pipeline）。
  * 首页输入框发来的话（outbox）进了对应的对话就发出去。
  */
-import { useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import type { TCardPlanView, THomePlanTask } from "@warmap/contracts";
+import { useContext, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent, type ReactNode } from "react";
+import type { TCardPlanView, TConversationCard, THomePlanTask } from "@warmap/contracts";
 import type { Buddy } from "@/components/buddy/useBuddy";
 import { ChatColumn } from "@/components/rail/ChatPane";
 import { PendingBoxes, PendingDock } from "@/components/work/DecisionBox";
@@ -42,6 +42,7 @@ import { useSideDetail } from "./SideDetail";
 import { planOrder } from "./SubRows";
 import { ThreadChip, rightOpener, threadOpener } from "./ThreadChip";
 import { DispatchChip, type DispatchCard } from "./DispatchChip";
+import { ThreadNamesContext, type ThreadName } from "@/conversation/threadNames";
 import h from "@/styles/home.module.css";
 import p from "@/styles/presence.module.css";
 
@@ -151,6 +152,7 @@ function useEscStopsReply(data: ConversationData) {
  * subs、projects：首页数据里的会话和项目（派活卡的小条照它们画名字、状态）；waitingFolder：这个项目的会话在等本人选文件夹。
  * 派活卡的小条：电脑上在右边开（页头写「项目名 · 从主线开的」），刚开、首页数据里还没有的也是，数据到了右边就画出来；手机上去那个会话。
  * 主线事件行：电脑上、首页数据里有这个会话就在右边开，手机上、找不到的照旧跳。
+ * 伙伴话里的会话名：派活卡开的会话还开着（首页数据里找得到）的，伙伴写完的话里同名的那几个字带下划线，点了和点小条一样。
  */
 export function BuddyView({ buddy, outbox, consume, onSpeaking, waiting, go, context = null, onClearContext, subs, projects, waitingFolder }: {
   buddy: Buddy | null; outbox: Outbox; consume: (id: number) => void; onSpeaking: (speaking: boolean) => void; context?: string | null; onClearContext?: () => void;
@@ -163,10 +165,30 @@ export function BuddyView({ buddy, outbox, consume, onSpeaking, waiting, go, con
   const side = useSideDetail();
   const openRight = useMemo(() => rightOpener(side, subs), [side, subs]);
   const events = usePartnerWorkEvents(waiting, go, openRight);
-  const dispatch = useMemo(() => {
-    const openSub = threadOpener(side, go);
-    return (card: DispatchCard) => <DispatchChip card={card} subs={subs} projects={projects} waitingFolder={waitingFolder} onOpenSub={openSub} onOpenProject={(id) => go(projectHref(id))} />;
-  }, [side, subs, projects, waitingFolder, go]);
+  const openSub = useMemo(() => threadOpener(side, go), [side, go]);
+  const dispatch = useMemo(
+    () => (card: DispatchCard) => <DispatchChip card={card} subs={subs} projects={projects} waitingFolder={waitingFolder} onOpenSub={openSub} onOpenProject={(id) => go(projectHref(id))} />,
+    [openSub, subs, projects, waitingFolder, go]);
+  const threads = useMemo(() => dispatchedThreads([...data.messages.flatMap((message) => message.cards ?? []), ...(data.turnCards ?? [])], subs, projects), [data.messages, data.turnCards, subs, projects]);
+  // 名字没变就是同一份（气泡按这一份记住带下划线的部件，不重新解析）。
+  const signature = JSON.stringify([...threads].map(([key, thread]): ThreadName => ({ key, title: thread.sub.title })));
+  const names = useMemo(() => JSON.parse(signature) as ThreadName[], [signature]);
+  const named = (target: EventTarget) => {
+    const key = (target as Element).closest("[data-thread]")?.getAttribute("data-thread");
+    return key ? threads.get(key) : undefined;
+  };
+  const openNamed = (event: MouseEvent) => {
+    const thread = named(event.target);
+    if (thread) openSub(thread.sub, thread.from);
+  };
+  // 会话名是 role="button" 的行内文字：Enter、空格也打开（空格不让页面滚）。
+  const keyNamed = (event: ReactKeyboardEvent) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    const thread = named(event.target);
+    if (!thread) return;
+    if (event.key === " ") event.preventDefault();
+    openSub(thread.sub, thread.from);
+  };
   const meetingFeed = usePartnerMeetingFeed();
   const handoffFeed = useMeetingWorkHandoffFeed();
   useOutbox(data, "main", outbox, consume, team.intercept, team.composing);
@@ -187,7 +209,13 @@ export function BuddyView({ buddy, outbox, consume, onSpeaking, waiting, go, con
               </header>
             </>
           )}
-          timeline={(current) => <>{meetingFeed.notice}{handoffFeed.notice}<ReactionsProvider scope={current.scope} buddyName={name}><WorkTimeline data={current} blocks={[...team.blocks, ...events, ...meetingFeed.blocks, ...handoffFeed.blocks]} modelRule={modelRule} dispatch={dispatch} /></ReactionsProvider></>}
+          timeline={(current) => <>{meetingFeed.notice}{handoffFeed.notice}<ReactionsProvider scope={current.scope} buddyName={name}>
+            <ThreadNamesContext.Provider value={names}>
+              <div className={h.threadNames} onClick={openNamed} onKeyDown={keyNamed} data-testid="thread-names">
+                <WorkTimeline data={current} blocks={[...team.blocks, ...events, ...meetingFeed.blocks, ...handoffFeed.blocks]} modelRule={modelRule} dispatch={dispatch} />
+              </div>
+            </ThreadNamesContext.Provider>
+          </ReactionsProvider></>}
           dock={(latest) => <>{team.composer}<PendingDock latest={latest} /></>}
           input={(onHeight) => <ChatInput data={data} placeholder={`与${name}讨论`} onHeight={onHeight} intercept={team.intercept} footer={{ left: team.launcher, right: <ModelText data={data} /> }}
             context={context ? { label: context, onClear: () => onClearContext?.() } : null} />} />
@@ -195,6 +223,18 @@ export function BuddyView({ buddy, outbox, consume, onSpeaking, waiting, go, con
       </div>
     </PendingBoxes>
   );
+}
+
+/** 伙伴主线上能点的会话名：派活卡开的会话（卡还是 active、首页数据里找得到），key → 会话现在的样子和项目名（右边页头写「项目名 · 从主线开的」）。 */
+function dispatchedThreads(cards: readonly TConversationCard[], subs: readonly SubSession[], projects: readonly Project[]): Map<string, { sub: SubSession; from: string }> {
+  const threads = new Map<string, { sub: SubSession; from: string }>();
+  for (const card of cards) {
+    if (card.kind !== "buddy_dispatch" || card.state !== "active" || !card.sub?.id) continue;
+    const target = card.sub;
+    const sub = subs.find((entry) => entry.kind === target.kind && entry.id === target.id);
+    if (sub) threads.set(`${sub.kind}:${sub.id}`, { sub, from: projects.find((entry) => entry.id === card.projectId)?.name ?? card.projectName });
+  }
+  return threads;
 }
 
 type PipelineProps = {

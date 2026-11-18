@@ -63,7 +63,7 @@ const TURN_REMARK_PLUGINS = [...CONVERSATION_REMARK_PLUGINS, remarkCitationMarks
  * 行内代码、链接对得上本会话的文件就能点开）。传进来的要是稳定的引用（模块常量），不然每次重画都重新解析。
  */
 export type MarkdownParts = { components: Components; remarkPlugins: PluggableList; rehypePlugins: PluggableList };
-const TURN_PARTS: MarkdownParts = { components: TURN_MARKDOWN.components, remarkPlugins: TURN_REMARK_PLUGINS, rehypePlugins: CONVERSATION_REHYPE_PLUGINS };
+export const TURN_PARTS: MarkdownParts = { components: TURN_MARKDOWN.components, remarkPlugins: TURN_REMARK_PLUGINS, rehypePlugins: CONVERSATION_REHYPE_PLUGINS };
 
 /**
  * 流式正文的一个顶层块：自己的到达记录（新放出的字淡入，旧字不重播）；文字没变就不重画、不重新解析。

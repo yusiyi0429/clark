@@ -789,3 +789,7 @@ button.bgLabel:hover { background: var(--default-soft); }
 /* 右边 thread 的页头：会话名下面一行淡字「项目名 · 从主线开的」（只在主线上、从主线开的会话）。 */
 .threadHead { display: grid; flex: 1; min-width: 0; }
 .threadFrom { min-width: 0; color: var(--ink-faint); white-space: normal; overflow-wrap: anywhere; }
+/* 伙伴话里的会话名（本人 11/18）：行内文字（role="button"），带下划线，放不下在中间折行；点了、Enter、空格在右边看那个会话（BuddyView 那一层接）。
+ * 手形指针和键盘焦点框用全局的（[role="button"]、:focus-visible）。 */
+.threadNames { display: contents; }
+.threadLink { text-decoration: underline; text-underline-offset: 3px; }

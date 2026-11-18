@@ -7,7 +7,7 @@ vi.mock("./PartnerMeetings", () => ({ usePartnerMeetingFeed: feed.meetings }));
 vi.mock("../meeting/MeetingWorkHandoffs", () => ({ useMeetingWorkHandoffFeed: feed.handoffs, MeetingWorkFeedEntry: () => null }));
 vi.mock("./PartnerTeam", () => ({ usePartnerTeam: () => ({ blocks: [{ key: "team:a", at: "2026-11-15T00:00:00Z", node: <p>同事来件</p> }], composing: false, composer: null, launcher: null }) }));
 vi.mock("./PartnerWorkEvents", () => ({ usePartnerWorkEvents: () => [{ key: "work:a", at: "2026-11-15T00:02:00Z", node: <p>工作进展</p> }] }));
-vi.mock("@/conversation/useConversation", () => ({ useConversation: () => ({ scope: "global", status: "idle", streaming: false, partial: "", steps: [], followLatest() {} }) }));
+vi.mock("@/conversation/useConversation", () => ({ useConversation: () => ({ scope: "global", status: "idle", streaming: false, partial: "", steps: [], messages: [], followLatest() {} }) }));
 vi.mock("./view", () => ({ useViewChrome: () => ({ lead: null, trail: null }) }));
 vi.mock("@/conversation/answerOptions", () => ({ useAnswerOptionFill: () => {} }));
 vi.mock("./InputBar", () => ({ InputBar: ({ dock }: { dock?: ReactNode }) => <div data-testid="measured-input">{dock}</div> }));
