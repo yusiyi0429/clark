@@ -25,17 +25,29 @@ export async function repoHead(folder: string): Promise<{ top: string; branch: s
   return top && branch && commit ? { top, branch, commit } : null;
 }
 
-/** 有改动的文件（含没加进 git 的，untracked 为 true；不含 .gitignore 里的）；干净为空。 */
-export async function dirtyFiles(dir: string): Promise<{ path: string; untracked: boolean }[]> {
-  const out = await git(dir, ["status", "--porcelain"]);
-  return out.split("\n").filter((l) => l.trim()).map((l) => ({ path: l.slice(3).split(" -> ").pop()!.replace(/^"|"$/g, ""), untracked: l.startsWith("??") }));
+export interface DirtyFile { path: string; untracked: boolean; /** 改名、复制的原名。 */ orig?: string }
+
+/**
+ * 有改动的文件（含没加进 git 的，untracked 为 true；不含 .gitignore 里的）；干净为空。
+ * 用 -z：文件名原样（不加引号、不转义）；改名、复制是「XY 新名\0原名\0」。
+ */
+export async function dirtyFiles(dir: string): Promise<DirtyFile[]> {
+  const parts = (await git(dir, ["status", "--porcelain", "-z"])).split("\0");
+  const out: DirtyFile[] = [];
+  for (let i = 0; i < parts.length; i++) {
+    const e = parts[i]!;
+    if (e.length < 4) continue;
+    const code = e.slice(0, 2);
+    out.push({ path: e.slice(3), untracked: code === "??", ...(/[RC]/.test(code) ? { orig: parts[++i] } : {}) });
+  }
+  return out;
 }
 
 export const changedFiles = async (dir: string): Promise<string[]> => (await dirtyFiles(dir)).map((f) => f.path);
 
-/** 扔掉这几处没提交的改动：改过、删了的已有文件照 HEAD 恢复，没加进 git 的删掉（.gitignore 里的不动）。 */
-export async function discardFiles(dir: string, files: { path: string; untracked: boolean }[]): Promise<void> {
-  const tracked = files.filter((f) => !f.untracked).map((f) => f.path);
+/** 扔掉这几处没提交的改动：改过、删了、改了名的已有文件照 HEAD 恢复，没加进 git 的删掉（.gitignore 里的不动）。 */
+export async function discardFiles(dir: string, files: DirtyFile[]): Promise<void> {
+  const tracked = files.filter((f) => !f.untracked).flatMap((f) => (f.orig ? [f.path, f.orig] : [f.path]));
   const untracked = files.filter((f) => f.untracked).map((f) => f.path);
   if (tracked.length) await git(dir, ["--literal-pathspecs", "restore", "--source=HEAD", "--staged", "--worktree", "--", ...tracked]);
   if (untracked.length) await git(dir, ["--literal-pathspecs", "clean", "-f", "-d", "-q", "--", ...untracked]);

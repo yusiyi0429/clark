@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
@@ -36,7 +36,7 @@ import { isInside, type Folders } from "./folders.js";
 import type { Outbox } from "./outbox.js";
 import { SESSION_MCP_NAME, sessionToolNames, type SessionToolset } from "./sessionMcp.js";
 import { agreementInBrief, changesBrief, criticAgents, returnText, reviewMessage, saidBrief, systemPrompt } from "./rolePrompt.js";
-import { addWorktree, branchName, cardDiff, changedFiles, commitAll, deleteBranch, dirtyFiles, discardFiles, git, mergeBranch, pruneRepo, removeWorktree, repoHead } from "./git.js";
+import { addWorktree, branchName, cardDiff, changedFiles, commitAll, deleteBranch, dirtyFiles, discardFiles, git, mergeBranch, pruneRepo, removeWorktree, repoHead, type DirtyFile } from "./git.js";
 import { ensureFeishuPlugin, larkSkills } from "./agents/feishuPlugin.js";
 import { AGENT_NAME, earlierTurns, handoffText, otherRules } from "./handoff.js";
 import { listSessionFiles, readSessionFile, SessionFileError } from "./sessionFiles.js";
@@ -58,6 +58,11 @@ export const READ_ONLY_KINDS: TLocalSessionKind[] = ["plan", "verify"];
 const WRITE_TOOLS = ["Edit", "MultiEdit", "Write", "NotebookEdit", "Agent", "Task"];
 /** 跑命令的工具：规划员不给；验收员在被验的卡自己的工作树里做时给（本人 11/18：跑测试、类型检查等检查命令，仍不给改文件的工具）。 */
 const SHELL_TOOLS = ["Bash", "PowerShell"];
+/**
+ * 能跑命令的验收员也不给的 git 写命令（前缀规则 Tool(前缀:*)，Claude Code 2.1.327 认）：提交、暂存、重置、切换、推送、收起。
+ * Windows 上它另有 PowerShell 工具，同样的规则两边都写。
+ */
+const GIT_WRITES = ["git commit", "git add", "git reset", "git checkout", "git push", "git stash"].flatMap((c) => [`Bash(${c}:*)`, `PowerShell(${c}:*)`]);
 /** 排队先后：验收员（短，而且卡着交付）→ 规划员 → 执行；同一档先来先跑。 */
 const PRIORITY: Record<TLocalSessionKind, number> = { verify: 0, plan: 1, card: 2, topic: 2 };
 /** 验收交代取不到（没连天枢、断网、天枢出错）时多久再试一次。 */
@@ -187,6 +192,11 @@ interface SessionRecord {
   startAgreement?: { standards: string[] | null; brief?: string | null };
   /** 自由子会话（第 68 条，项目下的「+」开的专题）：换一套规矩和工具；在哪个文件夹做都按普通文件夹算（workspace 是 folder）。 */
   free?: true;
+  /**
+   * 能跑检查命令的验收员第一次拉起时的快照（本人 11/18，afterVerify 用）：卡的工作树里已有的没提交的改动、卡的事件记到第几条；
+   * 拍的时候卡还在做（一轮没做完、在跑、有后台任务）写在 busy，这次不清。存盘，本机程序重启后续上的验收员照这一份比。清理做完（或决定不清）后去掉。
+   */
+  verifyBase?: { files: string[]; cardSeq: number; busy?: true };
 }
 
 /** 不合契约时给执行方看的一句（哪个字段、哪里不对）。 */
@@ -304,8 +314,8 @@ export class SessionManager {
   private readonly finished = new Set<string>();
   /** 等验收交代时最近一次告诉网页的原因（变了才再说）。 */
   private readonly waitNotes = new Map<string, string>();
-  /** 能跑检查命令的验收员拉起时：卡的工作树里已有的没提交的改动、卡的事件记到第几条（afterVerify 用）。 */
-  private readonly verifyBase = new Map<string, { files: string[]; cardSeq: number }>();
+  /** 关机中：验收员退出时不清它留下的改动（快照留着，下次续上的验收员退出时再清）。 */
+  private closing = false;
   /** 在等本人回答的提问（会话 id → 提问），会话这时是 idle（等你回复）。 */
   private readonly questions = new Map<string, TLocalQuestionRequestView>();
   /** 前面的卡都做完、正在开工作树的卡（开好以前不能开始）。 */
@@ -418,7 +428,7 @@ export class SessionManager {
     const {
       mcpSecret: _s, syncSeq: _q, outputs: _o, versionNumber: _v, lastVersion: _l, role: _r, critics: _c, queuedMessage: _m, queuedSaid: _qs, queueOrder: _n,
       parentId: _p, briefPending: _b, criteria: _cr, failStreak: _f, submitted: _sb, nudged: _nd, workspace, commit: _cm, after: _af, passed: _ps, sourceWords: _sw, unread: _ur,
-      background, hold, holdSince: _hs, modelTier: _mt, budgetKey: _bk, runSince: _rs, seen: _se, handoff: _ho, run, agreementRevision: _ar, startAgreement: _sa, free: _fr, ...rest
+      background, hold, holdSince: _hs, modelTier: _mt, budgetKey: _bk, runSince: _rs, seen: _se, handoff: _ho, run, agreementRevision: _ar, startAgreement: _sa, free: _fr, verifyBase: _vb, ...rest
     } = rec;
     const question = this.questions.get(rec.id);
     const waitingFor = this.waitingFor(rec);
@@ -965,12 +975,17 @@ export class SessionManager {
     }
     const disallowedTools = [
       ...(has("web_search") ? [] : ["WebSearch", `mcp__${CLOUD_MCP_NAME}__${CLOUD_MCP_SEARCH_TOOL}`]),
-      ...(READ_ONLY_KINDS.includes(rec.subject.kind) ? [...WRITE_TOOLS, ...(checks ? [] : SHELL_TOOLS)] : []),
+      ...(READ_ONLY_KINDS.includes(rec.subject.kind) ? [...WRITE_TOOLS, ...(checks ? GIT_WRITES : SHELL_TOOLS)] : []),
     ];
-    // 跑检查命令前工作树里已经有的没提交的改动：验收员退出后只扔这以后多出来的（afterVerify）
-    if (checks && rec.parentId) {
+    // 第一次拉起时拍快照（续上的照原来那份）：验收员退出后只扔这以后多出来的（afterVerify）
+    const card = checks && rec.parentId ? this.records.get(rec.parentId) : undefined;
+    if (checks && card && !rec.verifyBase) {
       const files = await changedFiles(checks.path).catch(() => null);
-      if (files) this.verifyBase.set(rec.id, { files, cardSeq: this.d.log.lastSeq(rec.parentId) });
+      const busy = this.inTurn.has(card.id) || OCCUPYING.includes(card.status) || this.starting.has(card.id) || card.background.some((b) => b.state === "running");
+      if (files) {
+        rec.verifyBase = { files, cardSeq: this.d.log.lastSeq(card.id), ...(busy ? { busy: true as const } : {}) };
+        this.save(rec);
+      }
     }
     const plan = this.runFor(rec, model);
     // 续上同一个模型：上次实际报的照留（这次的 init 来之前也显示得出实际的）。
@@ -995,7 +1010,8 @@ export class SessionManager {
         ...this.d.folders.list().map((f) => f.path),
       ],
       // 卡在自己的工作树里：「自动」「自动接受改文件」只在工作树里自己放行（规则在 pathGuard 的 modeAllows）
-      autoAllowRoot: rec.subject.kind === "card" && rec.workspace?.kind === "worktree" ? rec.workspace.path : null,
+      // 能跑检查命令的验收员一样：只在卡的工作树里自己放行，主文件夹和本人允许的别的文件夹照问
+      autoAllowRoot: rec.subject.kind === "card" && rec.workspace?.kind === "worktree" ? rec.workspace.path : checks ? checks.path : null,
       extraDirs: () => this.extraDirs(rec),
       // 「全部放行」的兜底规矩（pathGuard 的 noLossAsks）：本机自己的目录（含卡的工作树）、留了一份的地方改、删不丢本人的东西
       covered: (p) => (undo ? undo.covers(p) : this.d.folders.isOwn(p)),
@@ -1268,28 +1284,47 @@ export class SessionManager {
 
   /**
    * 验收员退出后（本人 11/18）：它在卡的工作树里跑检查命令留下的没提交的改动（测试生成的文件、被改写的文件）扔掉，
-   * 不让卡下次交回时提交进分支、也不挡自动合回。只扔这次拉起以后多出来的；这期间卡自己也做过一轮的，分不清是谁的，不扔，记一条。
+   * 不让卡下次交回时提交进分支、也不挡自动合回。只扔快照以后多出来的，扔之前存一份到验收员的会话目录。
+   * 分不清是谁的就不扔、记一条：拍快照时卡还在做（busy），或者快照以后卡的日志里有事件（验收员自己报到卡上的结论、卡的状态变化不算）。
+   * 关机时不动，快照留着给下次续上的验收员。
    */
   private async afterVerify(rec: SessionRecord, passed: boolean): Promise<void> {
-    const base = this.verifyBase.get(rec.id);
-    this.verifyBase.delete(rec.id);
+    if (this.closing) return;
+    const base = rec.verifyBase;
     const card = rec.parentId ? this.records.get(rec.parentId) : undefined;
     const ws = card?.workspace;
     if (base && card && ws?.kind === "worktree" && !ws.mergedCommit && existsSync(ws.path)) {
       try {
         const fresh = (await dirtyFiles(ws.path)).filter((f) => !base.files.includes(f.path));
         const names = fresh.slice(0, 20).map((f) => f.path).join("、") + (fresh.length > 20 ? `，另有 ${fresh.length - 20} 个没列出` : "");
-        if (fresh.length && this.d.log.after(card.id, base.cardSeq).some((e) => e.type === "agent_info")) {
-          this.emit(rec, { type: "notice", level: "warn", code: "verify_leftovers", text: `验收时卡也接着做了，分不清工作树里没提交的改动是谁的，没清：${names}` });
+        const cardMoved = this.d.log.after(card.id, base.cardSeq).some((e) => e.type !== "verdict" && e.type !== "status");
+        if (fresh.length && (base.busy || cardMoved)) {
+          const why = base.busy ? "交回时卡还在做" : "验收时卡也有动静";
+          this.emit(rec, { type: "notice", level: "warn", code: "verify_leftovers", text: `${why}，分不清工作树里没提交的改动是谁的，没清：${names}` });
         } else if (fresh.length) {
+          const saved = await this.saveLeftovers(rec, ws.path, fresh);
           await discardFiles(ws.path, fresh);
-          this.emit(rec, { type: "notice", level: "info", code: "verify_leftovers", text: `清掉了验收员跑检查留下的没提交的改动，不随卡合回：${names}` });
+          this.emit(rec, { type: "notice", level: "info", code: "verify_leftovers", text: `清掉了验收员跑检查留下的没提交的改动，不随卡合回（删之前存了一份：${saved}）：${names}` });
         }
       } catch (e) {
         this.emit(rec, { type: "notice", level: "warn", code: "verify_leftovers", text: `验收员跑检查留下的改动没清掉：${e instanceof Error ? e.message : String(e)}` });
       }
     }
+    if (base) {
+      delete rec.verifyBase;
+      this.save(rec);
+    }
     if (passed) await this.autoMerge(rec);
+  }
+
+  /** 扔之前存一份到验收员的会话目录：新文件原样拷过去，改过的已有文件存成 changes.diff（对 HEAD）。返回存在哪。 */
+  private async saveLeftovers(rec: SessionRecord, tree: string, files: DirtyFile[]): Promise<string> {
+    const dir = join(this.dir, rec.id, "leftovers", nowIso().replace(/[:.]/g, "-"));
+    mkdirSync(dir, { recursive: true });
+    for (const f of files.filter((x) => x.untracked)) cpSync(join(tree, f.path), join(dir, f.path), { recursive: true });
+    const tracked = files.filter((f) => !f.untracked).flatMap((f) => (f.orig ? [f.path, f.orig] : [f.path]));
+    if (tracked.length) writeFileSync(join(dir, "changes.diff"), await git(tree, ["--literal-pathspecs", "diff", "HEAD", "--binary", "--", ...tracked]));
+    return dir;
   }
 
   /**
@@ -2304,6 +2339,7 @@ export class SessionManager {
   async shutdown(): Promise<void> {
     // 关机时进程一个个退出会让出位置，这时不能再从队里接新的：排着的留到下次启动。
     this.holdQueue = true;
+    this.closing = true;
     if (this.briefTimer) clearTimeout(this.briefTimer);
     this.briefTimer = null;
     if (this.holdTimer) clearTimeout(this.holdTimer);
