@@ -196,4 +196,22 @@ describe("项目对话在本人电脑上跑（17.2 第 38 条）", () => {
       await s.close();
     }
   }, 60_000);
+
+  it("本机那一轮收起清单出错时，回答照样写进 Chat", async () => {
+    const s = await setup();
+    try {
+      const turn = (await s.start("帮我看看进展")).json();
+      // 收起清单的 UPDATE 一律报错。
+      await s.f.t.sql(`CREATE FUNCTION fail_plan_update() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'plan update broken'; END $$`);
+      await s.f.t.sql("CREATE TRIGGER fail_plan_update BEFORE UPDATE ON buddy_plans FOR EACH ROW EXECUTE FUNCTION fail_plan_update()");
+      await s.f.t.sql("INSERT INTO buddy_plans(run_id,owner_id,entries,collapsed,updated_at) VALUES($1,$2,$3::jsonb,false,now())",
+        [turn.turnId, (await s.f.t.sql("SELECT owner_id FROM project_local_turns WHERE id=$1", [turn.turnId]))[0].owner_id,
+          JSON.stringify([{ content: "读项目", status: "in_progress" }, { content: "回话", status: "pending" }])]);
+      const finished = await s.runner(`/api/local-runner/project-turns/${turn.turnId}/finish`, { status: "completed", answer: "进展都在这里。" });
+      expect([finished.statusCode, finished.json()]).toEqual([200, { turnId: turn.turnId, recorded: true }]);
+      expect(s.chat.recorded).toMatchObject([{ runId: turn.turnId, answer: "进展都在这里。" }]);
+    } finally {
+      await s.close();
+    }
+  }, 60_000);
 });

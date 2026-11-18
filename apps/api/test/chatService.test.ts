@@ -1279,6 +1279,9 @@ describe("伙伴代本人做事走 Chat（17.4）", () => {
     const upstreams: ServerResponse[] = [];
     const frame = (event: Record<string, unknown>) => `data: ${JSON.stringify({ conversationId: "chat-conversation", runId: RUN, scope: "global", sequence: 9, ...event })}\n\n`;
     let busy = false;
+    /** Chat 收到「停下」、上一轮还没结束时库里的清单（每一轮都是同一个 RUN，结束时也会收起，只有这一刻分得出是插话收起的）。 */
+    let readPlan: (() => Promise<unknown>) | undefined;
+    let planAtCancel: unknown;
     const chat = await fakeChat({
       conversations: [randomUUID()],
       pages: { "0": { messages: [{ role: "user", text: "换成深色", runId: RUN }, { role: "assistant", text: "换好了", runId: RUN }],
@@ -1294,7 +1297,8 @@ describe("伙伴代本人做事走 Chat（17.4）", () => {
         upstreams.push(res);
         sse(res, [{ type: "turn_started" }, { type: "message", delta: "我来" }], false);
       },
-      cancel: (res, request) => {
+      cancel: async (res, request) => {
+        planAtCancel = await readPlan?.();
         upstreams.at(-1)!.end(frame({ type: "done", status: "aborted" }));
         busy = false;
         res.writeHead(200, { "content-type": "application/json" });
@@ -1349,9 +1353,10 @@ describe("伙伴代本人做事走 Chat（17.4）", () => {
       // 回答到一半再发一句：上一轮停掉（以「已停止」结束，清单收起），新一句开新的一轮、回执照给。
       const second = await ask("算了，先别发");
       await second.until("我来");
-      // 这一轮又交了清单（重新展开），下面被插话打断时收起。
+      // 这一轮又交了清单（重新展开），下面被插话打断时收起：Chat 收到「停下」时（上一轮还没结束）已经收起。
       await act("update_plan", { entries });
-      expect((await t.sql("SELECT collapsed FROM buddy_plans WHERE run_id=$1", [RUN]))[0]).toEqual({ collapsed: false });
+      readPlan = async () => (await t.sql("SELECT collapsed FROM buddy_plans WHERE run_id=$1", [RUN]))[0];
+      expect(await readPlan()).toEqual({ collapsed: false });
       const third = await ask("就这样");
       const thirdText = await (async () => { await third.until("我来"); upstreams.at(-1)!.end(frame({ type: "done", status: "completed" })); return third.rest(); })();
       const stopped = events(await second.rest());
@@ -1363,6 +1368,7 @@ describe("伙伴代本人做事走 Chat（17.4）", () => {
       expect(allEvents(thirdText).slice(0, 2)).toEqual([{ type: "receipt", state: "delivered", messageId: thirdTurns[0], scope: "global", sequence: 1 },
         { type: "receipt", state: "read", messageId: thirdTurns[0], runId: RUN, scope: "global", sequence: 2 }]);
       expect(events(thirdText).at(-1)).toMatchObject({ type: "done", status: "completed" });
+      expect(planAtCancel).toEqual({ collapsed: true });
       expect((await t.sql("SELECT collapsed FROM buddy_plans WHERE run_id=$1", [RUN]))[0]).toEqual({ collapsed: true });
     });
   }, 30_000);

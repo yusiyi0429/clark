@@ -253,8 +253,8 @@ export async function finishLocalTurn(deps: LocalTurnDeps, ownerId: string, devi
     [turnId, body.status, body.status === "released" ? null : body.answer ?? "", body.errorCode ?? null, body.reason ?? null, deps.now()])).rows[0] as TurnRow | undefined;
   if (!finished) return { turnId, recorded: false };
   if (body.status === "released") return { turnId, recorded: false };
-  // 这一轮的计划清单收起（同云端一轮结束），网页读回历史时拿到。
-  await collapsePlan(deps.q, turnId);
+  // 这一轮的计划清单收起（同云端一轮结束），网页读回历史时拿到。失败只记日志，不连累写回答。
+  await collapsePlan(deps.q, turnId).catch((error) => logEvent({ event: "local_turn.collapse_plan_failed", requestId, turnId, error: (error as Error)?.message }));
   if (await recordOnce(deps, finished, requestId)) return { turnId, recorded: true };
   recordLater(deps, finished, requestId);
   return { turnId, recorded: false };
