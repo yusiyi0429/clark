@@ -94,8 +94,93 @@ describe("splitReply", () => {
     expect(splitReply("```ts\n\nconst a = 1\nconst b = 2\n```").segments[0]).toMatchObject({ kind: "card", title: "const a = 1", summary: "const b = 2" });
     expect(splitReply("$$\nx^2\n$$").segments[0]).toMatchObject({ kind: "card", title: "x^2", summary: "" });
   });
+  it("单独一行的加粗当小标题：后面有长清单的整节成卡，卡片标题是小标题", () => {
+    const six = Array.from({ length: 6 }, (_, i) => `- 第${i + 1}项`).join("\n");
+    expect(splitReply(`先说一句。\n\n**要做的事**：\n\n${six}\n\n**风险:**\n\n| a | b |\n|---|---|\n| 1 | 2 |`).segments).toEqual([
+      { kind: "bubble", markdown: "先说一句。" },
+      { kind: "card", markdown: `**要做的事**：\n\n${six}`, title: "要做的事", summary: "第1项" },
+      { kind: "card", markdown: "**风险:**\n\n| a | b |\n|---|---|\n| 1 | 2 |", title: "风险", summary: "a · b" },
+    ]);
+  });
+  it("加粗小标题后面只有短段落：合成一个气泡，第一行是小标题", () => {
+    expect(splitReply("**打新要算的账**\n\n利息和手续费都要算。\n\n冻结资金也有成本。\n\n## 下一步\n\n先看招股书。").segments).toEqual([
+      { kind: "bubble", markdown: "**打新要算的账**\n\n利息和手续费都要算。\n\n冻结资金也有成本。" },
+      { kind: "card", markdown: "## 下一步\n\n先看招股书。", title: "下一步", summary: "先看招股书。" },
+    ]);
+    // 前后空白不算（含 Windows 换行留下的 \r）。
+    expect(splitReply("  **打新要算的账**：\r\n\r\n利息要算。").segments).toEqual([{ kind: "bubble", markdown: "  **打新要算的账**：\r\n\r\n利息要算。" }]);
+    // 整条回答最后一段是一行加粗、后面没有内容：照普通段落出气泡。
+    expect(splitReply("说完了。\n\n**就这些**").segments).toEqual([{ kind: "bubble", markdown: "说完了。" }, { kind: "bubble", markdown: "**就这些**" }]);
+  });
+  it("行内加粗加正文不算小标题", () => {
+    const six = Array.from({ length: 6 }, (_, i) => `- 第${i + 1}项`).join("\n");
+    const { segments } = splitReply(`**结论**：今天先不买\n\n${six}`);
+    expect(segments.map((s) => s.kind)).toEqual(["bubble", "card"]);
+    expect(segments[1]).toMatchObject({ title: "第1项" });
+    expect(splitReply("**甲** 和 **乙**\n\n说明。").segments).toEqual([{ kind: "bubble", markdown: "**甲** 和 **乙**" }, { kind: "bubble", markdown: "说明。" }]);
+    expect(splitReply("**两行**\n第二行\n\n说明。").segments).toEqual([{ kind: "bubble", markdown: "**两行**\n第二行" }, { kind: "bubble", markdown: "说明。" }]);
+  });
+  it("ant-answer 原文拆成 说明气泡 / 卡 / 卡 / 气泡 / 卡", () => {
+    const { segments } = splitReply(ANT_ANSWER);
+    expect(segments.map((s) => s.kind)).toEqual(["bubble", "card", "card", "bubble", "card"]);
+    expect(segments[0].markdown).toMatch(/^这次没调查成/);
+    expect(segments[1]).toMatchObject({ title: "先确认 ANT 指的是哪家", summary: expect.stringMatching(/^蚂蚁集团：2020 年/) });
+    expect(segments[2]).toMatchObject({ title: "判断一只新股适不适合打新，主要看这几项", summary: expect.stringMatching(/^在哪里上市、散户怎么参与。/) });
+    expect(segments[3].markdown).toMatch(/^\*\*打新本身要算清的账\*\*\n\n用孖展加大申购/);
+    expect(segments[4]).toMatchObject({ title: "接下来可以这样做" });
+    // 不再有单独的粗体小气泡。
+    expect(segments.filter((s) => /^\*\*[^*]+\*\*$/.test(s.markdown.trim()))).toEqual([]);
+  });
+  it("流式逐字到达时已经出过的块不变", () => {
+    // 第二条：「**结论**」写完一整行时像小标题，接着写出「：」就成了普通段落，前一节要等它定下来才出。
+    const longItem = `- ${"很长的一项".repeat(6)}`;
+    for (const reply of [ANT_ANSWER, `**甲**\n\n${longItem}\n\n**结论**：今天先不买\n\n**乙**\n\n说明。`]) {
+      const chars = [...reply];
+      let previous: ReturnType<typeof splitReply>["segments"] = [];
+      for (let length = 1; length <= chars.length; length++) {
+        const { segments } = splitReply(chars.slice(0, length).join(""), true);
+        expect(segments.slice(0, previous.length), `第 ${length} 个字`).toEqual(previous);
+        previous = segments;
+      }
+      expect(previous).toEqual(splitReply(reply).segments.slice(0, previous.length));
+    }
+    expect(splitReply(ANT_ANSWER, true).segments).toEqual(splitReply(ANT_ANSWER).segments.slice(0, -1));
+    // 加粗行还没确定后面跟什么之前不出成块：写到第二个小标题，第一节还在 tail。
+    const head = ANT_ANSWER.slice(0, ANT_ANSWER.indexOf("**判断"));
+    expect(splitReply(head, true).segments.map((s) => s.kind)).toEqual(["bubble"]);
+    expect(splitReply(head, true).tail).toMatchObject({ kind: "card", title: "先确认 ANT 指的是哪家" });
+  });
   it("空的回复", () => {
     expect(splitReply("")).toEqual({ segments: [], tail: null });
     expect(splitReply("  \n")).toEqual({ segments: [], tail: null });
   });
 });
+
+/** 本人 11/18 截图里那一轮的原文：Chat 还没接伙伴人设，用单独一行的加粗当小标题。 */
+const ANT_ANSWER = `这次没调查成：联网搜索还没配置好（缺少搜索接口的密钥），我查不到 ANT 现在的上市进度、招股时间、定价和认购情况。所以我给不出“这一只适不适合打新”的结论。下面先说清楚有哪几件事会决定答案，等信息拿到了，可以逐项对照。
+
+**先确认 ANT 指的是哪家**
+
+- **蚂蚁集团**：2020 年它在上交所和港交所的同步上市被叫停。之后有没有重新启动、走到哪一步，我现在查不到。重启的话，最可能走港股或 A 股，散户都能参与公开认购。
+- **Anthropic**：这是开发我的公司，我和它有利益关联，所以不评价它值不值得买、估值高不高，只能讲一般的打新机制。另外，就算它在美股上市，散户通常只能通过少数券商的新股通道拿到很少的配售，“申购一手”的玩法和港股不太一样。
+
+**判断一只新股适不适合打新，主要看这几项**
+
+1. **在哪里上市、散户怎么参与。** 港股公开认购有回拨机制：超额认购倍数越高，划给散户的份额越多，一手中签的机会也相对好一些。A 股按市值配售加摇号，中签率通常很低。美股散户基本靠券商配售，拿不拿得到要看券商给多少额度。
+2. **发行价和同类公司比贵不贵。** 招股书里的估值要和已上市的同类公司比，比如市盈率、市销率。发行价定得太满，是首日破发最常见的原因。
+3. **基石投资者和锚定投资者的占比与名单。** 基石认购占比高，而且是长线资金，说明定价有人托底，实际流通的筹码也更少。但基石有锁定期，到期时会有卖压。
+4. **认购热度。** 港股的孖展（融资申购）倍数和最终超额认购倍数，是判断首日表现最直接的参考，招股期间每天都有数据。
+5. **暗盘表现。** 港股上市前一天的暗盘交易，常被用来决定首日卖不卖。
+6. **稳价机制。** 有绿鞋（超额配售权）的新股，上市后头 30 天有稳价人托底，破发风险相对小一些。
+7. **市场情绪。** 同期新股首日的表现、恒指或纳指的走势，都会明显影响首日涨跌。
+
+**打新本身要算清的账**
+
+用孖展加大申购，中签概率会高一些，但中不中都要付利息和手续费。热门大盘股超额认购几百倍时，一手中签率可能很低，资金冻结几天的机会成本也要算进去。打新最好定好纪律：中签了按暗盘或首日表现决定卖不卖，不要因为中签就变成被动长期持有。
+
+**接下来可以这样做**
+
+- 招股书或券商的新股资料是 PDF 的话，直接传给我，我按上面几项帮你逐条分析，比如估值、基石名单、发行结构。
+- 联网搜索配置好以后，再让我查一次，我把当前进度和认购数据补上。
+- 真要下单，以招股书和券商公布的信息为准。上面讲的都是一般机制，不针对这家公司当下的情况，也不构成投资建议。
+`;

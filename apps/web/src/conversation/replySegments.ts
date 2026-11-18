@@ -3,6 +3,7 @@ import { splitStableBlocks } from "./smoothText";
 /**
  * 伙伴的一条回复拆成气泡和卡片（设计稿 6.2）。
  * - 卡片：以标题开头的一节（吞到下一个标题或末尾）、表格、代码块 / 富块 / 公式块、长清单；相邻的非标题卡片料并成一张。
+ * - 单独一行的加粗当小标题，吞到下一个小标题：里面有卡片料就整节成卡（标题是小标题），否则整节一个气泡。
  * - 其余是气泡；以冒号结尾的段落和紧跟着的短清单并成一个气泡。
  * - 流式中 `segments` 只往后长：还没写完、或还可能被后面的内容改写的块（标题还可能往下吞、卡片料还可能并上下一块、
  *   冒号结尾的话还要看下一块、短清单还可能变长）连同它后面已经到的文字放进 `tail`。
@@ -162,11 +163,21 @@ function endsWithColon(part: Part): boolean {
   return part.kind === "paragraph" && /[：:]$/.test(part.lines.join("\n").trimEnd());
 }
 
+/** 单独一行的加粗（小标题）：整行是一对 `**…**`，行尾可带冒号（在 `**` 里外都算），前后空白不算。 */
+const BOLD_LINE = /^\s*\*\*(?:(?!\*\*).)*\S(?:(?!\*\*).)*\*\*[：:]?\s*$/;
+
+/** 这一段只有一行，整行是加粗：当小标题，和后面各段合成一节（本人 11/18）。 */
+function isBoldHeading(part: Part): boolean {
+  const lines = part.lines.filter((line) => line.trim());
+  return part.kind === "paragraph" && lines.length === 1 && BOLD_LINE.test(lines[0]);
+}
+
 /**
  * 一组：拼成一个气泡或一张卡的连续几段，`parts[from, to)`。
- * `lookahead`：这一组拼成什么还要看下一段（标题往下吞、卡片料并上下一块、冒号结尾的话并上短清单）。
+ * `lookahead`：这一组拼成什么还要看下一段（标题、加粗小标题往下吞、卡片料并上下一块、冒号结尾的话并上短清单）。
+ * `bold`：以加粗小标题开头的一节，成卡时标题用小标题的文字。
  */
-type Group = { kind: "bubble" | "card"; from: number; to: number; lookahead: boolean };
+type Group = { kind: "bubble" | "card"; from: number; to: number; lookahead: boolean; bold?: boolean };
 
 function group(parts: Part[]): Group[] {
   const groups: Group[] = [];
@@ -175,6 +186,13 @@ function group(parts: Part[]): Group[] {
     let to = from + 1;
     if (part.kind === "heading") {
       while (to < parts.length && parts[to].kind !== "heading") to++;
+    } else if (isBoldHeading(part)) {
+      // 一节吞到下一个小标题（# 标题或加粗行）；里面有卡片料就整节成卡，否则整节一个气泡。
+      while (to < parts.length && parts[to].kind !== "heading" && !isBoldHeading(parts[to])) to++;
+      const card = parts.slice(from + 1, to).some(isCardMaterial);
+      groups.push({ kind: card ? "card" : "bubble", from, to, lookahead: true, bold: true });
+      from = to;
+      continue;
     } else if (isCardMaterial(part)) {
       while (to < parts.length && isCardMaterial(parts[to])) to++;
     } else if (endsWithColon(part) && parts[to]?.kind === "list" && !isLongList(parts[to])) {
@@ -185,6 +203,14 @@ function group(parts: Part[]): Group[] {
     from = to;
   }
   return groups;
+}
+
+/** 卡的标题和摘要；加粗小标题开头的卡，标题去掉末尾的冒号。 */
+function describeGroup(group: Group, markdown: string): { title: string; summary: string } {
+  const described = describeCard(markdown);
+  if (!group.bold) return described;
+  const title = lineText(markdown.split("\n")[0]).replace(/[：:]$/, "");
+  return { title: truncate(title, TITLE_CHARS), summary: described.summary };
 }
 
 /**
@@ -212,18 +238,22 @@ function closed(parts: Part[], index: number, last: number): boolean {
   return content + 1 < part.lines.length && part.start + content + 1 < last;
 }
 
-/** 流式中这一组以后不会再变：最后一段关上了；要看下一段的，下一段的类别也定了（清单要等它关上，免得短清单再变长）。 */
+/**
+ * 流式中这一组以后不会再变：最后一段关上了；要看下一段的，下一段的类别也定了
+ * （清单要等它关上，免得短清单再变长；加粗行要等它关上，免得后面接上字、不再是小标题）。
+ */
 function settled(parts: Part[], group: Group, last: number): boolean {
   if (!closed(parts, group.to - 1, last)) return false;
   if (!group.lookahead) return true;
   const next = parts[group.to];
-  return next !== undefined && begun(next, last) && (next.kind !== "list" || closed(parts, group.to, last));
+  return next !== undefined && begun(next, last) && (next.kind !== "list" && !isBoldHeading(next) || closed(parts, group.to, last));
 }
 
 function markdownOf(parts: Part[]): string {
   return parts.flatMap((part) => part.lines).join("\n").trimEnd();
 }
 
+// 块的序号被按块的表情（reaction 的 part）用到：改拆分规则会让历史上的表情挂到别的块上。
 export function splitReply(markdown: string, streaming = false): { segments: ReplySegment[]; tail: ReplyTail } {
   const parts = toParts(markdown);
   const groups = group(parts);
@@ -231,10 +261,10 @@ export function splitReply(markdown: string, streaming = false): { segments: Rep
   const done = streaming ? groups.findIndex((group) => !settled(parts, group, last)) : -1;
   const segments = (done === -1 ? groups : groups.slice(0, done)).map((group): ReplySegment => {
     const text = markdownOf(parts.slice(group.from, group.to));
-    return group.kind === "card" ? { kind: "card", markdown: text, ...describeCard(text) } : { kind: "bubble", markdown: text };
+    return group.kind === "card" ? { kind: "card", markdown: text, ...describeGroup(group, text) } : { kind: "bubble", markdown: text };
   });
   if (done === -1) return { segments, tail: null };
   const pending = groups[done];
   const text = markdownOf(parts.slice(pending.from));
-  return { segments, tail: { kind: pending.kind, markdown: text, title: pending.kind === "card" ? describeCard(text).title : "" } };
+  return { segments, tail: { kind: pending.kind, markdown: text, title: pending.kind === "card" ? describeGroup(pending, text).title : "" } };
 }

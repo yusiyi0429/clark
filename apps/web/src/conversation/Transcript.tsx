@@ -38,13 +38,16 @@ export const liveClock = (ms: number) => { const total = Math.max(1, Math.round(
 /** 预计：不到 1 分钟写「约 40 秒」，再长写「约 3 分钟」。 */
 const aboutText = (sec: number) => (sec < 60 ? `约 ${sec} 秒` : `约 ${Math.round(sec / 60)} 分钟`);
 
-/** 助手这一轮的实际用时：与前一条用户消息的创建时间差（历史里没有单独记录）。 */
+/**
+ * 助手这一轮的实际用时：与前一条用户消息的创建时间差（历史里没有单独记录）。
+ * 回答不晚于提问（Chat 给两条的都是这一轮的开始时间）就不写，不写错的数。
+ */
 function turnMs(messages: Message[], index: number): number | undefined {
   const reply = messages[index];
   const question = [...messages.slice(0, index)].reverse().find((message) => message.role === "user");
   if (!reply?.createdAt || !question?.createdAt) return undefined;
   const ms = Date.parse(reply.createdAt) - Date.parse(question.createdAt);
-  return Number.isFinite(ms) && ms >= 0 ? ms : undefined;
+  return Number.isFinite(ms) && ms > 0 ? ms : undefined;
 }
 
 /** 稳定下来的块多久以后把到达 span 合并掉：淡入 150ms（conversation-transcript.module.css arrivalFade），多留一点。 */
@@ -377,8 +380,10 @@ function CarriedDivider({ message }: { message: Message }) {
  * 状态区紧贴在正在写的文字下面，正文第一个字就出现在思考原来的位置；卡先做好就先在下面淡入，正文往下长时把卡往下推。
  * 状态区占的是完成后选项（footer）的位置，卡的位置不变，读回历史时卡不重挂。
  */
-export function ConversationTurns({ messages, partial = "", footer, after, insertions, trailing, thought, steps, status, modelRule }: {
+export function ConversationTurns({ messages, partial = "", footer, after, insertions, trailing, thought, steps, status, modelRule, lastReply }: {
   messages: Message[]; partial?: string;
+  /** 这一页刚收完的那一轮（useConversation 的 lastReply）：同一个 runId 的回答，用时用网页自己量到的数。 */
+  lastReply?: { ms: number; runId?: string } | null;
   /** 本轮的步骤（正文开始后才给）：与思考摘要一样，流式中挂在正在写的那条，结束后挂在最后一条回答上。 */
   steps?: Step[] | null;
   /** 进行中这一轮的状态区（思考、进度、停止）：放在正在写的那条之后、本轮的卡之前。给了就表示这一轮还在进行。 */
@@ -409,7 +414,8 @@ export function ConversationTurns({ messages, partial = "", footer, after, inser
         {switches?.has(index) ? modelRule!(switches.get(index)!) : null}
         {message.kind === "carried" && messages[index - 1]?.kind !== "carried" ? <CarriedDivider message={message} /> : null}
         {isReportPrompt(message) ? null : (
-          <ConversationTurn key="turn" message={message} ms={message.role === "assistant" ? turnMs(messages, index) : undefined}
+          <ConversationTurn key="turn" message={message} ms={message.role !== "assistant" ? undefined
+            : lastReply?.runId && message.runId === lastReply.runId ? lastReply.ms : turnMs(messages, index)}
             thought={!partial && thought && index === messages.length - 1 && message.role === "assistant" ? thought : undefined}
             steps={!partial && steps?.length && index === messages.length - 1 && message.role === "assistant" ? steps : undefined} />
         )}

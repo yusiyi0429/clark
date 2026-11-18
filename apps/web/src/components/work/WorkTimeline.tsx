@@ -104,7 +104,7 @@ export function WorkTimeline({ data, blocks, modelRule }: { data: ConversationDa
     <RescopeContext.Provider value={rescope}>
     <AskContext.Provider value={ask}>
     <ConversationTurns messages={data.messages} partial={data.streaming ? data.partial : ""} status={status} modelRule={modelRule}
-      insertions={blocksAt}
+      insertions={blocksAt} lastReply={data.lastReply}
       trailing={!data.streaming && data.localTurn ? <LocalTurnRow turn={data.localTurn} /> : undefined}
       steps={!data.thinking || data.stage === "answering" ? data.steps : null}
       after={(index) => {
