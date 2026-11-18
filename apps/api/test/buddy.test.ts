@@ -21,9 +21,9 @@ describe("本人的伙伴", () => {
     expect(persona).toContain("# 寒暄、托付和心情");
   });
 
-  it("人设里写了在已有项目里开会话不用再问文件夹", () => {
+  it("人设里写了在已有项目或「随手」里开会话不用再问文件夹", () => {
     const persona = buddyPersona({ name: "团团", personality: "steady" }, "测试乙");
-    const line = persona.indexOf("在已有项目里开会话不用再问文件夹，项目绑了哪个就在哪个里做。");
+    const line = persona.indexOf("在已有项目或「随手」里开会话不用再问文件夹，项目绑了哪个就在哪个里做。");
     expect(line).toBeGreaterThan(persona.indexOf("# 先从现实出发"));
     expect(line).toBeLessThan(persona.indexOf("# 底线"));
   });

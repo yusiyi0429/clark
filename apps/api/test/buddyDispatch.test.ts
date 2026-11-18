@@ -372,7 +372,20 @@ describe("动作说明里的判断规矩", () => {
   });
 
   it("create_project 的说明写明一次性的活不建项目", () => {
-    expect(described("create_project")).toContain("一次性的活不建项目，用 open_session 带 scratch");
+    expect(described("create_project")).toContain("（伙伴主线）一次性的活不建项目，用 open_session 带 scratch");
+  });
+
+  it("open_session 说明写明主线不直接拆卡、不直接开子会话", () => {
+    expect(described("open_session")).toContain("伙伴主线里起新活只走两条路：用 open_session 放进项目（一次性的放「随手」），或用 message_project 交给项目对话去拆卡；主线里不直接用 split_cards、start_sub_session。");
+    expect(described("split_cards").startsWith("（项目对话里用）")).toBe(true);
+    expect(described("message_project")).toContain("（伙伴主线）别的要动手的活用 open_session 直接开会话。");
+  });
+
+  it("规矩写明短版后用一句话问、不用 ask_user", () => {
+    const text = described("open_session");
+    expect(text).toContain("拿不准够不够大：先自己答个短版，末尾用一句话问要不要开会话做完整的；这句不用 ask_user。ask_user 只用来问放进哪个项目（对得上多个或一个都对不上时）。");
+    expect(text).not.toContain("先自己做个短版答了");
+    expect(described("ask_user")).toContain("问要不要开会话做完整版不用选项框");
   });
 });
 

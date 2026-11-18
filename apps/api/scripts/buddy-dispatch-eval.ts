@@ -144,7 +144,9 @@ async function run(model: string, instructions: string, message: string) {
 
 async function main() {
   const outIndex = process.argv.indexOf("--out");
-  const out = outIndex > 0 ? resolve(process.argv[outIndex + 1]) : join(tmpdir(), `buddy-dispatch-eval-${Date.now()}.json`);
+  const outArg = outIndex > 0 ? process.argv[outIndex + 1] : undefined;
+  if (outIndex > 0 && (!outArg || outArg.startsWith("--"))) throw new Error("--out 后面要跟结果文件的路径，比如 --out 结果.json");
+  const out = outArg ? resolve(outArg) : join(tmpdir(), `buddy-dispatch-eval-${Date.now()}.json`);
   const model = env("HEAVY_MODEL");
   const instructions = `${driSystemPrompt(OWNER)}\n\n${BUDDY_ACTION_RULES}`;
   const results: unknown[] = [];
