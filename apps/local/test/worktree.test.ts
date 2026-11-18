@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { api, pair, raw, startTestRunner, tempDir, ORIGIN } from "./helpers.js";
 import { EDIT_SCOPE_RULE } from "../src/rolePrompt.js";
+import { codexProfileId } from "../src/codexCatalog.js";
 
 async function until<T>(fn: () => Promise<T | null | undefined | false> | T | null | undefined | false, ms = 10_000): Promise<T> {
   const t0 = Date.now();
@@ -26,14 +27,14 @@ const PASSING = { summary: "都达到了", criteria: [{ index: 1, verdict: "met"
  * （主文件夹是本人允许的文件夹，不算越界，但在工作树外面，照样问，卡停在等你批准）。
  */
 const MAIN_FILE = "main-folder.txt";
-function repo(busy = false): string {
+function repo(busy = false, extra: Record<string, unknown> = {}): string {
   const dir = tempDir("tl-repo-");
   git(dir, "init", "-q", "-b", "main");
   git(dir, "config", "user.name", "测试");
   git(dir, "config", "user.email", "test@example.com");
   git(dir, "config", "core.autocrlf", "false");
   writeFileSync(join(dir, ".gitignore"), ".fake-claude-trace.jsonl\n.fake-claude-turns.jsonl\n");
-  writeFileSync(join(dir, ".fake-claude.json"), JSON.stringify({ verdict: PASSING, ...(busy ? { writePath: join(dir, MAIN_FILE) } : {}) }));
+  writeFileSync(join(dir, ".fake-claude.json"), JSON.stringify({ verdict: PASSING, ...(busy ? { writePath: join(dir, MAIN_FILE) } : {}), ...extra }));
   writeFileSync(join(dir, "readme.md"), "原来的\n");
   git(dir, "add", "-A");
   git(dir, "commit", "-q", "-m", "init");
@@ -61,9 +62,15 @@ function fakeCloud() {
   return { impl, items };
 }
 
-async function setup(folder: string, max = 3, dataDir?: string, token0?: string, autoMerge = false) {
+async function setup(folder: string, max = 3, dataDir?: string, token0?: string, autoMerge = false, codex = false) {
   const cloud = fakeCloud();
-  const t = await startTestRunner({ pickFolder: folder, fetchImpl: cloud.impl, dataDir });
+  // codex：用假的 Codex，已登录（数据目录里先放好 auth.json）
+  const codexData = codex && !dataDir ? tempDir() : undefined;
+  if (codexData) {
+    mkdirSync(join(codexData, "codex"), { recursive: true });
+    writeFileSync(join(codexData, "codex", "auth.json"), "{}");
+  }
+  const t = await startTestRunner({ pickFolder: folder, fetchImpl: cloud.impl, dataDir: dataDir ?? codexData, fakeCodex: codex });
   const token = token0 ?? await pair(t.port);
   const call = (method: string, path: string, body?: unknown) => api(t.port, token, method, path, body);
   if (!dataDir) {
@@ -555,6 +562,106 @@ describe("卡在自己的工作树里做", { timeout: 60_000 }, () => {
       });
       expect(changed.s.workspace.needsMerge).toMatchObject({ reason: "not_ready", message: "交回以后卡又改过，等它再交回、验收过了再合" });
       expect(git(main, "log", "--oneline").split("\n").some((l) => l.includes("天枢卡「F」"))).toBe(false);
+    } finally {
+      await h.t.cleanup();
+    }
+  });
+
+  // 验收员能在卡的工作树里跑检查命令（本人 11/18）：假 claude 的验收员在 --disallowedTools 里没有 Bash 时，交结论前先跑 verifyCheck 那条命令
+  const CHECK = { input: { command: "node --version", description: "跑测试" } };
+  const traceOf = (dir: string) => readFileSync(join(dir, ".fake-claude-trace.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+  const argvIn = (dir: string, id: string) => traceOf(dir).find((l) => l.argv?.includes(id))!.argv as string[];
+  const flagList = (argv: string[], name: string) => (argv.includes(name) ? argv[argv.indexOf(name) + 1]!.split(",") : []);
+  const FILE_TOOLS = ["Edit", "MultiEdit", "Write", "NotebookEdit", "Agent", "Task"];
+
+  it("Claude Code 验收员放开 Bash、仍禁改文件的工具", async () => {
+    const main = repo(false, { verifyCheck: CHECK });
+    const h = await setup(main);
+    try {
+      const a = await h.open("A");
+      await h.waitStatus(a.id, "idle");
+      await h.handBack(a.id);
+      const v = await h.verifierOf("A");
+      await h.waitStatus(v.id, "done");
+      expect(v.cwd).toBe(a.workspace.path);
+      const denied = flagList(argvIn(a.workspace.path, v.id), "--disallowedTools");
+      expect(denied).toEqual(expect.arrayContaining(FILE_TOOLS));
+      expect(denied).not.toContain("Bash");
+      expect(denied).not.toContain("PowerShell");
+      // 在卡的工作树里跑检查命令：随卡的「自动」自己放行，不来问本人
+      expect(traceOf(a.workspace.path).find((l) => l.verifyCheck === v.id)).toMatchObject({ behavior: "allow" });
+      expect(h.events(v.id).some((e) => e.type === "permission_request")).toBe(false);
+      expect(readFileSync(join(h.t.dataDir, "sessions", v.id, "system.md"), "utf8")).toContain("可以运行检查命令");
+    } finally {
+      await h.t.cleanup();
+    }
+  });
+
+  it("Codex 验收员用能跑测试的最小权限", async () => {
+    const main = repo(false, { verifyCheck: CHECK });
+    const h = await setup(main, 3, undefined, undefined, false, true);
+    try {
+      const SOL = codexProfileId("gpt-6.1-sol");
+      await until(async () => ((await h.call("GET", "/v1/models")).body.profiles as any[]).some((p) => p.id === SOL));
+      const r = await h.call("POST", "/v1/sessions", { subject: { kind: "card", cardId: "X" }, title: "X", cwd: main, firstMessage: "做 X", modelProfileId: SOL, permissionMode: "auto" });
+      expect(r.status, JSON.stringify(r.body)).toBe(200);
+      const x = r.body;
+      expect([x.agent, x.workspace.kind]).toEqual(["codex", "worktree"]);
+      await h.waitStatus(x.id, "idle");
+      await h.handBack(x.id);
+      // Codex 的卡也由 Claude Code 验收（Codex 没有按工具禁用改文件的办法）：在卡的工作树里能跑命令，改文件的工具照旧不给
+      const v = await h.verifierOf("X");
+      await h.waitStatus(v.id, "done");
+      expect([v.agent, v.cwd]).toEqual(["claude-code", x.workspace.path]);
+      const denied = flagList(argvIn(x.workspace.path, v.id), "--disallowedTools");
+      expect(denied).toEqual(expect.arrayContaining(FILE_TOOLS));
+      expect(denied).not.toContain("Bash");
+      expect(traceOf(x.workspace.path).find((l) => l.verifyCheck === v.id)).toMatchObject({ behavior: "allow" });
+      expect(h.events(v.id).some((e) => e.type === "permission_request")).toBe(false);
+    } finally {
+      await h.t.cleanup();
+    }
+  });
+
+  it("验收员跑测试留下的未提交文件不随卡合回", async () => {
+    const leaves = { "coverage.txt": "测试生成的\n", "readme.md": "测试改写的\n" };
+    const main = repo(false, { verifyCheck: { ...CHECK, leaves } });
+    const h = await setup(main, 3, undefined, undefined, true);
+    try {
+      const a = await h.open("A");
+      await h.waitStatus(a.id, "idle");
+      await h.handBack(a.id);
+      const v = await h.verifierOf("A");
+      await h.waitStatus(v.id, "done");
+      // 验收员留下的（新文件、改了的已有文件）清掉，记一条；卡自己提交的照常合回
+      const merged = await until(async () => { const s = (await h.session(a.id)).session; return s.workspace.mergedCommit ? s : null; });
+      expect(git(main, "rev-parse", "HEAD")).toBe(merged.workspace.mergedCommit);
+      expect(existsSync(join(main, "hello.txt"))).toBe(true);
+      expect(existsSync(join(main, "coverage.txt"))).toBe(false);
+      expect(readFileSync(join(main, "readme.md"), "utf8")).toBe("原来的\n");
+      const note = h.events(v.id).find((e) => e.type === "notice" && e.code === "verify_leftovers");
+      expect(note.text).toContain("coverage.txt");
+      expect(note.text).toContain("readme.md");
+
+      // 验收员在跑时卡也接着做了一轮：分不清是谁留下的，不清，记一条；没提交的改动挡着，不自动合回
+      const b = await h.open("B");
+      await h.waitStatus(b.id, "idle");
+      // 这张卡的验收员要跑的命令要本人批（装依赖），停在那儿
+      writeFileSync(join(b.workspace.path, ".fake-claude.json"), JSON.stringify({ verdict: PASSING, verifyCheck: { input: { command: "pnpm install", description: "装依赖" }, leaves } }));
+      await h.handBack(b.id);
+      const vb = await h.verifierOf("B");
+      await h.waitStatus(vb.id, "waiting_permission");
+      writeFileSync(join(b.workspace.path, "card-later.txt"), "卡这时又写的\n");
+      const turns = () => h.events(b.id).filter((e) => e.type === "turn_end").length;
+      const before = turns();
+      expect((await h.call("POST", `/v1/sessions/${b.id}/messages`, { text: "再看看" })).status).toBe(200);
+      await until(() => turns() > before);
+      await h.allow(vb.id);
+      await h.waitStatus(vb.id, "done");
+      const kept = await until(() => h.events(vb.id).find((e) => e.type === "notice" && e.code === "verify_leftovers"));
+      expect(kept.text).toContain("没清");
+      expect(existsSync(join(b.workspace.path, "card-later.txt"))).toBe(true);
+      expect(existsSync(join(b.workspace.path, "coverage.txt"))).toBe(true);
     } finally {
       await h.t.cleanup();
     }

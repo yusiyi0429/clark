@@ -25,10 +25,20 @@ export async function repoHead(folder: string): Promise<{ top: string; branch: s
   return top && branch && commit ? { top, branch, commit } : null;
 }
 
-/** 有改动的文件（含没加进 git 的；不含 .gitignore 里的）；干净为空。 */
-export async function changedFiles(dir: string): Promise<string[]> {
+/** 有改动的文件（含没加进 git 的，untracked 为 true；不含 .gitignore 里的）；干净为空。 */
+export async function dirtyFiles(dir: string): Promise<{ path: string; untracked: boolean }[]> {
   const out = await git(dir, ["status", "--porcelain"]);
-  return out.split("\n").filter((l) => l.trim()).map((l) => l.slice(3).split(" -> ").pop()!.replace(/^"|"$/g, ""));
+  return out.split("\n").filter((l) => l.trim()).map((l) => ({ path: l.slice(3).split(" -> ").pop()!.replace(/^"|"$/g, ""), untracked: l.startsWith("??") }));
+}
+
+export const changedFiles = async (dir: string): Promise<string[]> => (await dirtyFiles(dir)).map((f) => f.path);
+
+/** 扔掉这几处没提交的改动：改过、删了的已有文件照 HEAD 恢复，没加进 git 的删掉（.gitignore 里的不动）。 */
+export async function discardFiles(dir: string, files: { path: string; untracked: boolean }[]): Promise<void> {
+  const tracked = files.filter((f) => !f.untracked).map((f) => f.path);
+  const untracked = files.filter((f) => f.untracked).map((f) => f.path);
+  if (tracked.length) await git(dir, ["--literal-pathspecs", "restore", "--source=HEAD", "--staged", "--worktree", "--", ...tracked]);
+  if (untracked.length) await git(dir, ["--literal-pathspecs", "clean", "-f", "-d", "-q", "--", ...untracked]);
 }
 
 /** 卡的分支名：tianshu/<卡 id 前 8 位>-<标题里的英文和数字>（中文标题就只有 id）。 */

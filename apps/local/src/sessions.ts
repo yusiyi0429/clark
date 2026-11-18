@@ -36,7 +36,7 @@ import { isInside, type Folders } from "./folders.js";
 import type { Outbox } from "./outbox.js";
 import { SESSION_MCP_NAME, sessionToolNames, type SessionToolset } from "./sessionMcp.js";
 import { agreementInBrief, changesBrief, criticAgents, returnText, reviewMessage, saidBrief, systemPrompt } from "./rolePrompt.js";
-import { addWorktree, branchName, cardDiff, changedFiles, commitAll, deleteBranch, git, mergeBranch, pruneRepo, removeWorktree, repoHead } from "./git.js";
+import { addWorktree, branchName, cardDiff, changedFiles, commitAll, deleteBranch, dirtyFiles, discardFiles, git, mergeBranch, pruneRepo, removeWorktree, repoHead } from "./git.js";
 import { ensureFeishuPlugin, larkSkills } from "./agents/feishuPlugin.js";
 import { AGENT_NAME, earlierTurns, handoffText, otherRules } from "./handoff.js";
 import { listSessionFiles, readSessionFile, SessionFileError } from "./sessionFiles.js";
@@ -53,9 +53,11 @@ const CLOUD_MCP_NAME = "tianshu";
 const CLOUD_MCP_CONTEXT_TOOL = "get_task_context";
 const CLOUD_MCP_SEARCH_TOOL = "web_search";
 /** 规划员、验收员只读：改东西的工具都不给；子 agent 也不给，免得绕过去改。 */
-/** 只读的会话种类（规划员、验收员）：不给写文件、跑命令的工具，也不挂本人加的工具。 */
+/** 只读的会话种类（规划员、验收员）：不给写文件的工具（跑命令的工具见 SHELL_TOOLS），也不挂本人加的工具。 */
 export const READ_ONLY_KINDS: TLocalSessionKind[] = ["plan", "verify"];
-const WRITE_TOOLS = ["Edit", "MultiEdit", "Write", "NotebookEdit", "Bash", "PowerShell", "Agent", "Task"];
+const WRITE_TOOLS = ["Edit", "MultiEdit", "Write", "NotebookEdit", "Agent", "Task"];
+/** 跑命令的工具：规划员不给；验收员在被验的卡自己的工作树里做时给（本人 11/18：跑测试、类型检查等检查命令，仍不给改文件的工具）。 */
+const SHELL_TOOLS = ["Bash", "PowerShell"];
 /** 排队先后：验收员（短，而且卡着交付）→ 规划员 → 执行；同一档先来先跑。 */
 const PRIORITY: Record<TLocalSessionKind, number> = { verify: 0, plan: 1, card: 2, topic: 2 };
 /** 验收交代取不到（没连天枢、断网、天枢出错）时多久再试一次。 */
@@ -302,6 +304,8 @@ export class SessionManager {
   private readonly finished = new Set<string>();
   /** 等验收交代时最近一次告诉网页的原因（变了才再说）。 */
   private readonly waitNotes = new Map<string, string>();
+  /** 能跑检查命令的验收员拉起时：卡的工作树里已有的没提交的改动、卡的事件记到第几条（afterVerify 用）。 */
+  private readonly verifyBase = new Map<string, { files: string[]; cardSeq: number }>();
   /** 在等本人回答的提问（会话 id → 提问），会话这时是 idle（等你回复）。 */
   private readonly questions = new Map<string, TLocalQuestionRequestView>();
   /** 前面的卡都做完、正在开工作树的卡（开好以前不能开始）。 */
@@ -926,7 +930,10 @@ export class SessionManager {
     // 工作规矩、岗位、挑刺子 agent 写在本机程序的数据目录，经参数交给 Claude Code，不往本人的仓库写文件。
     const dir = join(this.dir, rec.id);
     const systemPromptPath = join(dir, "system.md");
-    let prompt = systemPrompt(rec.subject.kind, rec.role, rec.critics, feishu, rec.workspace, custom?.names ?? [], this.extraDirs(rec), rec.free);
+    // 验收员看被验的卡：卡在自己的工作树里做时，验收员能在那里跑检查命令（本人 11/18）
+    const cardWs = rec.subject.kind === "verify" && rec.parentId ? this.records.get(rec.parentId)?.workspace : undefined;
+    const checks = cardWs?.kind === "worktree" ? cardWs : null;
+    let prompt = systemPrompt(rec.subject.kind, rec.role, rec.critics, feishu, rec.subject.kind === "verify" ? checks : rec.workspace, custom?.names ?? [], this.extraDirs(rec), rec.free);
     if (rec.subject.kind === "plan") {
       // 开拆前看一眼项目的文件夹（只读）：在本机给它的专用目录里做就是没绑
       const facts = await planFolderFacts(isInside(join(this.d.dataDir, "plans"), rec.cwd) ? null : rec.cwd);
@@ -958,8 +965,13 @@ export class SessionManager {
     }
     const disallowedTools = [
       ...(has("web_search") ? [] : ["WebSearch", `mcp__${CLOUD_MCP_NAME}__${CLOUD_MCP_SEARCH_TOOL}`]),
-      ...(READ_ONLY_KINDS.includes(rec.subject.kind) ? WRITE_TOOLS : []),
+      ...(READ_ONLY_KINDS.includes(rec.subject.kind) ? [...WRITE_TOOLS, ...(checks ? [] : SHELL_TOOLS)] : []),
     ];
+    // 跑检查命令前工作树里已经有的没提交的改动：验收员退出后只扔这以后多出来的（afterVerify）
+    if (checks && rec.parentId) {
+      const files = await changedFiles(checks.path).catch(() => null);
+      if (files) this.verifyBase.set(rec.id, { files, cardSeq: this.d.log.lastSeq(rec.parentId) });
+    }
     const plan = this.runFor(rec, model);
     // 续上同一个模型：上次实际报的照留（这次的 init 来之前也显示得出实际的）。
     rec.run = rec.run?.actual && rec.run.model === plan.view.model ? { ...plan.view, actual: rec.run.actual } : plan.view;
@@ -1250,8 +1262,34 @@ export class SessionManager {
     // 本人要换的模型还没换上就退了（交完收工、强停等）：直接换，下次开起来用新的
     const want = rec.pendingModel?.modelProfileId;
     if (want) void this.d.models.resolve(want).then((m) => { if (m?.profileId === want && rec.pendingModel?.modelProfileId === want && this.applyModel(rec, m, rec.pendingModel.effort ?? undefined)) this.carryOn(rec); });
-    // 验收过了：卡在工作树里做的，试着自动合回
-    if (finished && rec.subject.kind === "verify" && rec.passed) void this.autoMerge(rec);
+    // 验收员退出：扔掉它跑检查留下的改动；验收过了，卡在工作树里做的，试着自动合回
+    if (rec.subject.kind === "verify") void this.afterVerify(rec, finished && Boolean(rec.passed));
+  }
+
+  /**
+   * 验收员退出后（本人 11/18）：它在卡的工作树里跑检查命令留下的没提交的改动（测试生成的文件、被改写的文件）扔掉，
+   * 不让卡下次交回时提交进分支、也不挡自动合回。只扔这次拉起以后多出来的；这期间卡自己也做过一轮的，分不清是谁的，不扔，记一条。
+   */
+  private async afterVerify(rec: SessionRecord, passed: boolean): Promise<void> {
+    const base = this.verifyBase.get(rec.id);
+    this.verifyBase.delete(rec.id);
+    const card = rec.parentId ? this.records.get(rec.parentId) : undefined;
+    const ws = card?.workspace;
+    if (base && card && ws?.kind === "worktree" && !ws.mergedCommit && existsSync(ws.path)) {
+      try {
+        const fresh = (await dirtyFiles(ws.path)).filter((f) => !base.files.includes(f.path));
+        const names = fresh.slice(0, 20).map((f) => f.path).join("、") + (fresh.length > 20 ? `，另有 ${fresh.length - 20} 个没列出` : "");
+        if (fresh.length && this.d.log.after(card.id, base.cardSeq).some((e) => e.type === "agent_info")) {
+          this.emit(rec, { type: "notice", level: "warn", code: "verify_leftovers", text: `验收时卡也接着做了，分不清工作树里没提交的改动是谁的，没清：${names}` });
+        } else if (fresh.length) {
+          await discardFiles(ws.path, fresh);
+          this.emit(rec, { type: "notice", level: "info", code: "verify_leftovers", text: `清掉了验收员跑检查留下的没提交的改动，不随卡合回：${names}` });
+        }
+      } catch (e) {
+        this.emit(rec, { type: "notice", level: "warn", code: "verify_leftovers", text: `验收员跑检查留下的改动没清掉：${e instanceof Error ? e.message : String(e)}` });
+      }
+    }
+    if (passed) await this.autoMerge(rec);
   }
 
   /**
@@ -2518,7 +2556,7 @@ export class SessionManager {
     const now = nowIso();
     const rec: SessionRecord = {
       id: randomUUID(), subject: { kind: "verify", cardId: card.subject.cardId!, handbackKey, ...(card.subject.projectId ? { projectId: card.subject.projectId } : {}) }, title: `验收：${card.title}`.slice(0, 120),
-      // 验收员一律用 Claude Code（Codex 的卡也是，模型等交代到了按档位挑）：它要只读地查、交结论
+      // 验收员一律用 Claude Code（Codex 的卡也是，模型等交代到了按档位挑）：它不改文件，按工具禁掉改文件、只留跑命令的只有 Claude Code 做得到
       agent: "claude-code", modelProfileId: card.agent === "claude-code" ? card.modelProfileId : this.d.models.forTier("normal"), modelLabel: card.modelLabel, cwd: card.cwd, includePersonalConfig: false,
       createdAt: now, updatedAt: now, status: "queued", usage: zeroUsage(), syncSeq: 0, mcpSecret: "", outputs: [], versionNumber: 0, lastVersion: null,
       role: null, modelTier: null, critics: [], queuedMessage: null, queueOrder: ++this.queueSeq,
@@ -2574,7 +2612,7 @@ export class SessionManager {
         continue;
       }
       const { brief } = got;
-      // 卡在工作树里做：交代后面接上开工以来到交回那个提交的改动（验收员只读、不能跑命令）
+      // 卡在工作树里做：交代后面接上开工以来到交回那个提交的改动（验收员不改文件，靠它、读文件和跑检查命令核对）
       const ws = rec.parentId ? this.records.get(rec.parentId)?.workspace : null;
       const changes = rec.commit && ws?.kind === "worktree"
         ? changesBrief(ws, rec.commit, await cardDiff(ws.folder, ws.baseCommit, rec.commit).catch((e: unknown) => (e instanceof Error ? e.message : String(e))))
