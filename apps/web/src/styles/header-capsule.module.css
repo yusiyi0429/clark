@@ -342,3 +342,11 @@
 }
 :global(:root:has([data-type-scale="one"])) .scope :global(.ts-detail) { scroll-padding-top: calc(var(--detail-head-h, var(--detail-header-height)) + 10px); }
 :global(:root:has([data-type-scale="one"])) .scope :global(.ts-detail-header > .ts-eyebrow) { white-space: normal; text-overflow: clip; overflow-wrap: anywhere; }
+/*
+ * ≤1250 宽带计划时段的页头（手机也在内）：时段在上、标题在下叠成两行，本来就超过 48。留白加在页头上下，标题不再加，
+ * 时段那一行不贴顶、不被裁。单行页头照旧留白在标题上（上面那条），单行时仍 48。
+ */
+@media (max-width: 1250px) {
+  :global(:root:has([data-type-scale="one"])) .scope :global(.ts-detail-header:has(> .ts-row > [data-header-lead])) { padding-block: var(--space-1); }
+  :global(:root:has([data-type-scale="one"])) .scope :global(.ts-detail-header:has(> .ts-row > [data-header-lead]) > h1) { padding-block: 0; }
+}

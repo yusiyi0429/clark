@@ -237,6 +237,23 @@ describe("新首页不出省略号（本人 11/18）", () => {
     expect(home(".scope :global(.ts-detail-header)")).not.toMatch(/padding/);
   });
 
+  it("会议页时段和标题叠两行时，页头上下留白，时段不贴顶", () => {
+    // ≤1250 宽（手机也在内）带计划时段的页头是时段在上、标题在下两行，本来就超过 48：留白加在页头上，标题不再加。
+    // 单行页头（没有时段，或宽屏上时段和标题同一行）照旧留白在标题上，单行时仍 48。
+    const css = readFileSync(new URL("./header-capsule.module.css", import.meta.url), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+    const stacked = [...css.matchAll(/@media \(max-width: 1250px\) \{((?:[^{}]*\{[^{}]*\})*)\s*\}/g)].map((match) => match[1]).join("\n");
+    const lead = ".scope :global(.ts-detail-header:has(> .ts-row > [data-header-lead]))";
+    const inStacked = (selector: string) => [...stacked.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+      .filter((match) => match[1].split(/,(?![^(]*\))/).some((part) => part.trim().replace(/\s+/g, " ") === `${NEW_HOME} ${selector}`)).map((match) => match[2]).join(";");
+    expect(inStacked(lead)).toMatch(/padding-block:\s*var\(--space-1\)/);
+    expect(inStacked(`${lead.slice(0, -1)} > h1)`)).toMatch(/padding-block:\s*0/);
+    // 单行的页头本身仍不加留白，标题照旧加。
+    const all = rules("styles/header-capsule.module.css");
+    const home = (selector: string) => all.filter((rule) => rule.selectors.includes(`${NEW_HOME} ${selector}`)).map((rule) => rule.body).join(";");
+    expect(home(".scope :global(.ts-detail-header)")).not.toMatch(/padding/);
+    expect(home(".scope :global(.ts-detail-header > h1)")).toMatch(/padding-block:\s*var\(--space-1\)/);
+  });
+
   it("会议页页头长高时，键盘定位让开实际页头高度", () => {
     // 旧界面照旧按固定 48 算；新首页里读 DetailFrame 量出来的页头高度（--detail-head-h，同项目对话的 --head-h）。
     const all = rules("styles/header-capsule.module.css");
