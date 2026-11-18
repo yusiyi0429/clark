@@ -264,9 +264,11 @@ describe("页头在场：形象钉在正中，状态胶囊挂在下面（设计 
     const rule = (selector: string) => chatCss.split(/\r?\n/).find((line) => line.startsWith(`${selector} {`)) ?? "";
     // 有在场的对话：页头浮在对话上（对话区一直延到面板顶），停在最上面时对话上沿让出原来页头那么高。
     expect(rule(".pane:has(.head [data-presence]) > .head")).toMatch(/position: absolute/);
-    expect(rule(".pane:has(.head [data-presence]) > .log")).toMatch(/padding-top: calc\(var\(--head-block\) \+ 30px\)/);
-    // 只有一层淡出：标题那一行（14 + 48）看不见，往下 20 渐显；别处不再有遮罩或渐变。
-    expect(chatCss.match(/(?<!-webkit-)mask-image/g)).toHaveLength(1);
+    // 让出的高跟着页头实际的高（--head-h，标题折行时页头长高；本人 11/18 修复第 4 轮）；没量到时同原来的「页头块 + 30」。
+    expect(rule(".pane:has(.head [data-presence]) > .log")).toMatch(/padding-top: calc\(var\(--head-h, calc\(var\(--head-block\) \+ 18px\)\) \+ 12px\)/);
+    // 只有一层淡出：标题那一行（14 + 48）看不见，往下 20 渐显；没有形象的页头按实际高度算这一行；别处不再有遮罩或渐变。
+    expect(chatCss.match(/(?<!-webkit-)mask-image/g)).toHaveLength(2);
+    expect(chatCss).toContain("mask-image: linear-gradient(to bottom, transparent calc(var(--head-h, 66px) - 4px), black calc(var(--head-h, 66px) + 16px))");
     expect(chatCss).toContain("mask-image: linear-gradient(to bottom, transparent 62px, black 82px)");
     expect(css).not.toMatch(/mask-image|linear-gradient/);
     // 形象身后垫一块比它大一圈、边缘柔和的底，字从后面过去不透出来。

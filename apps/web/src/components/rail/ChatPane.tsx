@@ -5,7 +5,7 @@
  * 只复用现有对话的零件（useConversation、ConversationTimeline、ColumnComposer），不改它们；输入条原本是 fixed 定位，这里在本列里重新摆。
  * 从哪一页发的，useConversation 会带上当前路径（pagePath）：Task 页的话，云端按 /me/month/tasks/<id> 给 Chat 带上这个 Task（第 10 节兜底）。
  */
-import { useState, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import type { ConversationData } from "@/conversation/useConversation";
 import { ColumnComposer } from "@/conversation/ColumnComposer";
 import { ConversationTimeline } from "@/conversation/ConversationTimeline";
@@ -57,11 +57,25 @@ export function ChatColumn({ data, buddy, head, extra, timeline, above, dock, in
 }) {
   const scroll = useConversationScroll({ streaming: data.streaming, onSend });
   const [composerHeight, setComposerHeight] = useState(52);
+  const paneRef = useRef<HTMLElement>(null);
+  const headRef = useRef<HTMLDivElement>(null);
+  // 页头叠在对话上时（新首页），对话上沿和渐隐跟着页头实际的高走：标题折行、页头长高也不压正文。
+  useLayoutEffect(() => {
+    const pane = paneRef.current;
+    const head = headRef.current;
+    if (!pane || !head) return;
+    const measure = () => pane.style.setProperty("--head-h", `${head.offsetHeight}px`);
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(head);
+    return () => observer.disconnect();
+  }, [Boolean(head)]);
   const name = label ?? (buddy?.name?.trim() || "伙伴");
   const channels: ConversationChannel[] = [{ id: "agent", kind: "agent", label: "天枢", title: name, unread: 0 }];
   return (
-    <section className={s.pane} data-variant={variant} data-tone={tone} aria-label={`和${name}的对话`} style={{ ["--pane-composer" as string]: `${composerHeight}px` }}>
-      {head ? <div className={s.head}>{head}</div> : null}
+    <section ref={paneRef} className={s.pane} data-variant={variant} data-tone={tone} aria-label={`和${name}的对话`} style={{ ["--pane-composer" as string]: `${composerHeight}px` }}>
+      {head ? <div ref={headRef} className={s.head}>{head}</div> : null}
       <div className={s.log} ref={scroll.scrollRef} onScroll={(event) => markScrolled(event.currentTarget)} role="log" aria-label={name} aria-live="polite" aria-relevant="additions text">
         <div className={s.inner} ref={scroll.contentRef}>
           {timeline ? timeline(data) : <ConversationTimeline data={data} />}

@@ -172,6 +172,30 @@ describe("新首页不出省略号（本人 11/18）", () => {
     expect(phoneBody(".monthTaskLine > * + *")).not.toMatch(/flex(-basis)?:[^;]*100%/);
   });
 
+  it("手机上页头标题长时换行，页头跟着长高、不压正文", () => {
+    // 没有形象的页头（项目对话）：标题占到右边按钮前面，不再和右边平分；在场槽（只挂状态胶囊）不占列，绝对定位在正中。
+    const presence = rules("styles/presence.module.css");
+    const body = (selector: string) => presence.filter((rule) => rule.selectors.includes(selector)).map((rule) => rule.body).join(";");
+    expect(body(".head[data-flush]:not(:has(> .presence[data-stage]))")).toMatch(/grid-template-columns:\s*minmax\(0, 1fr\) auto;/);
+    expect(body(".head[data-flush]:not(:has(> .presence[data-stage])) > .presence")).toMatch(/position:\s*absolute/);
+    // 页头只有最小高度，标题折行时跟着长高。
+    const home = rules("styles/home.module.css");
+    const viewHead = home.filter((rule) => rule.selectors.some((selector) => /^\.viewHead(\[data-flush\])?$/.test(selector))).map((rule) => rule.body).join(";");
+    expect(viewHead).toMatch(/min-height:/);
+    expect(viewHead).not.toMatch(/(^|[;\s])height:/);
+    // 页头叠在对话上时，对话上沿和渐隐跟着页头实际高度（--head-h，ChatColumn 量出来），不是写死的 48。
+    const chat = rules("styles/v2-chat.module.css");
+    const log = chat.filter((rule) => rule.selectors.some((selector) => selector.endsWith("> .log"))).map((rule) => rule.body).join(";");
+    expect(log).toMatch(/padding-top:\s*calc\(var\(--head-h/);
+    const fade = chat.filter((rule) => rule.selectors.some((selector) => selector.includes(":not([data-stage])") && selector.includes(".log[data-scrolled]"))).map((rule) => rule.body).join(";");
+    expect(fade).toMatch(/transparent calc\(var\(--head-h/);
+    expect(readFileSync(new URL("../components/rail/ChatPane.tsx", import.meta.url), "utf8")).toMatch(/--head-h/);
+    // 子会话页头（不叠在对话上，本来就跟着长高）：标题折成多行时上下留出空，字不贴屏幕上沿。
+    const session = rules("styles/v2-session.module.css");
+    const embedHead = session.filter((rule) => rule.selectors.some((selector) => selector.includes('data-type-scale="one"') && selector.endsWith(".embedHead"))).map((rule) => rule.body).join(";");
+    expect(embedHead).toMatch(/padding-block:/);
+  });
+
   it("下沿左边是没绑文件夹的「此电脑」时也算有字，右边最多一半", () => {
     const all = rules("styles/home.module.css");
     const capped = all.filter((rule) => /max-width:\s*50%/.test(rule.body) && rule.selectors.some((selector) => selector.includes(".barFoot:has(")));

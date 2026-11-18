@@ -320,3 +320,5 @@ button.output:focus-visible { outline: 2px solid var(--focus); outline-offset: -
 /* 新首页不出省略号（本人 11/18）：放不下就换行，长预览限高往下渐隐；只在新首页的外壳里生效，旧界面照旧。 */
 :global(:root:has([data-type-scale="one"])) .title b, :global(:root:has([data-type-scale="one"])) .stepText, :global(:root:has([data-type-scale="one"])) .step > time + span, :global(:root:has([data-type-scale="one"])) .stepsSummary, :global(:root:has([data-type-scale="one"])) .embedName, :global(:root:has([data-type-scale="one"])) .outTitle, :global(:root:has([data-type-scale="one"])) .previewHead b { overflow: visible; white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
 :global(:root:has([data-type-scale="one"])) .stepsHead { height: auto; min-height: var(--touch-hit, var(--row-28)); }
+/* 子会话页头标题折成多行时上下留空，字不贴屏幕上沿；一行时照旧 48 高。 */
+:global(:root:has([data-type-scale="one"])) .embedHead { padding-block: var(--space-1); }
