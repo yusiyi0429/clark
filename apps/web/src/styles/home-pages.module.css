@@ -205,6 +205,10 @@ label.row:hover { background: var(--default-soft); }
 .rowButton:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .rowChevron { flex: none; color: var(--ink-faint); transition: transform var(--dur-snap) var(--ease-swift); }
 .rowChevron[data-open] { transform: rotate(90deg); }
+/* 能展开收起的一行（连接页文件夹，Row 的 fold）：名字和小字是按钮，占满动作以外的地方，悬停底铺到行的内边距；ChevronDown 贴右，展开时转 180°。 */
+.fold { display: flex; flex: 1; align-self: stretch; align-items: center; gap: var(--space-2); width: auto; min-width: 0; margin: -6px 0 -6px calc(-1 * var(--space-2)); padding: 6px var(--space-2); border-radius: var(--r-control); }
+.fold .rowChevron { margin-left: auto; }
+.fold .rowChevron[data-open] { transform: rotate(180deg); }
 .empty { margin: 0; padding: 0 var(--space-2); color: var(--ink-faint); font-size: var(--text-base); line-height: var(--lh-row); }
 .link { color: var(--accent); text-decoration: none; }
 .link:hover { text-decoration: underline; text-underline-offset: 3px; }

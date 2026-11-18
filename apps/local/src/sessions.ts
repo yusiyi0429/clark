@@ -226,7 +226,7 @@ export interface SessionDeps {
   paused?: () => boolean;
   /** 同时最多跑几个（本机设置 maxConcurrent）。 */
   maxConcurrent?: () => number;
-  /** 验收过就合回（本机设置 autoMerge，默认开）。 */
+  /** 验收后自动合并（本机设置 autoMerge，默认开）。 */
   autoMerge?: () => boolean;
   /** 本人在连接页加的工具：挂给执行会话（卡、专题），不受岗位名单管；规划员、验收员不挂。 */
   customTools?: CustomTools;
@@ -1720,7 +1720,7 @@ export class SessionManager {
   }
 
   /**
-   * 验收过了，卡在工作树里做的自动合回（本机设置「验收过就合回」，只合不推）：主文件夹停在原分支上、干净、合并没冲突才合，
+   * 验收过了，卡在工作树里做的自动合回（本机设置「验收后自动合并」，只合不推）：主文件夹停在原分支上、干净、合并没冲突才合，
    * 合了等它的卡接着开始。合不了（或关了、卡还在跑、交回以后又改过）就在卡上记 needsMerge 等本人合。都报一条同步条目 merge。
    */
   private async autoMerge(verifier: SessionRecord): Promise<void> {
@@ -1736,7 +1736,7 @@ export class SessionManager {
       notice(message);
       this.d.onChange?.();
     };
-    if (this.d.autoMerge?.() === false) return hold("auto_merge_off", "没开「验收过就合回」，等你合");
+    if (this.d.autoMerge?.() === false) return hold("auto_merge_off", "没开「验收后自动合并」，等你合");
     // 只合验过的那个提交：交回以后卡又提交过，等它再交回、再验收
     try {
       const head = await git(ws.folder, ["rev-parse", `refs/heads/${ws.branch}`]).then((o) => o.trim(), () => null);

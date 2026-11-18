@@ -137,6 +137,8 @@ export const LocalAgentStatus = Type.Object({
   loggedIn: Type.Boolean(),
   authMethod: Nullable(Type.String()),
   subscriptionType: Nullable(Type.String()),
+  /** 只有 Claude Code：`claude auth status --json` 的 planTier（如 max_5x、max_20x），能分出同一种订阅的档位；它没报就不带。 */
+  planTier: Type.Optional(Type.String()),
   loginExpiresAt: Nullable(Instant),
   /** 低于这个版本的 Claude Code 不保证兼容，网页提示升级。 */
   minimumVersion: Nullable(Type.String()),
@@ -178,7 +180,7 @@ export const LocalSettings = Type.Object({
   /** 同时最多跑几个（默认 3，插件页可改，不设上限；超过 10 个时网页提醒电脑和额度可能吃紧）。超出的排队，先来先跑；调大时立刻从队里接上。 */
   maxConcurrent: Type.Integer({ minimum: 1 }),
   /**
-   * 「验收过就合回」（默认 true，插件页可改）：卡的验收过了，主文件夹停在原分支上、没有没提交的改动、合并没有冲突时，本机自动合回（只合不推），
+   * 「验收后自动合并」（默认 true，插件页可改）：卡的验收过了，主文件夹停在原分支上、没有没提交的改动、合并没有冲突时，本机自动合回（只合不推），
    * 等它的卡接着自己开始。不满足或关了时不合，卡的 workspace.needsMerge 写明原因，等本人合。
    */
   autoMerge: Type.Boolean(),
@@ -900,7 +902,7 @@ export const LocalFolderHolder = Type.Object({
 /**
  * 验收过了却没自动合回的原因（卡的 workspace.needsMerge、同步条目 merge）：
  * base_not_checked_out 主文件夹现在不在 baseBranch 上；dirty 主文件夹有没提交的改动（含没加进 git 的文件）；conflict 有冲突（已放弃这次合并）；
- * auto_merge_off 本人把「验收过就合回」关了；not_ready 卡还在跑或有后台任务在跑、交回以后卡又改过、工作树不在了、主文件夹已不在允许的文件夹里（message 写明是哪种）。
+ * auto_merge_off 本人把「验收后自动合并」关了；not_ready 卡还在跑或有后台任务在跑、交回以后卡又改过、工作树不在了、主文件夹已不在允许的文件夹里（message 写明是哪种）。
  */
 export const LocalMergeHoldReason = Type.Union([
   Type.Literal("base_not_checked_out"), Type.Literal("dirty"), Type.Literal("conflict"), Type.Literal("auto_merge_off"), Type.Literal("not_ready"),

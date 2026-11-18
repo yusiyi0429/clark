@@ -31,8 +31,8 @@ const plan = {
   ],
 } as unknown as THomePlanResponse;
 const WORKTREE = { kind: "worktree" as const, folder: "C:\\w", path: "C:\\w\\.wt\\c5", branch: "tianshu/c5", baseBranch: "main", baseCommit: "a".repeat(40), mergedCommit: null };
-/** 本机没能自动合回、等本人合（「验收过就合回」关着）。 */
-const HOLD = { reason: "auto_merge_off" as const, message: "「验收过就合回」关着，等你合" };
+/** 本机没能自动合回、等本人合（「验收后自动合并」关着）。 */
+const HOLD = { reason: "auto_merge_off" as const, message: "「验收后自动合并」关着，等你合" };
 /** 看板上的卡（交给 Agent 做的，带最近一次交回）。 */
 const boardCard = (id: string, title: string, handback: Record<string, unknown>, criterion: number | null = null): CardItem => ({
   id, title, updatedAt: "2026-11-06T05:00:00Z", card: { executor: "claude_code", role: null, criterion: criterion ? { index: criterion, text: "x" } : null, handback: {

@@ -41,7 +41,8 @@ export class ClaudeSetup {
   private cached: { at: number; status: TLocalAgentStatus } | null = null;
   private setup: Setup = { phase: "idle", startedAt: null, loginUrl: null, error: null, child: null };
 
-  constructor(private readonly configuredPath: string | null) {}
+  /** run：跑 --version、auth status 用的（测试换成假的）。 */
+  constructor(private readonly configuredPath: string | null, private readonly run: typeof exec = exec) {}
 
   /** 给适配器用：找到的 claude 可执行文件。 */
   async bin(): Promise<ClaudeBin | null> {
@@ -53,7 +54,7 @@ export class ClaudeSetup {
     if (this.found && existsSync(this.found.path)) return this.found;
     for (const p of candidates(this.configuredPath)) {
       if (!existsSync(p)) continue;
-      const r = await exec(p, ["--version"], 10_000);
+      const r = await this.run(p, ["--version"], 10_000);
       const m = /^(\d+\.\d+\.\d+)/.exec(r.out.trim());
       if (r.code === 0 && m) return (this.found = { path: p, version: m[1]! });
     }
@@ -66,7 +67,7 @@ export class ClaudeSetup {
     const f = await this.locate();
     let auth: Record<string, any> = {};
     if (f) {
-      const r = await exec(f.path, ["auth", "status", "--json"], 15_000);
+      const r = await this.run(f.path, ["auth", "status", "--json"], 15_000);
       try { auth = JSON.parse(r.out); } catch { auth = {}; }
     }
     const status: TLocalAgentStatus = {
@@ -77,6 +78,7 @@ export class ClaudeSetup {
       loggedIn: auth.loggedIn === true,
       authMethod: typeof auth.authMethod === "string" ? auth.authMethod : null,
       subscriptionType: typeof auth.subscriptionType === "string" ? auth.subscriptionType : null,
+      ...(typeof auth.planTier === "string" ? { planTier: auth.planTier } : {}),
       loginExpiresAt: typeof auth.loginExpiresAt === "string" ? auth.loginExpiresAt : null,
       minimumVersion: MIN_CLAUDE_VERSION,
       compatible: f ? versionAtLeast(f.version, MIN_CLAUDE_VERSION) : false,

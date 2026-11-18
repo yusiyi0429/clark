@@ -64,8 +64,39 @@ describe("连接页每一行（设计 9.5、5.4.6）", () => {
     expect(agentRow(agent({ loggedIn: false }), NOW)).toMatchObject({ state: "disconnected", action: "login" });
     expect(agentRow(agent({ loginExpiresAt: "2026-11-01T00:00:00.000Z" }), NOW)).toMatchObject({ state: "expired", action: "reauth" });
     expect(agentRow(agent(), NOW, true).state).toBe("exhausted");
-    expect(agentRow(agent(), NOW)).toMatchObject({ sub: "2.1.318 · max", state: "connected", action: null });
+    expect(agentRow(agent(), NOW)).toMatchObject({ sub: "2.1.318 · Max", state: "connected", action: null });
     expect(agentRow(agent({ kind: "codex", subscriptionType: null }), NOW).name).toBe("Codex");
+  });
+
+  it("Codex 的 prolite 显示成 Pro 100", () => {
+    const codex = (subscriptionType: string) => agentRow(agent({ kind: "codex", version: "0.170.0", subscriptionType }), NOW).sub;
+    expect(codex("prolite")).toBe("0.170.0 · Pro 100");
+    expect(codex("pro")).toBe("0.170.0 · Pro 200");
+    expect(codex("promax")).toBe("0.170.0 · Pro 500");
+    expect(codex("plus")).toBe("0.170.0 · Plus");
+    // 认不出的照原样。
+    expect(codex("enterprise")).toBe("0.170.0 · enterprise");
+  });
+
+  it("Claude 的 planTier 认不出时按 subscriptionType 显示", () => {
+    const claude = (patch: Partial<TLocalAgentStatus>) => agentRow(agent(patch), NOW).sub;
+    expect(claude({ subscriptionType: "max", planTier: "max_40x" })).toBe("2.1.318 · Max");
+    expect(claude({ subscriptionType: "pro", planTier: "default_claude_ai" })).toBe("2.1.318 · Pro");
+    // 两个都认不出：照原样，planTier 优先。
+    expect(claude({ subscriptionType: "team", planTier: "team_tier" })).toBe("2.1.318 · team_tier");
+    expect(claude({ subscriptionType: "team" })).toBe("2.1.318 · team");
+  });
+
+  it("Claude 有 planTier 时显示 Max 20x", () => {
+    const claude = (patch: Partial<TLocalAgentStatus>) => agentRow(agent(patch), NOW).sub;
+    expect(claude({ subscriptionType: "max", planTier: "max_20x" })).toBe("2.1.318 · Max 20x");
+    expect(claude({ subscriptionType: "max", planTier: "max_5x" })).toBe("2.1.318 · Max 5x");
+    // 没有 planTier 时按 subscriptionType；认不出的照原样。
+    expect(claude({ subscriptionType: "max" })).toBe("2.1.318 · Max");
+    expect(claude({ subscriptionType: "pro" })).toBe("2.1.318 · Pro");
+    // 连接页「这台电脑」那一行也是这个名字。
+    const html = withLocal(<ConnectionsPage go={() => undefined} />, "ready", status({ agents: [agent({ planTier: "max_20x" })] }));
+    expect(text(html.split('data-testid="row-agent:claude-code"')[1]!.split("</li>")[0]!)).toContain("Claude Code 2.1.318 · Max 20x 已连接");
   });
 
   it("GitHub、飞书命令行写登的是谁；没登录时小字是登录命令", () => {
@@ -117,7 +148,7 @@ describe("连接（卡片网格 + 三组）", () => {
     const html = withLocal(<ConnectionsPage go={() => undefined} />, "ready", status());
     expect(text(html)).toMatch(/本体.*GitHub.*飞书命令行.*这台电脑.*我的账号.*公司/);
     const claude = html.split('data-testid="row-agent:claude-code"')[1]!.split("data-testid=\"row-")[0]!;
-    expect(text(claude)).toContain("Claude Code 2.1.318 · max 已连接");
+    expect(text(claude)).toContain("Claude Code 2.1.318 · Max 已连接");
     // 额度和右栏「用量」同一套数（usageCells）。
     expect(text(claude)).toContain("Claude 17%");
     expect(text(claude)).toContain("本周：剩 17%");
@@ -135,12 +166,15 @@ describe("连接（卡片网格 + 三组）", () => {
     expect(text(card("tool:lark-cli"))).toContain("飞书命令行 未连接 · lark-cli auth login 本机");
     expect(card("tool:lark-cli")).not.toContain('aria-label="已连接"');
     expect(html).not.toContain('data-testid="row-tool:gh"');
-    expect(text(html)).toContain("C:/code/Tianshu-MVP");
+    // 文件夹默认收起：只有「文件夹 1 个」和「添加」（展开见 connectionFolders.behavior.test.tsx）。
+    expect(text(html)).not.toContain("C:/code/Tianshu-MVP");
     expect(html).toContain('aria-label="同时跑 3 个"');
     const row = (id: string) => html.split(`data-testid="row-${id}"`)[1]!.split("</li>")[0]!;
     // 开关是左右拨动的那种（整行一个 role="switch" 按钮），不是勾选框。
     expect(row("auto-merge")).toMatch(/<button type="button" role="switch" aria-checked="true"/);
     expect(row("personal-config")).toMatch(/<button type="button" role="switch" aria-checked="false"/);
+    expect(text(row("folders"))).toMatch(/^> 文件夹 1 个 添加$/);
+    expect(text(row("auto-merge"))).toMatch(/^> 验收后自动合并$/);
     expect(html).not.toContain('type="checkbox"');
     // 状态词只有那四个；不写「插件」。
     expect(text(html)).not.toContain("插件");

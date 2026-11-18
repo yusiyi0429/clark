@@ -493,7 +493,7 @@ describe("执行方问本人、卡等前面的卡", () => {
     expect(remote).toMatchObject({ state: "queued", reason: "after", waitingFor: ["先搭骨架"] });
   });
 
-  it("假本机程序：批准以后问一个单选问题，答了接着做；答过再答是 409。「验收过就合回」关着时验收过了记 needsMerge；带 after 的卡等前面的卡合回才开工作树、开始", async () => {
+  it("假本机程序：批准以后问一个单选问题，答了接着做；答过再答是 409。「验收后自动合并」关着时验收过了记 needsMerge；带 after 的卡等前面的卡合回才开工作树、开始", async () => {
     vi.useFakeTimers();
     const runner = createMockRunner({ stepMs: 10 });
     await runner.patchSettings({ autoMerge: false });
@@ -522,7 +522,7 @@ describe("执行方问本人、卡等前面的卡", () => {
     vi.useRealTimers();
   });
 
-  it("「验收过就合回」开着（默认）：交回、验收员收工以后自己合回，等它的卡接着开工作树", async () => {
+  it("「验收后自动合并」开着（默认）：交回、验收员收工以后自己合回，等它的卡接着开工作树", async () => {
     vi.useFakeTimers();
     const runner = createMockRunner({ stepMs: 10 });
     const first = await runner.createSession({ subject: { kind: "card", cardId: "c1" }, title: "Skeleton", cwd: "C:\\work\\tianshu", firstMessage: "交代" });

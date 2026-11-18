@@ -476,7 +476,7 @@ describe("卡在自己的工作树里做", { timeout: 60_000 }, () => {
     }
   });
 
-  it("验收过就合回（默认开）：主文件夹在原分支上、干净、没冲突时自己合回，报 merge；等它的卡接着自己开始，不用点", async () => {
+  it("验收后自动合并（默认开）：主文件夹在原分支上、干净、没冲突时自己合回，报 merge；等它的卡接着自己开始，不用点", async () => {
     const main = repo();
     const h = await setup(main, 3, undefined, undefined, true);
     try {
@@ -535,10 +535,10 @@ describe("卡在自己的工作树里做", { timeout: 60_000 }, () => {
       const manual = await until(() => h.cloud.items.find((i) => i.sessionId === d.a.id && i.type === "merge" && i.data.merged));
       expect(manual.data).toMatchObject({ handbackKey: d.item.data.handbackKey, merged: true, commit: m.body.commit, reason: null, auto: false });
 
-      // 关了「验收过就合回」
+      // 关了「验收后自动合并」
       expect((await h.call("PATCH", "/v1/settings", { autoMerge: false })).body.autoMerge).toBe(false);
       const off = await pass("E");
-      expect(off.s.workspace.needsMerge).toEqual({ reason: "auto_merge_off", message: "没开「验收过就合回」，等你合" });
+      expect(off.s.workspace.needsMerge).toEqual({ reason: "auto_merge_off", message: "没开「验收后自动合并」，等你合" });
       expect(off.item.data).toMatchObject({ merged: false, reason: "auto_merge_off", auto: true });
       await h.call("PATCH", "/v1/settings", { autoMerge: true });
       // 又交回：上一次的「要你合」作废，等这次验收；这次验收过了（开关已开）自己合回
