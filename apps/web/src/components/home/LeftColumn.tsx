@@ -38,7 +38,7 @@ import h from "@/styles/home.module.css";
 export const deleteProjectFail = (error: unknown) => conflictText(error, { PROJECT_BUSY: null, PROJECT_TRANSFERRING: "正在转交" }, "没删成");
 
 /**
- * 伙伴门牌（设计 4.1；本人 11/18 方案 A：对话顶上为主，这里退成门牌）：一行 48 高，左边小形象、右边伙伴名字；
+ * 伙伴门牌（设计 4.1；本人 11/18 方案 A：对话顶上为主，这里退成门牌）：一行 48 高，只放形象、居中（名字只给读屏）；
  * 形象永远不动（开会、听写时也不动），活的那颗只在主线页头。点了进伙伴主线，在主线时只是选中底；
  * 鼠标移上去右边出「⋯」进「伙伴」二级页（贴右浮着）。
  */
@@ -48,7 +48,6 @@ function BuddyCard({ buddy, name, view, go }: { buddy: Buddy | null; name: strin
     <div className={h.buddyCard}>
       <button type="button" className={h.buddyHit} aria-label={name} aria-current={current ? "page" : undefined} onClick={() => go(BUDDY_HREF)} data-testid="buddy-entry">
         <BuddyMark buddy={buddy} place="card" still />
-        <span className={h.buddyName}>{name}</span>
       </button>
       <span className={h.buddyMore}>
         <HeroButton variant="ghost" size="sm" isIconOnly title="伙伴" aria-label="伙伴" onPress={() => go(pageHref("buddy"))}><Ellipsis {...ICON} /></HeroButton>

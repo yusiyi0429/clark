@@ -50,12 +50,12 @@ describe("「在做什么」那一行（照 Claude Code，本人 11/16）", () =
     expect(text(bare)).toContain("|3 秒|");
   });
 
-  it("样式：动画用站内强调色，减少动态效果时停下；字号走 --type-size: 15px，不直接写 font-size；深浅只用 ink 三档", () => {
+  it("样式：动画用站内强调色，减少动态效果时停下；字号走 --type-size: 14px（同计划清单），不直接写 font-size；深浅只用 ink 三档", () => {
     const rule = (name: string) => css.match(new RegExp(`\\.${name} \\{[^}]*\\}`))?.[0] ?? "";
     expect(rule("mark")).toContain("var(--accent)");
     expect(css).toMatch(/@keyframes markTurn/);
     expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\) \{[^}]*\.mark > span \{ animation: none; \}/);
-    expect(rule("activity")).toContain("--type-size: 15px");
+    expect(rule("activity")).toContain("--type-size: 14px");
     const block = css.slice(css.indexOf("/* 「在做什么」"), css.indexOf("/* 「在做什么」完 */"));
     expect(block).not.toMatch(/font-size/);
     expect(block.match(/#[0-9a-f]{3,8}\b|rgb\(/gi)).toBeNull();

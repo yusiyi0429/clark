@@ -5,7 +5,7 @@
  * 左栏「项目」小一号、对话里的计划清单小 1px（本人说的两处），对话正文 Markdown 的加粗和标题（内容，不是界面）。
  */
 :root:has([data-type-scale="one"]) body *:not(svg, svg *) {
-  font-size: var(--type-size, 1rem) !important;
+  font-size: var(--type-size, 15px) !important;
   font-weight: var(--type-weight, 400) !important;
   line-height: var(--type-lh, 1.5) !important;
 }
