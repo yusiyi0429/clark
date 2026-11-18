@@ -8,9 +8,10 @@
 .side { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
 .side[data-end] { justify-content: flex-end; }
 /* 没有形象的页头（项目对话）：标题占到右边按钮前面，不和右边平分（手机上原来只剩约 100 宽，长标题折成三行）；
- * 在场槽（只挂状态胶囊）不占列，绝对定位在正中，胶囊位置照旧。 */
+ * 在场槽（只挂状态胶囊）不占列，绝对定位在正中；跟着页头底部走：页头 48 高时离顶 4（位置照旧），
+ * 标题折行、页头长高时槽落到最后 44 里，挂在槽下面的胶囊在标题下面，不压字。 */
 .head[data-flush]:not(:has(> .presence[data-stage])) { position: relative; grid-template-columns: minmax(0, 1fr) auto; }
-.head[data-flush]:not(:has(> .presence[data-stage])) > .presence { position: absolute; top: 4px; left: 50%; }
+.head[data-flush]:not(:has(> .presence[data-stage])) > .presence { position: absolute; top: calc(100% - 44px); left: 50%; }
 
 /* 在场槽 40 高（项目对话没有形象，页头照旧 48）：胶囊挂在它下面 6。 */
 .presence { position: relative; z-index: 4; display: grid; place-items: center; min-height: 40px; }

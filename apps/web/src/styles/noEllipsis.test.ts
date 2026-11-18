@@ -190,10 +190,24 @@ describe("新首页不出省略号（本人 11/18）", () => {
     const fade = chat.filter((rule) => rule.selectors.some((selector) => selector.includes(":not([data-stage])") && selector.includes(".log[data-scrolled]"))).map((rule) => rule.body).join(";");
     expect(fade).toMatch(/transparent calc\(var\(--head-h/);
     expect(readFileSync(new URL("../components/rail/ChatPane.tsx", import.meta.url), "utf8")).toMatch(/--head-h/);
-    // 子会话页头（不叠在对话上，本来就跟着长高）：标题折成多行时上下留出空，字不贴屏幕上沿。
+    // 子会话页头（不叠在对话上，本来就跟着长高）：标题折成多行时上下留出空，字不贴屏幕上沿；
+    // 空留在标题上，不加在页头上（手机返回键 44 高，页头加上下内边距就成了 52），单行时页头仍 48。
     const session = rules("styles/v2-session.module.css");
-    const embedHead = session.filter((rule) => rule.selectors.some((selector) => selector.includes('data-type-scale="one"') && selector.endsWith(".embedHead"))).map((rule) => rule.body).join(";");
-    expect(embedHead).toMatch(/padding-block:/);
+    const inNewHome = (name: string) => session.filter((rule) => rule.selectors.some((selector) => selector.includes('data-type-scale="one"') && selector.endsWith(name))).map((rule) => rule.body).join(";");
+    expect(inNewHome(".embedHead")).not.toMatch(/padding/);
+    expect(inNewHome(".embedTitle")).toMatch(/padding-block:/);
+  });
+
+  it("项目对话页长标题折行时，状态胶囊不压标题", () => {
+    // 在场槽跟着页头底部走：页头 48 高时离顶 4（位置照旧）；页头长高时槽落到最后 44 里，挂在槽下面的胶囊在标题下面。
+    const presence = rules("styles/presence.module.css");
+    const slot = presence.filter((rule) => rule.selectors.includes(".head[data-flush]:not(:has(> .presence[data-stage])) > .presence")).map((rule) => rule.body).join(";");
+    expect(slot).toMatch(/top:\s*calc\(100% - 44px\)/);
+    expect(slot).not.toMatch(/top:\s*4px/);
+    // 主线（有形象）的胶囊位置不动：在场槽不绝对定位，胶囊照旧压住形象下沿 6。
+    const stage = presence.filter((rule) => rule.selectors.some((selector) => selector.includes("[data-stage]") && !selector.includes(":not("))).map((rule) => rule.body).join(";");
+    expect(stage).not.toMatch(/position:\s*absolute;\s*top:\s*calc\(100% - 44px\)/);
+    expect(presence.find((rule) => rule.selectors.includes(".presence[data-stage] > .hang"))?.body).toMatch(/top:\s*calc\(100% - 6px\)/);
   });
 
   it("下沿左边是没绑文件夹的「此电脑」时也算有字，右边最多一半", () => {
