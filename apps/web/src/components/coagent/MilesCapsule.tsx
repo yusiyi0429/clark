@@ -22,7 +22,7 @@ const FIGURES: Record<FigureSkin, MilesFigure> = {
   cmei: { art: CMEI_ART, svg: CMEI_SVG, name: "Mia" },
 };
 
-export function MilesCapsule({ skin, name, pose, level, leaving, size = "small", shape = "capsule", children }: {
+export function MilesCapsule({ skin, name, pose, level, leaving, size = "small", shape = "capsule", still = false, children }: {
   /** 挂哪一种形象。 */
   skin: FigureSkin;
   /** 伙伴名字，写在胶囊上；空着时写形象自己的名字（Miles 写「Miles」，C妹 写「Mia」）。 */
@@ -35,6 +35,8 @@ export function MilesCapsule({ skin, name, pose, level, leaving, size = "small",
   size?: MilesCapsuleSize;
   /** circle：Q 版圆形头像。 */
   shape?: MilesShape;
+  /** 一下都不动（门牌）：按「减少动态效果」挂，不出场、不眨眼。 */
+  still?: boolean;
   /** 读屏念的那句（PresenceCapsule 给）。 */
   children?: ReactNode;
 }) {
@@ -49,7 +51,7 @@ export function MilesCapsule({ skin, name, pose, level, leaving, size = "small",
 
   useEffect(() => {
     if (!svg.current) return;
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    const reduced = still || window.matchMedia("(prefers-reduced-motion: reduce)").matches
       || document.documentElement.dataset.reduceMotion === "true";
     const mounted = mountMiles(svg.current, {
       figure: FIGURES[skin],
@@ -63,7 +65,7 @@ export function MilesCapsule({ skin, name, pose, level, leaving, size = "small",
     });
     rig.current = mounted;
     return () => { mounted.destroy(); rig.current = null; };
-  }, [idPrefix, skin, size, shape]);
+  }, [idPrefix, skin, size, shape, still]);
 
   useEffect(() => { if (rig.current) setWidth(rig.current.setName(name)); }, [name]);
   useEffect(() => { rig.current?.setPose(pose); }, [pose]);
@@ -72,7 +74,7 @@ export function MilesCapsule({ skin, name, pose, level, leaving, size = "small",
 
   const circle = shape === "circle";
   return (
-    <div className={m.miles} style={circle ? undefined : { width, height: milesBoxHeight(size, FIGURES[skin].art) }} data-skin={skin} data-pose={pose} data-leaving={leaving || undefined} data-shape={circle ? "circle" : undefined}>
+    <div className={m.miles} style={circle ? undefined : { width, height: milesBoxHeight(size, FIGURES[skin].art) }} data-skin={skin} data-pose={pose} data-leaving={leaving || undefined} data-shape={circle ? "circle" : undefined} data-still={still || undefined}>
       <svg ref={svg} className={m.unit} viewBox={circle ? FIGURES[skin].art.head : undefined} aria-hidden focusable="false" />
       {children}
     </div>

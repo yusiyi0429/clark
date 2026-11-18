@@ -8,7 +8,7 @@
  * 姿势：在听本人说话（listening，页头那颗在听写时）> 伙伴在说话（active：回答进行中、收着时来了新话）> 待机。
  * 在说时用模拟的声音动起来；在听时跟着本人说话的响度动、整块再变大一圈；待机时安静，不读麦克风。
  *
- * 新首页的两处（11/17 设计 5.1、5.2）：页头正中（head）、左上角伙伴名片（card）。胶囊类横放、不写名字；
+ * 新首页的两处（11/17 设计 5.1、5.2）：页头正中（head）、左上角伙伴门牌（card，本人 11/18：still，一下都不动）。胶囊类横放、不写名字；
  * Miles、C妹 是 Q 版圆形头像（data-shape="circle"）。样子照传进来的 state 画，不自己计时（做完了持续多久由调用方管）。
  */
 
@@ -20,7 +20,7 @@ import b from "@/styles/buddy-mark.module.css";
 
 export type BuddyState = "idle" | "thinking" | "typing" | "done" | "listening";
 
-export function BuddyMark({ buddy, place, active = false, listening = false, level = 0, state = "idle" }: {
+export function BuddyMark({ buddy, place, active = false, listening = false, level = 0, state = "idle", still = false }: {
   buddy: Buddy | null;
   /** head、card：新首页页头正中、左上角伙伴名片。 */
   place: "sheet" | "entry" | "note" | "head" | "card";
@@ -31,6 +31,8 @@ export function BuddyMark({ buddy, place, active = false, listening = false, lev
   level?: number;
   /** 只有 head、card 用。 */
   state?: BuddyState;
+  /** 一下都不动（左上角门牌）：不出场、不眨眼。 */
+  still?: boolean;
 }) {
   const placed = place === "head" || place === "card";
   const speaking = !placed && active && !listening;
@@ -41,10 +43,10 @@ export function BuddyMark({ buddy, place, active = false, listening = false, lev
   const poseLevel = placed ? (state === "listening" ? level : 0) : listening ? level : speaking ? simulated : 0;
   return (
     <span className={b.mark} data-place={place} data-skin={skin} data-state={placed ? state : undefined} data-shape={circle ? "circle" : undefined}
-      data-listening={listening || undefined} aria-hidden>
+      data-still={still || undefined} data-listening={listening || undefined} aria-hidden>
       <span className={b.scale}>
         <PresenceCapsule skin={skin} name={buddy?.name ?? ""} milesSize={place === "sheet" ? "header" : "small"}
-          shape={circle ? "circle" : undefined} still={placed && state === "idle"} pose={pose} level={poseLevel} />
+          shape={circle ? "circle" : undefined} still={still || (placed && state === "idle" && !circle)} pose={pose} level={poseLevel} />
       </span>
     </span>
   );

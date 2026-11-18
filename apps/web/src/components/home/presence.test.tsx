@@ -124,7 +124,7 @@ describe("页头在场：形象钉在正中，状态胶囊挂在下面（设计 
     // 胶囊挂在形象后面另一块里（hang），不在形象的排版里：形象那一块前后是同一个位置。
     expect(busy).toMatch(/<div class="[^"]*hang[^"]*"><div[^>]*data-testid="presence-pill"/);
     const rule = (name: string) => css.match(new RegExp(`\\.${name} \\{[^}]*\\}`))?.[0] ?? "";
-    // 页头三栏，正中那一栏永远在正中；胶囊挂在形象下面 6px，绝对定位、居中、不撑高页头。
+    // 页头三栏，正中那一栏永远在正中；胶囊挂在在场块下面 6px（主线另往上贴，见下），绝对定位、居中、不撑高页头。
     expect(css).toMatch(/grid-template-columns: minmax\(0, 1fr\) auto minmax\(0, 1fr\)/);
     expect(rule("hang")).toMatch(/position: absolute/);
     expect(rule("hang")).toMatch(/top: calc\(100% \+ 6px\)/);
@@ -153,18 +153,52 @@ describe("页头在场：形象钉在正中，状态胶囊挂在下面（设计 
     const busy = renderToStaticMarkup(<Presence buddy={miles} data={answering({ scope: "project:p1" })} go={vi.fn()} />);
     const mainBusy = renderToStaticMarkup(<Presence buddy={miles} data={answering()} go={vi.fn()} />);
     expect(busy).not.toContain("data-place");
-    // 同一个在场块、同一个挂胶囊的那一块（hang），只是上面没有形象：去掉主线那颗形象，两边一模一样。
+    // 同一个在场块、同一个挂胶囊的那一块（hang），只是上面没有形象：去掉主线那颗形象和舞台标记（data-stage），两边一模一样。
     const container = (html: string) => html.match(/^<div[^>]*>/)![0];
-    expect(container(busy)).toBe(container(mainBusy));
+    expect(container(busy)).toBe(container(mainBusy).replace(" data-stage=\"\"", ""));
     const hang = (html: string) => html.match(/<div class="[^"]*hang[^"]*">[^]*$/)![0];
     expect(hang(busy)).toBe(hang(mainBusy));
-    // 胶囊的位置只有一条规则：挂在页头正中下面 6px，项目对话不另挪（不进页头那一行，盖不住标题和右边按钮）。
-    expect(css.match(/\.hang \{/g)).toHaveLength(1);
-    expect(css).not.toMatch(/data-bare|\.presence\[[^\]]*\] \.hang/);
+    // 项目对话的胶囊挂在页头正中下面 6px，不另挪（不进页头那一行，盖不住标题和右边按钮）；只有主线（data-stage）那一条往上贴着形象。
+    expect(css.match(/\.hang \{/g)).toHaveLength(2);
+    expect(css.match(/\.presence\[[^\]]*\][^{]*\.hang/g)).toEqual([".presence[data-stage] > .hang"]);
+    expect(css).not.toMatch(/data-bare/);
     env.meeting = { listening: true, clock: "12:34", href: "/me/work/meetings/m1" };
     expect(renderToStaticMarkup(<Presence buddy={miles} data={project()} go={vi.fn()} />)).toMatch(/^<div[^>]*data-presence=""><div class="[^"]*hang[^"]*">[^]*● 12:34 在录/);
     // 主线照旧：形象钉住。
     expect(renderToStaticMarkup(<Presence buddy={miles} data={data()} go={vi.fn()} />)).toContain('data-place="head"');
+  });
+
+  it("主线页头形象是 head 位、由 --head-figure 定大小，默认 64", () => {
+    const markCss = readFileSync(new URL("../../styles/buddy-mark.module.css", import.meta.url), "utf8");
+    const rule = (selector: string, from = css) => from.split("\n").find((line) => line.startsWith(`${selector} {`)) ?? "";
+    const stage = ".head[data-flush]:has(> .presence[data-stage])";
+    // 主线的在场块带 data-stage，里面是 head 位的形象。
+    expect(renderToStaticMarkup(<Presence buddy={miles} data={data()} go={vi.fn()} />)).toMatch(/^<div[^>]*data-stage=""[^>]*><span[^>]*data-place="head"/);
+    // 页头这一块：电脑 88 高、--head-figure 64；手机 72 高、56（胶囊 80×30）。标题和按钮留在最上面 48 那一行，形象上下居中。
+    expect(rule(stage)).toMatch(/--head-figure: 64;/);
+    expect(rule(stage)).toMatch(/min-height: 88px;/);
+    expect(rule(`:global([data-phone]) ${stage}`)).toMatch(/--head-figure: 56; --head-capsule: \.625; min-height: 72px;/);
+    expect(rule(`${stage} > .side`)).toMatch(/height: var\(--row-48\)/);
+    expect(rule(".presence[data-stage]")).toMatch(/align-self: center/);
+    // 胶囊往上贴，压住形象下沿 6。
+    expect(rule(".presence[data-stage] > .hang")).toMatch(/top: calc\(100% - 6px\)/);
+    // 形象只看 --head-figure（圆的直径，不带单位，没给时 64）：圆就是这么大，横放胶囊 128×48 画、按 96:36 跟着等比缩。
+    expect(rule('.mark[data-place="head"]', markCss)).toMatch(/--head-k: var\(--head-capsule, calc\(var\(--head-figure, 64\) \* 3 \/ 256\)\); width: calc\(128px \* var\(--head-k\)\); height: calc\(48px \* var\(--head-k\)\);/);
+    expect(rule('.mark[data-place="head"] .scale', markCss)).toMatch(/transform: scale\(var\(--head-k\)\)/);
+    expect(rule('.mark[data-place="head"][data-shape="circle"]', markCss)).toMatch(/width: calc\(var\(--head-figure, 64\) \* 1px\); height: calc\(var\(--head-figure, 64\) \* 1px\);/);
+  });
+
+  it("项目对话页头没有形象、页头高度不变", () => {
+    const project = answering({ scope: "project:p1" });
+    const html = renderToStaticMarkup(<Presence buddy={miles} data={project} go={vi.fn()} />);
+    expect(html).not.toContain("data-place");
+    expect(html).not.toContain("data-stage");
+    // 加高、放大、往上贴都只挂在 data-stage 上：项目对话的页头还是 48，胶囊照旧挂在下面 6。
+    const stageFree = css.split(/\r?\n/).filter((line) => line.includes(" { ") && /min-height: (?!0)|--head-figure|top: calc/.test(line) && !line.includes("data-stage"));
+    expect(stageFree).toEqual([
+      ".presence { position: relative; z-index: 4; display: grid; place-items: center; min-height: 40px; }",
+      ".hang { position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; }",
+    ]);
   });
 
   it("回答中写在做什么、用时和停止；点停止调 stop", () => {
