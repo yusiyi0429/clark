@@ -261,6 +261,33 @@ describe("伙伴主线开会话（open_session）", { timeout: 60_000 }, () => {
     } finally { await f.close(); }
   });
 
+  it("项目被删后派活卡还在：转给项目的卡 state 是 gone，会话卡按会话自己的状态", async () => {
+    const f = await fixture();
+    try {
+      await f.grant();
+      const projectId = await f.project("品牌建设");
+      const deps = f.deps();
+      const opening = randomUUID(), forwarding = randomUUID();
+      const opened = (await runAction(deps, { personId: TEST_MEMBER.personId, conversationId: randomUUID(), runId: opening }, "open_session",
+        { projectId, title: "首页换深色", brief: BRIEF })).result as { id: string; dispatchId: string };
+      await runAction(deps, { personId: TEST_MEMBER.personId, conversationId: randomUUID(), runId: forwarding }, "message_project", { projectId, text: "录屏先停" });
+      const deleted = await f.call("DELETE", `/api/me/projects/${projectId}`);
+      expect(deleted.statusCode, deleted.body).toBe(204);
+      expect(await f.t.sql("SELECT id FROM projects WHERE id=$1", [projectId])).toEqual([]);
+      const cards = async () => {
+        const extras = await runExtras(deps.q, TEST_MEMBER.personId, [opening, forwarding]);
+        return [extras.get(opening)?.cards, extras.get(forwarding)?.cards];
+      };
+      // 会话跟着项目进了回收站：archived；转给项目的那张：项目没了，gone。项目 id 和名字照派活时存下的。
+      expect(await cards()).toEqual([
+        [{ kind: "buddy_dispatch", dispatchId: opened.dispatchId, projectId, projectName: "品牌建设", sub: { kind: "topic", id: opened.id, title: "首页换深色" }, state: "archived" }],
+        [{ kind: "buddy_dispatch", dispatchId: expect.any(String), projectId, projectName: "品牌建设", sub: null, state: "gone" }]]);
+      // 会话从回收站恢复：回到 active，不受项目没了影响。
+      expect((await f.call("POST", `/api/me/trash/topic/${opened.id}/restore`)).statusCode).toBe(204);
+      expect((await cards())[0]).toMatchObject([{ projectId, sub: { id: opened.id }, state: "active" }]);
+    } finally { await f.close(); }
+  });
+
   it("会话被真删后派活卡还在，state 是 gone，名字用存下的那份", async () => {
     const f = await fixture();
     try {
@@ -405,6 +432,34 @@ describe("从主线开的会话做完一轮，主线出一行", { timeout: 60_00
       expect((await events(f)).map((event) => event.done)).toEqual([true]);
       expect((await f.call("DELETE", `/api/me/sub-sessions/topic/${topic}`)).statusCode).toBe(204);
       expect(await events(f)).toEqual([]);
+    } finally { await f.close(); }
+  });
+
+  it("项目被删、会话从回收站恢复后，做完一轮仍算从主线开的", async () => {
+    const f = await fixture();
+    try {
+      await f.grant();
+      const projectId = await f.project("品牌建设");
+      const topic = (await f.act("open_session", { projectId, title: "首页换深色", brief: BRIEF }, { turn: turn() })).json().result.id as string;
+      const first = await machineFor(f, topic);
+      await first(...running);
+      await first("stopped", { why: "turn_done", summary: "第一轮", blocker: null, outputs: [] });
+      await first("status", { status: "exited", title: "首页换深色", agent: "claude-code", modelLabel: "Opus 5.5" });
+      expect((await events(f)).map((event) => event.done)).toEqual([true]);
+      expect((await f.call("DELETE", `/api/me/projects/${projectId}`)).statusCode).toBe(204);
+      expect(await events(f)).toEqual([]);
+      expect((await f.call("POST", `/api/me/trash/topic/${topic}/restore`)).statusCode).toBe(204);
+      // 恢复后在「其他」里，不在项目里的会话不报停下；挪进另一个项目（今天只有挂 Task 时 linkGoal 会挪）以后才报。
+      const moved = await f.project("品牌二期");
+      await f.t.sql("UPDATE research_topics SET project_id=$2 WHERE id=$1", [topic, moved]);
+      const again = await machineFor(f, topic);
+      await again(...running);
+      await again("stopped", { why: "turn_done", summary: "第二轮", blocker: null, outputs: [] });
+      expect(await events(f)).toEqual([expect.objectContaining({ projectId: moved, projectName: "品牌二期", subjectId: topic, detail: "第二轮", done: true, fromMain: true })]);
+      // 卡住的那一行也认得出是从主线开的。
+      await again(...running);
+      await again("stopped", { why: "held", summary: null, blocker: "等素材", outputs: [] });
+      expect(await events(f)).toEqual([expect.objectContaining({ subjectId: topic, detail: "等素材", fromMain: true })]);
     } finally { await f.close(); }
   });
 
