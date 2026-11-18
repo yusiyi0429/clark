@@ -4,7 +4,7 @@ import { useLayoutEffect, useRef, type HTMLAttributes, type RefObject } from "re
 
 type Box = { scrollHeight: number; clientHeight: number; toggleAttribute: (name: string, force: boolean) => boolean };
 
-/** 内容比限高的那一格高：挂上 data-over，样式只在这时往下渐隐；放得下就摘掉（同 ReplyBubbles 里 TextBubble 的量法）。 */
+/** 内容比限高的那一格高：挂上 data-over，样式只在这时往下渐隐；放得下就摘掉。 */
 export function markOverflow(element: Box) {
   element.toggleAttribute("data-over", element.scrollHeight > element.clientHeight + 1);
 }

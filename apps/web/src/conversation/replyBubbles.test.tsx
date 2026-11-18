@@ -97,7 +97,7 @@ import { SideDetailContext, type SideDetail } from "@/components/home/SideDetail
 import { Presence } from "@/components/home/Presence";
 import { TransferHistory } from "@/components/home/Transfer";
 import { WorkTimeline } from "@/components/work/WorkTimeline";
-import { BubbleContext, HOLD_MS, ReplyBubbles, RevealContext, TypingBubble, resetReplyBubbles } from "./ReplyBubbles";
+import { BubbleContext, CARD_FULL_LINES, HOLD_MS, ReplyBubbles, RevealContext, TypingBubble, resetReplyBubbles } from "./ReplyBubbles";
 import { ConversationTurn, ConversationTurns, MarkdownBody } from "./Transcript";
 import { AnswerOptions, QuickReplyContext } from "./AnswerOptionRow";
 
@@ -132,6 +132,17 @@ const expand = (book: string, element: Element) => call(book, () => (element.typ
 const pieces = (tree: ReactNode) => elements(tree).filter((element) => typeof element.type === "function" && ["TextBubble", "ReplyCard"].includes(element.type.name))
   .map((element) => ({ kind: (element.type as { name: string }).name === "ReplyCard" ? "card" : "bubble", markdown: element.props.markdown, open: element.props.open }));
 const typing = (tree: ReactNode) => elements(tree).some((element) => element.type === TypingBubble);
+/** 卡片挂上以后量全文：给它量到的尺寸（wide：里面横向溢出的表格、代码）；ResizeObserver 有桩时记下它的回调。 */
+type CardBox = { scrollHeight: number; clientHeight: number; wide?: { scrollWidth: number; clientWidth: number }[] };
+function measureCard(book: string, element: Element, box: CardBox) {
+  const first = call(book, () => (element.type as (props: unknown) => ReactNode)(element.props), false);
+  const full = elements(first).find((child) => child.props.ref);
+  if (full) (full.props.ref as { current: unknown }).current = { scrollWidth: 500, clientWidth: 500, ...box, querySelectorAll: () => box.wide ?? [] };
+  hooks.flush();
+}
+const FITS: CardBox = { scrollHeight: 120, clientHeight: 120 };
+const TALL: CardBox = { scrollHeight: 400, clientHeight: 312 };
+const fullOf = (tree: ReactNode) => elements(tree).find((element) => element.props.ref);
 
 const inBubbles = (node: ReactNode) => renderToStaticMarkup(<BubbleContext.Provider value={true}>{node}</BubbleContext.Provider>);
 const assistant = (content: string, extra: Partial<Message> = {}): Message => ({ sequence: 2, role: "assistant", content, ...extra });
@@ -154,16 +165,14 @@ describe("伙伴回复成气泡和卡片（设计 6.1–6.3）", () => {
   it("伙伴的回复按块成气泡和卡片，「打开」在右边打开", () => {
     const reply = "先说结论：先保灯塔。\n\n| 事 | 状态 |\n|---|---|\n| 灯塔交付 | 进行中 |\n| 回款 | 等对方 |\n\n其余的下周再说。";
     const html = inBubbles(<ConversationTurn message={assistant(reply, { createdAt: "2026-11-17T01:31:00.000Z" })} />);
-    // 两个气泡夹一张卡；卡在对话里只露标题、摘要、时间和「打开」，表格本身不铺开。
+    // 两个气泡夹一张卡；短的表格放得下，卡里直接是全文（放不下的才收成摘要加「打开」，见下面几条）。
     expect(html.match(/data-bubble="buddy"/g)).toHaveLength(2);
     expect(html.match(/data-card=""/g)).toHaveLength(1);
     expect(html.indexOf("先说结论")).toBeLessThan(html.indexOf("data-card"));
     expect(html.indexOf("data-card")).toBeLessThan(html.indexOf("其余的下周再说"));
-    expect(html).toContain("事 · 状态");
-    expect(html).toContain("灯塔交付 · 进行中");
     expect(html).toContain("09:31");
-    expect(html).toContain(">打开</button>");
-    expect(html).not.toContain("<table");
+    expect(html).toContain("<table");
+    expect(html).not.toContain(">打开</button>");
     // 本人的话：靠右的本人气泡。
     expect(inBubbles(<ConversationTurn message={{ sequence: 1, role: "user", content: "排一下本月" }} />)).toMatch(/data-bubble="mine"[^>]*>[\s\S]*排一下本月/);
 
@@ -173,7 +182,9 @@ describe("伙伴回复成气泡和卡片（设计 6.1–6.3）", () => {
       show: vi.fn((kind: SideDetail["shown"]) => { shown.value = kind; }) } as unknown as SideDetail;
     hooks.provide(SideDetailContext, side);
     const card = named(call("bubbles", () => ReplyBubbles({ markdown: reply, streaming: false })), "ReplyCard")[0]!;
+    measureCard("card", card, TALL);
     const before = expand("card", card);
+    expect(text(before)).toContain("事 · 状态");
     expect(named(before, "SideContent")).toHaveLength(0);
     (button(before, "打开")!.props.onClick as () => void)();
     expect(side.show).toHaveBeenCalledWith("file");
@@ -192,6 +203,7 @@ describe("伙伴回复成气泡和卡片（设计 6.1–6.3）", () => {
     // 手机上（没有右边那一格）：「打开」就地展开全文，「打开」收起来。
     hooks.reset();
     const phone = named(call("bubbles", () => ReplyBubbles({ markdown: reply, streaming: false })), "ReplyCard")[0]!;
+    measureCard("card", phone, TALL);
     (button(expand("card", phone), "打开")!.props.onClick as () => void)();
     const inPlace = expand("card", phone);
     expect(elements(inPlace).find((element) => element.type === MarkdownBody)?.props.text).toBe(phone.props.markdown);
@@ -199,39 +211,133 @@ describe("伙伴回复成气泡和卡片（设计 6.1–6.3）", () => {
     // 标题开头的一节：标题已经在页头上，全文里不再写一遍。
     hooks.reset();
     const section = named(call("bubbles", () => ReplyBubbles({ markdown: "## 这周安排\n\n- 周二：发清单\n- 周三：确认", streaming: false })), "ReplyCard")[0]!;
+    measureCard("card", section, TALL);
     (button(expand("card", section), "打开")!.props.onClick as () => void)();
     expect(elements(expand("card", section)).find((element) => element.type === MarkdownBody)?.props.text).toBe("- 周二：发清单\n- 周三：确认");
     // 卡片：--surface 底、--hairline-strong 边、圆角 --r-card，最宽 560；手机上占满。
     expect(css).toMatch(/\.card \{[^}]*var\(--surface\)[^}]*var\(--hairline-strong\)[^}]*var\(--r-card\)[^}]*max-width: 560px/);
   });
 
-  it("长气泡收起到 6 行，「展开」就地展开", () => {
+  it("很长的气泡整段显示，没有展开", () => {
     const long = "这一段很长。".repeat(60);
     const bubble = named(call("bubbles", () => ReplyBubbles({ markdown: long, streaming: false })), "TextBubble")[0]!;
-    expect(bubble.props.collapsible).toBe(true);
-    // 挂上以后量一下：内容比 6 行高才收起，出「展开」。
-    const mount = (element: Element, size: { scrollHeight: number; clientHeight: number }) => {
-      const first = call("bubble", () => (element.type as (props: unknown) => ReactNode)(element.props), false);
-      (elements(first).find((child) => child.props.ref)!.props.ref as { current: unknown }).current = size;
-      hooks.flush();
+    const tree = expand("bubble", bubble);
+    expect(elements(tree).find((element) => element.type === MarkdownBody)?.props.text).toBe(long);
+    expect(button(tree, "展开")).toBeUndefined();
+    expect(elements(tree).some((element) => "data-clamp" in element.props || "data-over" in element.props)).toBe(false);
+    expect(bubble.props).not.toHaveProperty("collapsible");
+    // 收起的样式和「展开」都不留。
+    expect(css).not.toMatch(/data-clamp|\.more\b/);
+  });
+
+  it("短的小节写完后直接显示全文，没有打开", () => {
+    vi.useFakeTimers();
+    const bubbles = (markdown: string, streaming: boolean) => call("bubbles", () => ReplyBubbles({ markdown, streaming }));
+    bubbles("## 用法\n\n- 装好", true);
+    vi.advanceTimersByTime(HOLD_MS);
+    // 还在写：照旧是壳子加「•••」，不先铺全文。
+    const shell = expand("card", named(bubbles("## 用法\n\n- 装好以后", true), "ReplyCard")[0]!);
+    expect(elements(shell).some((element) => element.props["data-testid"] === "card-typing")).toBe(true);
+    expect(elements(shell).find((element) => element.type === MarkdownBody)).toBeUndefined();
+    expect(button(shell, "打开")).toBeUndefined();
+    // 写完：量下来放得下，原地是全文（标题不重复），没有摘要、没有「打开」。
+    const card = named(bubbles("## 用法\n\n- 装好以后运行 `pstack`。", false), "ReplyCard")[0]!;
+    measureCard("card", card, FITS);
+    const done = expand("card", card);
+    expect(fullOf(done)?.props["data-fold"]).toBeUndefined();
+    expect(elements(fullOf(done)!.props.children as ReactNode).find((element) => element.type === MarkdownBody)?.props.text).toBe("- 装好以后运行 `pstack`。");
+    expect(named(done, "FadeText")).toHaveLength(0);
+    expect(button(done, "打开")).toBeUndefined();
+    // 标题行、时间照旧在。
+    expect(text(done)).toContain("用法");
+  });
+
+  it("超过 12 行或横向放不下的小节，显示摘要和打开", () => {
+    // 放得下的上限是 12 行：写成常量，正文按它限高来量。
+    expect(CARD_FULL_LINES).toBe(12);
+    const markdown = "## 注意事项\n\n第一条要说清楚。\n\n第二条也很长。";
+    const card = () => named(call("bubbles", () => ReplyBubbles({ markdown, streaming: false })), "ReplyCard")[0]!;
+    // 竖着超过 12 行。
+    let observed: (() => void) | null = null;
+    vi.stubGlobal("ResizeObserver", class { constructor(callback: () => void) { observed = callback; } observe() {} disconnect() {} });
+    const tall = card();
+    measureCard("tall", tall, TALL);
+    let tree = expand("tall", tall);
+    expect(fullOf(tree)!.props["data-fold"]).toBe("");
+    expect(named(tree, "FadeText")[0]?.props.children).toBe("第一条要说清楚。");
+    expect(button(tree, "打开")).toBeDefined();
+    // 窗口变宽、放得下了：重新量，换成全文。
+    Object.assign((fullOf(tree)!.props.ref as { current: CardBox }).current, FITS);
+    observed!();
+    tree = expand("tall", tall);
+    expect(fullOf(tree)!.props["data-fold"]).toBeUndefined();
+    expect(fullOf(tree)!.props.style).toEqual({ maxHeight: `${CARD_FULL_LINES}lh` });
+    expect(button(tree, "打开")).toBeUndefined();
+    // 不高，但里面的宽表格、长代码行横向放不下。
+    const wide = card();
+    measureCard("wide", wide, { ...FITS, wide: [{ scrollWidth: 900, clientWidth: 500 }] });
+    tree = expand("wide", wide);
+    expect(fullOf(tree)!.props["data-fold"]).toBe("");
+    expect(button(tree, "打开")).toBeDefined();
+    // 收起时正文不占位置、看不见（只留着量），摘要、「打开」照旧。
+    expect(css).toMatch(/\.cardFull\[data-fold\] \{[^}]*position: absolute[^}]*visibility: hidden/);
+    // 收起时左右和卡片内边距读同一个变量。
+    expect(css).toMatch(/\.card \{[^}]*--card-pad-x: 16px;[^}]*padding: 14px var\(--card-pad-x\)/);
+    expect(css).toMatch(/\.cardFull\[data-fold\] \{[^}]*left: var\(--card-pad-x\); right: var\(--card-pad-x\)/);
+  });
+
+  it("卡片卡在阈值附近时，宽度小幅变化不来回切", () => {
+    // 对话区的竖滚动条一出一收，宽度差十几像素，正好卡在 12 行附近的卡片会被反复重新量。
+    // 收起以后要回到全文，得比阈值少一行（11 行）才行：收起时全文那一格限高 11 行来量。
+    const LH = 26;
+    let observed: (() => void) | null = null;
+    vi.stubGlobal("ResizeObserver", class { constructor(callback: () => void) { observed = callback; } observe() {} disconnect() {} });
+    const card = named(call("bubbles", () => ReplyBubbles({ markdown: "## 注意事项\n\n第一条。\n\n第二条。", streaming: false })), "ReplyCard")[0]!;
+    let lines = 12.4;
+    let tree: ReactNode = call("near", () => (card.type as (props: unknown) => ReactNode)(card.props), false);
+    // 全文那一格照它当前的 maxHeight（几行）限高：scrollHeight 是内容高，clientHeight 是限高后的高。
+    const cap = () => parseFloat(String((fullOf(tree)!.props.style as { maxHeight: string }).maxHeight));
+    (fullOf(tree)!.props.ref as { current: unknown }).current = {
+      scrollWidth: 500, clientWidth: 500, querySelectorAll: () => [],
+      get scrollHeight() { return lines * LH; }, get clientHeight() { return Math.min(lines, cap()) * LH; },
     };
-    mount(bubble, { scrollHeight: 400, clientHeight: 156 });
-    const folded = expand("bubble", bubble);
-    expect(elements(folded).find((element) => element.props.ref)!.props["data-clamp"]).toBe("");
-    const more = button(folded, "展开")!;
-    expect(more).toBeDefined();
-    (more.props.onClick as () => void)();
-    const open = expand("bubble", bubble);
-    expect(button(open, "展开")).toBeUndefined();
-    expect(elements(open).find((element) => element.props.ref)!.props["data-clamp"]).toBeUndefined();
-    // 6 行按正文行高算，收起时下沿淡出；「展开」淡色。
-    expect(css).toMatch(/\[data-clamp\] \{[^}]*max-height: calc\(6 \* var\(--type-lh, 26px\)\)/);
-    expect(css).toMatch(/\.more \{[^}]*var\(--ink-faint\)/);
-    // 不高于 6 行：不出「展开」。
-    hooks.reset();
-    const short = named(call("bubbles", () => ReplyBubbles({ markdown: "短的一句。", streaming: false })), "TextBubble")[0]!;
-    mount(short, { scrollHeight: 26, clientHeight: 26 });
-    expect(button(expand("bubble", short), "展开")).toBeUndefined();
+    hooks.flush();
+    const state = () => { tree = expand("near", card); return fullOf(tree)!.props["data-fold"] === "" ? "fold" : "full"; };
+    // 窄了一点、12.4 行：收起，收起后限高 11 行。
+    expect(state()).toBe("fold");
+    expect(fullOf(tree)!.props.style).toEqual({ maxHeight: `${CARD_FULL_LINES - 1}lh` });
+    // 滚动条收回、宽了一点：11.6 行，放得进 12 行但没少到 11 行，仍是摘要；再窄回去也不动。
+    lines = 11.6; observed!(); expect(state()).toBe("fold");
+    lines = 12.4; observed!(); expect(state()).toBe("fold");
+    lines = 11.6; observed!(); expect(state()).toBe("fold");
+    // 真的宽了很多、只剩 10 行：换回全文，限高回到 12 行。
+    lines = 10; observed!(); expect(state()).toBe("full");
+    expect(fullOf(tree)!.props.style).toEqual({ maxHeight: `${CARD_FULL_LINES}lh` });
+    // 全文时 11.6 行照旧全文：不超过 12 行不收。
+    lines = 11.6; observed!(); expect(state()).toBe("full");
+  });
+
+  it("读历史时短卡直接是全文，不先出摘要再换", () => {
+    // 第一次画（还没量）就是全文：短卡量完不变，不会先出摘要再换成全文。
+    const html = inBubbles(<ConversationTurn message={assistant("先说一句。\n\n## 用法\n\n- 装好以后运行 `pstack`。")} />);
+    expect(html).toMatch(/data-card=""[\s\S]*装好以后运行/);
+    expect(html).not.toContain(">打开</button>");
+    const card = named(call("bubbles", () => ReplyBubbles({ markdown: "## 用法\n\n- 装好以后运行。", streaming: false })), "ReplyCard")[0]!;
+    const first = call("card", () => (card.type as (props: unknown) => ReactNode)(card.props), false);
+    expect(fullOf(first)?.props["data-fold"]).toBeUndefined();
+    expect(button(first, "打开")).toBeUndefined();
+    expect(named(first, "FadeText")).toHaveLength(0);
+  });
+
+  it("卡片全文不重复标题：单独一行加粗的标题也去掉", () => {
+    const markdown = "**用法：**\n\n```bash\npstack run\n```";
+    const card = named(call("bubbles", () => ReplyBubbles({ markdown, streaming: false })), "ReplyCard")[0]!;
+    expect(card.props.title).toBe("用法");
+    const tree = expand("card", card);
+    expect(elements(fullOf(tree)!.props.children as ReactNode).find((element) => element.type === MarkdownBody)?.props.text).toBe("```bash\npstack run\n```");
+    // 加粗的不是标题那一句，照旧留着。
+    const other = named(call("other", () => ReplyBubbles({ markdown: "## 用法\n\n**先装好**\n\n```bash\npstack run\n```", streaming: false })), "ReplyCard")[0]!;
+    expect(elements(fullOf(expand("otherCard", other))!.props.children as ReactNode).find((element) => element.type === MarkdownBody)?.props.text).toBe("**先装好**\n\n```bash\npstack run\n```");
   });
 
   it("写完的块马上出，没写完的 2 秒内露「•••」，过了 2 秒在气泡里边写边长", () => {
@@ -262,10 +368,9 @@ describe("伙伴回复成气泡和卡片（设计 6.1–6.3）", () => {
     expect(typing(tree)).toBe(false);
     tree = bubbles("第一段。\n\n第二段。\n\n第三段在写，又写了几个字，还在长");
     expect(pieces(tree)[2]).toEqual({ kind: "bubble", markdown: "第三段在写，又写了几个字，还在长", open: true });
-    // 边写边长过的气泡写完了不收起（人已经看着它长出来）；之前已经出的不重播入场。
+    // 边写边长过的气泡写完了照旧出着；之前已经出的不重播入场。
     tree = bubbles("第一段。\n\n第二段。\n\n第三段在写，又写了几个字，还在长。\n\n第四");
     expect(pieces(tree)[2]).toEqual({ kind: "bubble", markdown: "第三段在写，又写了几个字，还在长。", open: false });
-    expect(named(tree, "TextBubble")[2]!.props.collapsible).toBe(false);
     expect(named(tree, "TextBubble").map((element) => element.props.delay)).toEqual([0, 60, 0]);
     // 新起的第四段从头算 2 秒。
     expect(pieces(tree)).toHaveLength(3);
@@ -409,6 +514,7 @@ describe("出字的边角", () => {
       show: vi.fn((kind: SideDetail["shown"]) => { shown.value = kind; }) } as unknown as SideDetail;
     hooks.provide(SideDetailContext, side);
     const card = named(bubbles("## 本周\n\n- 周二发清单\n- 周三确认", false), "ReplyCard")[0]!;
+    measureCard("card", card, TALL);
     (button(expand("card", card), "打开")!.props.onClick as () => void)();
     expect(named(expand("card", card), "SideContent")).toHaveLength(1);
     // 没开着的卡卸载不碰右边。
@@ -481,5 +587,25 @@ describe("快捷回复（设计 6.4）", () => {
     const pills = AnswerOptions(row!.props as Parameters<typeof AnswerOptions>[0]) as ReactElement<{ children: ReactElement<{ onClick: () => void }>[] }>;
     pills.props.children[1]!.props.onClick();
     expect(send).toHaveBeenCalledWith("先补发票", []);
+  });
+});
+
+describe("浅色下对话看得清（本人 11/18）", () => {
+  it("新首页里对话的加粗、链接、代码块用颜色变量", () => {
+    // 旧规则写死了深色主题的颜色（#f7f7f9、#a9caff、#18181b、#ffffff20），浅色修正只挂在 [data-tone=light] 上；
+    // 右边那一格（SideDetail 的 portal）、子会话里没有这个祖先。新首页的前缀挂在根上，portal 出去的也吃得到。
+    const transcript = readFileSync(new URL("../styles/conversation-transcript.module.css", import.meta.url), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+    const NEW_HOME = ':global(:root:has([data-type-scale="one"]))';
+    const declared = (selector: string, property: string) => [...transcript.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+      .filter((match) => match[1].split(",").some((part) => part.trim().replace(/\s+/g, " ") === `${NEW_HOME} ${selector}`))
+      .map((match) => new RegExp(`(?:^|[;\\s])${property}\\s*:\\s*([^;]+)`).exec(match[2])?.[1].trim())
+      .find(Boolean);
+    expect(declared(".prose strong", "color")).toBe("var(--ink)");
+    expect(declared(".prose a", "color")).toBe("var(--link)");
+    expect(declared(".prose pre", "background")).toBe("var(--neutral-wash)");
+    expect(declared(".prose pre", "color")).toBe("var(--ink)");
+    expect(declared(".prose code", "color")).toBe("var(--ink)");
+    expect(declared(".prose td", "border-bottom-color")).toBe("var(--hairline)");
+    expect(declared(".prose th", "border-bottom-color")).toBe("var(--hairline)");
   });
 });
