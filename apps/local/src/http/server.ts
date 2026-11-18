@@ -292,7 +292,7 @@ export function createServer(d: ServerDeps): http.Server {
       if (current && bound) return { folder: bound, project: current };
       let folder;
       try { folder = d.folders.ensureScratch(); } catch (e) {
-        if (e instanceof FolderError) throw new HttpError(400, e.code, e.message);
+        if (e instanceof FolderError) throw new HttpError(e.code === "conflict" ? 409 : 400, e.code, e.message);
         throw e;
       }
       return { folder, project: d.folders.bindProject(b.projectId, folder.id, b.projectName)! };

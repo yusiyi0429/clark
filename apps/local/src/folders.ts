@@ -116,12 +116,18 @@ export class Folders {
     return this.add(target);
   }
 
-  /** 「随手」项目的文件夹：主目录/天枢/随手，没有就建（已经有了不动里面的东西），加进允许的列表。不合规矩抛 FolderError（validation）。 */
+  /** 「随手」项目的文件夹：主目录/天枢/随手，没有就建（已经有了不动里面的东西），加进允许的列表。不合规矩、链接到主目录外抛 FolderError（validation），被文件占着抛 conflict。 */
   ensureScratch(): TLocalFolder {
     const target = join(this.home, ...LOCAL_SCRATCH_FOLDER);
     const reject = this.rejectReason(target);
     if (reject) throw new FolderError("validation", reject);
-    mkdirSync(target, { recursive: true });
+    if (!isInside(this.home, target)) throw new FolderError("validation", "只能建在你的主目录下"); // 「天枢」是指向外面的目录链接时
+    const occupied = () => new FolderError("conflict", "「天枢/随手」被一个文件占着");
+    try { mkdirSync(target, { recursive: true }); } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code;
+      throw code === "EEXIST" || code === "ENOTDIR" ? occupied() : e; // 随手、或上一层的天枢是个文件
+    }
+    if (!statSync(target).isDirectory()) throw occupied();
     return this.add(target);
   }
 

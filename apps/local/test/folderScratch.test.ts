@@ -1,6 +1,6 @@
 // 「随手」项目在这台电脑上的文件夹（plan-dots 第 3 件）：本机程序自己在 主目录/天枢/随手 建好、加进允许的文件夹、绑到项目。
 // 主目录换成临时目录，不碰本人真的主目录。
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Value } from "@sinclair/typebox/value";
@@ -70,6 +70,44 @@ describe("「随手」的文件夹", { timeout: 30_000 }, () => {
     expect(r.body.project.folder.path).toBe(own);
     expect(existsSync(target())).toBe(false);
     expect(await boundPath()).toBe(own);
+  });
+
+  it("天枢是指向主目录外的链接时不建也不绑", async (ctx) => {
+    const outside = tempDir("tl-outside-");
+    try { symlinkSync(outside, join(home, "天枢"), "junction"); } catch (e) {
+      // Windows 上 junction 不要管理员；别的系统上 "junction" 当普通目录链接。都建不了时（权限、文件系统不支持）只能跳过。
+      console.warn(`建不了目录链接，跳过：${e instanceof Error ? e.message : String(e)}`);
+      ctx.skip();
+    }
+    const r = await scratch();
+    expect([r.status, r.body.error?.message]).toEqual([400, "只能建在你的主目录下"]);
+    expect(existsSync(join(outside, "随手"))).toBe(false);
+    expect((await call("GET", "/v1/folders")).body.folders).toEqual([]);
+    expect(await boundPath()).toBeNull();
+  });
+
+  it("天枢/随手被同名文件占着时回 409，不覆盖文件", async () => {
+    mkdirSync(join(home, "天枢"));
+    writeFileSync(target(), "留着");
+    const r = await scratch();
+    expect([r.status, r.body.error?.code, r.body.error?.message]).toEqual([409, "conflict", "「天枢/随手」被一个文件占着"]);
+    expect(readFileSync(target(), "utf8")).toBe("留着");
+    expect((await call("GET", "/v1/folders")).body.folders).toEqual([]);
+    expect(await boundPath()).toBeNull();
+  });
+
+  it("天枢本身是个文件：同样回 409，不动它", async () => {
+    writeFileSync(join(home, "天枢"), "留着");
+    const r = await scratch();
+    expect([r.status, r.body.error?.code]).toEqual([409, "conflict"]);
+    expect(readFileSync(join(home, "天枢"), "utf8")).toBe("留着");
+    expect(await boundPath()).toBeNull();
+  });
+
+  it("不带口令调建随手文件夹回 401", async () => {
+    const r = await api(t.port, "", "POST", "/v1/folders/scratch", { projectId: SCRATCH, projectName: "随手" });
+    expect([r.status, r.body.error?.code]).toEqual([401, "unauthorized"]);
+    expect(existsSync(target())).toBe(false);
   });
 
   it("没带项目、项目 id 不对：400，不建", async () => {
