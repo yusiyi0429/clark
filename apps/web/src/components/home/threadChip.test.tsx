@@ -55,8 +55,23 @@ describe("thread 小条（设计 6.6）", () => {
     const go = vi.fn();
     chip(sub(), threadOpener(panel, go));
     (tap.props.get("thread-chip")?.onClick as () => void)();
-    expect(panel.openThread).toHaveBeenCalledWith(expect.objectContaining({ kind: "topic", id: "t1" }));
+    expect(panel.openThread).toHaveBeenCalledWith(expect.objectContaining({ kind: "topic", id: "t1" }), undefined);
     expect(go).not.toHaveBeenCalled();
+  });
+
+  it("项目对话里的 thread 小条不带项目名", () => {
+    // 不给 project：和原来一样，只有名字、状态。
+    const plain = chip(sub());
+    expect(text(plain)).toContain("|首页手机检查|在跑|");
+    expect(plain).not.toContain(" · ");
+    // 主线上给 project：名字前面一段淡色「项目名 · 」；等文件夹时短状态写「等你」。
+    const main = renderToStaticMarkup(<ThreadChip sub={sub()} onOpen={vi.fn()} project="品牌建设" needsYou />);
+    expect(text(main)).toContain("|品牌建设 · |首页手机检查|等你|");
+    expect(main).toMatch(/data-wait="">等你</);
+    // 电脑上点了在右边开，带上从主线开的项目名。
+    const panel = side();
+    threadOpener(panel, vi.fn())({ kind: "topic", id: "t1" }, "品牌建设");
+    expect(panel.openThread).toHaveBeenCalledWith({ kind: "topic", id: "t1" }, "品牌建设");
   });
 
   it("中间已经是这个子会话：再点它的行或小条不在右边再开一份", () => {
@@ -86,7 +101,7 @@ describe("thread 小条（设计 6.6）", () => {
     renderToStaticMarkup(<LocalContext.Provider value={local}><SessionsPanel view={{ kind: "project", id: "p1" }} projects={[project]} other={[]} archivedSubs={[]} actions={null} go={go}
       items={[]} onStop={async () => undefined} resources={resources} onOpenSub={threadOpener(panel, go)} /></LocalContext.Provider>);
     (tap.props.get("tree-sub")?.onClick as () => void)();
-    expect(panel.openThread).toHaveBeenCalledWith(expect.objectContaining({ kind: "topic", id: "t1" }));
+    expect(panel.openThread).toHaveBeenCalledWith(expect.objectContaining({ kind: "topic", id: "t1" }), undefined);
     expect(go).not.toHaveBeenCalled();
   });
 });

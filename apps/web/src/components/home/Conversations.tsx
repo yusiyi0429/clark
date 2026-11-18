@@ -28,7 +28,7 @@ import { ReplyContext, ReplyProvider } from "@/conversation/replyTo";
 import { quoteExcerpt } from "@/conversation/QuoteChips";
 import { MESSAGE_REPLY, quotedMessage } from "@/conversation/quotes";
 import { InputBar } from "./InputBar";
-import type { Project } from "@/lib/home/projects";
+import { projectHref, type Project } from "@/lib/home/projects";
 import type { CardItem } from "@/lib/board/cards";
 import type { FeedItem, ProjectFeedItem, SubSession, WaitingItem } from "@/lib/home/types";
 import type { WorkHomeApi } from "@/lib/home/useWorkHome";
@@ -40,7 +40,8 @@ import { useViewChrome } from "./view";
 import { usePhone } from "./usePhone";
 import { useSideDetail } from "./SideDetail";
 import { planOrder } from "./SubRows";
-import { ThreadChip, threadOpener } from "./ThreadChip";
+import { ThreadChip, rightOpener, threadOpener } from "./ThreadChip";
+import { DispatchChip, type DispatchCard } from "./DispatchChip";
 import h from "@/styles/home.module.css";
 import p from "@/styles/presence.module.css";
 
@@ -147,15 +148,25 @@ function useEscStopsReply(data: ConversationData) {
 
 /**
  * context：从 Mission 详情「问伙伴」带来的「关于：{Mission}」，输入框左上角一枚胶囊（14.5），去掉调 onClearContext。
+ * subs、projects：首页数据里的会话和项目（派活卡的小条照它们画名字、状态）；waitingFolder：这个项目的会话在等本人选文件夹。
+ * 派活卡的小条：电脑上在右边开（页头写「项目名 · 从主线开的」），刚开、首页数据里还没有的也是，数据到了右边就画出来；手机上去那个会话。
+ * 主线事件行：电脑上、首页数据里有这个会话就在右边开，手机上、找不到的照旧跳。
  */
-export function BuddyView({ buddy, outbox, consume, onSpeaking, waiting, go, context = null, onClearContext }: {
+export function BuddyView({ buddy, outbox, consume, onSpeaking, waiting, go, context = null, onClearContext, subs, projects, waitingFolder }: {
   buddy: Buddy | null; outbox: Outbox; consume: (id: number) => void; onSpeaking: (speaking: boolean) => void; context?: string | null; onClearContext?: () => void;
   waiting: WaitingItem[]; go: (href: string) => void;
+  subs: SubSession[]; projects: Project[]; waitingFolder: (projectId: string) => boolean;
 }) {
   const data = useConversation("global");
   const chrome = useViewChrome();
   const team = usePartnerTeam();
-  const events = usePartnerWorkEvents(waiting, go);
+  const side = useSideDetail();
+  const openRight = useMemo(() => rightOpener(side, subs), [side, subs]);
+  const events = usePartnerWorkEvents(waiting, go, openRight);
+  const dispatch = useMemo(() => {
+    const openSub = threadOpener(side, go);
+    return (card: DispatchCard) => <DispatchChip card={card} subs={subs} projects={projects} waitingFolder={waitingFolder} onOpenSub={openSub} onOpenProject={(id) => go(projectHref(id))} />;
+  }, [side, subs, projects, waitingFolder, go]);
   const meetingFeed = usePartnerMeetingFeed();
   const handoffFeed = useMeetingWorkHandoffFeed();
   useOutbox(data, "main", outbox, consume, team.intercept, team.composing);
@@ -176,7 +187,7 @@ export function BuddyView({ buddy, outbox, consume, onSpeaking, waiting, go, con
               </header>
             </>
           )}
-          timeline={(current) => <>{meetingFeed.notice}{handoffFeed.notice}<ReactionsProvider scope={current.scope} buddyName={name}><WorkTimeline data={current} blocks={[...team.blocks, ...events, ...meetingFeed.blocks, ...handoffFeed.blocks]} modelRule={modelRule} /></ReactionsProvider></>}
+          timeline={(current) => <>{meetingFeed.notice}{handoffFeed.notice}<ReactionsProvider scope={current.scope} buddyName={name}><WorkTimeline data={current} blocks={[...team.blocks, ...events, ...meetingFeed.blocks, ...handoffFeed.blocks]} modelRule={modelRule} dispatch={dispatch} /></ReactionsProvider></>}
           dock={(latest) => <>{team.composer}<PendingDock latest={latest} /></>}
           input={(onHeight) => <ChatInput data={data} placeholder={`与${name}讨论`} onHeight={onHeight} intercept={team.intercept} footer={{ left: team.launcher, right: <ModelText data={data} /> }}
             context={context ? { label: context, onClear: () => onClearContext?.() } : null} />} />

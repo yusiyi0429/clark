@@ -15,15 +15,26 @@ const h = vi.hoisted(() => ({
   path: "/me/work", phone: false, collapsed: null as boolean | null,
   /** 外壳右边面板位（HomeFrame 里第 7 个 useState，shown）一打开就是这个；undefined 照真的。 */
   shown: undefined as string | null | undefined, frameIndex: 0,
+  /** 右边 thread 开的是哪个会话（HomeFrame 里第 10 个 useState）；undefined 照真的。 */
+  thread: undefined as { kind: "card" | "topic"; id: string; from?: string } | null | undefined,
+  /** 首页数据；undefined 照真的（空的）。 */
+  data: undefined as WorkHomeData | undefined,
 }));
 vi.mock("react", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react")>();
   return {
     ...actual,
     useState: (initial: unknown) => {
-      if (h.shown !== undefined && /^\s*at HomeFrame /.test(new Error().stack?.split("\n")[2] ?? "") && h.frameIndex++ === 6) {
-        if (initial !== null) throw new Error("HomeFrame 第 7 个 useState 不是面板位");
-        return [h.shown, () => undefined];
+      if ((h.shown !== undefined || h.thread !== undefined) && /^\s*at HomeFrame /.test(new Error().stack?.split("\n")[2] ?? "")) {
+        const index = h.frameIndex++;
+        if (index === 6 && h.shown !== undefined) {
+          if (initial !== null) throw new Error("HomeFrame 第 7 个 useState 不是面板位");
+          return [h.shown, () => undefined];
+        }
+        if (index === 9 && h.thread !== undefined) {
+          if (initial !== null) throw new Error("HomeFrame 第 10 个 useState 不是 thread");
+          return [h.thread, () => undefined];
+        }
       }
       if (!h.hooks) return actual.useState(initial);
       const index = h.index++;
@@ -35,6 +46,10 @@ vi.mock("react", async (importOriginal) => {
   };
 });
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }), usePathname: () => h.path, useSearchParams: () => new URLSearchParams() }));
+vi.mock("@/lib/home/useWorkHome", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/home/useWorkHome")>();
+  return { ...actual, useWorkHome: () => { const real = actual.useWorkHome(); return h.data ? { ...real, data: h.data } : real; } };
+});
 vi.mock("./usePhone", async (importOriginal) => ({ ...(await importOriginal<typeof import("./usePhone")>()), usePhone: () => h.phone }));
 vi.mock("./LeftResize", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./LeftResize")>();
@@ -58,7 +73,7 @@ const flush = () => h.effects.splice(0).forEach((effect) => effect());
 const open = () => { h.states = []; h.effects = []; run(); flush(); return run(); };
 const shell = () => { h.frameIndex = 0; return renderToStaticMarkup(<HomeShell account={{ displayName: "孙铭泽", role: "member", personId: "p" }} />); };
 
-afterEach(() => { vi.unstubAllGlobals(); h.path = "/me/work"; h.phone = false; h.collapsed = null; h.shown = undefined; });
+afterEach(() => { vi.unstubAllGlobals(); h.path = "/me/work"; h.phone = false; h.collapsed = null; h.shown = undefined; h.thread = undefined; h.data = undefined; });
 
 describe("左栏能收起（设计 4.1）", () => {
   it("收起记在这台电脑上", () => {
@@ -223,16 +238,40 @@ describe("伙伴主线看不到子会话（本人 11/18）", () => {
     expect(buddy).not.toContain("sessions-panel");
     h.path = "/me/work/projects/p1";
     expect(shell()).toContain('data-testid="side-sessions"');
-    // thread 同样当作关着。
-    h.shown = "thread";
-    h.path = "/me/work/buddy";
-    expect(shell()).toMatch(/<div class="[^"]*"[^>]*data-panel="closed"/);
     // 首页、本月仍按项目分组列全部子会话。
     h.shown = "sessions";
     for (const path of ["/me/work", "/me/work/month/2026-11"]) {
       h.path = path;
       expect(shell()).toContain('data-testid="side-sessions"');
     }
+  });
+
+  it("电脑上点小条在右边开 thread，中间还是主线；页头写 项目名 · 从主线开的", () => {
+    const topic = { id: "t1", kind: "topic", letter: null, title: "首页换深色", state: "running", unseen: false, waiting: null, queueReason: null, holdUntil: null, role: null,
+      sessionId: null, deviceId: null, autoStart: false, updatedAt: "2026-11-18T01:00:00.000Z", merge: null, free: true };
+    h.data = { period: "2026-11", projects: [{ projectId: "p1", name: "品牌建设", lastActivityAt: null, budget: null, goals: [], transfer: null, unseen: false,
+      summary: { running: 1, waiting: 0, queued: 0, done: 0, doneToday: 0, needsYou: 0 }, pipeline: { conversationId: null, scope: "project:p1" }, planning: false, subSessions: [topic], items: [] }],
+      archivedCount: 0, month: { missions: [] }, waiting: [], other: { subSessions: [], items: [] } } as unknown as WorkHomeData;
+    h.shown = "thread";
+    h.thread = { kind: "topic", id: "t1", from: "品牌建设" };
+    h.path = "/me/work/buddy";
+    const main = shell();
+    // 中间还是主线，右边是那个会话；页头会话名下面一行淡字。
+    expect(main).toContain('data-testid="buddy-view"');
+    expect(main).toMatch(/<div class="[^"]*"[^>]*data-panel="file"/);
+    expect(main).toContain('data-testid="side-thread"');
+    expect(main).toMatch(/data-testid="thread-from"[^>]*>品牌建设 · 从主线开的</);
+    // 主线页头照旧没有会话按钮。
+    expect(main).not.toContain("sessions-button");
+    // 项目对话里开的同一个 thread：不写「从主线开的」。
+    h.path = "/me/work/projects/p1";
+    const project = shell();
+    expect(project).toContain('data-testid="side-thread"');
+    expect(project).not.toContain("从主线开的");
+    // 会话不在首页数据里了（开着时被归档、删了）：面板当作关着。
+    h.path = "/me/work/buddy";
+    h.thread = { kind: "topic", id: "gone", from: "品牌建设" };
+    expect(shell()).toMatch(/<div class="[^"]*"[^>]*data-panel="closed"/);
   });
 
   it("伙伴主线里卡片打开的文件面板照旧出", () => {

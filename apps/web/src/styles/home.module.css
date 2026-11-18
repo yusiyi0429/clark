@@ -781,6 +781,14 @@ button.bgLabel:hover { background: var(--default-soft); }
 :global(:root:has([data-type-scale="one"])) .sendTo b, :global(:root:has([data-type-scale="one"])) .attName b { overflow: visible; white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
 /* 用量一格的「暂时读不到」（额度读不到时，排在名字和数之间，数照旧靠右）：淡色、不折成一字一行。 */
 .usageNote { flex: none; color: var(--ink-faint); }
+/* 伙伴主线的派活卡（本人 11/18）：一轮回答下面一条会话小条（同 .thread），名字前面淡色「项目名 · 」；会话归档、删了是一行淡字，不能点。放不下就换行。 */
+.dispatch { display: grid; justify-items: start; margin: var(--space-2) 0; }
+.dispatch > .thread { margin: 0; }
+.threadProject { color: var(--ink-faint); }
+.dispatchFaded { min-width: 0; color: var(--ink-faint); white-space: normal; overflow-wrap: anywhere; }
+/* 右边 thread 的页头：会话名下面一行淡字「项目名 · 从主线开的」（只在主线上、从主线开的会话）。 */
+.threadHead { display: grid; flex: 1; min-width: 0; }
+.threadFrom { min-width: 0; color: var(--ink-faint); white-space: normal; overflow-wrap: anywhere; }
 
 /* 上下文圆环点开（本人 11/18）：两行，占用和「压缩」。 */
 .contextPop { min-width: 0; }

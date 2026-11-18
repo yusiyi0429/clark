@@ -16,7 +16,7 @@ import { scopeOf } from "./view";
 
 const today = (hours: number, minutes = 0) => { const at = new Date(); at.setHours(hours, minutes, 0, 0); return at.toISOString(); };
 const fresh = () => new Date().toISOString();
-const windows = (usedPercent: number) => [{ kind: "session" as const, model: null, usedPercent, state: usedPercent >= 100 ? "blocked" as const : "ok" as const, resetsAt: today(23, 30) }];
+const windows = (usedPercent: number) => [{ kind: "session" as const, model: null, usedPercent, state: usedPercent >= 100 ? "blocked" as const : "ok" as const, resetsAt: new Date(Date.now() + 3 * 3_600_000).toISOString() }]; // 跟着现在往后推：过了重置时间的窗口按 0 算，写死钟点深夜跑会挂
 const cloud = (deviceName: string, usedPercent: number, n: number): Resources["quota"][number] => ({
   deviceId: `00000000-0000-4000-8000-0000000000d${n}`, deviceName, id: "claude", name: "Claude", kind: "subscription", remainingPercent: null, amounts: [],
   windows: windows(usedPercent), resetsAt: null, blockedUntil: null, updatedAt: fresh(),
