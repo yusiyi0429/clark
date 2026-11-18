@@ -127,7 +127,7 @@ describe("右栏（5.4.5）", () => {
     const cells = (html: string) => html.split('data-testid="quota-row"').slice(1).map((cell) => text(cell.split("</li>")[0]!).replace(/^>/, "").trim());
     // 旧数照画（圆环、百分比），旁边淡色短语「暂时读不到」，不写原因
     const stale = render(panel([]), "ready", [old]);
-    expect(cells(stale)).toEqual(["Claude 70% 暂时读不到"]); // 和连接页同一个顺序
+    expect(cells(stale)).toEqual(["Claude 暂时读不到 70%"]); // 名字、暂时读不到、数：数照旧靠右，和别的格子对齐
     expect(stale).toContain("<circle");
     expect(stale).not.toContain("get_usage");
     // 「暂时读不到」自己一个 span，不和名字连成一串

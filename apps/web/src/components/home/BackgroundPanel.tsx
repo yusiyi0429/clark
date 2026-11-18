@@ -80,8 +80,8 @@ function UsageItem({ cell }: { cell: UsageCell }) {
         </svg>
       )}
       <span className={h.usageName}>{cell.name}</span>
-      {cell.value ? <span className={`${h.usageValue} ${h.num}`}>{cell.value}</span> : null}
       {cell.unreadable ? <span className={h.usageNote}>暂时读不到</span> : null}
+      {cell.value ? <span className={`${h.usageValue} ${h.num}`}>{cell.value}</span> : null}
     </li>
   );
 }

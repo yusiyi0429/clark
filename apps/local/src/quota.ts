@@ -124,9 +124,9 @@ export class QuotaTracker {
     return s.windows.some((w) => w.state === "blocked" && !w.resetsAt) ? Infinity : null;
   }
 
-  /** 本周（所有模型）用了几个百分点：预算记「开工后涨了几个点」用；读不到为 null。 */
+  /** 本周（所有模型）用了几个百分点：预算记「开工后涨了几个点」用（过了重置时间按 0，预算那边当本周重置）；读不到为 null。 */
   weeklyPercent(): number | null {
-    return this.state?.windows.find((w) => w.kind === "weekly_all")?.usedPercent ?? null;
+    return liveWindows(this.state?.windows ?? [], this.now()).find((w) => w.kind === "weekly_all")?.usedPercent ?? null;
   }
 
   /** 5 小时和本周（所有模型）里用得最多的百分比（按模型分的不算）：「无上限」到 95% 对新的轮次关掉多 agent；读不到为 null。 */

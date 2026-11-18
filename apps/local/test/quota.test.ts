@@ -224,6 +224,22 @@ describe("额度", () => {
     expect(q.usedPercent()).toBe(0);
   });
 
+  it("本周用量过了重置时间按 0 算", async () => {
+    let now = Date.parse("2026-11-18T08:00:00Z");
+    let resp: Record<string, unknown> = { subscription_type: "max", rate_limits: { limits: [
+      { kind: "weekly_all", percent: 40, severity: "normal", resets_at: "2026-11-20T00:00:00Z", is_active: true },
+    ] } };
+    const q = new QuotaTracker(tempDir("tl-quota-"), async () => resp, () => now);
+    await q.refresh();
+    expect(q.weeklyPercent()).toBe(40);
+    // 之后一直读不到，本周已经重置：预算开工拿的起点是 0，不是上周的 40
+    resp = LIMITED;
+    now = Date.parse("2026-11-20T01:00:00Z");
+    await q.refresh();
+    expect(q.view()[0]!.error).toBeTruthy();
+    expect(q.weeklyPercent()).toBe(0);
+  });
+
   it("跑着的卡报的额度不会被下一次空读清掉", async () => {
     let now = Date.parse("2026-11-07T08:00:00Z"); // USAGE 的窗口 11/07 10:00、11/12 才重置
     let resp: Record<string, unknown> = LIMITED;
