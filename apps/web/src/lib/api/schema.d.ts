@@ -7256,6 +7256,21 @@ export interface components {
                     status: "open" | "answered" | "dismissed";
                 } | {
                     /** @constant */
+                    kind: "buddy_dispatch";
+                    /** Format: uuid */
+                    dispatchId: string;
+                    /** Format: uuid */
+                    projectId: string;
+                    projectName: string;
+                    sub: {
+                        /** @constant */
+                        kind: "topic";
+                        /** Format: uuid */
+                        id: string;
+                        title: string;
+                    } | null;
+                } | {
+                    /** @constant */
                     kind: "review";
                     personalReviewId: string;
                     href: string;
@@ -7546,6 +7561,21 @@ export interface components {
                     multiSelect?: boolean;
                 }[];
                 status: "open" | "answered" | "dismissed";
+            } | {
+                /** @constant */
+                kind: "buddy_dispatch";
+                /** Format: uuid */
+                dispatchId: string;
+                /** Format: uuid */
+                projectId: string;
+                projectName: string;
+                sub: {
+                    /** @constant */
+                    kind: "topic";
+                    /** Format: uuid */
+                    id: string;
+                    title: string;
+                } | null;
             } | {
                 /** @constant */
                 kind: "review";
@@ -19780,6 +19810,8 @@ export interface components {
                 afterSequence: number | null;
             } | null;
             unseen: boolean;
+            /** @constant */
+            scratch?: true;
         };
         HomeMonthTask: {
             taskId: string;
@@ -20032,6 +20064,8 @@ export interface components {
                     afterSequence: number | null;
                 } | null;
                 unseen: boolean;
+                /** @constant */
+                scratch?: true;
             }[];
             archivedCount: number;
             month: {
@@ -20594,6 +20628,8 @@ export interface components {
             } | null;
             permissionMode: "auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions";
             autoRelayLimit: number | null;
+            /** @constant */
+            scratch?: true;
         };
         ProjectListResponse: {
             projects: {
@@ -20666,6 +20702,8 @@ export interface components {
                 } | null;
                 permissionMode: "auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions";
                 autoRelayLimit: number | null;
+                /** @constant */
+                scratch?: true;
             }[];
         };
         CreateProjectRequest: {
@@ -20761,6 +20799,8 @@ export interface components {
                 } | null;
                 permissionMode: "auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions";
                 autoRelayLimit: number | null;
+                /** @constant */
+                scratch?: true;
             };
             period: string;
             goals: {
@@ -22963,6 +23003,10 @@ export interface components {
                 subjectKind: "card" | "topic";
                 subjectId: string;
                 waitingId: string | null;
+                /** @constant */
+                done?: true;
+                /** @constant */
+                fromMain?: true;
             }[];
         };
         PartnerMeetingItem: {

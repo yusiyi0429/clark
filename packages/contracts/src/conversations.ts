@@ -245,6 +245,18 @@ export const ConversationCard = Type.Union([
     questions: Type.Array(BuddyAskQuestion, { minItems: 1, maxItems: 4 }),
     status: Type.Union([Type.Literal("open"), Type.Literal("answered"), Type.Literal("dismissed")]),
   }, { additionalProperties: false }),
+  /**
+   * 派活卡（本人 11/18）：伙伴在主线派出去的活。open_session 开了哪个项目的哪个会话（sub），或 message_project 转给了哪个项目的对话（sub 为 null）。
+   * 跟着出它的那一轮画在对话记录里，读历史时也在那一轮的回答上。
+   */
+  Type.Object({
+    kind: Type.Literal("buddy_dispatch"),
+    dispatchId: Type.String({ format: "uuid" }),
+    projectId: Type.String({ format: "uuid" }),
+    projectName: Type.String(),
+    /** 开出来的会话；转给项目对话（message_project）时为 null。 */
+    sub: Type.Union([Type.Object({ kind: Type.Literal("topic"), id: Type.String({ format: "uuid" }), title: Type.String() }, { additionalProperties: false }), Type.Null()]),
+  }, { additionalProperties: false }),
   /** 复盘草稿：摘要与「打开修改」。 */
   Type.Object({ kind: Type.Literal("review"), personalReviewId: Type.String({ minLength: 1 }), href: Type.String({ minLength: 1 }) }, { additionalProperties: false }),
   /** 周复盘草稿：摘要与「打开修改」。 */

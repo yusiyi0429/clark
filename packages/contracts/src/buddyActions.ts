@@ -82,6 +82,11 @@ export const BuddyAskQuestion = Type.Object({
  *   伙伴不直接和子会话对话；凡是要改子会话手上的活的都走它）。天枢把话写进那个项目的对话（标成伙伴转来的，ConversationMessage.via = buddy），
  *   触发项目对话这一轮，由它去派活、问子会话；立即回 summary，不等项目对话回完（项目对话正在回上一轮时排在后面，不打断它）。
  *   项目对话的结果照原来的方式由伙伴在总管线里回报（18 节第 4 条）。不可撤。从项目对话里调（conversationId 是项目对话）回 409 ALREADY_IN_PROJECT。
+ * - open_session（write，只在伙伴主线用，MAIN_ONLY_ACTIONS；本人 11/18）：在一个项目里开一个会话做一件项目级的活。projectId 是哪个项目；一次性的活带 scratch: true，
+ *   放进本人的「随手」项目（没有就建，归档了就恢复）；两样带且只带一样，不然 400 INVALID_ARGS。title 是会话名字，brief 是交代（伙伴整理，带上本人的关键原话）。
+ *   同「+ 新会话」（POST /api/me/topics 带 free）：建自由会话、登记开工，本人电脑上开着的网页接下后就开始。项目对话里调 409 MAIN_ONLY；项目在交接 409 PROJECT_PAUSED。
+ *   同一轮同一句交代重放只开一个。做成后出一张派活卡（ConversationCard 的 buddy_dispatch）。回 { dispatchId, projectId, projectName, kind: "topic", id, title }。不可撤。
+ *   message_project 做成后也出一张派活卡（sub 为 null）。
  * - send_message（write）：给人员目录里的同事发一句话。先出一张卡（ConversationCard 的 buddy_message）给本人看，本人点「发出」才由天枢机器人转达；
  *   每人每天最多 20 条（回 429 DAILY_LIMIT）。不可撤（发出以后）。
  * - update_plan（plan）：计划清单，见 BuddyPlanParams。
@@ -149,6 +154,12 @@ export const BuddyActionParams = {
   set_task_due_date: Type.Object({ projectId: Uuid, taskId: Type.String({ minLength: 1 }),
     dueDate: Type.Union([Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" }), Type.Null()]) }, strict),
   message_project: Type.Object({ projectId: Uuid, text: Type.String({ minLength: 1, maxLength: 4000 }) }, strict),
+  open_session: Type.Object({
+    projectId: Type.Optional(Uuid),
+    scratch: Type.Optional(Type.Literal(true)),
+    title: Type.String({ minLength: 1, maxLength: 40 }),
+    brief: Type.String({ minLength: 1, maxLength: 4000 }),
+  }, strict),
   send_message: Type.Object({ toPersonIds: Type.Array(Type.String({ minLength: 1 }), { minItems: 1, maxItems: 5 }), text: Type.String({ minLength: 1, maxLength: 2000 }) }, strict),
   update_plan: Type.Object({
     /** 整张清单（每次都交全部，后一次取代前一次）。少于 2 条不出。 */
@@ -164,6 +175,8 @@ export const BuddyActionParams = {
   sub_session_approve: Type.Object({ letter: SubSessionLetter, ...LocalPermissionDecisionRequest.properties }, strict),
   update_card: UpdateCardActionParams,
 } as const;
+/** 只在伙伴主线能用的动作。 */
+export const MAIN_ONLY_ACTIONS = ["open_session"] as const;
 /** 只在项目对话里能用的动作（18 节第 10 条；update_card 是主循环第 60 条）。 */
 export const PROJECT_ONLY_ACTIONS = ["sub_session_tell", "sub_session_stop", "sub_session_rename", "sub_session_link", "sub_session_restart", "sub_session_answer", "sub_session_approve", "update_card"] as const;
 
@@ -175,7 +188,8 @@ export const BUDDY_ACTION_NAMES = Object.keys(BuddyActionParams) as BuddyActionN
 
 /**
  * GET /internal/me/buddy-actions：本人现在能用的动作。authority 为 none 时只列 read、ui、plan 三类。
- * 可选查询参数 conversationId：带了而且不是项目对话时，只在项目对话里能用的那几个（PROJECT_ONLY_ACTIONS）不列；不带时全列（执行时再按对话拦）。
+ * 可选查询参数 conversationId：带了而且不是项目对话时，只在项目对话里能用的那几个（PROJECT_ONLY_ACTIONS）不列；是项目对话时，只在伙伴主线用的（MAIN_ONLY_ACTIONS）不列；
+ * 不带时全列（执行时再按对话拦）。
  * parameters 是参数的 JSON Schema（直接交给模型当工具的 input_schema）。Chat 把 name 原样当工具名，这样网页收到的 tool 事件里就是动作名。
  */
 export const BuddyActionSpec = Type.Object({

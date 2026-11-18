@@ -32975,6 +32975,63 @@
                         "type": "object",
                         "required": [
                           "kind",
+                          "dispatchId",
+                          "projectId",
+                          "projectName",
+                          "sub"
+                        ],
+                        "properties": {
+                          "kind": {
+                            "const": "buddy_dispatch",
+                            "type": "string"
+                          },
+                          "dispatchId": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
+                          "projectId": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
+                          "projectName": {
+                            "type": "string"
+                          },
+                          "sub": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "kind",
+                                  "id",
+                                  "title"
+                                ],
+                                "properties": {
+                                  "kind": {
+                                    "const": "topic",
+                                    "type": "string"
+                                  },
+                                  "id": {
+                                    "format": "uuid",
+                                    "type": "string"
+                                  },
+                                  "title": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "kind",
                           "personalReviewId",
                           "href"
                         ],
@@ -34588,6 +34645,63 @@
                           {
                             "const": "dismissed",
                             "type": "string"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "kind",
+                      "dispatchId",
+                      "projectId",
+                      "projectName",
+                      "sub"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "const": "buddy_dispatch",
+                        "type": "string"
+                      },
+                      "dispatchId": {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      "projectId": {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      "projectName": {
+                        "type": "string"
+                      },
+                      "sub": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "kind",
+                              "id",
+                              "title"
+                            ],
+                            "properties": {
+                              "kind": {
+                                "const": "topic",
+                                "type": "string"
+                              },
+                              "id": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "title": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          {
+                            "type": "null"
                           }
                         ]
                       }
@@ -119807,6 +119921,10 @@
           },
           "unseen": {
             "type": "boolean"
+          },
+          "scratch": {
+            "const": true,
+            "type": "boolean"
           }
         }
       },
@@ -121726,6 +121844,10 @@
                   ]
                 },
                 "unseen": {
+                  "type": "boolean"
+                },
+                "scratch": {
+                  "const": true,
                   "type": "boolean"
                 }
               }
@@ -125843,6 +125965,10 @@
                 "type": "null"
               }
             ]
+          },
+          "scratch": {
+            "const": true,
+            "type": "boolean"
           }
         }
       },
@@ -126355,6 +126481,10 @@
                       "type": "null"
                     }
                   ]
+                },
+                "scratch": {
+                  "const": true,
+                  "type": "boolean"
                 }
               }
             }
@@ -127032,6 +127162,10 @@
                     "type": "null"
                   }
                 ]
+              },
+              "scratch": {
+                "const": true,
+                "type": "boolean"
               }
             }
           },
@@ -140742,6 +140876,14 @@
                       "type": "null"
                     }
                   ]
+                },
+                "done": {
+                  "const": true,
+                  "type": "boolean"
+                },
+                "fromMain": {
+                  "const": true,
+                  "type": "boolean"
                 }
               }
             }
