@@ -475,14 +475,14 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
     promote();
     return commit;
   };
-  /** 验收员交完（假的一律算过）：「验收过就合回」开着就合回那张卡，关着就记下要本人合。 */
+  /** 验收员交完（假的一律算过）：「验收后自动合并」开着就合回那张卡，关着就记下要本人合。 */
   const cardOf = (verify: MockSession) => [...sessions.values()].find((other) => other.summary.subject.kind === "card" && other.summary.subject.cardId === verify.summary.subject.cardId);
   const afterVerdict = (verify: MockSession) => {
     const card = cardOf(verify);
     const ws = card?.summary.workspace;
     if (!card || ws?.kind !== "worktree" || ws.mergedCommit) return;
     if (autoMerge) { mergeInto(card); return; }
-    card.summary = { ...card.summary, workspace: { ...ws, needsMerge: { reason: "auto_merge_off", message: "「验收过就合回」关着，等你合" } } };
+    card.summary = { ...card.summary, workspace: { ...ws, needsMerge: { reason: "auto_merge_off", message: "「验收后自动合并」关着，等你合" } } };
   };
 
   const advance = (s: MockSession) => {
@@ -523,7 +523,7 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
     unpair: async () => { token = ""; },
     status: async () => ({
       deviceId: "00000000-0000-4000-8000-000000000001", version: "0.1.0-mock",
-      agents: [{ kind: "claude-code", installed: true, version: "2.1.318", path: null, loggedIn: true, authMethod: "claude.ai", subscriptionType: "max", loginExpiresAt: null, minimumVersion: "2.1.300", compatible: true, setup: { phase: "idle", startedAt: null, loginUrl: null, error: null } },
+      agents: [{ kind: "claude-code", installed: true, version: "2.1.318", path: null, loggedIn: true, authMethod: "claude.ai", subscriptionType: "max", planTier: "max_20x", loginExpiresAt: null, minimumVersion: "2.1.300", compatible: true, setup: { phase: "idle", startedAt: null, loginUrl: null, error: null } },
         { kind: "codex", installed: true, version: "0.159.2", path: null, loggedIn: codexIn, authMethod: codexIn ? "chatgpt" : null, subscriptionType: codexIn ? "pro" : null, loginExpiresAt: null, minimumVersion: "0.159.0", compatible: true,
           setup: { ...codexSetup, loginUrl: codexSetup.phase === "waiting_browser" ? "https://auth.openai.com/oauth/authorize?mock" : null, error: null } }],
       activeSessions: slots().running,

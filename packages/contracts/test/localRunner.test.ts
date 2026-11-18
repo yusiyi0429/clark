@@ -393,7 +393,7 @@ describe("本机程序契约", () => {
     expect(LOCAL_RUNNER_ROUTES.stopBackground).toEqual({ method: "POST", path: "/v1/sessions/:id/background/:itemId/stop", auth: true });
   });
 
-  it("交完收工是 done；验收过就合回是设置；没合回的卡带 needsMerge；合回结果按交回同步", () => {
+  it("交完收工是 done；验收后自动合并是设置；没合回的卡带 needsMerge；合回结果按交回同步", () => {
     const at = "2026-11-07T04:30:00.000Z";
     const sha = "a".repeat(40);
     const usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0 };
@@ -417,7 +417,7 @@ describe("本机程序契约", () => {
 
     const key = `${deviceId}:${sessionId}:12`;
     const merged = { handbackKey: key, merged: true, commit: sha, baseBranch: "main", reason: null, message: null, auto: true };
-    const held = { handbackKey: key, merged: false, commit: null, baseBranch: "main", reason: "auto_merge_off", message: "没开「验收过就合回」，等你合", auto: true };
+    const held = { handbackKey: key, merged: false, commit: null, baseBranch: "main", reason: "auto_merge_off", message: "没开「验收后自动合并」，等你合", auto: true };
     for (const m of [merged, held, { ...held, reason: "not_ready", message: "交回以后卡又改过" }, { ...merged, auto: false }]) expect(Value.Check(LocalMergeSync, m)).toBe(true);
     expect(Value.Check(LocalMergeSync, { ...held, reason: "busy" })).toBe(false);
     const batch = { deviceId, runnerVersion: "0.1.0", slots: { max: 3, running: 0, queued: 0 }, items: [{ key: `${deviceId}:${sessionId}:13`, sessionId, subject: card.subject, occurredAt: at, type: "merge", data: merged }] };

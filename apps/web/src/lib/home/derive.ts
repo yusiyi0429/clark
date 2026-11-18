@@ -114,7 +114,7 @@ function mergeOf({ cardId, at: when, ws, git }: { cardId: string; at: string; ws
   if (issue) return { state: "needs_merge", commit: null, baseBranch: base, reason: null, message: issue.text, at: when };
   if (ws?.kind !== "worktree") return null;
   if (ws.mergedCommit) return { state: "merged", commit: ws.mergedCommit, baseBranch: ws.baseBranch, reason: null, message: null, at: when };
-  // 本机验收过就自己试着合回（「验收过就合回」），合不了或关了才报 needsMerge 等你合；还没报的是正在合，不算等你。
+  // 本机验收过就自己试着合回（「验收后自动合并」），合不了或关了才报 needsMerge 等你合；还没报的是正在合，不算等你。
   if (ws.needsMerge) return { state: "needs_merge", commit: null, baseBranch: ws.baseBranch, reason: ws.needsMerge.reason, message: ws.needsMerge.message, at: when };
   return null;
 }

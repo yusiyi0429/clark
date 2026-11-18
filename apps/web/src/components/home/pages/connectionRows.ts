@@ -42,6 +42,16 @@ export function programRow(input: { phase: LocalPhase; status: TLocalStatusRespo
 
 const AGENT_NAME: Record<TLocalAgentStatus["kind"], string> = { "claude-code": "Claude Code", codex: "Codex" };
 
+/** 套餐名给人看（11/18）：Codex 照它源码里的显示名；Claude 有 planTier 按它（分得出 5x、20x），没有按 subscriptionType。只换显示，认不出的照原样。 */
+const PLAN_NAME: Record<TLocalAgentStatus["kind"], Record<string, string>> = {
+  codex: { prolite: "Pro 100", pro: "Pro 200", promax: "Pro 500", plus: "Plus" },
+  "claude-code": { max_5x: "Max 5x", max_20x: "Max 20x", max: "Max", pro: "Pro" },
+};
+const planName = (agent: TLocalAgentStatus) => {
+  const plan = agent.planTier ?? agent.subscriptionType;
+  return plan ? PLAN_NAME[agent.kind][plan] ?? plan : null;
+};
+
 /** Claude Code、Codex：没装、没登录是未连接（没登录给「连接」去登录），登录过期是已过期（重新授权），额度用完是用完。 */
 export function agentRow(agent: TLocalAgentStatus, now: number, exhausted = false): RowModel {
   const name = AGENT_NAME[agent.kind];
@@ -49,7 +59,7 @@ export function agentRow(agent: TLocalAgentStatus, now: number, exhausted = fals
   if (!agent.installed) return { key, name, sub: "没装", state: "disconnected", action: null };
   const version = agent.version ? agent.version : null;
   const old = !agent.compatible && agent.minimumVersion ? `要 ${agent.minimumVersion} 以上` : null;
-  const sub = [version, agent.subscriptionType, old].filter(Boolean).join(" · ") || null;
+  const sub = [version, planName(agent), old].filter(Boolean).join(" · ") || null;
   if (agent.setup.phase === "waiting_browser") return { key, name, sub: "等浏览器登录", state: "disconnected", action: null };
   if (!agent.loggedIn) return { key, name, sub, state: "disconnected", action: "login" };
   if (agent.loginExpiresAt && Date.parse(agent.loginExpiresAt) <= now) return { key, name, sub, state: "expired", action: "reauth" };

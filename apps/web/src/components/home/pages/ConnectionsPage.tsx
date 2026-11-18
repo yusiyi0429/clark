@@ -3,7 +3,7 @@
 /**
  * 「连接和技能」页的「连接」标签（设计 9.5、5.4.6、11.2、§17.2 第 22、31 条）。不写说明句。
  * - 我的：最上面是卡片网格——本机程序、飞书、本体、GitHub、飞书命令行、加过的工具（金蝶、其他）；
- *   下面是几组行：这台电脑（Claude Code 带订阅额度和每个窗口的明细、Codex、TokenHub、文件夹、同时跑、验收过就合回、带上个人配置、我的几台电脑）、
+ *   下面是几组行：这台电脑（Claude Code 带订阅额度和每个窗口的明细、Codex、TokenHub、文件夹（默认收起）、同时跑、验收后自动合并、带上个人配置、我的几台电脑）、
  *   我的账号（微信、让外部 AI 读天枢）、公司（公司本体、飞书应用，只看状态）。
  *   本机逻辑照插件页（components/local/PluginsPage.tsx）：配对好、没关联云端时自己关联一次；断开的正好是这台时当场重新关联。手机上不连本机，只列电脑。
  * - 可添加：还没加的工具预设（金蝶）和「其他工具」。
@@ -115,23 +115,11 @@ function ThisComputer({ me }: { me: Me | null }) {
               ))}
             </Row>
           ) : null}
-          <Row testId="row-folders" name="文件夹" sub={local.folders.length ? `${local.folders.length} 个` : null}
-            action={<HeroButton variant="tertiary" size="sm" onPress={() => void local.pickFolder()}>添加</HeroButton>}>
-            {local.folders.length || local.error ? <>
-              {local.folders.map((folder) => (
-                <div key={folder.id} className={p.sub} title={folder.path}>
-                  <b>{folder.label}</b><span className={p.path}>{folder.path}</span><span className={p.grow} />
-                  <HeroButton variant="ghost" size="sm" isIconOnly title="移除" aria-label={`移除 ${folder.label}`}
-                    onPress={() => actions.run(`folder:${folder.id}`, async () => { await local.runner.removeFolder(folder.id); await local.refresh(); })}><X {...ICON} /></HeroButton>
-                </div>
-              ))}
-              {local.error ? <p className={p.error} role="alert">{local.error}</p> : null}
-            </> : null}
-          </Row>
+          <Folders run={actions.run} />
           <Row testId="row-concurrency" name="同时跑" action={<Concurrency value={status.settings.maxConcurrent} onPick={(maxConcurrent) => patch({ maxConcurrent })} />}>
             {status.settings.maxConcurrent > MANY_SESSIONS ? <p className={p.warn}>超过 {MANY_SESSIONS} 个，电脑和额度可能吃紧</p> : null}
           </Row>
-          <SwitchRow testId="row-auto-merge" name="验收过就合回" checked={status.settings.autoMerge} onChange={(autoMerge) => patch({ autoMerge })} />
+          <SwitchRow testId="row-auto-merge" name="验收后自动合并" checked={status.settings.autoMerge} onChange={(autoMerge) => patch({ autoMerge })} />
           <SwitchRow testId="row-personal-config" name="带上个人配置" checked={status.settings.includePersonalConfigByDefault}
             onChange={(value) => actions.run("settings", () => local.setIncludePersonal(value))} />
         </> : null}
@@ -141,6 +129,32 @@ function ThisComputer({ me }: { me: Me | null }) {
       {sourceDialog ? <AddSourceDialog source={sourceDialog.source} onClose={() => setSourceDialog(null)} /> : null}
       {tokenHubOpen ? <TokenHubDialog onClose={() => setTokenHubOpen(false)} onConnect={async (apiKey) => { await local.runner.connectTokenHub(apiKey); await local.refresh(); }} /> : null}
     </Section>
+  );
+}
+
+/**
+ * 文件夹（本人 11/18）：默认收起，只有「文件夹 N 个」和「添加」；点「文件夹 N 个」展开收起，不记住。
+ * 刚加了文件夹就展开，看得到新加的那个；没选上之类的报错收没收起都显示。
+ */
+export function Folders({ run }: { run: (key: string, work: () => Promise<unknown>) => void }) {
+  const local = useLocalRunner();
+  const [open, setOpen] = useState(false);
+  const add = async () => { if (await local.pickFolder()) setOpen(true); };
+  return (
+    <Row testId="row-folders" name="文件夹" sub={local.folders.length ? `${local.folders.length} 个` : null}
+      fold={local.folders.length ? { open, onToggle: () => setOpen(!open) } : undefined}
+      action={<HeroButton variant="tertiary" size="sm" onPress={() => void add()}>添加</HeroButton>}>
+      {(open && local.folders.length) || local.error ? <>
+        {open ? local.folders.map((folder) => (
+          <div key={folder.id} className={p.sub} title={folder.path}>
+            <b>{folder.label}</b><span className={p.path}>{folder.path}</span><span className={p.grow} />
+            <HeroButton variant="ghost" size="sm" isIconOnly title="移除" aria-label={`移除 ${folder.label}`}
+              onPress={() => run(`folder:${folder.id}`, async () => { await local.runner.removeFolder(folder.id); await local.refresh(); })}><X {...ICON} /></HeroButton>
+          </div>
+        )) : null}
+        {local.error ? <p className={p.error} role="alert">{local.error}</p> : null}
+      </> : null}
+    </Row>
   );
 }
 

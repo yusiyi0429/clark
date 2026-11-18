@@ -5,7 +5,7 @@
  * 本人是谁（session）、订阅的额度块（和右栏的额度行同一套数：quotaRows）。
  */
 import { useEffect, useState, type ReactNode, type Ref } from "react";
-import { Check, LoaderCircle, Plus } from "lucide-react";
+import { Check, ChevronDown, LoaderCircle, Plus } from "lucide-react";
 import { HeroButton } from "@/components/HeroButton";
 import { Switch } from "@/components/ui/Switch";
 import { browserApi } from "@/lib/api/client";
@@ -33,24 +33,35 @@ export const STATE_WORD: Record<ConnState, string> = {
   connected: "已连接", disconnected: "未连接", expired: "已过期", exhausted: "用完", unauthorized: "未授权", unreachable: "连不上", unknown: "未知", not_enabled: "未开通",
 };
 
-/** 一行：名字（14/20）+ 小字（12/16，可以没有）、状态词、一个动作；高 48。children 是跟在行下面的（额度、文件夹、展开的面板）。 */
-export function Row({ name, tag, sub, state, action, children, testId }: {
+/**
+ * 一行：名字（14/20）+ 小字（12/16，可以没有）、状态词、一个动作；高 48。children 是跟在行下面的（额度、文件夹、展开的面板）。
+ * fold 给了，名字和小字是一个能展开收起的按钮（后面一个 ChevronDown，展开时转过来）；动作在按钮外面，点它不展开收起。
+ */
+export function Row({ name, tag, sub, state, action, fold, children, testId }: {
   name: ReactNode;
   /** 名字后面的中性 chip（「这台」）。 */
   tag?: ReactNode;
   sub?: ReactNode;
   state?: ConnState | null;
   action?: ReactNode;
+  fold?: { open: boolean; onToggle: () => void };
   children?: ReactNode;
   testId?: string;
 }) {
+  const text = (
+    <span className={p.rowText}>
+      <span className={p.rowName}><span>{name}</span>{tag ? <span className={p.chip}>{tag}</span> : null}</span>
+      {sub ? <span className={p.rowSub}>{sub}</span> : null}
+    </span>
+  );
   return (
     <li data-testid={testId}>
       <div className={p.row}>
-        <span className={p.rowText}>
-          <span className={p.rowName}><span>{name}</span>{tag ? <span className={p.chip}>{tag}</span> : null}</span>
-          {sub ? <span className={p.rowSub}>{sub}</span> : null}
-        </span>
+        {fold ? (
+          <button type="button" className={`${p.rowButton} ${p.fold}`} aria-expanded={fold.open} onClick={fold.onToggle}>
+            {text}<ChevronDown {...ICON} aria-hidden className={p.rowChevron} data-open={fold.open ? "" : undefined} />
+          </button>
+        ) : text}
         {state ? <span className={p.state} data-state={state}>{STATE_WORD[state]}</span> : null}
         {action ? <span className={p.action}>{action}</span> : null}
       </div>
@@ -59,7 +70,7 @@ export function Row({ name, tag, sub, state, action, children, testId }: {
   );
 }
 
-/** 开关行（带上个人配置、验收过就合回、飞书推送）：整行是一个开关按钮（components/ui/Switch），名字在左、开关在右。 */
+/** 开关行（带上个人配置、验收后自动合并、飞书推送）：整行是一个开关按钮（components/ui/Switch），名字在左、开关在右。 */
 export function SwitchRow({ name, sub, checked, disabled, onChange, testId }: {
   name: string;
   sub?: ReactNode;
