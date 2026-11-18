@@ -781,3 +781,11 @@ button.bgLabel:hover { background: var(--default-soft); }
 :global(:root:has([data-type-scale="one"])) .sendTo b, :global(:root:has([data-type-scale="one"])) .attName b { overflow: visible; white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
 /* 用量一格的「暂时读不到」（额度读不到时，排在名字和数之间，数照旧靠右）：淡色、不折成一字一行。 */
 .usageNote { flex: none; color: var(--ink-faint); }
+
+/* 上下文圆环点开（本人 11/18）：两行，占用和「压缩」。 */
+.contextPop { min-width: 0; }
+.contextDialog { display: grid; justify-items: start; gap: var(--space-2); padding: var(--space-2); outline: none; }
+/* 会话面板的行：上下文到八成时行尾一颗小圆环（同输入框下那颗到八成的颜色），悬停出「…」时让开。 */
+.subContext { display: inline-grid; flex: none; place-items: center; }
+.subContext .usageRing circle:last-child { stroke: var(--warning); }
+.subItem:is(:hover, :focus-within, :has(> .rowMore[data-open])) .subContext { visibility: hidden; }

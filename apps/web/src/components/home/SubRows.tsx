@@ -10,9 +10,10 @@ import { cardHref, subQueueText, topicHref } from "@/lib/home/derive";
 import type { SubSession } from "@/lib/home/types";
 import { LocalContext, latestSessionFor } from "@/lib/local/LocalRunnerProvider";
 import { runLabel } from "@/lib/local/runModel";
-import { running } from "@/lib/local/sessionView";
+import { contextUsage, running } from "@/lib/local/sessionView";
 import { showUnseen, type SeenKind, type SeenMarks } from "@/lib/home/seen";
 import { showWorkspaceToast } from "@/lib/toast";
+import { Ring } from "./InputFooter";
 import { useNameTip } from "./NameTip";
 import { RowMenu, conflictText, useLongPress, type RowMenuItem } from "./RowMenu";
 import type { IconState } from "./StateIcon";
@@ -138,6 +139,8 @@ export function SubRow({ sub, view, go, status = null }: { sub: SubSession; view
   // 停止只在这台电脑上跑着时有（本机直接停）；会话照子会话页的认法（这张卡、这个专题最近的那个）。
   const session = local ? latestSessionFor(local.sessions, sub.kind === "card" ? { cardId: sub.id } : { topicId: sub.id }) : null;
   const stoppable = !!session && running(session.status);
+  // 上下文到八成（本人 11/18）：行尾一颗小圆环，颜色同输入框下那颗到八成时，不带字；低于八成什么都不加
+  const context = contextUsage(session?.context);
   // 行尾「…」（35 条）：重命名、标为已读、停止（在跑时）、归档、删除（进回收站）。
   const menuItems: RowMenuItem[] = actions ? [
     { id: "rename", label: "重命名", run: () => setRenaming(true) },
@@ -157,6 +160,7 @@ export function SubRow({ sub, view, go, status = null }: { sub: SubSession; view
         <span ref={name.textRef} className={h.subName}>{sub.title}</span>
         {heldBy ? <span className={h.subReason} data-testid="sub-held">等「{heldBy.title}」</span> : null}
         {status ? <span className={h.subStatus} data-testid="sub-status">{status}</span> : null}
+        {context?.warn ? <span className={h.subContext} data-tone="warning" role="img" aria-label={`上下文 ${context.percent}%`} data-testid="sub-context"><Ring percent={context.percent} /></span> : null}
         {dot ? <span className={h.subDot} data-tone={dot.tone} role="img" aria-label={dot.label} data-testid="sub-dot"><i aria-hidden /></span> : null}
       </button>
       {name.tip}

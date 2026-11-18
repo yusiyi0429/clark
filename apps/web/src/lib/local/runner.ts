@@ -128,6 +128,8 @@ export interface LocalRunner {
   answerQuestion(id: string, requestId: string, body: TLocalQuestionAnswerRequest): Promise<TLocalSessionSummary>;
   /** 停会话里的一个后台任务（子 agent、后台命令），会话本身不停；不在跑、进程已退出、没有这一项是 409。 */
   stopBackground(id: string, itemId: string): Promise<TLocalSessionSummary>;
+  /** 压缩上下文（本人 11/18，上下文圆环点开「压缩」）：压完才回，摘要的 context 是压完的；一轮在跑、正在压、没压成是 409。 */
+  compactSession(id: string): Promise<TLocalSessionSummary>;
   /** 开工前看这次会怎么跑：落到哪个来源的哪个模型（actual 为 null）。 */
   previewRun(body: TLocalRunPreviewRequest): Promise<TLocalRun>;
   /** 改一件 Task 的预算（先存天枢再交给本机）：用完停着等的马上接着做。 */

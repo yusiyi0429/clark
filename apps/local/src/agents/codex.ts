@@ -10,7 +10,7 @@ import { codexEnv, CodexRpcError, openCodex, withCodex, type CodexBin, type Code
 import { linkLarkSkills } from "./feishuPlugin.js";
 import { CONTEXT_COMPACTED, ContextReporter } from "./contextUsage.js";
 import { modeAllows, outsidePaths, permissionSummary, touchedPaths, type PathScope } from "./pathGuard.js";
-import { AgentStartError, type AgentAdapter, type AgentLaunch, type AgentRun, type PermissionAnswer, type TurnModels } from "./types.js";
+import { AgentStartError, type AgentAdapter, type AgentLaunch, type AgentRun, type CompactResult, type PermissionAnswer, type TurnModels } from "./types.js";
 
 /** 11/10 实测基于 codex-cli 0.159.2（app-server 的 turn/steer、两种批准、mcpServer/elicitation 都在稳定接口里）。 */
 export const MIN_CODEX_VERSION = "0.159.0";
@@ -61,6 +61,9 @@ function errorKindOf(info: unknown): string {
   return "other";
 }
 
+/** 压缩途中进程没了、Codex 不接：没压成，也没花。 */
+const compactFailed = (text: string): CompactResult => ({ ok: false, usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: null }, text });
+
 /** reason：Codex 请求批准时给的理由（主循环第 64 条，有才有）。 */
 interface Pending { kind: "command" | "file" | "mcp"; rpcId: number | string; steps: { tool: string; input: Record<string, unknown> }[]; hint: string | null; turnId: string; reason?: unknown }
 
@@ -89,6 +92,8 @@ export class CodexRun implements AgentRun {
   /** 上下文用了多少（设计 17.2 第 42 条）：最近一次模型回复后 Codex 报的（最近一次请求的 token 数、模型上限）。 */
   private readonly context = new ContextReporter((e) => this.emit(e));
   private contextNow: { used: number; max: number | null } | null = null;
+  /** 正在压缩上下文（thread/compact/start 开的那一轮）：压完交回结果。这一轮不报 agent_info、turn_end。 */
+  private compacting: ((r: CompactResult) => void) | null = null;
   private markReported: () => void = () => {};
   private readonly exitReported = new Promise<void>((r) => { this.markReported = r; });
   lastTurn: TurnModels | null = null;
@@ -106,6 +111,8 @@ export class CodexRun implements AgentRun {
     let errBuf = "";
     rpc.child.stderr.setEncoding("utf8").on("data", (d: string) => { errBuf = (errBuf + d).slice(-2_000); });
     rpc.child.on("exit", (code) => {
+      this.compacting?.(compactFailed("执行方进程已结束"));
+      this.compacting = null;
       for (const fn of this.exitFns) fn(code);
       this.markReported();
     });
@@ -149,6 +156,19 @@ export class CodexRun implements AgentRun {
     if (this.starting) await this.starting;
     if (!this.turnId) return;
     await this.rpc.request("turn/interrupt", { threadId: this.threadId, turnId: this.turnId }, 5_000).catch(() => {});
+  }
+
+  /** 压缩上下文（0.170.0 的 thread/compact/start，回 {} 以后照一轮的样子报 turn/started、contextCompaction、turn/completed）。 */
+  compact(): Promise<CompactResult> {
+    if (this.rpc.exited) return Promise.resolve(compactFailed("执行方进程已结束"));
+    return new Promise((resolve) => {
+      this.compacting = resolve;
+      this.rpc.request("thread/compact/start", { threadId: this.threadId }).catch((e: unknown) => {
+        if (this.compacting !== resolve) return;
+        this.compacting = null;
+        resolve(compactFailed(e instanceof Error ? e.message : String(e)));
+      });
+    });
   }
 
   respondPermission(requestId: string, a: PermissionAnswer): boolean {
@@ -274,6 +294,7 @@ export class CodexRun implements AgentRun {
         this.turnStartUsage = this.usage;
         this.requests = 0;
         this.lastText = null;
+        if (this.compacting) return; // 压缩不算一轮
         this.emit({ type: "agent_info", agent: "codex", version: this.version, model: this.model, permissionMode: this.mode });
         return;
       }
@@ -383,6 +404,13 @@ export class CodexRun implements AgentRun {
         this.retried = false;
         if (kind === "auth") this.emit({ type: "notice", level: "error", code: "auth_required", text: "Codex 还没登录或登录已失效，请在天枢里登录 Codex。" });
         if (this.contextNow) this.context.report(this.contextNow.used, this.contextNow.max, true);
+        const compacted = this.compacting;
+        if (compacted) {
+          // 压完了：不报 turn_end，交回结果（压完的用量上面刚报过）
+          this.compacting = null;
+          compacted({ ok: !isError, usage, text: isError && turn.error?.message ? String(turn.error.message) : null });
+          return;
+        }
         this.emit({
           type: "turn_end", isError,
           text: isError && turn.error?.message ? String(turn.error.message) : this.lastText,

@@ -8,6 +8,7 @@
 //   slow              一直跑，等停下或插话（插话后回一句 heard: …）
 //   compact           先压缩一次上下文（contextCompaction），再回一句
 //   ctx <n>           这一次请求用了 n 个 token（上下文用了多少），再回一句
+//   （thread/compact/start：单独压缩一次，压完这一次请求用了 2 万）
 //   stream <话>       一个字一个字写出这句（item/agentMessage/delta）；streamcut 写到一半出错
 //   别的              回一句 echo: <话>
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -169,6 +170,25 @@ process.stdin.setEncoding("utf8").on("data", (d) => {
         turn = { id: `turn-${++n}`, cwd: process.cwd(), done: false, steer: [] };
         reply({ turn: { id: turn.id, status: "inProgress" } });
         void runTurn(turn, text, p.input, p.clientUserMessageId);
+        break;
+      }
+      // 压缩上下文（0.170.0 的 thread/compact/start，回 {}）：照一轮的样子报 turn/started、contextCompaction、用量、turn/completed（不能插话）
+      case "thread/compact/start": {
+        if (turn) { fail("turn in progress"); break; }
+        const t = { id: `turn-${++n}`, cwd: process.cwd(), done: false, steer: [] };
+        turn = t;
+        reply({});
+        setTimeout(() => {
+          note("turn/started", { threadId: thread, turn: { id: t.id, status: "inProgress" } });
+          const c = item("contextCompaction", {});
+          note("item/started", { item: c, threadId: thread, turnId: t.id });
+          note("item/completed", { item: c, threadId: thread, turnId: t.id });
+          total = { ...total, totalTokens: total.totalTokens + 15, inputTokens: total.inputTokens + 10, outputTokens: total.outputTokens + 5 };
+          note("thread/tokenUsage/updated", { threadId: thread, turnId: t.id, tokenUsage: { total, last: { ...total, totalTokens: 20000 }, modelContextWindow: 200000 } });
+          t.done = true;
+          turn = null;
+          note("turn/completed", { threadId: thread, turn: { id: t.id, status: "completed", error: null, durationMs: 80 } });
+        }, 20);
         break;
       }
       case "turn/steer":

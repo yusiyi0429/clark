@@ -277,6 +277,22 @@ function streamTurn(text, opt) {
   tick();
 }
 
+/**
+ * 收到的话是 /compact（Claude Code 斜杠命令在 -p 里当普通输入发进来就执行）：照它的样子报 init、compact_boundary（manual）、
+ * 一条命令输出，result 的 result 是空的；之后读上下文用配置 compactTo（默认 2 万 / 20 万）。compactMs：压多久。
+ */
+let compacted = null;
+function compactTurn() {
+  appendFileSync(TURNS, JSON.stringify({ compact: true, sid }) + "\n");
+  out({ type: "system", subtype: "init", session_id: sid, model: initModel(), permissionMode: "default", claude_code_version: "2.1.318" });
+  turn = { permId: null, work: true, timer: setTimeout(() => {
+    out({ type: "system", subtype: "compact_boundary", session_id: sid, compact_metadata: { trigger: "manual", pre_tokens: 190000 } });
+    out({ type: "user", message: { role: "user", content: "<local-command-stdout>Compacted </local-command-stdout>" }, parent_tool_use_id: null, session_id: sid });
+    compacted = readCfg().compactTo ?? { totalTokens: 20000, maxTokens: 200000 };
+    finish(true, "");
+  }, readCfg().compactMs ?? 20) };
+}
+
 function finish(ok, text) {
   out({ type: "result", subtype: ok ? "success" : "error_during_execution", is_error: !ok, result: text, duration_ms: 12, total_cost_usd: 0.01 * turns,
     usage: { input_tokens: 3, output_tokens: 5, cache_read_input_tokens: 7, cache_creation_input_tokens: 11, iterations: [] },
@@ -315,7 +331,7 @@ rl.on("line", (line) => {
     out({ type: "control_response", response: { subtype: "success", request_id: msg.request_id, response: usage } });
   } else if (msg.type === "control_request" && msg.request.subtype === "get_context_usage") {
     // 上下文用了多少（11/10 实测 2.1.318 的形状，只留本机用到的字段）：配置 context 可改（false 是老版本、不认这个请求），默认每轮涨一点
-    const c = readCfg().context;
+    const c = compacted ?? readCfg().context;
     if (c === false) { out({ type: "control_response", response: { subtype: "error", request_id: msg.request_id, error: "Unsupported control request subtype: get_context_usage" } }); return; }
     const usage = c ?? { totalTokens: 18000 + 1000 * turns, maxTokens: 200000 };
     out({ type: "control_response", response: { subtype: "success", request_id: msg.request_id, response: { ...usage, percentage: Math.round((usage.totalTokens / usage.maxTokens) * 100), model: initModel() } } });
@@ -387,7 +403,8 @@ rl.on("line", (line) => {
     lifecycle(msg.uuid, "queued");
     if (turn && readCfg().holdInterjections) { held.push({ id: msg.uuid, text: msg.message.content }); return; }
     lifecycle(msg.uuid, "started");
-    if (turn) {
+    if (!turn && msg.message.content === "/compact") compactTurn();
+    else if (turn) {
       // 进行中插话：下一个工具步骤之前读到。
       appendFileSync(TURNS, JSON.stringify({ interjection: msg.message.content, sid }) + "\n");
       out({ type: "assistant", message: { content: [{ type: "text", text: `插话收到：${msg.message.content}` }] }, parent_tool_use_id: null });

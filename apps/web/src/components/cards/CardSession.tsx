@@ -256,7 +256,7 @@ export function CardSession({ cardId, embedded = false, waiting, queued = null, 
   const model = (session ? sessionModelText(session, local.models.find((entry) => entry.id === session.modelProfileId)?.efforts) : null) ?? ((label) => (label ? { label, title: null } : null))(runLabel(session?.run) ?? run?.modelLabel ?? item.card?.model?.label ?? null);
   const place = session?.workspace ? { name: shortPlace(session.workspace), title: placeText(session.workspace), path: placePath(session.workspace) } : null;
   const composer = agent && (session || !embedded)
-    ? <SessionComposer label={`给${item.title}插话`} disabled={!canAct} onSend={onSend} mode={mode} dock={dock} context={contextUsage(view.context ?? session?.context)} subject={{ kind: "card", id: cardId }} place={place} model={model ? { label: model.label, title: model.title ?? undefined } : null}
+    ? <SessionComposer label={`给${item.title}插话`} disabled={!canAct} onSend={onSend} mode={mode} dock={dock} context={contextUsage(view.context ?? session?.context)} onCompact={session ? () => local.runner.compactSession(session.id).then(() => local.refresh()) : undefined} subject={{ kind: "card", id: cardId }} place={place} model={model ? { label: model.label, title: model.title ?? undefined } : null}
       models={models} pinned={pinned} fill={supply ? { text: supply.text, nonce: supply.nonce } : null}
       busy={sessionRunning} onStop={() => void control("interrupt").catch(() => showWorkspaceToast({ text: "没停下" }))} />
     : <div className={s.composerDock}>{pinned ? <div className={s.pinned} data-testid="pinned">{pinned}</div> : null}{dock}</div>;

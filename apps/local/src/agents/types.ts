@@ -1,4 +1,4 @@
-import type { TLocalAgentKind, TLocalEffort, TLocalPermissionMode } from "@warmap/contracts";
+import type { TLocalAgentKind, TLocalEffort, TLocalPermissionMode, TLocalUsage } from "@warmap/contracts";
 import type { EventBody } from "../eventLog.js";
 import type { ResolvedModel } from "../models.js";
 
@@ -51,6 +51,8 @@ export interface AgentLaunch {
   permissionMode: TLocalPermissionMode;
 }
 
+export interface CompactResult { ok: boolean; usage: TLocalUsage; text: string | null }
+
 export interface PermissionAnswer {
   allow: boolean;
   message?: string;
@@ -86,6 +88,12 @@ export interface AgentRun {
    * 本人批了计划（ExitPlanMode）时执行方自己转成 auto，报一条 permission_mode 事件（by plan_approved）。
    */
   setPermissionMode(mode: TLocalPermissionMode): Promise<boolean>;
+  /**
+   * 压缩上下文（契约 POST /v1/sessions/:id/compact）：Claude Code 往会话里发 /compact，Codex 调 thread/compact/start。只在两轮之间调。
+   * 这一次不算一轮：不报 agent_info、turn_end；压缩照常报 notice context_compacted，压完读一次上下文报 context_usage 再回。
+   * 回这一次花的用量；执行方没压成（出错、进程没了）ok 为 false，text 是它的原话。
+   */
+  compact(): Promise<CompactResult>;
   /** 强停：只杀本进程树。 */
   kill(): Promise<void>;
   /** 说完了：关掉输入，让执行方自己退出（验收员交完结论用）；一会儿还不退就强停。 */

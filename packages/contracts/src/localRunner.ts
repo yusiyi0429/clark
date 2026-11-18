@@ -1369,8 +1369,12 @@ export const LocalSendMessageRequest = Type.Object({
   agreementRevision: Type.Optional(Type.Integer({ minimum: 1 })),
 }, strict);
 export const LocalSendMessageResponse = Type.Object({
-  /** next_step：进行中，下一步前送达；new_turn：开了新一轮；resumed：进程已退出，续接后送达。 */
-  delivery: Type.Union([Type.Literal("next_step"), Type.Literal("new_turn"), Type.Literal("resumed")]),
+  /**
+   * next_step：进行中，下一步前送达；new_turn：开了新一轮；resumed：进程已退出，续接后送达。
+   * compact：这句是手打的 /compact，照 POST /v1/sessions/:id/compact 压缩上下文（开始压了就回，不等压完），不记成一句话、没有 user_message；
+   * 在跑一轮、正在压缩时照那边回 409。
+   */
+  delivery: Type.Union([Type.Literal("next_step"), Type.Literal("new_turn"), Type.Literal("resumed"), Type.Literal("compact")]),
   /** 这句话的编号（请求带了就是它，没带是本机给的），事件流里 user_message 和 receipt 按它对上。 */
   messageId: Uuid,
 }, strict);
@@ -1410,6 +1414,12 @@ export const LocalQuestionAnswerRequest = Type.Object({
  * 停下以后这一项的 state 变成 stopped（事件 background 和同步条目 background 都会报）。不在跑、进程已退出、没有这一项回 409。
  */
 
+/**
+ * POST /v1/sessions/:id/compact（体 {}）：压缩上下文（本人 11/18，子会话输入框下的上下文圆环点开「压缩」；手打 /compact 也走这里），回执是 LocalSessionActionResponse。
+ * Claude Code 往会话里发 /compact，Codex 调 thread/compact/start；进程不在就先续接上。压完才回，摘要的 context 已是压完读到的用量（事件流里随 context_usage、
+ * notice context_compacted 更新）。压缩不算一轮：不记成本人说的一句话，没有 agent_info、turn_end，不报 stopped，状态不变；花的用量照记（cost 同步条目）。
+ * 一轮在跑（含在等批准、在问本人、启动中、排队中）、正在压缩时回 409；执行方没压成也回 409（message 带它的原话）。压缩途中说话回 409。
+ */
 /** POST /v1/sessions/:id/interrupt（停下，会话保留）与 /kill（强停，杀本会话进程树）的回执。 */
 export const LocalSessionActionResponse = Type.Object({ session: LocalSessionSummary }, strict);
 /**
@@ -2189,6 +2199,7 @@ export const LOCAL_RUNNER_ROUTES = {
   mergeSession: { method: "POST", path: "/v1/sessions/:id/merge", auth: true },
   answerQuestion: { method: "POST", path: "/v1/sessions/:id/questions/:requestId", auth: true },
   stopBackground: { method: "POST", path: "/v1/sessions/:id/background/:itemId/stop", auth: true },
+  compactSession: { method: "POST", path: "/v1/sessions/:id/compact", auth: true },
   listBudgets: { method: "GET", path: "/v1/budgets", auth: true },
   putBudget: { method: "PUT", path: "/v1/budgets", auth: true },
   previewRun: { method: "POST", path: "/v1/runs/preview", auth: true },
