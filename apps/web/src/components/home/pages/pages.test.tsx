@@ -78,6 +78,15 @@ describe("连接页每一行（设计 9.5、5.4.6）", () => {
     expect(codex("enterprise")).toBe("0.170.0 · enterprise");
   });
 
+  it("Claude 的 planTier 认不出时按 subscriptionType 显示", () => {
+    const claude = (patch: Partial<TLocalAgentStatus>) => agentRow(agent(patch), NOW).sub;
+    expect(claude({ subscriptionType: "max", planTier: "max_40x" })).toBe("2.1.318 · Max");
+    expect(claude({ subscriptionType: "pro", planTier: "default_claude_ai" })).toBe("2.1.318 · Pro");
+    // 两个都认不出：照原样，planTier 优先。
+    expect(claude({ subscriptionType: "team", planTier: "team_tier" })).toBe("2.1.318 · team_tier");
+    expect(claude({ subscriptionType: "team" })).toBe("2.1.318 · team");
+  });
+
   it("Claude 有 planTier 时显示 Max 20x", () => {
     const claude = (patch: Partial<TLocalAgentStatus>) => agentRow(agent(patch), NOW).sub;
     expect(claude({ subscriptionType: "max", planTier: "max_20x" })).toBe("2.1.318 · Max 20x");
@@ -85,7 +94,6 @@ describe("连接页每一行（设计 9.5、5.4.6）", () => {
     // 没有 planTier 时按 subscriptionType；认不出的照原样。
     expect(claude({ subscriptionType: "max" })).toBe("2.1.318 · Max");
     expect(claude({ subscriptionType: "pro" })).toBe("2.1.318 · Pro");
-    expect(claude({ subscriptionType: "max", planTier: "max_40x" })).toBe("2.1.318 · max_40x");
     // 连接页「这台电脑」那一行也是这个名字。
     const html = withLocal(<ConnectionsPage go={() => undefined} />, "ready", status({ agents: [agent({ planTier: "max_20x" })] }));
     expect(text(html.split('data-testid="row-agent:claude-code"')[1]!.split("</li>")[0]!)).toContain("Claude Code 2.1.318 · Max 20x 已连接");

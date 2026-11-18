@@ -42,14 +42,18 @@ export function programRow(input: { phase: LocalPhase; status: TLocalStatusRespo
 
 const AGENT_NAME: Record<TLocalAgentStatus["kind"], string> = { "claude-code": "Claude Code", codex: "Codex" };
 
-/** 套餐名给人看（11/18）：Codex 照它源码里的显示名；Claude 有 planTier 按它（分得出 5x、20x），没有按 subscriptionType。只换显示，认不出的照原样。 */
+/**
+ * 套餐名给人看（11/18）：Codex 照它源码里的显示名；Claude 先按 planTier 查（分得出 5x、20x），查不到再按 subscriptionType 查。
+ * 只换显示，两个都查不到才照原样，planTier 优先。
+ */
 const PLAN_NAME: Record<TLocalAgentStatus["kind"], Record<string, string>> = {
   codex: { prolite: "Pro 100", pro: "Pro 200", promax: "Pro 500", plus: "Plus" },
   "claude-code": { max_5x: "Max 5x", max_20x: "Max 20x", max: "Max", pro: "Pro" },
 };
 const planName = (agent: TLocalAgentStatus) => {
-  const plan = agent.planTier ?? agent.subscriptionType;
-  return plan ? PLAN_NAME[agent.kind][plan] ?? plan : null;
+  const names = PLAN_NAME[agent.kind];
+  const known = [agent.planTier, agent.subscriptionType].find((plan) => plan && names[plan]);
+  return known ? names[known]! : agent.planTier ?? agent.subscriptionType;
 };
 
 /** Claude Code、Codex：没装、没登录是未连接（没登录给「连接」去登录），登录过期是已过期（重新授权），额度用完是用完。 */
