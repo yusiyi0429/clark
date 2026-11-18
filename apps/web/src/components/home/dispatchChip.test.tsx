@@ -65,6 +65,17 @@ describe("伙伴主线的派活卡（本人 11/18）", () => {
     expect(onOpenSub).toHaveBeenCalledWith(expect.objectContaining({ kind: "topic", id: TOPIC }), "品牌建设");
   });
 
+  it("正在回答时这一轮只有派活卡，不画空卡片框", () => {
+    const dispatch = (value: DispatchCard) => <DispatchChip card={value} subs={[sub()]} projects={[project()]} waitingFolder={() => false} onOpenSub={vi.fn()} onOpenProject={vi.fn()} />;
+    const live = renderToStaticMarkup(<WorkTimeline blocks={[]} dispatch={dispatch} data={{
+      scope: "global", streaming: true, thinking: true, partial: "开了", send: vi.fn(), rescope: vi.fn(), steps: [], stage: "answering",
+      messages: [{ sequence: 1, role: "user", content: "首页换个深色" }], turnCards: [card()],
+    } as unknown as ConversationData} />);
+    // 小条照画，派活卡不占卡片框（同读历史那边）。
+    expect(live).toContain('data-testid="dispatch-chip"');
+    expect(live).not.toContain('data-testid="entry-cards"');
+  });
+
   it("手机上点小条全屏打开那个会话", () => {
     const go = vi.fn();
     // 手机上没有右边的面板位：去那个会话。

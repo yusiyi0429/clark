@@ -76,6 +76,8 @@ const isDispatch = (card: { kind: string }): card is DispatchCard => card.kind =
 
 export function WorkTimeline({ data, blocks, modelRule, dispatch }: { data: ConversationData; blocks: TimedBlock[]; modelRule?: (label: string) => ReactNode; dispatch?: (card: DispatchCard) => ReactNode }) {
   const dispatched = (cards: readonly { kind: string }[]) => (dispatch ? cards.filter(isDispatch).map((card) => <Fragment key={card.dispatchId}>{dispatch(card)}</Fragment>) : null);
+  // 正在回答那一块的卡：派活卡不占卡片框（同读历史那边的 rest），由 dispatched 画小条。
+  const turnEntries = (data.turnCards ?? []).filter((card) => card.kind !== "buddy_dispatch");
   const lastIndex = data.messages.length - 1;
   const last = data.messages[lastIndex];
   // 最新一条回答的选项画成它最后一个气泡下面的一排小胶囊，点了直接发出（设计 6.4）。
@@ -96,7 +98,7 @@ export function WorkTimeline({ data, blocks, modelRule, dispatch }: { data: Conv
       {data.thinking ? <ConversationThinking stage={data.stage} startedAt={data.startedAt} onStop={data.stop} route={data.route} progress={data.progress} steps={data.steps} thought={null} readScope={data.readScope} row={false} /> : null}
       {/* 伙伴这一轮的计划清单和出的卡（17.4，同 ConversationTimeline）：写完读回历史后挂在那条回答上。 */}
       {data.plan ? <PlanChecklist entries={data.plan.entries} collapsed={data.plan.collapsed} /> : null}
-      {data.turnCards?.length ? <EntryCards cards={data.turnCards} /> : null}
+      {turnEntries.length ? <EntryCards cards={turnEntries} /> : null}
       {dispatched(data.turnCards ?? [])}
     </ConversationStatusSlot>
   ) : null;
