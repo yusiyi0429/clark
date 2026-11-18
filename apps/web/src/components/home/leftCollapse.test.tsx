@@ -13,12 +13,18 @@ import { fromHome } from "@/lib/home/projects";
 const h = vi.hoisted(() => ({
   hooks: false, states: [] as unknown[], index: 0, effects: [] as (() => void)[],
   path: "/me/work", phone: false, collapsed: null as boolean | null,
+  /** 外壳右边面板位（HomeFrame 里第 7 个 useState，shown）一打开就是这个；undefined 照真的。 */
+  shown: undefined as string | null | undefined, frameIndex: 0,
 }));
 vi.mock("react", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react")>();
   return {
     ...actual,
     useState: (initial: unknown) => {
+      if (h.shown !== undefined && /^\s*at HomeFrame /.test(new Error().stack?.split("\n")[2] ?? "") && h.frameIndex++ === 6) {
+        if (initial !== null) throw new Error("HomeFrame 第 7 个 useState 不是面板位");
+        return [h.shown, () => undefined];
+      }
       if (!h.hooks) return actual.useState(initial);
       const index = h.index++;
       if (!(index in h.states)) h.states[index] = typeof initial === "function" ? (initial as () => unknown)() : initial;
@@ -50,9 +56,9 @@ const run = () => { h.hooks = true; h.index = 0; try { return useLeftCollapsed()
 const flush = () => h.effects.splice(0).forEach((effect) => effect());
 /** 新打开一页：状态清空，挂载后的 effect 跑一次。 */
 const open = () => { h.states = []; h.effects = []; run(); flush(); return run(); };
-const shell = () => renderToStaticMarkup(<HomeShell account={{ displayName: "孙铭泽", role: "member", personId: "p" }} />);
+const shell = () => { h.frameIndex = 0; return renderToStaticMarkup(<HomeShell account={{ displayName: "孙铭泽", role: "member", personId: "p" }} />); };
 
-afterEach(() => { vi.unstubAllGlobals(); h.path = "/me/work"; h.phone = false; h.collapsed = null; });
+afterEach(() => { vi.unstubAllGlobals(); h.path = "/me/work"; h.phone = false; h.collapsed = null; h.shown = undefined; });
 
 describe("左栏能收起（设计 4.1）", () => {
   it("收起记在这台电脑上", () => {
@@ -181,5 +187,59 @@ describe("左栏能收起（设计 4.1）", () => {
     expect(html).toContain('data-phone=""');
     expect(html).not.toContain("left-toggle");
     expect(html).not.toContain('data-left="closed"');
+  });
+});
+
+describe("伙伴主线看不到子会话（本人 11/18）", () => {
+  it("伙伴主线页头没有会话按钮", () => {
+    h.path = "/me/work/buddy";
+    const desk = shell();
+    expect(desk).toContain('data-testid="buddy-view"');
+    expect(desk).not.toContain("sessions-button");
+    h.phone = true;
+    const phone = shell();
+    expect(phone).toContain('data-testid="buddy-view"');
+    expect(phone).not.toContain("phone-sessions");
+    // 别的页面照旧有：会议页的页头、手机首屏。
+    h.path = "/me/work/meetings";
+    expect(shell()).toContain('data-testid="phone-sessions"');
+    h.path = "/me/work";
+    expect(shell()).toContain('data-testid="phone-sessions"');
+    h.phone = false;
+    h.path = "/me/work/meetings";
+    expect(shell()).toContain('data-testid="sessions-button"');
+  });
+
+  it("从项目对话开着会话面板切到伙伴主线，右侧面板不出；切回项目对话，面板还在", () => {
+    h.shown = "sessions";
+    h.path = "/me/work/projects/p1";
+    const project = shell();
+    expect(project).toMatch(/<div class="[^"]*"[^>]*data-panel="open"/);
+    expect(project).toContain('data-testid="side-sessions"');
+    h.path = "/me/work/buddy";
+    const buddy = shell();
+    expect(buddy).toMatch(/<div class="[^"]*"[^>]*data-panel="closed"/);
+    expect(buddy).not.toContain('data-testid="side-panel"');
+    expect(buddy).not.toContain("sessions-panel");
+    h.path = "/me/work/projects/p1";
+    expect(shell()).toContain('data-testid="side-sessions"');
+    // thread 同样当作关着。
+    h.shown = "thread";
+    h.path = "/me/work/buddy";
+    expect(shell()).toMatch(/<div class="[^"]*"[^>]*data-panel="closed"/);
+    // 首页、本月仍按项目分组列全部子会话。
+    h.shown = "sessions";
+    for (const path of ["/me/work", "/me/work/month/2026-11"]) {
+      h.path = path;
+      expect(shell()).toContain('data-testid="side-sessions"');
+    }
+  });
+
+  it("伙伴主线里卡片打开的文件面板照旧出", () => {
+    h.shown = "file";
+    h.path = "/me/work/buddy";
+    const html = shell();
+    expect(html).toMatch(/<div class="[^"]*"[^>]*data-panel="file"/);
+    expect(html).toMatch(/<aside[^>]*aria-label="文件"[^>]*data-testid="side-panel"/);
   });
 });
