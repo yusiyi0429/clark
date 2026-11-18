@@ -767,17 +767,15 @@ button.bgLabel:hover { background: var(--default-soft); }
 /* 发给、附件名：没有新首页外壳的独立页（/me/cards/:id、/me/topics/:id）也用，原样单行；新首页里放不下换行，不出省略号（本人 11/18）。 */
 :global(:root:has([data-type-scale="one"])) .sendTo { height: auto; min-height: var(--row-32); padding-block: 4px; }
 /* 输入框下沿（本人 11/18）：旧界面（/me/cards、/me/topics 也用这个输入框）照旧 28 高单行；新首页里名字长就换行，跟着长高。
- * 左边（文件夹）占剩下的；右边（模型、发给）按内容占，左边有字时最多一半，左边没字时可以占满；名字长就在自己那边里换行。 */
+ * 左边（文件夹）占剩下的；右边（模型、发给）按内容占，左边有字（文件夹名，或没绑文件夹时的「此电脑」）时最多一半，左边没字时可以占满；名字长就在自己那边里换行。 */
 :global(:root:has([data-type-scale="one"])) .barFoot { height: auto; min-height: 28px; }
 :global(:root:has([data-type-scale="one"])) .barFootSide:first-child { flex: 1 1 0; min-width: min-content; }
 :global(:root:has([data-type-scale="one"])) .barFootSide:last-child { flex: 0 1 auto; min-width: 0; justify-content: flex-end; }
-:global(:root:has([data-type-scale="one"])) .barFoot:has(> .barFootSide:first-child .footText) > .barFootSide:last-child { max-width: 50%; }
+:global(:root:has([data-type-scale="one"])) .barFoot:has(> .barFootSide:first-child :is(.footText, .sendTo)) > .barFootSide:last-child { max-width: 50%; }
 :global(:root:has([data-type-scale="one"])) .barFoot .sendTo { flex-shrink: 0; max-width: 100%; }
 :global(:root:has([data-type-scale="one"])) .footText { overflow: visible; white-space: normal; overflow-wrap: anywhere; }
 /* 胶囊、按钮里的一段字（.ellipsis）：新首页里换行；装它的胶囊跟着长高（月份页 Task 挂的项目）。 */
 :global(:root:has([data-type-scale="one"])) .ellipsis { overflow: visible; white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
 :global(:root:has([data-type-scale="one"])) .statusChip:has(> .ellipsis) { height: auto; min-height: 20px; }
-/* 手机上月份页：项目胶囊折到 Task 名下面，自己占一行，长名字照样换行；左边让出状态图标那一格（16 + 间距），和 Task 名对齐。 */
-.app[data-phone] .statusChip:has(> .ellipsis) { flex: 1 0 calc(100% - 16px - var(--space-2)); max-width: none; margin-left: calc(16px + var(--space-2)); justify-content: flex-start; text-align: left; }
 :global(:root:has([data-type-scale="one"])) .att { height: auto; min-height: 56px; }
 :global(:root:has([data-type-scale="one"])) .sendTo b, :global(:root:has([data-type-scale="one"])) .attName b { overflow: visible; white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }

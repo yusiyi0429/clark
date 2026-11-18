@@ -58,11 +58,24 @@ const CUTS = /text-overflow\s*:\s*ellipsis|line-clamp\s*:\s*[1-9]/;
 
 type Rule = { selectors: string[]; body: string };
 
+/** 按顶层逗号切选择器（:is(a, b) 里的逗号不切）。 */
+function topLevel(list: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < list.length; i += 1) {
+    if (list[i] === "(") depth += 1;
+    else if (list[i] === ")") depth -= 1;
+    else if (list[i] === "," && depth === 0) { parts.push(list.slice(start, i)); start = i + 1; }
+  }
+  return [...parts, list.slice(start)];
+}
+
 /** 叶子规则：去注释，按花括号切；@media / @container 里的规则照样收。 */
 function rules(file: string): Rule[] {
   const css = readFileSync(new URL(`../${file}`, import.meta.url), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
   return [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((match) => ({
-    selectors: match[1].split(",").map((selector) => selector.trim().replace(/\s+/g, " ")),
+    selectors: topLevel(match[1]).map((selector) => selector.trim().replace(/\s+/g, " ")),
     body: match[2],
   }));
 }
@@ -129,20 +142,39 @@ describe("新首页不出省略号（本人 11/18）", () => {
     expect(home(".barFootSide:first-child")).toMatch(/flex:\s*1 1 0/);
     expect(home(".barFootSide:last-child")).toMatch(/flex:\s*0 1 auto/);
     expect(home(".barFootSide:last-child")).toMatch(/min-width:\s*0/);
-    expect(home(".barFoot:has(> .barFootSide:first-child .footText) > .barFootSide:last-child")).toMatch(/max-width:\s*50%/);
+    expect(home(".barFoot:has(> .barFootSide:first-child :is(.footText, .sendTo)) > .barFootSide:last-child")).toMatch(/max-width:\s*50%/);
     expect(home(".barFoot .sendTo")).not.toMatch(/flex:\s*none/);
     expect(home(".barFoot .sendTo")).toMatch(/max-width:\s*100%/);
   });
 
+  // 手机上（新首页外壳的 data-phone）月份页那一行：Task 名占一整行，后面跟的胶囊（项目名或「挂到」）折到下面，和 Task 名的字对齐。
+  const phoneLine = () => rules("styles/home-pages.module.css").filter((rule) => rule.selectors.some((selector) => selector.includes("[data-phone]") && selector.includes(".monthTaskLine")));
+  const phoneBody = (part: string) => phoneLine().filter((rule) => rule.selectors.some((selector) => selector.endsWith(part))).map((rule) => rule.body).join(";");
+
   it("手机上月份页的项目胶囊单独占一行", () => {
-    const home = rules("styles/home.module.css");
-    const chip = home.filter((rule) => rule.selectors.some((selector) => selector.includes(".app[data-phone]") && selector.includes(".statusChip:has(> .ellipsis)")));
-    expect(chip.map((rule) => rule.body).join(";")).toMatch(/flex:\s*1 0 calc\(100% - /);
-    expect(chip.map((rule) => rule.body).join(";")).toMatch(/max-width:\s*none/);
-    // 一行里放不下就折到下一行：只在手机上（新首页外壳的 data-phone）。
-    const line = rules("styles/home-pages.module.css").filter((rule) => rule.selectors.some((selector) => selector.includes("[data-phone]") && selector.includes(".monthTaskLine")));
-    expect(line.map((rule) => rule.body).join(";")).toMatch(/flex-wrap:\s*wrap/);
+    expect(phoneBody(".monthTaskLine")).toMatch(/flex-direction:\s*column/);
+    expect(phoneBody(".monthTaskLine > button:first-child")).toMatch(/align-self:\s*stretch/);
+    expect(phoneBody(".monthTaskLine > * + *")).toMatch(/margin-left:\s*calc\(16px \+ var\(--space-2\)\)/);
     // 电脑上没有用不上的最大宽度。
-    expect(home.filter((rule) => rule.selectors.some((selector) => selector.includes(".statusChip:has(")) && /max-width:\s*20em/.test(rule.body))).toEqual([]);
+    expect(rules("styles/home.module.css").filter((rule) => rule.selectors.some((selector) => selector.includes(".statusChip:has(")) && /max-width:\s*20em/.test(rule.body))).toEqual([]);
+  });
+
+  it("手机上没挂项目时，挂到也单独占一行", () => {
+    // 跟在 Task 名后面的不管是项目名胶囊还是「挂到」，规则一样：选择器不认 .ellipsis，认位置。
+    expect(phoneLine().flatMap((rule) => rule.selectors).filter((selector) => selector.includes(".ellipsis"))).toEqual([]);
+    expect(phoneBody(".monthTaskLine > * + *")).toMatch(/max-width:\s*calc\(100% - 16px - var\(--space-2\)\)/);
+    expect(rules("styles/home.module.css").filter((rule) => rule.selectors.some((selector) => selector.includes("[data-phone]") && selector.includes(".statusChip"))).map((rule) => rule.selectors.join(", "))).toEqual([]);
+  });
+
+  it("手机上短项目名的胶囊按字宽，不拉满", () => {
+    expect(phoneBody(".monthTaskLine")).toMatch(/align-items:\s*flex-start/);
+    expect(phoneBody(".monthTaskLine > * + *")).toMatch(/flex:\s*none/);
+    expect(phoneBody(".monthTaskLine > * + *")).not.toMatch(/flex(-basis)?:[^;]*100%/);
+  });
+
+  it("下沿左边是没绑文件夹的「此电脑」时也算有字，右边最多一半", () => {
+    const all = rules("styles/home.module.css");
+    const capped = all.filter((rule) => /max-width:\s*50%/.test(rule.body) && rule.selectors.some((selector) => selector.includes(".barFoot:has(")));
+    expect(capped.flatMap((rule) => rule.selectors).join(" ")).toMatch(/:is\(\.footText, \.sendTo\)/);
   });
 });

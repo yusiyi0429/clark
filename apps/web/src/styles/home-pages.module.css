@@ -127,8 +127,11 @@ label.row:hover { background: var(--default-soft); }
 /* 当月（11/16 重新设计第 6 节）：Task 行尾项目那一格；标题下一行小字；Mission 里按验收时间点分段的段头；页头翻月。 */
 .monthTaskLine { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
 .monthTaskLine > button { flex: 1; min-width: 0; }
-/* 手机上放不下就折行：项目胶囊到 Task 名下面自己占一行（胶囊那一半写在 home.module.css 的 .app[data-phone]）。 */
-:global([data-phone]) .monthTaskLine { flex-wrap: wrap; }
+/* 手机上（新首页外壳的 data-phone）：Task 名占一整行；后面跟的胶囊（项目名或「挂到」）折到下面，按字宽，长了最多到整行、换行；
+ * 左边让出状态图标那一格（16 + 间距），和 Task 名的字对齐。 */
+:global([data-phone]) .monthTaskLine { flex-direction: column; align-items: flex-start; }
+:global([data-phone]) .monthTaskLine > button:first-child { align-self: stretch; }
+:global([data-phone]) .monthTaskLine > * + * { flex: none; max-width: calc(100% - 16px - var(--space-2)); margin-left: calc(16px + var(--space-2)); text-align: left; }
 .monthSummary { margin: 0 0 var(--space-2); padding: 0 var(--space-2); color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; font-variant-numeric: tabular-nums; }
 .segmentTitle { margin: var(--space-1) 0 0; padding: 4px var(--space-2); color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; font-variant-numeric: tabular-nums; }
 .monthNav { display: inline-flex; align-items: center; gap: var(--space-1); }
