@@ -88,7 +88,7 @@ describe("新首页的两种对话里：表情挂在气泡底边（设计 6.5）
   const inBubbles = (message: Message, store: Store | null) => renderToStaticMarkup(
     <ReactionContext.Provider value={store}><BubbleContext.Provider value={true}><ConversationTurn message={message} /></BubbleContext.Provider></ReactionContext.Provider>);
 
-  it("每块各挂各的：表情在那一块的底边，每块自己有加表情的按钮（悬停那一块才出）", () => {
+  it("每块各挂各的：表情在那一块的底边；底边上不再有加表情的按钮（挪到块旁边那一排）", () => {
     const store = { of: () => [{ part: 0, emoji: "👍" }, { part: 1, emoji: "❤️" }], toggle: () => undefined };
     const html = inBubbles({ ...answer, content: "第一段。\n\n第二段。" }, store);
     expect(html.match(/data-bubble="buddy"/g)).toHaveLength(2);
@@ -102,7 +102,7 @@ describe("新首页的两种对话里：表情挂在气泡底边（设计 6.5）
     expect(first).toMatch(/^<div[^>]*data-reactable=""/);
     expect(second).toMatch(/^<div[^>]*data-reactable=""/);
     expect(html).not.toMatch(/<article[^>]*data-reactable/);
-    expect(html.match(/data-testid="reaction-add"/g)).toHaveLength(2);
+    expect(html).not.toContain('data-testid="reaction-add"');
     // 卡片也是一块。
     const card = inBubbles({ ...answer, content: "先看这个。\n\n## 本周\n\n- 周二发清单\n- 周三确认" }, { of: () => [{ part: 1, emoji: "👍" }], toggle: () => undefined });
     expect(card.slice(card.indexOf("<section"), card.indexOf("</section>"))).toMatch(/aria-label="点赞"[^>]*>👍<\/button>/);

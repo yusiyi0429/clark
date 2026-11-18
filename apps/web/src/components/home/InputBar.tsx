@@ -23,7 +23,7 @@ import h from "@/styles/home.module.css";
 type Draft = { key: number; file: File; url: string | null };
 const MAX_HEIGHT = 168;
 
-export function InputBar({ placeholder, label, onSend, busy = false, interruptible = false, onStop, disabled = false, textRequired = false, context, footer, emoji = false, dock, draftKey, fill, onText, onHeight }: {
+export function InputBar({ placeholder, label, onSend, busy = false, interruptible = false, onStop, disabled = false, textRequired = false, context, quote, footer, emoji = false, dock, draftKey, fill, onText, onHeight }: {
   placeholder: string;
   /** 读屏念的名字；不给时念占位字（子会话不放占位字，名字从这里给）。 */
   label?: string;
@@ -38,6 +38,8 @@ export function InputBar({ placeholder, label, onSend, busy = false, interruptib
   /** 只带附件不说话能不能发（Chat 要有一句话；子会话可以只带附件）。 */
   textRequired?: boolean;
   context?: { label: string; onClear: () => void } | null;
+  /** 「回复」引用条（新首页两种对话，本人 11/18）：排法同「关于」胶囊；key 换了（点了一块的「回复」）输入框获得焦点。 */
+  quote?: { key: string; label: string; onClear: () => void } | null;
   /** 框下面那一行：left 上下文（发给、文件夹），right 模型和权限档。 */
   footer?: { left?: ReactNode; right?: ReactNode };
   /** 框下面那一行左边先放表情按钮（伙伴台、项目对话）：选的表情插到光标处。 */
@@ -92,6 +94,10 @@ export function InputBar({ placeholder, label, onSend, busy = false, interruptib
     requestAnimationFrame(() => { const element = field.current; element?.focus({ preventScroll: true }); element?.setSelectionRange(fill.text.length, fill.text.length); });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 只响应新的一次填入
   }, [fill?.nonce]);
+  useEffect(() => {
+    if (quote) field.current?.focus({ preventScroll: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 只在挂上新的一条时
+  }, [quote?.key]);
   // 一行起，跟着字往上长，最多 168（7 行），再多在框里滚。
   useLayoutEffect(() => {
     const element = field.current;
@@ -168,6 +174,11 @@ export function InputBar({ placeholder, label, onSend, busy = false, interruptib
         {context ? (
           <span className={h.barContext} data-testid="input-context">{context.label}
             <button type="button" aria-label={`去掉 ${context.label}`} onClick={context.onClear}><X size={12} strokeWidth={1.8} aria-hidden /></button>
+          </span>
+        ) : null}
+        {quote ? (
+          <span className={h.barContext} data-testid="input-quote">{quote.label}
+            <button type="button" aria-label={`去掉 ${quote.label}`} onClick={quote.onClear}><X size={12} strokeWidth={1.8} aria-hidden /></button>
           </span>
         ) : null}
         {drafts.length ? (

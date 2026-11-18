@@ -96,8 +96,13 @@ const enter = (delay: number | null) => (delay === null ? {} : { "data-enter": "
 
 type Piece = { kind: "bubble" | "card"; markdown: string; title: string; summary: string; open: boolean };
 
-/** edge(part, parts)：挂在每一块底边上的东西（本人在这一块点的表情，设计 6.5）；给了的每块标上第几块、按块悬停。 */
-export function ReplyBubbles({ markdown, streaming, at, edge }: { markdown: string; streaming: boolean; at?: string; edge?: (part: number, parts: number) => ReactNode }) {
+/**
+ * edge(part, parts)：挂在每一块底边上的东西（本人在这一块点的表情，设计 6.5）；给了的每块标上第几块、按块悬停。
+ * actions(part, parts, text)：每块旁边那一排（回应、回复、复制，本人 11/18），text 是这一块的原文 markdown；它自己定位到块外。
+ */
+export function ReplyBubbles({ markdown, streaming, at, edge, actions }: {
+  markdown: string; streaming: boolean; at?: string; edge?: (part: number, parts: number) => ReactNode; actions?: (part: number, parts: number, text: string) => ReactNode;
+}) {
   const { segments, tail } = useMemo(() => splitReply(markdown, streaming), [markdown, streaming]);
   // 在这里流式过的：入场有动画；一挂上就是写完的（读历史来的）一次出齐。
   const live = useRef(streaming);
@@ -165,7 +170,7 @@ export function ReplyBubbles({ markdown, streaming, at, edge }: { markdown: stri
   return (
     <div className={b.group}>
       {pieces.map((piece, index) => {
-        const onEdge = edge ? <div className={b.edge}>{edge(index, pieces.length)}</div> : null;
+        const onEdge = <>{edge ? <div className={b.edge}>{edge(index, pieces.length)}</div> : null}{actions?.(index, pieces.length, piece.markdown)}</>;
         const part = edge ? { "data-reaction-part": index, "data-reactable": "" } : undefined;
         return piece.kind === "card"
           ? <ReplyCard key={index} markdown={piece.markdown} title={piece.title} summary={piece.summary} open={piece.open} at={streaming ? undefined : at} delay={delays.current[index] ?? null} edge={onEdge} part={part} />
