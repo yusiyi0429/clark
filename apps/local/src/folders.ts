@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { basename, dirname, join, parse, relative, isAbsolute, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
-import type { TLocalFolder, TLocalProjectFolder } from "@warmap/contracts";
+import { LOCAL_SCRATCH_FOLDER, type TLocalFolder, type TLocalProjectFolder } from "@warmap/contracts";
 
 /**
  * 一个项目在这台电脑上绑的文件夹（projects.json）。folderIds 有顺序，第一个是工作目录（设计 17.2 第 46 条）；
@@ -113,6 +113,15 @@ export class Folders {
     if (reject) throw new FolderError("validation", reject);
     if (readdirSync(base).some((n) => n.toLowerCase() === name.toLowerCase())) throw new FolderError("conflict", `「${name}」已经有了，换个名字`);
     mkdirSync(target);
+    return this.add(target);
+  }
+
+  /** 「随手」项目的文件夹：主目录/天枢/随手，没有就建（已经有了不动里面的东西），加进允许的列表。不合规矩抛 FolderError（validation）。 */
+  ensureScratch(): TLocalFolder {
+    const target = join(this.home, ...LOCAL_SCRATCH_FOLDER);
+    const reject = this.rejectReason(target);
+    if (reject) throw new FolderError("validation", reject);
+    mkdirSync(target, { recursive: true });
     return this.add(target);
   }
 

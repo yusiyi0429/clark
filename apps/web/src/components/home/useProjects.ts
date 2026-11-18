@@ -6,7 +6,7 @@
  * 绑文件夹在这台电脑的本机程序上（D 的 GET/PUT /v1/projects）：没连上本机程序时都算没绑。交出去了的项目，这台电脑上的绑定解掉（只解绑，不动文件）。
  * 一个项目可以绑多个文件夹（17.2 第 46 条）：第一个是工作目录。老的本机程序只认一个（回的东西里没有 folders），照一个的上限来。
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TArchivedSubSession, TProject, TSubSessionKind } from "@warmap/contracts";
 import { LOCAL_PROJECT_FOLDER_LIMIT } from "@/lib/local/routes";
 import { attachGoal, createProject, deleteProject, deleteSubSession, listArchivedSubSessions, listProjects, setGoalDueDate, startTransfer, updateProject, updateSubSession, withdrawTransfer } from "@/lib/board/cloud";
@@ -43,6 +43,14 @@ export function useProjects(data: Pick<WorkHomeData, "projects" | "month" | "per
   // 允许的文件夹变了也重读（在连接页删掉一个，它从各项目的列表里一起拿掉，拿掉的是第一个时剩下的第一个成了工作目录）。
   const allowed = local.folders.map((folder) => folder.id).join(",");
   useEffect(() => { if (ready) void loadFolders(); else setBoundAll(new Map()); }, [ready, loadFolders, allowed]);
+  // 「随手」项目：本机程序连着时请它在主目录/天枢/随手 建好并绑上（已经绑了的它不换），这次页面打开只试一次；老本机程序没有这个接口，当没做成，开工时照旧问文件夹。
+  const scratch = data.projects.find((project) => project.scratch);
+  const scratchTried = useRef(false);
+  useEffect(() => {
+    if (!ready || !scratch || scratchTried.current) return;
+    scratchTried.current = true;
+    void runner.scratchFolder({ projectId: scratch.projectId, projectName: scratch.name }).then(loadFolders, () => undefined);
+  }, [ready, scratch, runner, loadFolders]);
   // 交出去了（accepted）的项目还绑着这台电脑上的文件夹：解绑（16.7，原负责人那边只读）。
   const handedOff = listed.filter((project) => project.transfer?.status === "accepted" && folders.has(project.projectId)).map((project) => project.projectId).join(",");
   useEffect(() => {

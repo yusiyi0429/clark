@@ -139,6 +139,7 @@ export function createHttpRunner(base = localRunnerBase(), token: () => string =
     listFolders: async () => (await call<{ folders: Awaited<ReturnType<LocalRunner["listFolders"]>> }>("listFolders")).folders,
     pickFolder: (body = {}) => call("pickFolder", {}, body),
     createFolder: (body) => call("createFolder", {}, body),
+    scratchFolder: (body) => call("scratchFolder", {}, body),
     removeFolder: async (id) => { await call("deleteFolder", { id }); },
     openFolder: async (id) => { await call("openFolder", { id }); },
     listSessions: async () => (await call<{ sessions: Awaited<ReturnType<LocalRunner["listSessions"]>> }>("listSessions")).sessions,
