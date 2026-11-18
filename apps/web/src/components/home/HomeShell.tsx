@@ -527,11 +527,14 @@ function HomeFrame({ account }: { account: Account }) {
   const parent = useMemo(() => (owner ? (
     <button type="button" className={h.crumb} onClick={() => go(projectHref(owner.id))}>{owner.name} / </button>
   ) : null), [owner, go]);
+  // 伙伴主线（本人 11/18）：页头不放「会话」按钮，「会话」「thread」面板当作关着（slot 不动，切回项目对话照旧开着）。
+  const buddyMain = view.kind === "buddy";
+  const trail = buddyMain ? null : backgroundButton;
   const chrome = useMemo(() => (handheld ? {
     lead: <button type="button" className={h.icon} aria-label="返回" title="返回" onClick={() => go(HOME_HREF)} data-testid="phone-back"><ArrowLeft {...ICON} /></button>,
     // 手机上页头不写上一级（左边已经有返回），只留子会话标题（排查清单第 3 条）。
-    trail: backgroundButton, parent: null,
-  } : { lead: null, trail: backgroundButton, parent }), [handheld, go, backgroundButton, parent]);
+    trail, parent: null,
+  } : { lead: null, trail, parent }), [handheld, go, trail, parent]);
   // 开会（设计 2026-11-12）：录音挂在外壳上，切项目、切子会话、开设置都不断。在项目页里新的一场默认挂这个项目本月目标的 Mission。
   const meeting = useHomeMeeting({ account, go });
   // 首页「等你」的件数（11/16 重新设计 4.5）：和首页同一份 focusList，左栏「今天」行、标签页标题写全部件数。
@@ -692,7 +695,7 @@ function HomeFrame({ account }: { account: Account }) {
   const seen = useMemo(() => ({ seen: seenMarks, onOpen: markSeen }), [seenMarks, markSeen]);
   const threadSub = slot === "thread" && thread ? subs.find((sub) => sub.kind === thread.kind && sub.id === thread.id) ?? null : null;
   // thread 里那个子会话不在了（开着时被归档、删了）：面板当作关着，不留一块空的。
-  const panel = slot === "thread" && !threadSub ? null : slot;
+  const panel = (slot === "thread" && !threadSub) || (buddyMain && (slot === "sessions" || slot === "thread")) ? null : slot;
   if (handheld) {
     return (
       <WorkspaceContext.Provider value={workspace}>
