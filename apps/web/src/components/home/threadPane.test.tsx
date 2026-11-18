@@ -30,6 +30,12 @@ vi.mock("@/components/cards/useCardDetail", () => {
   return { useCardDetail: () => ({ detail, missing: false, refresh: async () => undefined }) };
 });
 
+// 专题会话只看 ThreadPane 交给它什么（钉在输入框上方的那个框）；读专题要网络，这里不读。
+vi.mock("@/components/topics/TopicSession", () => ({
+  TopicSession: ({ ask, pane }: { ask?: ReactNode; pane?: boolean }) => <div data-testid="topic-session" data-pane={pane ? "" : undefined}>{ask}</div>,
+}));
+
+import type { ReactNode } from "react";
 import type { SubSession } from "@/lib/home/types";
 import { LocalContext, type LocalRunnerState } from "@/lib/local/LocalRunnerProvider";
 import { createMockRunner } from "@/lib/local/mock";
@@ -42,11 +48,11 @@ const sub = { id: CARD, kind: "card", letter: null, title: "首页手机检查",
 const local = { runner: createMockRunner(), phase: "offline", version: null, status: null, models: [], folders: [], sessions: [], pairing: null, error: null, sources: null,
   refresh: vi.fn(), pair: vi.fn(), unpair: vi.fn(), pickFolder: vi.fn(), setIncludePersonal: vi.fn() } as unknown as LocalRunnerState;
 const outer = () => ({ open: false, toggle: vi.fn(), node: null, shown: "thread", show: vi.fn(), wide: false, setWide: vi.fn(), openThread: vi.fn() }) as SideDetail & { show: ReturnType<typeof vi.fn>; toggle: ReturnType<typeof vi.fn> };
-const render = (side: SideDetail, go = vi.fn(), onClose = vi.fn()) => renderToStaticMarkup(
+const render = (side: SideDetail, go = vi.fn(), onClose = vi.fn(), extra: { sub?: SubSession; from?: string | null; ask?: ReactNode } = {}) => renderToStaticMarkup(
   <LocalContext.Provider value={local}>
     <SideDetailContext.Provider value={side}>
       <ViewChrome.Provider value={{ lead: <i>返回键</i>, trail: <i>会话按钮</i>, parent: <i>天枢新版 / </i> }}>
-        <ThreadPane sub={sub} go={go} onClose={onClose} />
+        <ThreadPane sub={extra.sub ?? sub} go={go} onClose={onClose} from={extra.from} ask={extra.ask} />
       </ViewChrome.Provider>
     </SideDetailContext.Provider>
   </LocalContext.Provider>,
@@ -71,6 +77,20 @@ describe("右边的 thread 视图（设计 6.6）", () => {
     (tap.props.get("output-open")?.onClick as () => void)();
     expect(side.show).not.toHaveBeenCalled();
     expect(side.toggle).not.toHaveBeenCalled();
+  });
+
+  it("从主线开的：会话名下面一行淡字「项目名 · 从主线开的」；没给就不写", () => {
+    const html = render(outer(), vi.fn(), vi.fn(), { from: "品牌建设" });
+    expect(html).toMatch(/data-testid="thread-from"[^>]*>品牌建设 · 从主线开的</);
+    expect(html.indexOf("首页手机检查")).toBeLessThan(html.indexOf("从主线开的"));
+    expect(render(outer())).not.toContain("从主线开的");
+  });
+
+  it("等文件夹的会话：右边就地问「在哪个文件夹开工？」", () => {
+    const topic = { ...sub, id: "00000000-0000-4000-8000-0000000000a1", kind: "topic", free: true } as unknown as SubSession;
+    const html = render(outer(), vi.fn(), vi.fn(), { sub: topic, ask: <div data-testid="folder-ask">在哪个文件夹开工？</div> });
+    expect(html).toContain('data-testid="folder-ask"');
+    expect(html).toContain("在哪个文件夹开工？");
   });
 
   it("放大去中间", () => {

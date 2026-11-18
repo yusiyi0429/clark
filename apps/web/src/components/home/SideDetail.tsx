@@ -23,8 +23,8 @@ export type SideDetail = {
   show: (kind: PanelKind | null) => void;
   wide: boolean;
   setWide: (wide: boolean) => void;
-  /** 在面板里开这个子会话的 thread（设计 6.6，文件预览那一档宽）。 */
-  openThread: (subject: { kind: "card" | "topic"; id: string }) => void;
+  /** 在面板里开这个子会话的 thread（设计 6.6，文件预览那一档宽）。from：从主线开的会话所在的项目名（页头写「项目名 · 从主线开的」）。 */
+  openThread: (subject: { kind: "card" | "topic"; id: string }, from?: string) => void;
 };
 
 export const SideDetailContext = createContext<SideDetail | null>(null);

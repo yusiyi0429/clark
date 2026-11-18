@@ -22,7 +22,7 @@ describe("伙伴工作间集成", () => {
   it("会议与交接接入唯一时间线；页头左边是名字、正中是伙伴（11/17 设计 4.2），没有预约条和子会话汇总；输入框上方没有待发条，发出的话直接进对话", () => {
     feed.meetings.mockReturnValue({ blocks: [{ key: "meeting:a", at: "2026-11-15T00:01:00Z", node: <p>已结束会议</p> }], notice: <p>会议读取提示</p>, scheduled: <details><summary>会议安排</summary>明天</details> });
     feed.handoffs.mockReturnValue({ blocks: [{ key: "handoff:a", at: "2026-11-15T00:03:00Z", node: <p>已确认交接</p> }], notice: null });
-    const html = renderToStaticMarkup(<BuddyView buddy={null} waiting={[]} outbox={[]} consume={() => {}} onSpeaking={() => {}} go={() => {}} />);
+    const html = renderToStaticMarkup(<BuddyView buddy={null} waiting={[]} outbox={[]} consume={() => {}} onSpeaking={() => {}} go={() => {}} subs={[]} projects={[]} waitingFolder={() => false} />);
     for (const key of ["team:a", "work:a", "meeting:a", "handoff:a"]) expect(html).toContain(`data-block="${key}"`);
     expect(html.match(/data-testid="unified-timeline"/g)).toHaveLength(1);
     expect(html).not.toContain("会议安排");
