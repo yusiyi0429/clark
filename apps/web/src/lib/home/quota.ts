@@ -64,7 +64,10 @@ export function money(amounts: MoneyLike[]): string {
   return amounts.map((entry) => `${SYMBOL[entry.currency.toUpperCase()] ?? `${entry.currency} `}${Number(entry.amount.toFixed(1))}`).join(" + ");
 }
 
-/** 一个来源一格。还没读到过的（没有更新时间，订阅也没有窗口）不画；订阅读不到过（error）的照样一格，只写名字和「暂时读不到」。 */
+/**
+ * 一个来源一格。还没读到过的（没有更新时间，订阅也没有窗口）不画；Claude 读不到过（error）的照样一格，只写名字和「暂时读不到」。
+ * 过了重置时间的窗口（读不到时留着的旧数）按新的一期画：用量 0、不写过去的重置时间；过了的恢复时间不算用完。
+ */
 export function usageCells(sources: UsageSourceLike[], now: number): UsageCell[] {
   return sources.flatMap((source): UsageCell[] => {
     const name = source.device ? `${source.name} · ${source.device}` : source.name;
@@ -79,19 +82,21 @@ export function usageCells(sources: UsageSourceLike[], now: number): UsageCell[]
     }
     const unreadable = !!source.error;
     if (source.remainingPercent === null && !source.windows.length) {
-      return unreadable ? [{ id: source.id, name, percent: null, value: "", tone: "ok", tip: "", stale: false, unreadable }] : [];
+      return unreadable && source.id === "claude" ? [{ id: source.id, name, percent: null, value: "", tone: "ok", tip: "", stale: false, unreadable }] : [];
     }
-    const overall = source.windows.filter((window) => window.kind !== "weekly_scoped");
-    const counted = overall.length ? overall : source.windows;
+    const windows = source.windows.map((window): QuotaWindowLike => (window.resetsAt && Date.parse(window.resetsAt) <= now ? { ...window, usedPercent: 0, state: "ok", resetsAt: null } : window));
+    const blockedUntil = source.blockedUntil && Date.parse(source.blockedUntil) > now ? source.blockedUntil : null;
+    const overall = windows.filter((window) => window.kind !== "weekly_scoped");
+    const counted = overall.length ? overall : windows;
     const used = counted.length ? Math.max(...counted.map((window) => window.usedPercent)) : 100 - (source.remainingPercent ?? 100);
-    const blocked = !!source.blockedUntil || counted.some((window) => window.state === "blocked" || window.usedPercent >= 100);
-    const left = blocked ? 0 : source.remainingPercent ?? 100 - used;
-    const lines = source.windows.map((window) => {
+    const blocked = !!blockedUntil || counted.some((window) => window.state === "blocked" || window.usedPercent >= 100);
+    const left = blocked ? 0 : counted.length ? 100 - used : source.remainingPercent ?? 100;
+    const lines = windows.map((window) => {
       const label = window.kind === "weekly_scoped" && window.model ? `${WINDOW[window.kind]} · ${window.model}` : WINDOW[window.kind];
       const rest = window.state === "blocked" || window.usedPercent >= 100 ? "用完" : `剩 ${100 - window.usedPercent}%`;
       return `${label}：${rest}${window.resetsAt ? ` · ${clock(window.resetsAt, now)} 重置` : ""}`;
     });
-    if (source.blockedUntil) lines.push(`${clock(source.blockedUntil, now)} 恢复`);
+    if (blockedUntil) lines.push(`${clock(blockedUntil, now)} 恢复`);
     if (source.extraUsage !== null && source.extraUsage !== undefined) lines.push(`额外额度：${source.extraUsage ? "已开" : "未开"}`);
     return [{ id: source.id, name, percent: left, value: blocked ? "用完" : `${left}%`, tone: toneOf(left, blocked), tip: [...lines, ...staleLine].join("\n"), stale, unreadable }];
   });

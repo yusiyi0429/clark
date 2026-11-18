@@ -11,17 +11,24 @@ export interface SubscriptionState {
   error: string | null;
 }
 
+/** 过了重置时间的窗口（读不到时留着的旧数）：已经是新的一期，按用量 0、不警戒算，不留过去的重置时间。 */
+export function liveWindows(windows: TLocalQuotaWindow[], now: number): TLocalQuotaWindow[] {
+  return windows.map((w) => (w.resetsAt && Date.parse(w.resetsAt) <= now ? { ...w, usedPercent: 0, state: "ok", resetsAt: null } : w));
+}
+
 /**
  * 订阅 → 右栏「用量」的一格（新首页设计 14.4）：剩多少是 100 减去用得最多的那个窗口（按模型分的周额度不算，除非只有它），
- * 几点重置跟着那个窗口。
+ * 几点重置跟着那个窗口。过了重置时间的窗口按用量 0 算，过了的恢复时间不报。
  */
-export function subscriptionSource(id: string, name: string, s: SubscriptionState): TLocalQuotaSource {
-  const main = s.windows.filter((w) => w.kind !== "weekly_scoped");
-  const pool = main.length ? main : s.windows;
+export function subscriptionSource(id: string, name: string, s: SubscriptionState, now: number): TLocalQuotaSource {
+  const windows = liveWindows(s.windows, now);
+  const main = windows.filter((w) => w.kind !== "weekly_scoped");
+  const pool = main.length ? main : windows;
   const top = pool.length ? pool.reduce((a, b) => (b.usedPercent > a.usedPercent ? b : a)) : null;
+  const blockedUntil = s.blockedUntil && Date.parse(s.blockedUntil) > now ? s.blockedUntil : null;
   return {
-    id, name, kind: "subscription", remainingPercent: top ? 100 - top.usedPercent : null, amounts: [], windows: s.windows, resetsAt: top?.resetsAt ?? null,
-    blockedUntil: s.blockedUntil, plan: s.plan, extraUsage: s.extraUsage, updatedAt: s.updatedAt, error: s.error,
+    id, name, kind: "subscription", remainingPercent: top ? 100 - top.usedPercent : null, amounts: [], windows, resetsAt: top?.resetsAt ?? null,
+    blockedUntil, plan: s.plan, extraUsage: s.extraUsage, updatedAt: s.updatedAt, error: s.error,
   };
 }
 
@@ -104,7 +111,7 @@ export class QuotaTracker {
   }
 
   /** GET /v1/status 用：还没读过为空。 */
-  view(): TLocalQuotaSource[] { return this.state ? [subscriptionSource("claude", "Claude", this.state)] : []; }
+  view(): TLocalQuotaSource[] { return this.state ? [subscriptionSource("claude", "Claude", this.state, this.now())] : []; }
 
   /** 同步给云端用：读到过才带。 */
   syncView(): TLocalQuotaSync[] { return this.view().flatMap(syncOf); }
@@ -124,13 +131,13 @@ export class QuotaTracker {
 
   /** 5 小时和本周（所有模型）里用得最多的百分比（按模型分的不算）：「无上限」到 95% 对新的轮次关掉多 agent；读不到为 null。 */
   usedPercent(): number | null {
-    const ws = this.state?.windows.filter((w) => w.kind !== "weekly_scoped") ?? [];
+    const ws = liveWindows(this.state?.windows ?? [], this.now()).filter((w) => w.kind !== "weekly_scoped");
     return ws.length ? Math.max(...ws.map((w) => w.usedPercent)) : null;
   }
 
   /** 到了警戒线（Claude Code 报 warning，按模型分的不算）：「自动」「设预算」后面拉起的思考强度降一档。 */
   warning(): boolean {
-    return Boolean(this.state?.windows.some((w) => w.kind !== "weekly_scoped" && w.state === "warning"));
+    return liveWindows(this.state?.windows ?? [], this.now()).some((w) => w.kind !== "weekly_scoped" && w.state === "warning");
   }
 
   /**

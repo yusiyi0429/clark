@@ -127,16 +127,23 @@ describe("右栏（5.4.5）", () => {
     const cells = (html: string) => html.split('data-testid="quota-row"').slice(1).map((cell) => text(cell.split("</li>")[0]!).replace(/^>/, "").trim());
     // 旧数照画（圆环、百分比），旁边淡色短语「暂时读不到」，不写原因
     const stale = render(panel([]), "ready", [old]);
-    expect(cells(stale)).toEqual(["Claude 暂时读不到 70%"]);
+    expect(cells(stale)).toEqual(["Claude 70% 暂时读不到"]); // 和连接页同一个顺序
     expect(stale).toContain("<circle");
     expect(stale).not.toContain("get_usage");
+    // 「暂时读不到」自己一个 span，不和名字连成一串
+    const row = stale.split('data-testid="quota-row"')[1]!.split("</li>")[0]!;
+    expect(row).toMatch(/>Claude<\/span>/);
+    expect(row).toMatch(/<span class="[^"]*usageNote[^"]*">暂时读不到<\/span>/);
     // 有数、读得到：照旧，没有「暂时读不到」
     expect(cells(render(panel([]), "ready", [sub(70)]))).toEqual(["Claude 70%"]);
-    // 一个数都没有：那一格只写「Claude 暂时读不到」，不画圆环、不画「¥」
+    // 一个数都没有：那一格只写「Claude 暂时读不到」；画一个只有底圈的空圆环占住位置（和别的格子对齐），不画进度、不画「¥」
     const never = { ...sub(70), remainingPercent: null, windows: [], updatedAt: null, extraUsage: null, error: "暂时读不到（get_usage 没给额度）" };
     const empty = render(panel([]), "ready", [never]);
     expect(cells(empty)).toEqual(["Claude 暂时读不到"]);
-    expect(empty.split('data-testid="quota-row"')[1]!.split("</li>")[0]).not.toMatch(/<svg|¥/);
+    const emptyRow = empty.split('data-testid="quota-row"')[1]!.split("</li>")[0]!;
+    expect(emptyRow).toContain("<svg");
+    expect(emptyRow.match(/<circle/g)).toHaveLength(1);
+    expect(emptyRow).not.toContain("¥");
     // 没读过、也没出错（还没去读）：照旧不画
     expect(render(panel([]), "ready", [{ ...never, error: null }])).not.toContain('data-testid="quota-row"');
   });

@@ -31,7 +31,7 @@ const status = (patch: Partial<TLocalStatusResponse> = {}): TLocalStatusResponse
   cloud: { personId: "p-sunm", linked: true, apiBaseUrl: null, personName: "孙铭泽", outbox: { pending: 0, lastSyncedAt: null, lastError: null } },
   settings: { includePersonalConfigByDefault: false, allowedOrigins: [], paused: false, maxConcurrent: 3, autoMerge: true },
   quota: [{ id: "claude", name: "Claude", kind: "subscription", remainingPercent: null, amounts: [], resetsAt: null, plan: "max", extraUsage: false, updatedAt: fresh(), error: null, blockedUntil: null,
-    windows: [{ kind: "weekly_all", model: null, usedPercent: 83, state: "warning", resetsAt: fresh() }, { kind: "weekly_scoped", model: "Fable", usedPercent: 40, state: "ok", resetsAt: null }] }],
+    windows: [{ kind: "weekly_all", model: null, usedPercent: 83, state: "warning", resetsAt: new Date(Date.now() + 3_600_000).toISOString() }, { kind: "weekly_scoped", model: "Fable", usedPercent: 40, state: "ok", resetsAt: null }] }],
   tools: [
     { kind: "gh", state: "ready", version: "2.80.0", account: "sunm", checkedAt: fresh() },
     { kind: "lark-cli", state: "not_logged_in", version: "1.2.0", account: null, checkedAt: fresh() },
