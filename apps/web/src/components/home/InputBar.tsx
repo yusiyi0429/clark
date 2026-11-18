@@ -19,6 +19,7 @@ import { useDictation } from "@/conversation/useDictation";
 import { EmojiButton, insertEmoji } from "@/conversation/Reactions";
 import { ATTACHMENT_ACCEPT, admit, attachmentKind, fileNameOf, sizeText } from "@/lib/home/attachments";
 import h from "@/styles/home.module.css";
+import { FadeText } from "@/lib/home/overflowFade";
 
 type Draft = { key: number; file: File; url: string | null };
 const MAX_HEIGHT = 168;
@@ -177,7 +178,7 @@ export function InputBar({ placeholder, label, onSend, busy = false, interruptib
           </span>
         ) : null}
         {quote ? (
-          <span className={h.barContext} data-testid="input-quote">{quote.label}
+          <span className={h.barContext} data-testid="input-quote"><FadeText className={h.barQuote}>{quote.label}</FadeText>
             <button type="button" aria-label={`去掉 ${quote.label}`} onClick={quote.onClear}><X size={12} strokeWidth={1.8} aria-hidden /></button>
           </span>
         ) : null}
@@ -209,7 +210,7 @@ export function InputBar({ placeholder, label, onSend, busy = false, interruptib
           <span className={h.barField}>
             <DictationMirror field={field} value={text} marks={dictation.marks} polishing={dictation.polishing} fresh={dictation.fresh} />
             <textarea ref={field} rows={1} value={text} disabled={disabled}
-              placeholder={dictation.phase === "finishing" ? "正在收尾…" : dictation.active ? (dictation.live ? "正在听…" : "正在录音，结束后转写…") : placeholder}
+              placeholder={dictation.phase === "finishing" ? "正在收尾" : dictation.active ? (dictation.live ? "正在听" : "正在录音，结束后转写") : placeholder}
               aria-label={label ?? placeholder}
               onChange={(event) => { if (!dictation.change(event.target.value)) setText(event.target.value); }}
               onPaste={(event) => { const files = [...event.clipboardData.files]; if (!files.length) return; event.preventDefault(); add(files); }}

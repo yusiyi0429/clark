@@ -65,7 +65,7 @@ export function TeamFilePicker({ selection, onChange, disabled = false }: {
       </ul> : null}
       {picking ? <div id={sourceSection} className={s.choices} aria-label="可分享的文件版本">
         {readError ? <div role="alert">{readError} <button className={s.linkButton} type="button" onClick={() => setAttempt((n) => n + 1)}>重试</button></div>
-          : !versions ? <small role="status">正在读取文件版本…</small> : !versions.length ? <small>没有可分享的子会话文件</small> : versions.map((source) => (
+          : !versions ? <small role="status">正在读取文件版本</small> : !versions.length ? <small>没有可分享的子会话文件</small> : versions.map((source) => (
             <label className={s.choice} key={source.id}><input type="checkbox" checked={selection.sources.some((item) => item.id === source.id)} onChange={() => toggle(source)} />
               <span>{source.fileName} <small>{sizeText(source.size)} · {monthDayTime(source.createdAt)} · {source.sha256.slice(0, 8)}</small></span>
             </label>

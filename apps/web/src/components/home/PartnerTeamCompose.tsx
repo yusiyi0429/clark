@@ -76,7 +76,7 @@ export function TeamCompose({ draft, people, directoryError, onDirectory, busy, 
                 <input type="search" className={s.field} aria-label="搜索同事姓名或成员 ID" placeholder="搜索同事姓名或成员 ID" value={query} onChange={(event) => setQuery(event.target.value)} />
                 {draft.unresolved.length ? <p className={s.note}>请在名册中核对「{draft.unresolved.join("、")}」的收件人。</p> : null}
                 {directoryError ? <p role="alert" className={s.error}>{directoryError} <button type="button" className={s.linkButton} onClick={onDirectory}><RefreshCw size={12} aria-hidden />重试</button></p>
-                  : !people ? <small role="status">正在读取同事名册…</small>
+                  : !people ? <small role="status">正在读取同事名册</small>
                   : !shown.length ? <small>{query ? "没有找到匹配的同事" : "名册中没有可选的同事"}</small>
                   : <div className={s.choices}>{shown.map((person) => <label key={person.personId} className={s.choice}>
                     <input type="checkbox" checked={selected.has(person.personId)} disabled={busy || (!selected.has(person.personId) && selected.size >= 50)} onChange={() => toggle(person.personId)} />
@@ -100,7 +100,7 @@ export function TeamCompose({ draft, people, directoryError, onDirectory, busy, 
               <TeamFilePicker selection={draft} onChange={onChange} disabled={busy} />
               {draft.error ? <p className={s.error} role="alert">{draft.error}</p> : null}
               <footer className={s.actions}><HeroButton type="button" variant="tertiary" isDisabled={busy} onPress={onClose}>取消</HeroButton>
-                <HeroButton type="submit" variant="primary" isDisabled={busy || !valid || !people}>{busy ? "正在发送…" : question ? "发送征集" : "发送资料"}</HeroButton></footer>
+                <HeroButton type="submit" variant="primary" isDisabled={busy || !valid || !people}>{busy ? "正在发送" : question ? "发送征集" : "发送资料"}</HeroButton></footer>
             </form>}
           </Modal.Dialog>
         </Modal.Container>

@@ -26,19 +26,19 @@ describe("开工用项目绑的文件夹（17.2 第 32 条）", () => {
     expect(startFolder("p-brand", bound, other.path)).toEqual({ cwd: brand.path, ask: false });
   });
 
-  it("没绑定不开、要问：项目没绑时不给目录、ask；不属于任何项目的才用上次用过的；问的选项框列这台电脑的文件夹，最后是「选择其他文件夹…」", async () => {
+  it("没绑定不开、要问：项目没绑时不给目录、ask；不属于任何项目的才用上次用过的；问的选项框列这台电脑的文件夹，最后是「选择其他文件夹」", async () => {
     expect(startFolder("p-brand", new Map(), other.path)).toEqual({ cwd: null, ask: true });
     expect(startFolder(null, new Map(), other.path)).toEqual({ cwd: other.path, ask: false });
     const html = renderToStaticMarkup(<FolderAsk folders={[folder(brand), folder(other)]} onBind={vi.fn()} onPickOther={vi.fn()} />);
     expect(html).toContain('data-testid="folder-ask"');
-    expect(html.replace(/<[^>]+>/g, "|").replace(/\|+/g, "|")).toMatch(/在哪个文件夹开工？.*tk-branding.*测试新版天枢.*选择其他文件夹…/);
+    expect(html.replace(/<[^>]+>/g, "|").replace(/\|+/g, "|")).toMatch(/在哪个文件夹开工？.*tk-branding.*测试新版天枢.*选择其他文件夹\|/);
     // 选第几个就是哪个文件夹；选最后一项走本机的选择框，取消就不绑。
     const pickOther = vi.fn(async () => folder(other));
     expect(await folderChoice(0, [folder(brand)], pickOther)).toMatchObject({ id: brand.id });
     expect(await folderChoice(1, [folder(brand)], pickOther)).toMatchObject({ id: other.id });
     expect(pickOther).toHaveBeenCalledTimes(1);
     expect(await folderChoice(1, [folder(brand)], async () => null)).toBeNull();
-    expect(PICK_OTHER).toBe("选择其他文件夹…");
+    expect(PICK_OTHER).toBe("选择其他文件夹");
   });
 
   it("派活单同输入框下面：项目绑了写文件夹名（点开是在资源管理器中显示、复制路径，换不了）；没绑才给同一个文件夹下拉，写「此电脑」；没有「选文件夹」「这一次用别的」", () => {

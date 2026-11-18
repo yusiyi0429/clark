@@ -126,3 +126,6 @@ button.scheduleMain:focus-visible { outline: 2px solid var(--onboarding-blue); o
 }
 @media (prefers-reduced-motion: reduce) { .placeholder { animation: none; } .meter li { transition: none; } }
 .readValue a { color: var(--brand-deep); text-decoration: underline; text-underline-offset: 3px; }
+
+/* 新首页不出省略号（本人 11/18）：放不下就换行，长预览限高往下渐隐；只在新首页的外壳里生效，旧界面照旧。 */
+:global(:root:has([data-type-scale="one"])) .scheduleMain strong { overflow: visible; white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }

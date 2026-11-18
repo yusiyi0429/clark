@@ -57,3 +57,8 @@
   .pick { padding: 10px; gap: 10px; }
 }
 @media (prefers-reduced-motion: reduce) { .placeholder { animation: none; } }
+
+/* 新首页不出省略号（本人 11/18）：放不下就换行，长预览限高、只在真的放不下时（data-over，FadeText 量高）往下渐隐；只在新首页的外壳里生效，旧界面照旧。 */
+:global(:root:has([data-type-scale="one"])) .pickText strong { overflow: visible; white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+:global(:root:has([data-type-scale="one"])) .summary p { display: block; -webkit-line-clamp: none; max-height: 2lh; overflow: hidden; }
+:global(:root:has([data-type-scale="one"])) .summary p[data-over] { -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 1lh), transparent); mask-image: linear-gradient(to bottom, black calc(100% - 1lh), transparent); }

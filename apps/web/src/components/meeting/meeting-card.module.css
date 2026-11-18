@@ -196,3 +196,6 @@ button.source:focus-visible { outline: 2px solid #1f5fd6; outline-offset: 2px; b
 :global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .switch:not([aria-checked='true']) { background: var(--meeting-home-default-hover, var(--default-hover)); }
 :global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .field:hover { background: var(--meeting-home-default-soft, var(--default-soft)); }
 :global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .field:focus { background: var(--field-bg); box-shadow: inset 0 0 0 1px var(--field-border-focus); }
+
+/* 新首页不出省略号（本人 11/18）：放不下就换行，长预览限高往下渐隐；只在新首页的外壳里生效，旧界面照旧。 */
+:global(:root:has([data-type-scale="one"])) .source > span { overflow: visible; white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }

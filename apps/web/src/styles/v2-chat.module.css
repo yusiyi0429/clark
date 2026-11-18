@@ -37,10 +37,16 @@
 :global([data-phone]) .pane:has(.head [data-presence][data-stage]) { --head-block: 72px; }
 .pane:has(.head [data-presence]) > .head { position: absolute; top: 0; left: 0; right: 0; z-index: 2; pointer-events: none; }
 .pane:has(.head [data-presence]) > .head > * > * { pointer-events: auto; }
-.pane:has(.head [data-presence]) > .log { padding-top: calc(var(--head-block) + 30px); }
+/* 对话上沿让出页头实际的高（--head-h：ChatColumn 量的整块页头，含上 14 下 4），再空 12；标题折行、页头长高时跟着走。没量到时按页头块算。 */
+.pane:has(.head [data-presence]) > .log { padding-top: calc(var(--head-h, calc(var(--head-block) + 18px)) + 12px); }
 .pane:has(.head [data-presence]) .log[data-scrolled] {
   -webkit-mask-image: linear-gradient(to bottom, transparent 62px, black 82px);
   mask-image: linear-gradient(to bottom, transparent 62px, black 82px);
+}
+/* 没有形象的页头（项目对话）：标题那几行都看不见，往下 20 渐显，跟着页头实际高度。 */
+.pane:has(.head [data-presence]:not([data-stage])) .log[data-scrolled] {
+  -webkit-mask-image: linear-gradient(to bottom, transparent calc(var(--head-h, 66px) - 4px), black calc(var(--head-h, 66px) + 16px));
+  mask-image: linear-gradient(to bottom, transparent calc(var(--head-h, 66px) - 4px), black calc(var(--head-h, 66px) + 16px));
 }
 
 /* 输入框那一块是实心底（同子会话）：从框上沿到窗口底边整条盖住，对话不从框下面透出来；框离底 16 加安全区。 */
@@ -128,3 +134,7 @@
 .taskTag span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .taskTag i { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--c, var(--accent)); }
 .sideHead { display: flex; align-items: center; gap: 10px; min-height: 40px; }
+
+/* 新首页不出省略号（本人 11/18）：放不下就换行，长预览限高往下渐隐；只在新首页的外壳里生效，旧界面照旧。 */
+:global(:root:has([data-type-scale="one"])) .row b, :global(:root:has([data-type-scale="one"])) .taskTag span { overflow: visible; white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+:global(:root:has([data-type-scale="one"])) .taskTag { height: auto; min-height: 26px; padding-block: 2px; }

@@ -48,6 +48,7 @@ import { buildHistoryIndex, outcomeAnchorId, type SourceContext, type SourceMate
 import { TranscriptReader } from "@/components/meeting/TranscriptReader";
 import s from "@/styles/meeting-workspace.module.css";
 import p from "@/styles/meeting-progress.module.css";
+import { useDots } from "@/lib/home/noEllipsis";
 
 export { MaterialPane, materialMeta, previewKind, type MaterialMeta, type MaterialPreview } from "@/components/meeting/meetingMaterialPreview";
 
@@ -210,6 +211,7 @@ export function TranscriptCandidateDialog({
   onConfirm: (mappings: Record<string, string>) => void;
   onDiscard: () => void;
 }) {
+  const dots = useDots();
   const [mappings, setMappings] = useState<Record<string, string>>(() =>
     Object.fromEntries(candidate.speakers.map((speaker) => [speaker.speakerName, speaker.suggestedPersonId ?? ""])),
   );
@@ -220,7 +222,7 @@ export function TranscriptCandidateDialog({
         <div>
           <h2>确认会议记录</h2>
           <p>
-            {candidate.source.fileName} · {Math.ceil(candidate.source.sizeBytes / 1024)} KB · SHA-256 {candidate.source.sha256.slice(0, 12)}…
+            {candidate.source.fileName} · {Math.ceil(candidate.source.sizeBytes / 1024)} KB · SHA-256 {dots(`${candidate.source.sha256.slice(0, 12)}…`)}
           </p>
           <p>
             {candidate.turnCount} 条发言 · {candidate.speakerCount} 位说话人 · 时长 {offsetLabel(candidate.durationSeconds)} · 解析器 {candidate.source.parserVersion}
@@ -305,7 +307,7 @@ export function TranscriptCandidateDialog({
         </button>
         {hasConfirm ? (
           <button type="button" className={s.candidateConfirm} disabled={pending} onClick={() => onConfirm(mappings)}>
-            {pending ? "确认中…" : "确认并写入逐字稿"}
+            {pending ? dots("确认中…") : "确认并写入逐字稿"}
           </button>
         ) : null}
       </footer>
@@ -509,6 +511,7 @@ export const sameSentence = (a: string, b: string) => {
 };
 
 export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: memberReadOnly = false }: CardRenderProps & { readOnly?: boolean }) {
+  const dots = useDots();
   const source = payloadOf<MeetingPayload & { purpose?: string | null }>(card);
   const workspace = useWorkspace();
   const isHost = source.leadDriId === workspace.viewerId;
@@ -1292,7 +1295,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
       {regenerateAction ? (
         <button type="button" disabled={pending} onClick={() => void regenerate()}>
           <RefreshCw size={13} aria-hidden="true" />
-          {pending ? "预审中…" : "重新预审"}
+          {pending ? dots("预审中…") : "重新预审"}
         </button>
       ) : null}
       {/* 「重新安排会议」仍挂在这一行下面；「编辑会议」在标题右侧的铅笔浮层里。 */}
@@ -1334,7 +1337,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
           {regenerateAction ? (
             <button type="button" disabled={pending} onClick={() => void regenerate()}>
               <RefreshCw size={13} aria-hidden="true" />
-              {pending ? "预审中…" : "用最新资料重新预审"}
+              {pending ? dots("预审中…") : "用最新资料重新预审"}
             </button>
           ) : null}
         </div>
@@ -1474,7 +1477,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
             ))}
             <input ref={materialRef} type="file" multiple accept={MATERIAL_ACCEPT} aria-label="选择会前材料" />
             <div className={s.stageActions}>
-              <button type="button" disabled={uploading} onClick={() => void replaceMaterials()}>{uploading ? "解析中…" : "替换材料集"}</button>
+              <button type="button" disabled={uploading} onClick={() => void replaceMaterials()}>{uploading ? dots("解析中…") : "替换材料集"}</button>
               {actionOf("meeting.run_preflight") ? <button type="button" disabled={pending} onClick={() => void run(actionOf("meeting.run_preflight")!, {})}>运行预审</button> : null}
             </div>
           </section>
@@ -1535,7 +1538,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
                             if (file) void uploadSupplementMaterial(request.id, file);
                           }}
                         />
-                        {supplementBusyId === request.id ? <small aria-live="polite">上传中…</small> : null}
+                        {supplementBusyId === request.id ? <small aria-live="polite">{dots("上传中…")}</small> : null}
                       </label>
                     </li>
                   ))}
@@ -1688,7 +1691,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
         {/* 第一次上传在进度线「待交记录」后面；这里只在已有候选时给重新上传，拖进主栏任何地方也行（FileDropZone）。 */}
         <button type="button" className={s.recordUpload} disabled={uploading} onClick={() => uploadRef.current?.click()}>
           <FileUp size={16} aria-hidden="true" />
-          {uploading ? "上传中…" : "重新上传会议记录"}
+          {uploading ? dots("上传中…") : "重新上传会议记录"}
         </button>
         {!candidateOpen ? (
           <button type="button" className={s.candidateReopen} onClick={() => setCandidateOpen(true)}>

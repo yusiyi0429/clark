@@ -11,6 +11,7 @@ import { Switch } from "@/components/ui/Switch";
 import { browserApi } from "@/lib/api/client";
 import type { UsageCell } from "@/lib/home/quota";
 import p from "@/styles/home-pages.module.css";
+import { FadeText } from "@/lib/home/overflowFade";
 
 export const ICON = { size: 16, strokeWidth: 1.8 } as const;
 
@@ -107,7 +108,7 @@ export function Card({ icon, name, line, source, corner, onOpen, openRef, main, 
       <span className={p.cardIcon} aria-hidden>{icon}</span>
       <span className={p.cardText}>
         <span className={p.cardName}>{name}</span>
-        {line ? <span className={p.cardLine}>{line}</span> : null}
+        {line ? <FadeText className={p.cardLine}>{line}</FadeText> : null}
         {source ? <span className={p.cardSource}>{source}</span> : null}
       </span>
     </>

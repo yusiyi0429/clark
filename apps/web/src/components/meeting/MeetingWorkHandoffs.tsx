@@ -103,7 +103,7 @@ function TargetPicker({ targets, excluded, suggestion, action, onContinue, onCan
       </div>;
     })}
   </fieldset><div className={s.actions}>
-    <button type="button" className={s.primary} disabled={busy || !selection.length || selection.length > 30} onClick={() => void send()}>{busy ? "递送中…" : action}</button>
+    <button type="button" className={s.primary} disabled={busy || !selection.length || selection.length > 30} onClick={() => void send()}>{busy ? "递送中" : action}</button>
     <button type="button" disabled={busy} onClick={onCancel}>暂不递送</button>
   </div>{selection.length > 30 && <p role="status">每次最多选择 30 个去向。</p>}{error && <p role="alert">{error}</p>}</div>;
 }
@@ -126,7 +126,7 @@ export function ConfirmAndHandOff({ requestId, amendedValue, onConfirmed }: { re
           continueWork: { authorization: "continue", targets: selected } } }));
       window.dispatchEvent(new Event(refreshed)); onConfirmed(result.confirmationRef);
     }} />;
-  return <div className={s.actions}><button type="button" className={s.primary} disabled={loading} onClick={() => void choose()}>{loading ? "读取去向…" : "选择去向并确认"}</button>
+  return <div className={s.actions}><button type="button" className={s.primary} disabled={loading} onClick={() => void choose()}>{loading ? "读取去向" : "选择去向并确认"}</button>
     {error && <span role="alert">{error}</span>}</div>;
 }
 
@@ -181,7 +181,7 @@ function ChangeRow({ item, targets, update }: {
         {r.instruction && <p className={s.meta}>本次交代 · {r.instruction}</p>}
         {r.reason && <p className={r.status === "failed" ? s.failure : s.meta}>{r.reason}</p>}</div>
         {r.status === "delivered" ? <a href={destHref(r.target)}>打开去向</a>
-          : <button type="button" className={s.primary} disabled={pending.includes(r.id)} onClick={() => void retry(r)}>{pending.includes(r.id) ? "递送中…" : r.status === "pending" ? "递送此去向" : "重试此去向"}</button>}
+          : <button type="button" className={s.primary} disabled={pending.includes(r.id)} onClick={() => void retry(r)}>{pending.includes(r.id) ? "递送中" : r.status === "pending" ? "递送此去向" : "重试此去向"}</button>}
       </li>;
     })}</ul></details>}
     {suggestion && !receipts.some(r => same(r.target, suggestion)) && <p className={s.meta}>建议去向 · {destName(suggestion)}</p>}

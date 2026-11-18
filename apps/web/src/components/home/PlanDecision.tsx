@@ -256,7 +256,7 @@ export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onC
   const steps = (
     <>
     {[...said].filter(([, found]) => !found.matched).map(([words]) => (
-      <p key={words} className={h.stepSum} title={words} data-testid="model-words-missing">没找到「{words.length > 24 ? `${words.slice(0, 23)}…` : words}」</p>
+      <p key={words} className={h.stepSum} title={words} data-testid="model-words-missing">没找到「{words}」</p>
     ))}
     <ol className={h.steps}>
       {kept.map((draft, index) => {

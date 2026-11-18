@@ -74,7 +74,7 @@ function ProjectSlot({ task, showProject, projects, go }: { task: HomeTask; show
 function AttachMenu({ taskName, projects, onPick, onCreate }: { taskName: string; projects: Project[]; onPick: (projectId: string) => void; onCreate: () => void }) {
   return (
     <Dropdown>
-      <Dropdown.Trigger className={h.statusChip} data-testid="task-attach">挂到…</Dropdown.Trigger>
+      <Dropdown.Trigger className={h.statusChip} data-testid="task-attach">挂到</Dropdown.Trigger>
       <Dropdown.Popover placement="bottom end" offset={8} className={h.pop}>
         <Dropdown.Menu aria-label="挂到" className={h.menuList} onAction={(key) => (key === "new" ? onCreate() : onPick(String(key)))}>
           <Dropdown.Section className={h.menuSection}>

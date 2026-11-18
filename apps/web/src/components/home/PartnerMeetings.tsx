@@ -217,7 +217,7 @@ export function RecordText({ href, sourceUrl }: { href: string; sourceUrl: strin
     return () => controller.abort();
   }, [href, attempt]);
   return <div className={s.detail} aria-label="会议记录">
-    {error ? <ReadError message={error} retry={() => setAttempt(attempt + 1)} /> : text === null ? <span role="status">正在读取记录…</span>
+    {error ? <ReadError message={error} retry={() => setAttempt(attempt + 1)} /> : text === null ? <span role="status">正在读取记录</span>
       : <div className={s.transcript} tabIndex={0} role="region" aria-label="记录正文">{text}</div>}
     {sourceUrl && external(sourceUrl) ? <a className={s.link} href={sourceUrl} target="_blank" rel="noopener noreferrer">打开原文</a> : null}
   </div>;
@@ -268,7 +268,7 @@ export function OrganizeMinute({ token, navigate }: { token: string; navigate: N
     } finally { setBusy(false); }
   }
   if (error) return <ReadError message={error} retry={() => setAttempt(attempt + 1)} />;
-  if (!minute) return <p className={s.detail} role="status">正在读取可归入的会议…</p>;
+  if (!minute) return <p className={s.detail} role="status">正在读取可归入的会议</p>;
   return <div className={s.detail}>
     {choices.length ? <div className={s.organize}>
       <Select aria-label="归入哪场会议" placeholder="选择已有会议" value={choice} disabled={busy}

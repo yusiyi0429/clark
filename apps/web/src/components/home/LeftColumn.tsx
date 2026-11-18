@@ -225,7 +225,7 @@ function ProjectNode({ project, view, go, personId, working = false }: {
   const menuItems: RowMenuItem[] = actions ? [
     { id: "rename", label: "重命名", run: () => setRenaming(true) },
     { id: "read", label: "标为已读", disabled: !unseen, run: () => opened.onOpen?.("project", project.id, project.lastActivity) },
-    ...(project.archived ? [] : [{ id: "transfer", label: "转交给…", run: () => go(projectInfoHref(project.id)) }]),
+    ...(project.archived ? [] : [{ id: "transfer", label: "转交给", run: () => go(projectInfoHref(project.id)) }]),
     { id: "archive", label: project.archived ? "恢复" : "归档", run: () => actions.archiveProject(project.id, !project.archived), failText: () => "没改成" },
     { id: "delete", label: "删除", danger: true, run: async () => { await actions.deleteProject(project.id); go(HOME_HREF); }, failText: deleteProjectFail },
   ] : [];

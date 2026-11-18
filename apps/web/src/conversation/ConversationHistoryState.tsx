@@ -6,6 +6,7 @@ import { HeroButton } from "@/components/HeroButton";
 import type { ConversationData } from "./useConversation";
 import { WAITING_VISIBLE_MS } from "./reconnect";
 import s from "@/styles/conversation-transcript.module.css";
+import { useDots } from "@/lib/home/noEllipsis";
 
 type HistoryView = Pick<ConversationData, "messages" | "streaming" | "historyStatus" | "historyError" | "historyWaiting" | "retryHistory">;
 
@@ -27,9 +28,10 @@ function WaitingLabel({ waiting, fallback }: { waiting: NonNullable<HistoryView[
  * 连接类自己重试过仍没读到只写一行灰字和「重试」；登录、权限类（historyError）才用醒目的提示。
  */
 export function ConversationHistoryState({ data, empty }: { data: HistoryView; empty: ReactNode }) {
+  const dots = useDots();
   const shown = data.messages.length > 0;
   if (data.historyStatus === "loading") {
-    const fallback = shown ? "正在刷新对话记录…" : "正在载入对话记录…";
+    const fallback = dots(shown ? "正在刷新对话记录…" : "正在载入对话记录…");
     return (
       <p className={s.historyLoading} role="status" data-testid="conversation-history-loading">
         {data.historyWaiting ? <WaitingLabel waiting={data.historyWaiting} fallback={fallback} /> : fallback}

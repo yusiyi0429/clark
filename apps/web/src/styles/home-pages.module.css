@@ -17,8 +17,8 @@ label.row:hover { background: var(--default-soft); }
 .switchRow { width: 100%; }
 .rowText { display: grid; flex: 1; min-width: 0; }
 .rowName { display: flex; align-items: center; gap: var(--space-2); min-width: 0; overflow: hidden; color: var(--ink); font-size: var(--text-base); line-height: var(--lh-row); white-space: nowrap; }
-.rowName > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.rowSub { overflow: hidden; color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.rowName > span:first-child { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+.rowSub { color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; white-space: normal; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 .state { flex: none; color: var(--ink-muted); font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); white-space: nowrap; }
 .state[data-state="disconnected"], .state[data-state="unknown"], .state[data-state="not_enabled"] { color: var(--ink-faint); }
 .state[data-state="expired"], .state[data-state="unauthorized"], .state[data-state="unreachable"] { color: var(--warning); }
@@ -28,9 +28,9 @@ label.row:hover { background: var(--default-soft); }
 /* 行下面跟着的东西（额度、文件夹、命令、展开的面板）：和名字对齐。单列 grid 都写 minmax(0, 1fr)，长路径不把行撑出页面（clip-audit 第 6 条）。 */
 .under { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-1); margin: 0 0 var(--space-2); padding: 0 var(--space-2); }
 .sub { display: flex; align-items: center; gap: var(--space-2); min-height: var(--row-32); color: var(--ink-muted); font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); }
-.sub > b { flex: 0 1 auto; max-width: 50%; overflow: hidden; color: var(--ink); font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
-.subText { min-width: 0; overflow: hidden; color: var(--ink-faint); text-overflow: ellipsis; white-space: nowrap; }
-.path { min-width: 0; overflow: hidden; color: var(--ink-faint); font-family: var(--font-mono); font-size: var(--doc-type-meta); text-overflow: ellipsis; white-space: nowrap; }
+.sub > b { flex: 0 1 auto; max-width: 50%; color: var(--ink); font-weight: 400; white-space: normal; overflow-wrap: anywhere; }
+.subText { min-width: 0; color: var(--ink-faint); white-space: normal; overflow-wrap: anywhere; }
+.path { min-width: 0; color: var(--ink-faint); font-family: var(--font-mono); font-size: var(--doc-type-meta); white-space: normal; overflow-wrap: anywhere; }
 .grow { flex: 1; min-width: 0; }
 /* 这台电脑那一行的「这台」：中性 chip（5.4.3）。 */
 .chip { display: inline-flex; flex: none; align-items: center; height: 20px; padding: 0 var(--space-2); border-radius: var(--r-capsule); background: var(--neutral-wash); color: var(--ink-muted); font-size: var(--text-xs); line-height: 16px; }
@@ -49,7 +49,7 @@ label.row:hover { background: var(--default-soft); }
 /* 额度（订阅那几行下面，和右栏的额度行一样）：名字、剩多少、几点重置，下面 2px 额度条；明细每个窗口一行。 */
 .quota { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; padding: var(--space-1) 0; }
 .quotaLine { display: flex; align-items: baseline; gap: var(--space-2); font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); }
-.quotaName { min-width: 0; overflow: hidden; color: var(--ink); text-overflow: ellipsis; white-space: nowrap; }
+.quotaName { min-width: 0; color: var(--ink); white-space: normal; overflow-wrap: anywhere; }
 .quotaAmount { flex: none; color: var(--ink); font-variant-numeric: tabular-nums; }
 .quotaTime { flex: none; color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; font-variant-numeric: tabular-nums; }
 .quota[data-stale] :is(.quotaName, .quotaAmount) { color: var(--ink-faint); }
@@ -127,10 +127,15 @@ label.row:hover { background: var(--default-soft); }
 /* 当月（11/16 重新设计第 6 节）：Task 行尾项目那一格；标题下一行小字；Mission 里按验收时间点分段的段头；页头翻月。 */
 .monthTaskLine { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
 .monthTaskLine > button { flex: 1; min-width: 0; }
+/* 手机上（新首页外壳的 data-phone）：Task 名占一整行；后面跟的胶囊（项目名或「挂到」）折到下面，按字宽，长了最多到整行、换行；
+ * 左边让出状态图标那一格（16 + 间距），和 Task 名的字对齐。 */
+:global([data-phone]) .monthTaskLine { flex-direction: column; align-items: flex-start; }
+:global([data-phone]) .monthTaskLine > button:first-child { align-self: stretch; }
+:global([data-phone]) .monthTaskLine > * + * { flex: none; max-width: calc(100% - 16px - var(--space-2)); margin-left: calc(16px + var(--space-2)); text-align: left; }
 .monthSummary { margin: 0 0 var(--space-2); padding: 0 var(--space-2); color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; font-variant-numeric: tabular-nums; }
 .segmentTitle { margin: var(--space-1) 0 0; padding: 4px var(--space-2); color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; font-variant-numeric: tabular-nums; }
 .monthNav { display: inline-flex; align-items: center; gap: var(--space-1); }
-.groupTitle { margin: var(--space-2) 0 0; padding: 6px var(--space-2); overflow: hidden; color: var(--ink-faint); font-size: var(--text-xs); font-weight: 600; line-height: 16px; text-overflow: ellipsis; white-space: nowrap; }
+.groupTitle { margin: var(--space-2) 0 0; padding: 6px var(--space-2); color: var(--ink-faint); font-size: var(--text-xs); font-weight: 600; line-height: 16px; white-space: normal; overflow-wrap: anywhere; }
 .groupTitle:first-child { margin-top: 0; }
 .draftRow { display: flex; align-items: center; gap: var(--space-2); min-height: var(--row-48); padding: 6px var(--space-2); }
 .foot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: 0 var(--space-2); }
@@ -138,9 +143,9 @@ label.row:hover { background: var(--default-soft); }
 /* ---------- 复盘页（设计第三版第 3 节）：Mission 一块，三列 验收标准 | 评定 | 交付，按 Task 分组；最下面延期和取消 ---------- */
 .reviewHeadTrail { display: inline-flex; flex: 0 1 auto; align-items: center; gap: var(--space-3); min-width: 0; }
 .reviewMeta { flex: none; color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; white-space: nowrap; }
-.reviewHeadTrail .reviewMeta { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.reviewHeadTrail .reviewMeta { flex: 0 1 auto; min-width: 0; white-space: normal; overflow-wrap: anywhere; }
 .reviewMissionHead { display: flex; align-items: center; gap: var(--space-2); min-height: var(--row-36); padding: 0 var(--space-2); }
-.reviewMissionName { flex: 1; min-width: 0; margin: 0; overflow: hidden; color: var(--ink); font-size: var(--text-base); font-weight: 600; line-height: var(--lh-row); text-overflow: ellipsis; white-space: nowrap; }
+.reviewMissionName { flex: 1; min-width: 0; margin: 0; color: var(--ink); font-size: var(--text-base); font-weight: 600; line-height: var(--lh-row); white-space: normal; overflow-wrap: anywhere; }
 .reviewFold { display: inline-grid; flex: none; place-items: center; width: var(--row-28); height: var(--row-28); margin-left: calc(-1 * var(--space-1)); border: 0; border-radius: var(--r-control); background: none; color: var(--ink-faint); cursor: pointer; }
 .reviewFold:hover { background: var(--default-soft); color: var(--ink-muted); }
 /* 确认过、收起来的一行：整行能点开。 */
@@ -153,7 +158,7 @@ label.row:hover { background: var(--default-soft); }
 .reviewColumns { align-items: center; min-height: var(--row-28); color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; }
 .reviewTask + .reviewTask { margin-top: var(--space-2); }
 .reviewTaskHead { display: flex; align-items: center; gap: var(--space-2); min-height: var(--row-36); padding: 0 var(--space-2); box-shadow: inset 0 -1px 0 var(--hairline); }
-.reviewTaskName { flex: 1; min-width: 0; overflow: hidden; color: var(--ink); font-size: var(--text-base); line-height: var(--lh-row); text-overflow: ellipsis; white-space: nowrap; }
+.reviewTaskName { flex: 1; min-width: 0; color: var(--ink); font-size: var(--text-base); line-height: var(--lh-row); white-space: normal; overflow-wrap: anywhere; }
 .reviewRow { align-items: start; padding-block: var(--space-2); }
 .reviewText { display: grid; gap: 2px; min-width: 0; color: var(--ink); font-size: var(--text-base); line-height: var(--lh-row); }
 .reviewBasis { color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; }
@@ -167,8 +172,8 @@ label.row:hover { background: var(--default-soft); }
 .pick[data-rating="unmet"], .reviewRatingWord[data-rating="unmet"] { color: var(--danger); }
 .reviewRatingWord { font-size: var(--doc-type-meta); line-height: var(--row-28); }
 .reviewLinks { display: flex; flex-wrap: wrap; align-items: center; gap: 2px var(--space-1); min-width: 0; }
-.reviewLink { display: inline-flex; align-items: center; max-width: 100%; min-width: 0; height: var(--row-28); padding: 0 var(--space-1) 0 var(--space-2); border-radius: var(--r-capsule); background: var(--neutral-wash); font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); }
-.reviewLink a { min-width: 0; overflow: hidden; color: var(--ink); text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
+.reviewLink { display: inline-flex; align-items: center; max-width: 100%; min-width: 0; min-height: var(--row-28); padding: 2px var(--space-1) 2px var(--space-2); border-radius: var(--r-capsule); background: var(--neutral-wash); font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); }
+.reviewLink a { min-width: 0; color: var(--ink); text-decoration: none; white-space: normal; overflow-wrap: anywhere; }
 .reviewLink a:hover { text-decoration: underline; }
 .reviewUnlink { display: inline-grid; flex: none; place-items: center; width: 20px; height: 20px; border: 0; border-radius: var(--r-control); background: none; color: var(--ink-faint); opacity: 0; cursor: pointer; transition: opacity var(--dur-fast) linear; }
 .reviewLink:hover .reviewUnlink, .reviewUnlink:focus-visible { opacity: 1; }
@@ -273,8 +278,10 @@ button.cardMain:focus-visible { outline: none; }
 button.cardMain:focus-visible::after { outline: 2px solid var(--focus); outline-offset: -2px; }
 .cardIcon { display: grid; flex: none; place-items: center; width: 40px; height: 40px; border-radius: var(--r-inset); background: var(--neutral-wash); color: var(--ink-muted); }
 .cardText { display: grid; gap: 2px; min-width: 0; }
-.cardName { overflow: hidden; color: var(--ink); font-size: var(--text-base); font-weight: 600; line-height: var(--lh-row); text-overflow: ellipsis; white-space: nowrap; }
-.cardLine { display: -webkit-box; overflow: hidden; color: var(--ink-muted); font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; }
+.cardName { color: var(--ink); font-size: var(--text-base); font-weight: 600; line-height: var(--lh-row); white-space: normal; overflow-wrap: anywhere; }
+/* 卡片说明最多两行，多了往下渐隐（不出省略号，本人 11/18）。 */
+.cardLine { max-height: 2lh; overflow: hidden; color: var(--ink-muted); font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); overflow-wrap: anywhere; }
+.cardLine[data-over] { -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 1lh), transparent); mask-image: linear-gradient(to bottom, black calc(100% - 1lh), transparent); }
 .cardSource { color: var(--ink-faint); font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); }
 .cardState { color: var(--ink-muted); }
 .cardState[data-state="disconnected"], .cardState[data-state="unknown"], .cardState[data-state="not_enabled"] { color: var(--ink-faint); }

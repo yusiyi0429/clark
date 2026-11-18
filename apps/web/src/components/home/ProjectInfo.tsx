@@ -198,7 +198,7 @@ export function ProjectInfo({ project, period, go, actions, folders = [], folder
           </>
         ) : transfer ? <span className={h.line}>已交给 {transfer.to.name}</span> : project.archived ? <span className={h.line}>已归档</span> : (
           <Dropdown>
-            <Dropdown.Trigger className={h.sendTo} data-testid="transfer-to"><b>转给…</b></Dropdown.Trigger>
+            <Dropdown.Trigger className={h.sendTo} data-testid="transfer-to"><b>转给</b></Dropdown.Trigger>
             <Dropdown.Popover placement="bottom start" offset={8} className={h.pop}>
               <Dropdown.Menu aria-label="转给" className={`${h.menuList} ${h.menuScroll}`} onAction={(key) => {
                 const person = people.find((entry) => entry.personId === key);

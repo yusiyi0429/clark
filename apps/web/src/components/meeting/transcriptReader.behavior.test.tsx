@@ -29,6 +29,7 @@ vi.mock("react", async (original) => ({ ...(await original<typeof import("react"
   useState: hooks.useState, useRef: hooks.useRef, useEffect: hooks.useEffect, useCallback: (fn: unknown) => fn }));
 const api = vi.hoisted(() => ({ GET: vi.fn() }));
 vi.mock("@/lib/api/client", () => ({ browserApi: api }));
+vi.mock("@/lib/home/noEllipsis", () => ({ useDots: () => (text: string) => text }));
 
 import { TranscriptReader } from "./TranscriptReader";
 

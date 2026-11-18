@@ -8,20 +8,20 @@ const quote: TextQuote = { id: "quote-1", text: "形成可复核的界面与权�
   source: { label: "战役结果", scope: "mission-card:card-01", objectType: "mission-card", objectId: "card-01", missionId: "mission-01", field: "outcome", sourceRound: 2, sourceVersion: 3 } };
 
 describe("独立文字引用", () => {
-  it("待发送的引用块直接露出前 16 个字（换行压成空格，超出用省略号），全文仍在预览里读，保留移除", () => {
+  it("待发送的引用块直接露出开头一段（换行压成空格，不拼省略号，放不下由样式收起），全文仍在预览里读，保留移除", () => {
     const html = renderToStaticMarkup(<QuoteChips quotes={[quote]} onRemove={() => {}} />);
-    expect(html).toContain("形成可复核的界面与权限证据。 包…");
+    expect(html).toContain("形成可复核的界面与权限证据。 包括 CEO 与 DRI 的双视角。");
     expect(html).not.toContain(quote.text);
-    expect(html).not.toContain("CEO");
+    expect(html).not.toContain("…");
     expect(html).toContain('aria-label="移除批注"');
     expect(html).toContain('aria-expanded="false"');
     expect(html).toContain("查看批注：战役结果");
   });
-  it("短引用不加省略号；多条引用各露各的内容", () => {
-    const html = renderToStaticMarkup(<QuoteChips quotes={[{ id: "a", text: "  先看渠道  " }, { ...quote, id: "b", text: "一二三四五六七八九十一二三四五六七" }]} onRemove={() => {}} />);
+  it("长短引用都不加省略号；长的只取开头 40 个字；多条引用各露各的内容", () => {
+    const html = renderToStaticMarkup(<QuoteChips quotes={[{ id: "a", text: "  先看渠道  " }, { ...quote, id: "b", text: "一二三四五六七八九十".repeat(5) }]} onRemove={() => {}} />);
     expect(html).toContain(">先看渠道<");
-    expect(html).not.toContain("先看渠道…");
-    expect(html).toContain("一二三四五六七八九十一二三四五六…");
+    expect(html).not.toContain("…");
+    expect(html).toContain(`>${"一二三四五六七八九十".repeat(4)}<`);
     expect(html).toContain('aria-label="移除批注 2"');
   });
   it("对话里某条消息选出的一段叫「回复」，挂的内容叫「批注」", () => {

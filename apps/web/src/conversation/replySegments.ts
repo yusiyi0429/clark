@@ -27,8 +27,8 @@ const TABLE_ROW = /^ {0,3}\|/;
 const LIST_ITEM = /^([ \t]*)(?:[-*+]|\d{1,9}[.)])(?:[ \t]|$)/;
 const SHORT_LIST_ITEMS = 5;
 const SHORT_LIST_ITEM_CHARS = 24;
-const TITLE_CHARS = 40;
-const SUMMARY_CHARS = 60;
+/** 摘要只取够两行渐隐用的一段原文，不拼省略号（本人 11/18）；标题完整给，放不下由样式换行。 */
+const SUMMARY_CHARS = 120;
 
 function lineKind(line: string): PartKind {
   if (FENCE.test(line) || MATH.test(line)) return "code";
@@ -113,9 +113,8 @@ function cells(row: string): string {
   return row.trim().replace(/^\||\|$/g, "").split("|").map((cell) => plain(cell)).join(" · ");
 }
 
-function truncate(text: string, max: number): string {
-  const chars = [...text];
-  return chars.length > max ? `${chars.slice(0, max).join("")}…` : text;
+function head(text: string, max: number): string {
+  return [...text].slice(0, max).join("");
 }
 
 function isDelimiterRow(line: string): boolean {
@@ -140,7 +139,7 @@ function describeCard(markdown: string): { title: string; summary: string } {
     const text = lineText(line);
     if (text) texts.push(text);
   }
-  return { title: truncate(texts[0] ?? "", TITLE_CHARS), summary: truncate(texts[1] ?? "", SUMMARY_CHARS) };
+  return { title: texts[0] ?? "", summary: head(texts[1] ?? "", SUMMARY_CHARS) };
 }
 
 /** 长清单：超过 5 项，或有嵌套，或有一项超过 24 个字。 */
@@ -213,7 +212,7 @@ function describeGroup(group: Group, markdown: string): { title: string; summary
   const described = describeCard(markdown);
   if (!group.bold) return described;
   const title = lineText(markdown.split("\n")[0]).replace(/[：:]$/, "");
-  return { title: truncate(title, TITLE_CHARS), summary: described.summary };
+  return { title, summary: described.summary };
 }
 
 /**

@@ -29,7 +29,7 @@ describe("项目下的「+」开自由子会话（第 68 条）", () => {
   it("新子会话页：项目名做页头，底下是首页那个输入框，不加别的字", () => {
     const html = renderToStaticMarkup(<NewSubView project={{ id: "p1", name: "首页改版" }} onCreate={async () => undefined} />);
     expect(html).toMatch(/<h1[^>]*>首页改版<\/h1>/);
-    expect(html).toContain('placeholder="说点什么…"');
+    expect(html).toContain('placeholder="说点什么"');
     expect(html.replace(/<[^>]+>/g, "|").replace(/\|+/g, "|")).toBe("|首页改版|");
   });
 

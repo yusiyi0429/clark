@@ -26,6 +26,7 @@ import { DECISION_HISTORY_CHANGED } from "./useDecisionHistory";
 import s from "@/styles/meeting-workspace.module.css";
 import { cleanDisplayText, shortSourceName } from "@/lib/displayText";
 import { StructuredText } from "@/components/StructuredText";
+import { useDots } from "@/lib/home/noEllipsis";
 
 /**
  * 会议页里的一个议题块（feedback 15 / H06）：首屏是这个议题的核心判断，往下依次是历史与变化、事实与依据、
@@ -407,6 +408,7 @@ function DecisionForm({ draft, override, pending, error, onChange, onCancel, onS
   onCancel: () => void;
   onSubmit: () => void;
 }) {
+  const dots = useDots();
   if (!draft) return null;
   return (
     <div className={s.decisionForm} role="group" aria-label="确认决定">
@@ -424,7 +426,7 @@ function DecisionForm({ draft, override, pending, error, onChange, onCancel, onS
       {error ? <p className={s.formError} role="alert">{error}</p> : null}
       <div className={s.formActions}>
         <button type="button" className={s.confirmDecision} disabled={pending || !draft.text.trim()} onClick={onSubmit}>
-          {pending ? "保存中…" : "确认决定"}
+          {pending ? dots("保存中…") : "确认决定"}
         </button>
         <button type="button" className={s.cancelDecision} disabled={pending} onClick={onCancel}>取消</button>
       </div>

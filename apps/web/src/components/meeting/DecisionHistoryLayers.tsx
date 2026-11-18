@@ -5,6 +5,7 @@ import { monthDayTime } from "@/lib/companyTime";
 import { clip, historyAnchorId, shortDate } from "@/cards/meetingSources";
 import { SourceList } from "./SourceViewer";
 import d from "@/styles/decision-workspace.module.css";
+import { useDots, useNoEllipsis } from "@/lib/home/noEllipsis";
 
 /**
  * 议题的三层历史（feedback 9 / H05）：仍有效的历史决定、此后实际变化、本次待判断，互不混用。
@@ -45,11 +46,12 @@ export function hasHistoryContent(history: TIssueDecisionHistory | null): boolea
  * 只显示有内容的分层；全部为空时整节收成一行弱色小字。会议页不带 compact，三层照旧。
  */
 export function DecisionHistoryLayers({ issueId, view, currentMeetingId = null, compact = false }: { issueId: string; view: HistoryView; currentMeetingId?: string | null; compact?: boolean }) {
+  const dots = useDots();
   const history = view.data;
   if (compact && view.status !== "error" && (view.status === "ready" ? !hasHistoryContent(history) : !history)) {
     return view.status === "ready"
       ? <p className={d.layerEmpty} data-history-empty="">{HISTORY_EMPTY_LINE}</p>
-      : <p className={d.layerLoading} role="status">正在读取该议题的历史决定…</p>;
+      : <p className={d.layerLoading} role="status">{dots("正在读取该议题的历史决定…")}</p>;
   }
   if (!history) {
     if (view.status === "error") {
@@ -61,7 +63,7 @@ export function DecisionHistoryLayers({ issueId, view, currentMeetingId = null, 
       );
     }
     if (view.status === "ready") return <p className={d.layerEmpty}>未读取到该议题的历史决定。</p>;
-    return <p className={d.layerLoading} role="status">正在读取该议题的历史决定…</p>;
+    return <p className={d.layerLoading} role="status">{dots("正在读取该议题的历史决定…")}</p>;
   }
   const meetings = history.relatedMeetings.filter((meeting) => meeting.id !== currentMeetingId);
   return (
@@ -101,12 +103,12 @@ export function DecisionHistoryLayers({ issueId, view, currentMeetingId = null, 
   );
 }
 
-function sourceLine(entry: TDecisionHistoryEntry): string | null {
+function sourceLine(entry: TDecisionHistoryEntry, whole: boolean): string | null {
   const { source } = entry;
   if (source.kind === "imported") return source.importedRef ? `出处：${source.importedRef}` : null;
   if (source.kind === "meeting-item") {
     const meeting = source.meetingTitle ? `会议「${source.meetingTitle}」` : "会后确认";
-    return source.quote ? `${meeting} · 原话「${clip(source.quote, 60)}」` : meeting;
+    return source.quote ? `${meeting} · 原话「${clip(source.quote, 60, whole)}」` : meeting;
   }
   return null;
 }
@@ -117,7 +119,7 @@ const otherRefs = (refs: string[], self: string, issueId: string) => refs.filter
 function EffectiveEntry({ entry, issueId }: { entry: TDecisionHistoryEntry; issueId: string }) {
   const meta = [entry.decidedBy?.displayName, monthDayTime(entry.decidedAt), VIA[entry.confirmedVia], entry.option?.label ? `选项「${entry.option.label}」` : null]
     .filter(Boolean).join(" · ");
-  const line = sourceLine(entry);
+  const line = sourceLine(entry, useNoEllipsis());
   return (
     <li id={historyAnchorId(issueId, entry.ref)} className={d.entry} data-layer="effective">
       <p className={d.entryText}>
@@ -148,6 +150,7 @@ function ChangeEntry({ change, issueId }: { change: TDecisionHistoryChange; issu
 }
 
 function PendingEntry({ item, issueId }: { item: TDecisionHistoryPending; issueId: string }) {
+  const whole = useNoEllipsis();
   return (
     <li id={historyAnchorId(issueId, item.ref)} className={d.entry} data-layer="pending">
       <p className={d.entryText}>
@@ -156,7 +159,7 @@ function PendingEntry({ item, issueId }: { item: TDecisionHistoryPending; issueI
       </p>
       {item.options.length ? <p className={d.entryMeta}>可选路径：{item.options.map((option) => option.label).join(" / ")}</p> : null}
       {item.source?.meetingTitle ? (
-        <p className={d.entryMeta}>来自会议「{item.source.meetingTitle}」{item.source.quote ? ` · 原话「${clip(item.source.quote, 60)}」` : ""}</p>
+        <p className={d.entryMeta}>来自会议「{item.source.meetingTitle}」{item.source.quote ? ` · 原话「${clip(item.source.quote, 60, whole)}」` : ""}</p>
       ) : null}
       <p className={d.pendingNote}>{item.note}</p>
     </li>
@@ -164,6 +167,7 @@ function PendingEntry({ item, issueId }: { item: TDecisionHistoryPending; issueI
 }
 
 function InactiveEntry({ entry, issueId }: { entry: TDecisionHistoryEntry; issueId: string }) {
+  const whole = useNoEllipsis();
   const state = entry.status === "superseded" ? "已被替代" : "已撤回";
   const refs = [entry.supersededBy, entry.revokedBy].filter((ref): ref is string => Boolean(ref));
   return (
@@ -173,7 +177,7 @@ function InactiveEntry({ entry, issueId }: { entry: TDecisionHistoryEntry; issue
         {[`${state}${entry.statusAt ? ` · ${monthDayTime(entry.statusAt)}` : ""}${entry.statusReason ? `：${entry.statusReason}` : ""}`,
           `原决定 ${monthDayTime(entry.decidedAt)}`, VIA[entry.confirmedVia]].join(" · ")}
       </p>
-      {sourceLine(entry) ? <p className={d.entryMeta}>{sourceLine(entry)}</p> : null}
+      {sourceLine(entry, whole) ? <p className={d.entryMeta}>{sourceLine(entry, whole)}</p> : null}
       <SourceList label={entry.status === "superseded" ? "被它替代" : "撤回依据"} refs={refs} issueId={issueId} />
     </li>
   );

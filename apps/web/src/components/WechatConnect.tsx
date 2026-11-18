@@ -6,6 +6,7 @@ import { Button } from "ts-design/primitives";
 import { browserApi } from "@/lib/api/client";
 import type { components } from "@/lib/api/schema";
 import m from "@/styles/account-menu.module.css";
+import { useDots } from "@/lib/home/noEllipsis";
 
 export type WechatConnection = components["schemas"]["WechatConnection"];
 
@@ -26,6 +27,7 @@ export async function readWechatConnection(): Promise<WechatConnection | null> {
  * 二维码过期、连接失效时给一个按钮重来；已连接时可以断开。
  */
 export function WechatConnectPanel({ onChange }: { onChange?: (connection: WechatConnection) => void }) {
+  const dots = useDots();
   const [connection, setConnection] = useState<WechatConnection | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -76,7 +78,7 @@ export function WechatConnectPanel({ onChange }: { onChange?: (connection: Wecha
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 等扫码期间轮询
   }, [waiting]);
 
-  if (!connection) return <div className={m.form}>{error ? <p className={m.error} role="alert">{error}</p> : <p className={m.wechatStatus}>正在准备二维码…</p>}</div>;
+  if (!connection) return <div className={m.form}>{error ? <p className={m.error} role="alert">{error}</p> : <p className={m.wechatStatus}>{dots("正在准备二维码…")}</p>}</div>;
 
   if (connection.state === "connected") {
     return (
