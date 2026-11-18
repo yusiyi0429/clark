@@ -78,3 +78,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) { .pulse { animation: none; } }
+
+/* 新首页不出省略号（本人 11/18）：批注原文、垃圾篓里删掉的那段限高，只在放不下时往下渐隐（MaterialAnnotations 用 FadeText 量）；旧界面照旧截断。 */
+:global(:root:has([data-type-scale="one"])) .quote { display: block; -webkit-line-clamp: none; max-height: 2lh; overflow: hidden; }
+:global(:root:has([data-type-scale="one"])) .removedText { display: block; -webkit-line-clamp: none; max-height: 3lh; overflow: hidden; }
+:global(:root:has([data-type-scale="one"])) .quote[data-over], :global(:root:has([data-type-scale="one"])) .removedText[data-over] { -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 1lh), transparent); mask-image: linear-gradient(to bottom, black calc(100% - 1lh), transparent); }

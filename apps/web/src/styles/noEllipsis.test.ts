@@ -11,8 +11,7 @@ import { describe, expect, it } from "vitest";
  *   `:global(:root:has([data-type-scale="one"]))` 盖掉。这里查每条会出省略号的规则都被盖到了。
  * - 不在名单里的：只在旧界面出现（CEO 管理模式、对象页、V2 旧骨架、老工作台），或在新首页里不渲染
  *   （radar-feed、v2-month 只被引了函数或类型；composer-pill、conversation-dock、conversation-attachments、
- *   conversation-column 是旧对话栏的输入框和页头，新首页用自己的 InputBar）；
- *   material-tabs、materials、material-annotations（会议材料预览）另一个人在改，交主会话处理。
+ *   conversation-column 是旧对话栏的输入框和页头，新首页用自己的 InputBar）。
  */
 const OWN = [
   "styles/home.module.css",
@@ -42,6 +41,10 @@ const SHARED = [
   "styles/header-capsule.module.css",
   // 手机上「我」（连接页 PluginsPage）页头的账号名。
   "styles/account-menu.module.css",
+  // 会议页的材料区：页头的材料下拉钮、链接预览、批注和垃圾篓。
+  "styles/material-tabs.module.css",
+  "components/materials/materials.module.css",
+  "components/materials/material-annotations.module.css",
   "components/steps/step-list.module.css",
   "components/requests/requests.module.css",
   "components/requests/impact.module.css",
@@ -229,6 +232,47 @@ describe("新首页不出省略号（本人 11/18）", () => {
     }
     expect(home(".scope :global(.ts-detail-header)")).toMatch(/(^|[;\s])height:\s*auto/);
     expect(home(".scope :global(.ts-detail-header)")).toMatch(/min-height:\s*var\(--detail-header-height\)/);
+    // 标题折行时上下留空（同子会话 .embedTitle）：空留在标题上，不加在页头上，单行时页头仍 48。
+    expect(home(".scope :global(.ts-detail-header > h1)")).toMatch(/padding-block:\s*var\(--space-1\)/);
+    expect(home(".scope :global(.ts-detail-header)")).not.toMatch(/padding/);
+  });
+
+  it("会议页页头长高时，键盘定位让开实际页头高度", () => {
+    // 旧界面照旧按固定 48 算；新首页里读 DetailFrame 量出来的页头高度（--detail-head-h，同项目对话的 --head-h）。
+    const all = rules("styles/header-capsule.module.css");
+    const home = all.filter((rule) => rule.selectors.includes(`${NEW_HOME} .scope :global(.ts-detail)`)).map((rule) => rule.body).join(";");
+    expect(home).toMatch(/scroll-padding-top:\s*calc\(var\(--detail-head-h, var\(--detail-header-height\)\) \+ 10px\)/);
+    expect(readFileSync(new URL("../components/shell/DetailFrame.tsx", import.meta.url), "utf8")).toMatch(/setProperty\("--detail-head-h"/);
+  });
+
+  it("会议材料的名字换行，批注原文和垃圾篓只在溢出时渐隐", () => {
+    const fade = /mask-image:\s*linear-gradient\(to bottom/;
+    const annotations = rules("components/materials/material-annotations.module.css");
+    const home = (selector: string) => annotations.filter((rule) => rule.selectors.includes(`${NEW_HOME} ${selector}`)).map((rule) => rule.body).join(";");
+    expect(home(".quote")).toMatch(/max-height:\s*2lh/);
+    expect(home(".removedText")).toMatch(/max-height:\s*3lh/);
+    expect(home(".quote[data-over]")).toMatch(fade);
+    expect(home(".removedText[data-over]")).toMatch(fade);
+    // 渐隐只挂在新首页前缀加 [data-over] 上。
+    expect(annotations.filter((rule) => fade.test(rule.body)).flatMap((rule) => rule.selectors).filter((selector) => !selector.startsWith(NEW_HOME) || !selector.includes("[data-over]"))).toEqual([]);
+    // 量高：批注原文和垃圾篓用 FadeText。
+    const source = readFileSync(new URL("../components/materials/MaterialAnnotations.tsx", import.meta.url), "utf8");
+    expect(source.match(/<FadeText as="p" className=\{s\.quote\}>/g)).toHaveLength(2);
+    expect(source).toMatch(/<FadeText as="p" className=\{s\.removedText\}>/);
+    // 名字放不下时控件跟着长高：材料下拉钮、链接预览的域名条。
+    const tabs = rules("styles/material-tabs.module.css").filter((rule) => rule.selectors.includes(`${NEW_HOME} .trigger.trigger`)).map((rule) => rule.body).join(";");
+    expect(tabs).toMatch(/(^|[;\s])height:\s*auto/);
+    expect(tabs).toMatch(/white-space:\s*normal/);
+    const bar = rules("components/materials/materials.module.css").filter((rule) => rule.selectors.includes(`${NEW_HOME} .linkBar`)).map((rule) => rule.body).join(";");
+    expect(bar).toMatch(/(^|[;\s])height:\s*auto/);
+  });
+
+  it("账号胶囊里名字折行时胶囊跟着长高", () => {
+    // 旧界面的胶囊照旧 40 / 44 高；新首页里只留最小高度。
+    const all = rules("styles/account-menu.module.css");
+    const home = all.filter((rule) => rule.selectors.includes(`${NEW_HOME} .chip.chip`)).map((rule) => rule.body).join(";");
+    expect(home).toMatch(/(^|[;\s])height:\s*auto/);
+    expect(all.filter((rule) => rule.selectors.includes(".chip.chip")).map((rule) => rule.body).join(";")).toMatch(/(^|[;\s])height:\s*44px/);
   });
 
   it("下沿左边是没绑文件夹的「此电脑」时也算有字，右边最多一半", () => {

@@ -221,6 +221,7 @@ function overflows(element: HTMLElement): boolean {
  * 一张卡：标题、时间（淡色）、正文。写完后全文放得下就原地显示全文；放不下才是摘要（淡色）加「打开」：
  * 电脑上「打开」在右边文件预览那一格看全文；手机上（没有那一格）就地展开。
  * 放不放得下在绘制前量（读历史不闪）；放不下时全文还留着、不占位置也看不见，窗口变了照样重新量。
+ * 收起以后限高少一行再量：要少到 11 行才回全文，竖滚动条一出一收、宽度差十几像素时，卡在 12 行附近的卡片不来回切。
  * open：还在写，只出壳子（标题 + 正在输入的「•••」，同气泡），写完那一刻再定。
  */
 function ReplyCard({ markdown, title, summary, open, at, delay, edge, part }: { markdown: string; title: string; summary: string; open: boolean; at?: string; delay: number | null; edge?: ReactNode; part: PartMark }) {
@@ -266,7 +267,7 @@ function ReplyCard({ markdown, title, summary, open, at, delay, edge, part }: { 
       </div>
       {open ? <div className={`${b.typing} ${b.cardTyping}`} data-testid="card-typing" aria-hidden><i /><i /><i /></div> : fold && summary && !inPlace ? <FadeText as="div" className={b.summary}>{summary}</FadeText> : null}
       {open || inPlace ? null : (
-        <div ref={full} className={`${ts.prose} ${b.cardFull}`} data-fold={fold ? "" : undefined} style={{ maxHeight: `${CARD_FULL_LINES}lh` }}>
+        <div ref={full} className={`${ts.prose} ${b.cardFull}`} data-fold={fold ? "" : undefined} style={{ maxHeight: `${fold ? CARD_FULL_LINES - 1 : CARD_FULL_LINES}lh` }}>
           <MarkdownBody text={withoutTitle(markdown, title)} streaming={false} />
         </div>
       )}

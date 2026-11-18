@@ -12,6 +12,7 @@ import type {
   TMaterialAnnotationView, TMaterialBlockHistoryEntry, TMaterialDetailResponse, TMaterialEditProposalView, TMaterialRemovedView,
   TMaterialRevisionOrigin, TMaterialView,
 } from "@warmap/contracts";
+import { FadeText } from "@/lib/home/overflowFade";
 import s from "./material-annotations.module.css";
 
 export type MaterialSelection = { text: string; prefix: string; suffix: string; top: number; left: number };
@@ -104,7 +105,7 @@ export function AnnotationComposer({ selection, canEdit, onSubmit, onClose }: {
     return docked ? place(<div className={s.dock}>{pill}<button type="button" className={s.dockClose} aria-label="不写批注" onClick={onClose}><X size={16} aria-hidden /></button></div>) : pill;
   }
   return place(<div ref={box} className={s.composer} style={at} role="dialog" aria-label="写批注">
-    <p className={s.quote}>「{selection.text}」</p>
+    <FadeText as="p" className={s.quote}>「{selection.text}」</FadeText>
     <textarea autoFocus rows={3} maxLength={2000} value={body} disabled={sending !== null} placeholder="写下修改意见"
       onChange={(event) => { setBody(event.target.value); setError(""); }}
       onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send("note"); } if (event.key === "Escape") onClose(); }} />
@@ -161,7 +162,7 @@ function NoteItem({ note, material, onDecide }: { note: TMaterialAnnotationView;
     : note.status === "noted" && material.editable && !material.canEdit ? `待${material.owner.displayName}处理` : STATUS[note.status];
   const adoptedBy = !declined && note.decidedBy && note.decidedBy.personId !== note.author.personId ? note.decidedBy.displayName : null;
   return <li data-status={note.status} tabIndex={declined ? 0 : undefined}>
-    <p className={s.quote}>「{note.quote}」</p>
+    <FadeText as="p" className={s.quote}>「{note.quote}」</FadeText>
     <p>{note.body}</p>
     <small>{note.author.displayName} · {date(note.createdAt)} · <span className={s.status} data-status={note.status}>{label}{note.status === "applied" && note.appliedVersion ? ` · 第 ${note.appliedVersion} 版` : ""}</span>
       {adoptedBy ? ` · ${adoptedBy}采用` : ""}{note.stale ? " · 原文已改" : ""}{note.note && !declined ? ` · ${note.note}` : ""}</small>
@@ -187,7 +188,7 @@ function TrashPanel({ removed, onRestore }: { removed: TMaterialRemovedView[]; o
   return <ol className={s.panel} aria-label="已删除的内容">
     {error ? <li className={s.error} role="alert">{error}</li> : null}
     {removed.map((item) => <li key={item.id}>
-      <p className={s.removedText}>{item.text}</p>
+      <FadeText as="p" className={s.removedText}>{item.text}</FadeText>
       <small>第 {item.version} 版删掉 · {item.requestedBy?.displayName ?? "Agent"} · {date(item.at)}{item.annotation ? ` · 按${item.annotation.author.personId === item.requestedBy?.personId ? "" : `${item.annotation.author.displayName}的`}批注「${item.annotation.body.slice(0, 30)}」` : ""}</small>
       {item.restorable ? <button type="button" className={s.restore} disabled={busy !== null} onClick={async () => {
         setBusy(item.id); setError("");

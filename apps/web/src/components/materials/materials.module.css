@@ -60,3 +60,7 @@
 .area[data-dragging]{position:relative;outline:2px dashed #a9c7f8;outline-offset:-8px;border-radius:18px;background:#f5f9ff}
 /* 拖着文件进来时才出现的那一句。 */
 .area[data-dragging]::after{content:"松开上传";position:absolute;top:96px;left:50%;z-index:6;transform:translateX(-50%);padding:6px 14px;border-radius:999px;background:#2f6fd6;color:#fff;font-size:13px;font-weight:600;line-height:20px;pointer-events:none;box-shadow:0 6px 18px rgb(31 53 86/.18)}
+
+/* 新首页不出省略号（本人 11/18）：链接预览的域名放不下就换行，域名条跟着长高；旧界面照旧。 */
+:global(:root:has([data-type-scale="one"])) .linkBar{height:auto;min-height:24px}
+:global(:root:has([data-type-scale="one"])) .linkBar b{white-space:normal;text-overflow:clip;overflow-wrap:anywhere}

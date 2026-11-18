@@ -263,7 +263,6 @@ describe("伙伴回复成气泡和卡片（设计 6.1–6.3）", () => {
     const tall = card();
     measureCard("tall", tall, TALL);
     let tree = expand("tall", tall);
-    expect(fullOf(tree)!.props.style).toEqual({ maxHeight: `${CARD_FULL_LINES}lh` });
     expect(fullOf(tree)!.props["data-fold"]).toBe("");
     expect(named(tree, "FadeText")[0]?.props.children).toBe("第一条要说清楚。");
     expect(button(tree, "打开")).toBeDefined();
@@ -272,6 +271,7 @@ describe("伙伴回复成气泡和卡片（设计 6.1–6.3）", () => {
     observed!();
     tree = expand("tall", tall);
     expect(fullOf(tree)!.props["data-fold"]).toBeUndefined();
+    expect(fullOf(tree)!.props.style).toEqual({ maxHeight: `${CARD_FULL_LINES}lh` });
     expect(button(tree, "打开")).toBeUndefined();
     // 不高，但里面的宽表格、长代码行横向放不下。
     const wide = card();
@@ -281,6 +281,40 @@ describe("伙伴回复成气泡和卡片（设计 6.1–6.3）", () => {
     expect(button(tree, "打开")).toBeDefined();
     // 收起时正文不占位置、看不见（只留着量），摘要、「打开」照旧。
     expect(css).toMatch(/\.cardFull\[data-fold\] \{[^}]*position: absolute[^}]*visibility: hidden/);
+    // 收起时左右和卡片内边距读同一个变量。
+    expect(css).toMatch(/\.card \{[^}]*--card-pad-x: 16px;[^}]*padding: 14px var\(--card-pad-x\)/);
+    expect(css).toMatch(/\.cardFull\[data-fold\] \{[^}]*left: var\(--card-pad-x\); right: var\(--card-pad-x\)/);
+  });
+
+  it("卡片卡在阈值附近时，宽度小幅变化不来回切", () => {
+    // 对话区的竖滚动条一出一收，宽度差十几像素，正好卡在 12 行附近的卡片会被反复重新量。
+    // 收起以后要回到全文，得比阈值少一行（11 行）才行：收起时全文那一格限高 11 行来量。
+    const LH = 26;
+    let observed: (() => void) | null = null;
+    vi.stubGlobal("ResizeObserver", class { constructor(callback: () => void) { observed = callback; } observe() {} disconnect() {} });
+    const card = named(call("bubbles", () => ReplyBubbles({ markdown: "## 注意事项\n\n第一条。\n\n第二条。", streaming: false })), "ReplyCard")[0]!;
+    let lines = 12.4;
+    let tree: ReactNode = call("near", () => (card.type as (props: unknown) => ReactNode)(card.props), false);
+    // 全文那一格照它当前的 maxHeight（几行）限高：scrollHeight 是内容高，clientHeight 是限高后的高。
+    const cap = () => parseFloat(String((fullOf(tree)!.props.style as { maxHeight: string }).maxHeight));
+    (fullOf(tree)!.props.ref as { current: unknown }).current = {
+      scrollWidth: 500, clientWidth: 500, querySelectorAll: () => [],
+      get scrollHeight() { return lines * LH; }, get clientHeight() { return Math.min(lines, cap()) * LH; },
+    };
+    hooks.flush();
+    const state = () => { tree = expand("near", card); return fullOf(tree)!.props["data-fold"] === "" ? "fold" : "full"; };
+    // 窄了一点、12.4 行：收起，收起后限高 11 行。
+    expect(state()).toBe("fold");
+    expect(fullOf(tree)!.props.style).toEqual({ maxHeight: `${CARD_FULL_LINES - 1}lh` });
+    // 滚动条收回、宽了一点：11.6 行，放得进 12 行但没少到 11 行，仍是摘要；再窄回去也不动。
+    lines = 11.6; observed!(); expect(state()).toBe("fold");
+    lines = 12.4; observed!(); expect(state()).toBe("fold");
+    lines = 11.6; observed!(); expect(state()).toBe("fold");
+    // 真的宽了很多、只剩 10 行：换回全文，限高回到 12 行。
+    lines = 10; observed!(); expect(state()).toBe("full");
+    expect(fullOf(tree)!.props.style).toEqual({ maxHeight: `${CARD_FULL_LINES}lh` });
+    // 全文时 11.6 行照旧全文：不超过 12 行不收。
+    lines = 11.6; observed!(); expect(state()).toBe("full");
   });
 
   it("读历史时短卡直接是全文，不先出摘要再换", () => {

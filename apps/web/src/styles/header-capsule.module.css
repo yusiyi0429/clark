@@ -326,6 +326,8 @@
 
 /*
  * 新首页不出省略号（本人 11/18）：会议页等 DetailFrame 页头的标题整段换行，页头只有最小高度、跟着标题长高，不压正文。
+ * 标题折行时上下留空（同子会话 .embedTitle）：空留在标题上、不加在页头上，单行时页头仍 48。
+ * 键盘定位、滚动定位让开的是页头实际高度（DetailFrame 量出来写进 --detail-head-h），不是写死的 48。
  * 旧界面（CEO 管理模式等同一个 DetailFrame）照旧，只在新首页的外壳里生效。
  */
 :global(:root:has([data-type-scale="one"])) .scope :global(.ts-detail-header) { height: auto; min-height: var(--detail-header-height); }
@@ -336,5 +338,7 @@
   white-space: normal;
   text-overflow: clip;
   overflow-wrap: anywhere;
+  padding-block: var(--space-1);
 }
+:global(:root:has([data-type-scale="one"])) .scope :global(.ts-detail) { scroll-padding-top: calc(var(--detail-head-h, var(--detail-header-height)) + 10px); }
 :global(:root:has([data-type-scale="one"])) .scope :global(.ts-detail-header > .ts-eyebrow) { white-space: normal; text-overflow: clip; overflow-wrap: anywhere; }
