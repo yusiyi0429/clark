@@ -127,7 +127,6 @@ export class Folders {
       const code = (e as NodeJS.ErrnoException).code;
       throw code === "EEXIST" || code === "ENOTDIR" ? occupied() : e; // 随手、或上一层的天枢是个文件
     }
-    if (!statSync(target).isDirectory()) throw occupied();
     return this.add(target);
   }
 

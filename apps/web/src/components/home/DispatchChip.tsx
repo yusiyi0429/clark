@@ -31,7 +31,7 @@ export function DispatchChip({ card, subs, projects, waitingFolder, onOpenSub, o
   const target = card.sub;
   const live = target?.id ? subs.find((entry) => entry.kind === target.kind && entry.id === target.id) : undefined;
   const waiting = waitingFolder(card.projectId);
-  const node = card.state !== "active" || (target && !target.id)
+  const node = card.state !== "active"
     ? <span className={h.dispatchFaded} data-testid="dispatch-faded">{target ? `${name} · ${live?.title ?? target.title}` : name}</span>
     : !target ? (
       <button type="button" className={h.thread} onClick={() => onOpenProject(card.projectId)} data-testid="dispatch-project">
