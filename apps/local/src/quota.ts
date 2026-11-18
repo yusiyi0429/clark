@@ -39,6 +39,13 @@ type Json = Record<string, any>;
 
 /** 读一次额度隔多久：缓存 5 分钟（新首页设计 11.1：get_usage 有自己的限流）。 */
 export const QUOTA_TTL_MS = 5 * 60_000;
+/**
+ * 读不到以后停多久再读：官方额度接口 429 时 Claude Code 自己记着「多久以后再问」，但 get_usage 只回 rate_limits null、不带这个时间
+ * （11/18 查 2.1.327），拿不到就停 45 分钟。
+ */
+export const QUOTA_RETRY_MS = 45 * 60_000;
+/** 读不到时记在 error 里的话（网页见到 error 就在旧数旁边写「暂时读不到」）。 */
+const UNREADABLE = "暂时读不到（get_usage 没给额度）";
 
 const KINDS = new Set<TLocalQuotaWindow["kind"]>(["session", "weekly_all", "weekly_scoped"]);
 /** rate_limit_event 的窗口名 → 契约里的种类（只认这两种，按模型分的周额度等 get_usage 来补）。 */
@@ -87,6 +94,8 @@ export class QuotaTracker {
   private reading: Promise<void> | null = null;
   /** 上次去读的时间（没读到也算）：读不到时不能每次轮询都起一个 Claude Code。 */
   private triedAt = 0;
+  /** 读不到以后，这之前不再去读（force 照读）。 */
+  private retryAt = 0;
   onChange: () => void = () => {};
 
   constructor(dataDir: string, private readonly read: () => Promise<Json>, private readonly now = () => Date.now()) {
@@ -124,13 +133,23 @@ export class QuotaTracker {
     return Boolean(this.state?.windows.some((w) => w.kind !== "weekly_scoped" && w.state === "warning"));
   }
 
-  /** 读一次（get_usage）。force 以外 5 分钟内读过、试过就不再读；同时只读一次。从不抛错，没读到记在 error 里。 */
+  /**
+   * 读一次（get_usage）。force 以外 5 分钟内读过、试过就不再读，读不到以后停 45 分钟；同时只读一次。从不抛错，没读到记在 error 里。
+   * 一个认得的窗口都没给（rate_limits 为 null 等）算读不到：上一次的数和时间留着，只记 error。读的途中跑着的卡报过（比这次读新）就以卡报的为准。
+   */
   refresh(force = false): Promise<void> {
     const at = Math.max(this.triedAt, this.state?.updatedAt ? Date.parse(this.state.updatedAt) : 0);
-    if (!force && this.now() - at < QUOTA_TTL_MS) return this.reading ?? Promise.resolve();
+    if (!force && (this.now() < this.retryAt || this.now() - at < QUOTA_TTL_MS)) return this.reading ?? Promise.resolve();
     if (!this.reading) this.triedAt = this.now();
+    const startedAt = this.now();
     this.reading ??= this.read()
-      .then((resp) => this.set({ ...quotaFromUsage(resp), updatedAt: this.stamp(), error: null }))
+      .then((resp) => {
+        const got = quotaFromUsage(resp);
+        if (!got.windows.length) this.retryAt = this.now() + QUOTA_RETRY_MS;
+        if (this.state?.updatedAt && Date.parse(this.state.updatedAt) > startedAt) return;
+        if (!got.windows.length) return this.set({ ...(this.state ?? { plan: got.plan, windows: [], extraUsage: null, blockedUntil: null, updatedAt: null }), error: UNREADABLE });
+        this.set({ ...got, updatedAt: this.stamp(), error: null });
+      })
       .catch((e: unknown) => this.set({ ...(this.state ?? { plan: null, windows: [], extraUsage: null, blockedUntil: null, updatedAt: null }), error: (e instanceof Error ? e.message : String(e)).slice(0, 300) }))
       .finally(() => { this.reading = null; });
     return this.reading;
@@ -152,7 +171,7 @@ export class QuotaTracker {
       if (i >= 0) windows[i] = next; else windows.push(next);
     }
     const blockedUntil = info.status === "rejected" ? iso(info.resetsAt) : null;
-    this.set({ ...s, windows: windows.slice(0, 12), blockedUntil, updatedAt: this.stamp() });
+    this.set({ ...s, windows: windows.slice(0, 12), blockedUntil, updatedAt: this.stamp(), error: null });
   }
 
   private stamp() { return new Date(this.now()).toISOString(); }

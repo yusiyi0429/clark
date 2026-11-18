@@ -180,6 +180,24 @@ describe("连接（卡片网格 + 三组）", () => {
     expect(text(html)).not.toContain("插件");
   });
 
+  it("Claude 只有旧数时画旧数和暂时读不到；一个数都没有时写 Claude 暂时读不到", () => {
+    const base = status().quota[0]!;
+    const claudeRow = (quota: TLocalStatusResponse["quota"]) => {
+      const html = withLocal(<ConnectionsPage go={() => undefined} />, "ready", status({ quota }));
+      return html.split('data-testid="row-agent:claude-code"')[1]!.split("data-testid=\"row-")[0]!;
+    };
+    // 旧数照画（剩多少、额度条、本周剩余和重置时间），旁边淡色短语「暂时读不到」，不写原因
+    const stale = claudeRow([{ ...base, updatedAt: new Date(Date.now() - 50 * 60_000).toISOString(), error: "暂时读不到（get_usage 没给额度）" }]);
+    expect(text(stale)).toContain("Claude 17% 暂时读不到");
+    expect(text(stale)).toContain("本周：剩 17%");
+    expect(stale).not.toContain("get_usage");
+    // 一个数都没有：只写「Claude 暂时读不到」，没有额度条和明细
+    const empty = claudeRow([{ ...base, windows: [], updatedAt: null, extraUsage: null, error: "暂时读不到（get_usage 没给额度）" }]);
+    const block = empty.split('data-testid="quota-block"')[1]!;
+    expect(text(block.split("</div>")[0]!)).toBe('> Claude 暂时读不到');
+    expect(text(empty)).not.toContain("额外额度");
+  });
+
   it("同时跑不设上限：能选到 10 以上；超过 10 个时这一行下面提醒一句，10 个以内不提醒", () => {
     const row = (max: number) => {
       const html = withLocal(<ConnectionsPage go={() => undefined} />, "ready", status({ settings: { ...status().settings, maxConcurrent: max } }));

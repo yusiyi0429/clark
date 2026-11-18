@@ -122,6 +122,25 @@ describe("右栏（5.4.5）", () => {
     expect(text(render(panel([], [cloud("ThinkPad", 83, 1)]), "ready", []))).toContain("Claude · ThinkPad");
   });
 
+  it("Claude 只有旧数时画旧数和暂时读不到；一个数都没有时写 Claude 暂时读不到", () => {
+    const old = { ...sub(70), updatedAt: new Date(Date.now() - 50 * 60_000).toISOString(), error: "暂时读不到（get_usage 没给额度）" };
+    const cells = (html: string) => html.split('data-testid="quota-row"').slice(1).map((cell) => text(cell.split("</li>")[0]!).replace(/^>/, "").trim());
+    // 旧数照画（圆环、百分比），旁边淡色短语「暂时读不到」，不写原因
+    const stale = render(panel([]), "ready", [old]);
+    expect(cells(stale)).toEqual(["Claude 暂时读不到 70%"]);
+    expect(stale).toContain("<circle");
+    expect(stale).not.toContain("get_usage");
+    // 有数、读得到：照旧，没有「暂时读不到」
+    expect(cells(render(panel([]), "ready", [sub(70)]))).toEqual(["Claude 70%"]);
+    // 一个数都没有：那一格只写「Claude 暂时读不到」，不画圆环、不画「¥」
+    const never = { ...sub(70), remainingPercent: null, windows: [], updatedAt: null, extraUsage: null, error: "暂时读不到（get_usage 没给额度）" };
+    const empty = render(panel([]), "ready", [never]);
+    expect(cells(empty)).toEqual(["Claude 暂时读不到"]);
+    expect(empty.split('data-testid="quota-row"')[1]!.split("</li>")[0]).not.toMatch(/<svg|¥/);
+    // 没读过、也没出错（还没去读）：照旧不画
+    expect(render(panel([]), "ready", [{ ...never, error: null }])).not.toContain('data-testid="quota-row"');
+  });
+
   it("这台电脑块里用量来源名字放不下时换行，不出省略号", () => {
     const long = { ...sub(70), id: "tokenhub", name: "TokenHub 团队共享额度" };
     const html = render(panel([], []), "ready", [long], [tool("claude-code")]);
