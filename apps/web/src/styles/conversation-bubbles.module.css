@@ -102,6 +102,10 @@
 @media (hover: hover) {
   .card { max-width: min(560px, 100% - 96px); }
 }
+/* 有鼠标的窄窗口：气泡同样给这一排让位，不伸出对话栏；手机上照旧 85%。 */
+@media (hover: hover) and (max-width: 959px) {
+  .buddy, .mine { max-width: min(85%, 100% - 96px); }
+}
 /* 手机上不出这一排（长按出浮层）：藏起来但留着回应按钮给浮层定位，放回块里的底角，不撑出对话栏。 */
 @media (hover: none) {
   .actions { top: auto; bottom: 0; left: 0; transform: none; padding: 0; visibility: hidden; pointer-events: none; }

@@ -113,7 +113,8 @@ export function ChatInput({ data, placeholder, onHeight, context, footer, interc
       quote={reply ? { key: reply.id, label: `回复 ${quoteExcerpt(reply.text)}`, onClear: () => replies?.clear(reply.id) } : null}
       draftKey={`tianshu-home-draft-v1:${data.scope}`}
       onSend={async (text, files) => {
-        if (intercept && await intercept(text,files)) return true;
+        // 转给同事的那句接手了：引用条和发给伙伴成功时一样清掉，不留到下一句。
+        if (intercept && await intercept(text,files)) { if (reply) replies?.clear(reply.id); return true; }
         const said = context ? `${context.label}\n\n${text}` : text;
         const message = reply ? quotedMessage(said, [{ id: reply.id, text: reply.text, source: { scope: data.scope, intent: MESSAGE_REPLY } }]) : said;
         const ok = await sendWithFiles(data, message, files);

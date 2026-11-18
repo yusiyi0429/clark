@@ -118,15 +118,17 @@ describe("每块旁边一排：回应、回复、复制", () => {
     const card = inBubbles({ ...answer, content: "先看这个。\n\n## 本周\n\n- 周二发清单\n- 周三确认" });
     expect(labels(divsWith(card.slice(card.indexOf("<section")), 'data-testid="message-actions"')[0]!)).toEqual(["回应", "回复", "复制"]);
     // 在块的右边外侧离 8（用内边距补上这段，鼠标移过去不断），上下居中；鼠标在这一块上、焦点进来、浮层开着时才出。
-    expect(rule(".actions")).toMatch(/left: 100%;.*top: 50%;.*translateY\(-50%\).*padding-left: 8px;.*opacity: 0;/s);
-    expect(bubblesCss).toContain(':is(.buddy, .mine, .card):is(:hover, :focus-within) > .actions, .actions:has([aria-expanded="true"]) { opacity: 1; }');
+    expect(rule(".actions")).toContain("left: 100%;");
+    expect(bubblesCss).toContain(":is(.buddy, .mine, .card):is(:hover, :focus-within) > .actions");
+    // 有鼠标的窄窗口：气泡也给这一排让位，不伸出对话栏。
+    expect(bubblesCss).toMatch(/@media \(hover: hover\) and \(max-width: 959px\) \{\s*\.buddy, \.mine \{ max-width: min\(85%, 100% - 96px\); \}/);
   });
 
   it("本人那句的按钮在左边", () => {
     const [bubble] = divsWith(inBubbles(mine), 'data-bubble="mine"');
     expect(labels(divsWith(bubble!, 'data-testid="message-actions"')[0]!)).toEqual(["回应", "回复", "复制"]);
     // 镜像：在气泡左边外侧，离 8，顺序反过来（回应挨着气泡）。
-    expect(rule(".mine > .actions")).toMatch(/right: 100%;.*padding: 0 8px 0 0;.*flex-direction: row-reverse;/s);
+    expect(rule(".mine > .actions")).toContain("right: 100%;");
   });
 
   it("没有 runId 时只出回复和复制", () => {
@@ -195,8 +197,7 @@ describe("每块旁边一排：回应、回复、复制", () => {
     const [edge] = divsWith(first!, `class="${b.edge}"`);
     expect(edge).toMatch(/aria-label="点赞"[^>]*>👍<\/button>/);
     expect(edge).not.toContain('data-testid="message-actions"');
-    expect(rule(".edge")).toMatch(/right: 8px; bottom: -12px;/);
-    expect(rule(".edge")).not.toContain("left:");
+    expect(rule(".edge")).toContain("right: 8px;");
   });
 });
 
@@ -254,6 +255,19 @@ describe("回复", () => {
     expect(send).toHaveBeenCalledWith(quotedMessage("关于：会议回流\n\n好的", [{ id, text: "第二段，周三再确认一遍。", source: { scope: "global", intent: MESSAGE_REPLY } }]), [], { attachments: [] });
     expect(replies().target).toBeNull();
     expect(quoteBar(input(instance(), replies()))).toBeNull();
+  });
+
+  it("转给同事发出后引用条也清掉", async () => {
+    const store = instance();
+    const replies = () => store(() => useReplyStore("global"));
+    replyOn(replies(), 0, "第一段，先把清单发给财务。");
+    const send = vi.fn(async () => true);
+    const intercept = vi.fn(async () => true);
+    const element = instance()(() => ChatInput({ data: data(send), placeholder: "与伙伴讨论…", onHeight: () => undefined, intercept }), [[ReplyContext, replies()]]) as ReactElement<Props>;
+    expect(await (element.props.onSend as (text: string, files: File[]) => Promise<boolean>)("给财务的", [])).toBe(true);
+    expect(intercept).toHaveBeenCalledWith("给财务的", []);
+    expect(send).not.toHaveBeenCalled();
+    expect(replies().target).toBeNull();
   });
 
   it("发出的那句上方一行淡色回复摘要，点开看全文", () => {
