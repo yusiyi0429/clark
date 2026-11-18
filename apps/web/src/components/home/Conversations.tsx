@@ -9,7 +9,7 @@
  *   B 的接口没上时是这个标签页里的假对话（lib/home/pipeline）。
  * 首页输入框发来的话（outbox）进了对应的对话就发出去。
  */
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { TCardPlanView, THomePlanTask } from "@warmap/contracts";
 import type { Buddy } from "@/components/buddy/useBuddy";
 import { ChatColumn } from "@/components/rail/ChatPane";
@@ -24,6 +24,9 @@ import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { uploadToConversation } from "@/lib/home/attachments";
 import { useAnswerOptionFill } from "@/conversation/answerOptions";
 import { ReactionsProvider } from "@/conversation/Reactions";
+import { ReplyContext, ReplyProvider } from "@/conversation/replyTo";
+import { quoteExcerpt } from "@/conversation/QuoteChips";
+import { MESSAGE_REPLY, quotedMessage } from "@/conversation/quotes";
 import { InputBar } from "./InputBar";
 import type { Project } from "@/lib/home/projects";
 import type { CardItem } from "@/lib/board/cards";
@@ -95,21 +98,26 @@ async function sendWithFiles(data: ConversationData, text: string, files: File[]
 /**
  * 总管线、Task 管线底下的输入框（14.5）：InputBar，回答进行中右边是停止；回答末尾的选项填进框里；草稿按对话存。
  * context：「关于：{Mission}」胶囊，发出的这一句前面带上它，发完就去掉。
+ * 回复（ReplyContext，本人 11/18）：挂着时框里多一条「回复 …」，发出的这一句包成 quotedMessage 带上那一块的原文，发出去才去掉。
  */
-function ChatInput({ data, placeholder, onHeight, context, footer, intercept }: {
+export function ChatInput({ data, placeholder, onHeight, context, footer, intercept }: {
   data: ConversationData; placeholder: string; onHeight: (height: number) => void; context?: { label: string; onClear: () => void } | null; footer?: { left?: ReactNode; right?: ReactNode };
   intercept?: TeamIntercept;
 }) {
   const [fill, setFill] = useState<{ text: string; nonce: number } | null>(null);
   useAnswerOptionFill(data.scope, (text) => setFill({ text, nonce: Date.now() }));
+  const replies = useContext(ReplyContext);
+  const reply = replies?.target ?? null;
   return (
     <InputBar placeholder={placeholder} busy={data.streaming} interruptible={data.interruptible} onStop={data.stop} textRequired={!intercept} onHeight={onHeight} fill={fill} context={context} footer={footer} emoji
+      quote={reply ? { key: reply.id, label: `回复 ${quoteExcerpt(reply.text)}`, onClear: () => replies?.clear(reply.id) } : null}
       draftKey={`tianshu-home-draft-v1:${data.scope}`}
       onSend={async (text, files) => {
         if (intercept && await intercept(text,files)) return true;
-        const message = context ? `${context.label}\n\n${text}` : text;
+        const said = context ? `${context.label}\n\n${text}` : text;
+        const message = reply ? quotedMessage(said, [{ id: reply.id, text: reply.text, source: { scope: data.scope, intent: MESSAGE_REPLY } }]) : said;
         const ok = await sendWithFiles(data, message, files);
-        if (ok) context?.onClear();
+        if (ok) { context?.onClear(); if (reply) replies?.clear(reply.id); }
         return ok;
       }} />
   );
@@ -156,6 +164,7 @@ export function BuddyView({ buddy, outbox, consume, onSpeaking, waiting, go, con
   return (
     <PendingBoxes>
       <div className={h.convo} data-testid="buddy-view">
+        <ReplyProvider scope={data.scope}>
         <ChatColumn data={data} buddy={buddy} tone="light"
           head={(
             <>
@@ -170,6 +179,7 @@ export function BuddyView({ buddy, outbox, consume, onSpeaking, waiting, go, con
           dock={(latest) => <>{team.composer}<PendingDock latest={latest} /></>}
           input={(onHeight) => <ChatInput data={data} placeholder={`与${name}讨论…`} onHeight={onHeight} intercept={team.intercept} footer={{ left: team.launcher, right: <ModelText data={data} /> }}
             context={context ? { label: context, onClear: () => onClearContext?.() } : null} />} />
+        </ReplyProvider>
       </div>
     </PendingBoxes>
   );
@@ -453,6 +463,7 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
     <ProjectModeContext.Provider value={mode?.value ?? null}>
     <PendingBoxes>
       <div className={h.convo} data-testid="pipeline-view">
+        <ReplyProvider scope={data.scope}>
         <ChatColumn data={data} buddy={buddy} label={project.name} tone="light"
           head={(
             <>
@@ -469,6 +480,7 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
             left: folder,
             right: <><PipelineModelMenu projectId={project.id} fallback={<ModelText data={data} />} sheet={handheld} />{mode ? <PermissionModeMenu modes={mode.modes} value={mode.value} sheet={handheld} onChange={mode.set} /> : null}</>,
           }} />} />
+        </ReplyProvider>
       </div>
     </PendingBoxes>
     </ProjectModeContext.Provider>

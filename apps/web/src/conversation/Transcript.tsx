@@ -12,7 +12,8 @@ import { HeroButton } from "@/components/HeroButton";
 import { StepList, StepToggle, type Step } from "@/components/steps/StepList";
 import { VIA_LABEL, feishuWaiting, isReportPrompt, type Message, type ThinkingStage, type TurnProgress, type TurnThought } from "./useConversation";
 import { QuoteChips } from "./QuoteChips";
-import { pageContextBattlefield, readQuotedMessage } from "./quotes";
+import { isReplyQuote, pageContextBattlefield, readQuotedMessage } from "./quotes";
+import { SentReply } from "./replyTo";
 import { createArrivalLog, rehypeArrival, type ArrivalLog } from "./arrival";
 import { parseAnswerOptions } from "./answerOptions";
 import { AnswerRecord, AskContext } from "./AskPanel";
@@ -276,6 +277,7 @@ function ConversationTurnBody({ message, ms, streaming = false, thought, steps }
     </>
   );
   const prose = <MarkdownBody text={quoted.message} streaming={streaming} />;
+  const chips = bubbles ? quoted.quotes.filter((quote) => !isReplyQuote(quote)) : quoted.quotes;
   return (
     <article className={bubbles ? (user ? b.userTurn : b.turn) : user ? s.user : s.assistant} data-chat-role={message.role} aria-label={user ? "你" : "天枢"}
       data-testid={streaming ? "conversation-streaming-turn" : undefined} aria-busy={streaming || undefined} {...reaction?.target}>
@@ -321,7 +323,9 @@ function ConversationTurnBody({ message, ms, streaming = false, thought, steps }
       ) : null}
       {battlefield ? <div className={s.pageTag}>战场 · {battlefield}</div> : null}
       {user && message.via && message.via !== "report" ? <div className={s.pageTag} data-testid={`conversation-via-${message.via}`}>{VIA_LABEL[message.via]}</div> : null}
-      {quoted.quotes.length ? <QuoteChips quotes={quoted.quotes} sent /> : null}
+      {/* 新首页的两种对话：回复是气泡上方一行淡色摘要（本人 11/18），别的引用照旧是胶囊。 */}
+      {bubbles ? quoted.quotes.filter(isReplyQuote).map((quote) => <SentReply key={quote.id} text={quote.text} />) : null}
+      {chips.length ? <QuoteChips quotes={chips} sent /> : null}
       {/* 回答 Agent 提问的那一句：画成紧凑的问答记录，不显示原文。 */}
       {user && message.answers ? <AnswerRecord record={message.answers} /> : bubbles ? (
         user ? (
@@ -329,11 +333,12 @@ function ConversationTurnBody({ message, ms, streaming = false, thought, steps }
             <div className={s.prose}>{prose}</div>
             {/* 两个勾在气泡里右下角，不另占一行。 */}
             {message.receipt && message.receipt !== "failed" ? <ReceiptTicks state={message.receipt} className={b.tick} /> : null}
-            {message.buddyReactions?.length || reaction ? (
-              <div className={b.edge}>{message.buddyReactions?.length ? <BuddyReactions emojis={message.buddyReactions} /> : null}{reaction?.view(0, 1)}</div>
+            {message.buddyReactions?.length || reaction?.view ? (
+              <div className={b.edge}>{message.buddyReactions?.length ? <BuddyReactions emojis={message.buddyReactions} /> : null}{reaction?.view?.(0, 1)}</div>
             ) : null}
+            {reaction?.actions?.(0, 1, quoted.message)}
           </UserBubble>
-        ) : <MemoryUsedProvider value={memoryUsed}><ReplyBubbles markdown={quoted.message} streaming={streaming} at={message.createdAt} edge={reaction?.view} /></MemoryUsedProvider>
+        ) : <MemoryUsedProvider value={memoryUsed}><ReplyBubbles markdown={quoted.message} streaming={streaming} at={message.createdAt} edge={reaction?.view} actions={reaction?.actions} /></MemoryUsedProvider>
       ) : (
         <div className={s.prose}>
           <MemoryUsedProvider value={memoryUsed}>
@@ -351,7 +356,7 @@ function ConversationTurnBody({ message, ms, streaming = false, thought, steps }
       {bubbles && !streaming ? details : null}
       {/* 伙伴对话的回执（17.4）：两个小勾，送达亮第一个，读到亮第二个。 */}
       {user && message.receipt ? (message.receipt === "failed" ? <ResendLine message={message} /> : bubbles ? null : <ReceiptTicks state={message.receipt} />) : null}
-      {bubbles ? null : reaction?.view(0, 1)}
+      {bubbles ? null : reaction?.view?.(0, 1)}
     </article>
   );
 }

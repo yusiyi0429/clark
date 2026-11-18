@@ -49,47 +49,47 @@ describe("对一条消息的一块右键、长按", () => {
   it("右键出快捷表情（不出浏览器的菜单），开的是点的那一块；选一个交给这一块", () => {
     hooks.context = store;
     const first = render(() => useMessageReaction(answer))!;
-    expect(first.view(1, 3).props.open).toBe(false);
+    expect(first.view!(1, 3).props.open).toBe(false);
     const event = at(1);
-    first.target.onContextMenu(event as never);
+    first.target!.onContextMenu(event as never);
     expect(event.preventDefault).toHaveBeenCalled();
     const opened = render(() => useMessageReaction(answer))!;
-    expect((opened.view(1, 3) as View).props.open).toBe(true);
-    expect((opened.view(0, 3) as View).props.open).toBe(false);
-    (opened.view(1, 3) as View).props.onToggle("👍");
+    expect((opened.view!(1, 3) as View).props.open).toBe(true);
+    expect((opened.view!(0, 3) as View).props.open).toBe(false);
+    (opened.view!(1, 3) as View).props.onToggle("👍");
     expect(store.toggle).toHaveBeenCalledWith(answer, 1, 3, "👍");
   });
 
   it("块外面（老页面整条一块、本人那句）右键开最后一块", () => {
     hooks.context = store;
-    render(() => useMessageReaction(answer))!.target.onContextMenu(at() as never);
+    render(() => useMessageReaction(answer))!.target!.onContextMenu(at() as never);
     const opened = render(() => useMessageReaction(answer))!;
-    expect((opened.view(2, 3) as View).props.open).toBe(true);
-    expect((opened.view(0, 1) as View).props.open).toBe(true);
-    expect((opened.view(0, 3) as View).props.open).toBe(false);
+    expect((opened.view!(2, 3) as View).props.open).toBe(true);
+    expect((opened.view!(0, 1) as View).props.open).toBe(true);
+    expect((opened.view!(0, 3) as View).props.open).toBe(false);
   });
 
   it("选了字的右键照浏览器的（复制）", () => {
     hooks.context = store;
     vi.stubGlobal("window", { getSelection: () => ({ toString: () => "一段字" }) });
     const event = at(0);
-    render(() => useMessageReaction(answer))!.target.onContextMenu(event as never);
+    render(() => useMessageReaction(answer))!.target!.onContextMenu(event as never);
     expect(event.preventDefault).not.toHaveBeenCalled();
-    expect((render(() => useMessageReaction(answer))!.view(0, 1) as View).props.open).toBe(false);
+    expect((render(() => useMessageReaction(answer))!.view!(0, 1) as View).props.open).toBe(false);
   });
 
   it("手机上长按半秒出那一块的；中途松手或滑动不出", () => {
     vi.useFakeTimers();
     hooks.context = store;
     const first = render(() => useMessageReaction(answer))!;
-    first.target.onTouchStart(at(0) as never);
+    first.target!.onTouchStart(at(0) as never);
     vi.advanceTimersByTime(200);
-    first.target.onTouchMove();
+    first.target!.onTouchMove();
     vi.advanceTimersByTime(1000);
-    expect((render(() => useMessageReaction(answer))!.view(0, 2) as View).props.open).toBe(false);
-    first.target.onTouchStart(at(0) as never);
+    expect((render(() => useMessageReaction(answer))!.view!(0, 2) as View).props.open).toBe(false);
+    first.target!.onTouchStart(at(0) as never);
     vi.advanceTimersByTime(500);
-    expect((render(() => useMessageReaction(answer))!.view(0, 2) as View).props.open).toBe(true);
+    expect((render(() => useMessageReaction(answer))!.view!(0, 2) as View).props.open).toBe(true);
   });
 
   it("没有回应的地方、还没写进历史的那条不出", () => {

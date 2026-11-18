@@ -4,17 +4,20 @@
  * 表情（本人 11/16，照 WhatsApp / iMessage）：
  * - 输入框下面一行的表情按钮：点开一个小面板，点一个插到光标处（EmojiButton）。
  * - 伙伴台、项目对话里的一条消息：右键、悬停出的小按钮、手机上长按，弹出六个快捷表情加「更多」；选了挂在气泡下面，再点自己挂的就取消。
+ *   新首页的两种对话（本人 11/18，照 Claude Duet）：每块旁边一排回应、回复、复制（MessageActions），右键、长按的浮层下面多「回复」「复制」一行；点过的表情压在块的右下角。
  *   按块点（本人 11/17）：伙伴回答拆成的每个气泡、卡片各点各的，每块一个，点另一个换掉；老页面（不用气泡的）整条算一块。
  *   只是本人自己的标记（存在天枢，读历史时随消息带回 reactions），不送给模型、不通知别人。
  */
-import { createContext, useContext, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode, type TouchEvent } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactElement, type ReactNode, type TouchEvent } from "react";
 import { Popover } from "@heroui/react";
-import { MoreHorizontal, Smile, SmilePlus } from "lucide-react";
+import { Check, Copy, MoreHorizontal, Reply, Smile, SmilePlus } from "lucide-react";
 import type { TConversationReaction } from "@warmap/contracts";
 import { HeroButton } from "@/components/HeroButton";
 import { browserApi } from "@/lib/api/client";
 import { showWorkspaceToast } from "@/lib/toast";
 import type { Message } from "./useConversation";
+import { ReplyContext } from "./replyTo";
+import b from "@/styles/conversation-bubbles.module.css";
 import h from "@/styles/home.module.css";
 import r from "@/styles/reactions.module.css";
 
@@ -166,17 +169,22 @@ const partOf = (target: EventTarget | null) => Number((target as Element | null)
 
 /**
  * 一条消息上的表情：给整条的事件（右键、长按，开的是点到的那一块的）和挂在每一块下面的那一行 view(part, parts)（挂的表情、悬停出的小按钮、快捷表情浮层）。
- * edge：新首页的两种对话里这一行挂在气泡底边上（由气泡给位置），不再挂在整条下面；伙伴的回答按块悬停，data-reactable 在每块上（ReplyBubbles 给）。
- * 没有 ReactionContext、还没写进历史的（没有 runId）、留痕行这类不出。
+ * edge：新首页的两种对话里这一行挂在气泡底边上（由气泡给位置），只放点过的表情；加表情挪到每块旁边那一排 actions(part, parts, text)（回应、回复、复制，本人 11/18）。
+ * 伙伴的回答按块悬停，data-reactable 在每块上（ReplyBubbles 给）。
+ * 回应：没有 ReactionContext、还没写进历史的（没有 runId）、留痕行这类不出；回复、复制：有 ReplyContext（新首页两种对话）、写完了就出。
  */
 export function useMessageReaction(message: Message | null, edge = false) {
   const reactions = useContext(ReactionContext);
+  const replies = useContext(ReplyContext);
   /** 开着的是哪一块的浮层（-1 是最后一块）。 */
   const [open, setOpen] = useState<number | null>(null);
   const press = useRef<ReturnType<typeof setTimeout> | null>(null);
-  if (!reactions || !message?.runId || message.kind || message.sequence < 1) return null;
+  if (!message || message.kind) return null;
+  const store = reactions && message.runId && message.sequence >= 1 ? reactions : null;
+  const reply = edge ? replies : null;
+  if (!store && !reply) return null;
   const cancel = () => { if (press.current) clearTimeout(press.current); press.current = null; };
-  const target = {
+  const target = store ? {
     "data-reactable": edge && message.role === "assistant" ? undefined : "",
     style: { position: "relative" as const },
     onContextMenu: (event: MouseEvent) => {
@@ -192,40 +200,101 @@ export function useMessageReaction(message: Message | null, edge = false) {
     },
     onTouchEnd: cancel,
     onTouchMove: cancel,
-  };
-  const entries = reactions.of(message);
-  const view = (part: number, parts: number) => {
+  } : undefined;
+  const entries = store?.of(message) ?? [];
+  const user = message.role === "user";
+  /** 第 part 块的表情浮层：挂着的、开没开、点一个。 */
+  const menu = (on: Reactions, part: number, parts: number): ReactionMenuProps => {
     const mine = reactionAt(entries, part, parts);
-    const shown = open === part || (open === -1 && part === parts - 1);
-    return <MessageReactions mine={mine ? [mine.emoji] : []} user={message.role === "user"} edge={edge} open={shown}
-      onOpenChange={(next) => setOpen(next ? part : null)} onToggle={(emoji) => reactions.toggle(message, part, parts, emoji)} />;
+    return { mine: mine ? [mine.emoji] : [], user, open: open === part || (open === -1 && part === parts - 1),
+      onOpenChange: (next) => setOpen(next ? part : null), onToggle: (emoji) => on.toggle(message, part, parts, emoji) };
   };
-  return { target, view };
+  const view = store ? (part: number, parts: number) => {
+    const { mine, open: shown, onOpenChange, onToggle } = menu(store, part, parts);
+    return <MessageReactions mine={mine} user={user} edge={edge} open={shown} onOpenChange={onOpenChange} onToggle={onToggle} />;
+  } : undefined;
+  const actions = reply ? (part: number, parts: number, text: string): ReactElement<MessageActionsProps> =>
+    <MessageActions text={text} user={user} react={store ? menu(store, part, parts) : undefined} onReply={() => reply.to(text)} /> : undefined;
+  return { target, view, actions };
 }
 
-export function MessageReactions({ mine, user, edge = false, open, onOpenChange, onToggle }: {
-  mine: readonly string[]; user: boolean; edge?: boolean; open: boolean; onOpenChange: (open: boolean) => void; onToggle: (emoji: string) => void;
-}) {
+type ReactionMenuProps = { mine: readonly string[]; user: boolean; open: boolean; onOpenChange: (open: boolean) => void; onToggle: (emoji: string) => void };
+
+/** 快捷表情浮层：children 是点开它的按钮；extra 接在快捷那一排下面（新首页两种对话的「回复」「复制」）。 */
+function ReactionMenu({ mine, user, open, onOpenChange, onToggle, children, extra }: ReactionMenuProps & { children: ReactNode; extra?: ReactNode }) {
   // 「更多」翻出的面板只到这一次收起；收起的动画里不换回快捷那一排，下次打开再从快捷那一排起。
   const [more, setMore] = useState(false);
   const [shown, setShown] = useState(open);
   if (open !== shown) { setShown(open); if (open) setMore(false); }
   const pick = (emoji: string) => { onOpenChange(false); onToggle(emoji); };
   return (
+    <Popover isOpen={open} onOpenChange={onOpenChange}>
+      {children}
+      <Popover.Content placement={user ? "bottom end" : "bottom start"} offset={6} className={h.pop}>
+        <Popover.Dialog aria-label="回应" className={r.dialog} data-testid="reaction-menu">
+          {more ? <EmojiGrid onPick={pick} selected={mine} /> : <><QuickReactions onPick={pick} onMore={() => setMore(true)} selected={mine} />{extra}</>}
+        </Popover.Dialog>
+      </Popover.Content>
+    </Popover>
+  );
+}
+
+export function MessageReactions({ mine, user, edge = false, open, onOpenChange, onToggle }: {
+  mine: readonly string[]; user: boolean; edge?: boolean; open: boolean; onOpenChange: (open: boolean) => void; onToggle: (emoji: string) => void;
+}) {
+  return (
     <div className={r.row} data-side={user ? "end" : "start"} data-edge={edge ? "" : undefined} data-reacted={mine.length ? "" : undefined} data-testid="message-reactions">
       {mine.map((emoji) => (
         <button key={emoji} type="button" className={r.chip} aria-pressed="true" aria-label={emojiName(emoji)} title={emojiName(emoji)} onClick={() => onToggle(emoji)}>{emoji}</button>
       ))}
-      <Popover isOpen={open} onOpenChange={onOpenChange}>
-        <HeroButton variant="ghost" size="sm" isIconOnly className={r.add} aria-label="回应" data-testid="reaction-add">
-          <SmilePlus size={16} strokeWidth={1.8} aria-hidden />
-        </HeroButton>
-        <Popover.Content placement={user ? "bottom end" : "bottom start"} offset={6} className={h.pop}>
-          <Popover.Dialog aria-label="回应" className={r.dialog} data-testid="reaction-menu">
-            {more ? <EmojiGrid onPick={pick} selected={mine} /> : <QuickReactions onPick={pick} onMore={() => setMore(true)} selected={mine} />}
-          </Popover.Dialog>
-        </Popover.Content>
-      </Popover>
+      {edge ? null : (
+        <ReactionMenu mine={mine} user={user} open={open} onOpenChange={onOpenChange} onToggle={onToggle}>
+          <HeroButton variant="ghost" size="sm" isIconOnly className={r.add} aria-label="回应" data-testid="reaction-add">
+            <SmilePlus size={16} strokeWidth={1.8} aria-hidden />
+          </HeroButton>
+        </ReactionMenu>
+      )}
+    </div>
+  );
+}
+
+/** 复制成功后勾留多久。 */
+const COPIED_MS = 1600;
+
+type MessageActionsProps = { text: string; user: boolean; onReply: () => void; react?: ReactionMenuProps };
+
+/**
+ * 每块旁边那一排（本人 11/18）：回应（有 react 才出，点开快捷表情浮层）、回复、复制；位置和什么时候出现在 conversation-bubbles 的 .actions。
+ * 复制的是这一块的原文 markdown：成功换成勾约 1.6 秒，没复制上说一声。
+ */
+export function MessageActions({ text, user, onReply, react }: MessageActionsProps) {
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  const copy = () => {
+    void Promise.resolve().then(() => navigator.clipboard.writeText(text)).then(() => {
+      setCopied(true);
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = setTimeout(() => setCopied(false), COPIED_MS);
+    }, () => showWorkspaceToast({ text: "没复制上" }));
+  };
+  const close = () => react?.onOpenChange(false);
+  return (
+    <div className={b.actions} data-testid="message-actions">
+      {react ? (
+        <ReactionMenu {...react} extra={(
+          <div className={r.menuActs}>
+            <button type="button" className={r.menuAct} onClick={() => { close(); onReply(); }}>回复</button>
+            <button type="button" className={r.menuAct} onClick={() => { close(); copy(); }}>复制</button>
+          </div>
+        )}>
+          <HeroButton variant="ghost" size="sm" isIconOnly className={r.act} aria-label="回应"><SmilePlus size={16} strokeWidth={1.8} aria-hidden /></HeroButton>
+        </ReactionMenu>
+      ) : null}
+      <HeroButton variant="ghost" size="sm" isIconOnly className={r.act} aria-label="回复" onPress={onReply}><Reply size={16} strokeWidth={1.8} aria-hidden /></HeroButton>
+      <HeroButton variant="ghost" size="sm" isIconOnly className={r.act} aria-label="复制" onPress={copy}>
+        {copied ? <Check size={16} strokeWidth={1.8} aria-hidden /> : <Copy size={16} strokeWidth={1.8} aria-hidden />}
+      </HeroButton>
     </div>
   );
 }

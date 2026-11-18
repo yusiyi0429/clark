@@ -17,11 +17,23 @@
 .mine.mine :is(ul, ol) { margin: 6px 0 var(--space-2); }
 .mine.mine li { margin: 2px 0; }
 
-/* 表情挂在气泡底边（设计 6.5）：伙伴回复的挂在这组最后一块左下，本人那句的（含伙伴点的）在右下；挂着表情时让出压出去的那一截。 */
+/* 表情挂在气泡底边（设计 6.5）：点过的都压在那一块的右下角（本人 11/18），本人那句上伙伴点的也在这里；挂着表情时让出压出去的那一截。 */
 .buddy, .mine, .card { position: relative; }
-.edge { position: absolute; left: 8px; bottom: -12px; display: flex; align-items: center; gap: 6px; }
-.mine > .edge { left: auto; right: 8px; flex-direction: row-reverse; }
+.edge { position: absolute; right: 8px; bottom: -12px; display: flex; align-items: center; gap: 6px; }
+.mine > .edge { flex-direction: row-reverse; }
 :is(.buddy, .mine, .card):has(> .edge :is([data-reacted], [data-by-buddy])) { margin-bottom: 12px; }
+/*
+ * 每块旁边一排回应、回复、复制（本人 11/18，照 Claude Duet；Reactions.tsx 的 MessageActions）：是块的子元素、定位到块外，鼠标移过去仍算在这一块上。
+ * 伙伴的在块右边外侧、本人的在左边外侧（顺序也镜像），离块 8（用内边距补上，这段也算悬停），上下居中；鼠标在这一块上、焦点进来、浮层开着时才出。
+ */
+.actions { position: absolute; left: 100%; top: 50%; transform: translateY(-50%); display: flex; gap: 2px; padding-left: 8px; opacity: 0; transition: opacity var(--dur-fast) linear; }
+.mine > .actions { left: auto; right: 100%; padding: 0 8px 0 0; flex-direction: row-reverse; }
+:is(.buddy, .mine, .card):is(:hover, :focus-within) > .actions, .actions:has([aria-expanded="true"]) { opacity: 1; }
+/* 发出的那句回复了哪一块：气泡上方一行淡色，回复图标加开头几个字；点开看全文。 */
+.replied { display: inline-flex; align-items: center; gap: 4px; min-width: 0; max-width: min(75%, 560px); height: auto; margin: 0 4px 4px; padding: 0; border: 0; background: none; color: var(--ink-faint); font: inherit; cursor: pointer; }
+.replied:hover { background: none; color: var(--ink-muted); }
+.replied:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+.repliedFull { max-width: 360px; max-height: 320px; overflow: auto; padding: var(--space-2); color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; outline: none; }
 /* 本人那句的两个勾：气泡里右下角，不另占一行。 */
 .mine:has(> .tick) { padding-right: 36px; }
 .mine > .tick { position: absolute; right: 12px; bottom: 9px; height: var(--type-lh, 24px); align-items: center; margin: 0; }
@@ -85,6 +97,15 @@
 }
 @media (max-width: 959px), (hover: none) {
   .meta { opacity: 1; }
+}
+/* 有鼠标时卡片给旁边那一排留位置（8 + 三个 28 + 两个 2 = 96），按钮不盖住卡片。 */
+@media (hover: hover) {
+  .card { max-width: min(560px, 100% - 96px); }
+}
+/* 手机上不出这一排（长按出浮层）：藏起来但留着回应按钮给浮层定位，放回块里的底角，不撑出对话栏。 */
+@media (hover: none) {
+  .actions { top: auto; bottom: 0; left: 0; transform: none; padding: 0; visibility: hidden; pointer-events: none; }
+  .mine > .actions { left: auto; right: 0; padding: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
