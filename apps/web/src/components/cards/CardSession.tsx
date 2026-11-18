@@ -196,7 +196,7 @@ export function CardSession({ cardId, embedded = false, waiting, queued = null, 
   const openPane = () => (side ? side.toggle(true) : setDetails(true));
   // 约定改了、提议定了：云端登记了一句转话，这台电脑上跑着这张卡时马上说给执行方。
   // 登记了的转话（我来补、再改一轮、约定改了）：这一页马上认领，说给执行方的那句像平时发话一样先画出来。
-  const via = canAct && session ? { sessionId: session.id, say: (text: string) => say(text) } : null;
+  const via = canAct && session ? { sessionId: session.id, say: (text: string, messageId: string) => say(text, [], messageId) } : null;
   const settle = async () => { if (canAct) await relayNow(via); await refresh(); };
   const onSend = async (text: string, files: File[]) => {
     if (!supply) return say(text, files);

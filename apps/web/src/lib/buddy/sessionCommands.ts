@@ -36,11 +36,11 @@ export async function runSessionCommand(runner: LocalRunner, sessions: TLocalSes
  * 开着的子会话页自己的发话（useSessionSend.say）：先画出来、再交给本机、回执照常（先发后到）。
  * 认领到的转话是说给这个会话的、又不带 agreementRevision 时走它，本人马上在对话里看到这句话，不用等本机的事件。
  */
-export type SayVia = { sessionId: string; say: (text: string) => Promise<boolean> };
+export type SayVia = { sessionId: string; say: (text: string, messageId: string) => Promise<boolean> };
 
-/** 交给 SayVia：收下算送到；没收下（本机没连上）不报，下一轮再认领。 */
-async function sayCommand(via: SayVia, text: string): Promise<Outcome | null> {
-  try { return (await via.say(text)) ? { result: "done" } : null; }
+/** 交给 SayVia：收下算送到；没收下（本机没连上）不报，下一轮再认领。带命令编号：另一个标签页再认领同一条，本机按编号认出是同一句。 */
+async function sayCommand(via: SayVia, text: string, messageId: string): Promise<Outcome | null> {
+  try { return (await via.say(text, messageId)) ? { result: "done" } : null; }
   catch (error) { return { result: "failed", message: (error instanceof Error ? error.message : String(error)).slice(0, 500) }; }
 }
 
@@ -50,7 +50,7 @@ export async function runClaimedCommands(deviceId: string, local: Pick<LocalRunn
   for (const entry of commands) {
     const { command } = entry;
     const outcome = via && entry.sessionId === via.sessionId && command.type === "message" && !command.agreementRevision
-      ? await sayCommand(via, command.text)
+      ? await sayCommand(via, command.text, entry.id)
       : await runSessionCommand(local.runner, local.sessions, entry);
     if (outcome) await reportSessionCommand(entry.id, { deviceId, ...outcome }).catch(() => undefined);
   }

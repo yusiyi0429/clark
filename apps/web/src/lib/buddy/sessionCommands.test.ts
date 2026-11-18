@@ -5,6 +5,7 @@ const actions = vi.hoisted(() => ({ claimSessionCommands: vi.fn(), reportSession
 vi.mock("./actions", () => actions);
 
 import { runClaimedCommands, runSessionCommand } from "./sessionCommands";
+import { sessionOutbox, type Outgoing } from "@/components/cards/SessionTranscript";
 
 const SESSION = "00000000-0000-4000-8000-0000000000a1";
 const OTHER = "00000000-0000-4000-8000-0000000000a2";
@@ -60,10 +61,40 @@ describe("登记以后这一页马上认领（主循环第 61、62 条）", () =
     const refresh = vi.fn(async () => undefined);
     await runClaimedCommands("00000000-0000-4000-8000-0000000000d1", { runner: r, sessions: [{ id: SESSION }, { id: OTHER }] as TLocalSessionSummary[], refresh }, { sessionId: SESSION, say });
     expect(say).toHaveBeenCalledTimes(1);
-    expect(say).toHaveBeenCalledWith("本人补上了：申请号 A 无");
+    expect(say).toHaveBeenCalledWith("本人补上了：申请号 A 无", claimed[0]!.id);
     expect(call).toHaveBeenCalledWith(SESSION, "约定改了", undefined, undefined, undefined, 2);
     expect(call).toHaveBeenCalledWith(OTHER, "别的会话", undefined, undefined, undefined, undefined);
     expect(actions.reportSessionCommand).toHaveBeenCalledTimes(3);
     expect(refresh).toHaveBeenCalled();
+  });
+
+  it("子会话页认领转话命令时也带命令编号，两个标签页认领同一条只送一次", async () => {
+    // 本机：按编号去重（同一个编号只送一次）
+    const delivered = new Set<string>();
+    const sendMessage = vi.fn(async (_id: string, _text: string, _kind?: unknown, _files?: unknown, messageId?: string) => {
+      if (messageId) delivered.add(messageId);
+      return { delivery: "new_turn", messageId: messageId ?? "x" };
+    });
+    const local = { sendMessage, clientMessageIds: true } as unknown as LocalRunner;
+    // 两个开着这个子会话页的标签页，各有自己的发话（via 照子会话页的接法：转话带命令编号交给这一页的发话）
+    const tab = () => {
+      let list: Outgoing[] = [];
+      const outbox = sessionOutbox(() => ({ runner: local, sessionId: SESSION, pending: [], list }), (change) => { list = change(list); }, async () => []);
+      return { outbox, via: { sessionId: SESSION, say: (text: string, messageId: string) => outbox.say(text, [], messageId) } };
+    };
+    const command = entry({ type: "message", text: "本人补上了：申请号 A 无" });
+    const refresh = vi.fn(async () => undefined);
+    for (const { via } of [tab(), tab()]) {
+      actions.claimSessionCommands.mockResolvedValueOnce([command]);
+      await runClaimedCommands("00000000-0000-4000-8000-0000000000d1", { runner: local, sessions, refresh }, via);
+    }
+    await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(2));
+    expect(sendMessage.mock.calls.map((c) => c[4])).toEqual([command.id, command.id]);
+    expect([...delivered]).toEqual([command.id]);
+    // 本人在输入框里自己打的话照旧用新的随机编号
+    await tab().outbox.say("我自己说一句");
+    await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(3));
+    expect(sendMessage.mock.calls[2]![4]).not.toBe(command.id);
+    expect(sendMessage.mock.calls[2]![4]).toMatch(/^[0-9a-f-]{36}$/);
   });
 });

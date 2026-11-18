@@ -315,11 +315,12 @@ export function sessionOutbox(read: () => OutboxState, update: (change: (list: O
     } catch { mark(item.messageId, true); }
   };
   return {
-    say: async (text: string, files: File[] = []): Promise<boolean> => {
+    /** messageId：认领到的转话命令带命令的编号（另一个标签页再认领同一条，本机按编号只送一次）；本人自己打的话不给，用新的随机编号。 */
+    say: async (text: string, files: File[] = [], messageId?: string): Promise<boolean> => {
       const { runner, sessionId, pending } = read();
       if (!sessionId) return false;
-      if (!runner.clientMessageIds || !sendsMessage(pending, text, files.length > 0)) return sayToSession(runner, sessionId, [...pending], text, files.length ? await upload(files) : []);
-      const item: Outgoing = { sessionId, messageId: crypto.randomUUID(), at: new Date().toISOString(), text, files, failed: false };
+      if (!runner.clientMessageIds || !sendsMessage(pending, text, files.length > 0)) return sayToSession(runner, sessionId, [...pending], text, files.length ? await upload(files) : [], runner.clientMessageIds ? messageId : undefined);
+      const item: Outgoing = { sessionId, messageId: messageId ?? crypto.randomUUID(), at: new Date().toISOString(), text, files, failed: false };
       update((list) => [...list, item]);
       void deliver(item);
       return true;
