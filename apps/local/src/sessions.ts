@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
@@ -59,10 +59,21 @@ const WRITE_TOOLS = ["Edit", "MultiEdit", "Write", "NotebookEdit", "Agent", "Tas
 /** 跑命令的工具：规划员不给；验收员在被验的卡自己的工作树里做时给（本人 11/18：跑测试、类型检查等检查命令，仍不给改文件的工具）。 */
 const SHELL_TOOLS = ["Bash", "PowerShell"];
 /**
- * 能跑命令的验收员也不给的 git 写命令（前缀规则 Tool(前缀:*)，Claude Code 2.1.327 认）：提交、暂存、重置、切换、推送、收起。
+ * 能跑命令的验收员也不给的 git 写命令（前缀规则 Tool(前缀:*)，Claude Code 2.1.327 认）：提交、暂存、重置、切换、推送、收起、合并、变基、恢复、清理等。
  * Windows 上它另有 PowerShell 工具，同样的规则两边都写。
  */
-const GIT_WRITES = ["git commit", "git add", "git reset", "git checkout", "git push", "git stash"].flatMap((c) => [`Bash(${c}:*)`, `PowerShell(${c}:*)`]);
+const GIT_WRITES = [
+  "git commit", "git add", "git reset", "git checkout", "git push", "git stash", "git merge", "git rebase", "git cherry-pick", "git revert", "git am", "git switch", "git restore", "git clean",
+  // 验收员就在卡的工作树里跑，用不着指定别的仓库或改配置；禁掉也免得 git -C x commit 这种写法绕过上面的前缀
+  "git -C", "git -c",
+].flatMap((c) => [`Bash(${c}:*)`, `PowerShell(${c}:*)`]);
+/** 验收员留下的改动超过这么多就不存一份、也不扔（修复第 2 轮）。 */
+const LEFTOVER_LIMIT = 50 * 1024 * 1024;
+/** 文件或文件夹（不跟链接）一共多大。 */
+function sizeOf(path: string): number {
+  const s = lstatSync(path);
+  return s.isDirectory() ? readdirSync(path).reduce((n, name) => n + sizeOf(join(path, name)), 0) : s.size;
+}
 /** 排队先后：验收员（短，而且卡着交付）→ 规划员 → 执行；同一档先来先跑。 */
 const PRIORITY: Record<TLocalSessionKind, number> = { verify: 0, plan: 1, card: 2, topic: 2 };
 /** 验收交代取不到（没连天枢、断网、天枢出错）时多久再试一次。 */
@@ -193,10 +204,10 @@ interface SessionRecord {
   /** 自由子会话（第 68 条，项目下的「+」开的专题）：换一套规矩和工具；在哪个文件夹做都按普通文件夹算（workspace 是 folder）。 */
   free?: true;
   /**
-   * 能跑检查命令的验收员第一次拉起时的快照（本人 11/18，afterVerify 用）：卡的工作树里已有的没提交的改动、卡的事件记到第几条；
-   * 拍的时候卡还在做（一轮没做完、在跑、有后台任务）写在 busy，这次不清。存盘，本机程序重启后续上的验收员照这一份比。清理做完（或决定不清）后去掉。
+   * 能跑检查命令的验收员第一次拉起时的快照（本人 11/18，dropLeftovers 用）：卡的工作树里已有的没提交的改动、卡的事件记到第几条。
+   * 存盘，本机程序重启后续上的验收员照这一份比。验收员退出、兜完最后一次后去掉。
    */
-  verifyBase?: { files: string[]; cardSeq: number; busy?: true };
+  verifyBase?: { files: string[]; cardSeq: number };
 }
 
 /** 不合契约时给执行方看的一句（哪个字段、哪里不对）。 */
@@ -482,7 +493,20 @@ export class SessionManager {
   }
 
   private startable(r: SessionRecord): boolean {
-    return !r.briefPending && !(r.after.length && !r.workspace) && !this.folderBusy(r);
+    return !r.briefPending && !(r.after.length && !r.workspace) && !this.folderBusy(r) && !this.cardStillWorking(r);
+  }
+
+  /**
+   * 卡在自己的工作树里做时，它的验收员等卡这一轮做完再拉起（交回是在一轮中间调的）：免得快照拍在卡还在写的时候，
+   * 验收员跑检查留下的东西也分不清是谁的（修复第 2 轮）。卡在跑、一轮没做完、在拉起、有后台任务在跑都算还在做。
+   */
+  private cardStillWorking(r: SessionRecord): boolean {
+    const card = r.subject.kind === "verify" && r.parentId ? this.records.get(r.parentId) : undefined;
+    return card?.workspace?.kind === "worktree" && this.cardBusy(card);
+  }
+
+  private cardBusy(card: SessionRecord): boolean {
+    return this.inTurn.has(card.id) || OCCUPYING.includes(card.status) || this.starting.has(card.id) || card.background.some((b) => b.state === "running");
   }
 
   /** 排着的卡还在等的前面的卡（还没做完的那几张）。 */
@@ -981,9 +1005,8 @@ export class SessionManager {
     const card = checks && rec.parentId ? this.records.get(rec.parentId) : undefined;
     if (checks && card && !rec.verifyBase) {
       const files = await changedFiles(checks.path).catch(() => null);
-      const busy = this.inTurn.has(card.id) || OCCUPYING.includes(card.status) || this.starting.has(card.id) || card.background.some((b) => b.state === "running");
       if (files) {
-        rec.verifyBase = { files, cardSeq: this.d.log.lastSeq(card.id), ...(busy ? { busy: true as const } : {}) };
+        rec.verifyBase = { files, cardSeq: this.d.log.lastSeq(card.id) };
         this.save(rec);
       }
     }
@@ -1278,53 +1301,74 @@ export class SessionManager {
     // 本人要换的模型还没换上就退了（交完收工、强停等）：直接换，下次开起来用新的
     const want = rec.pendingModel?.modelProfileId;
     if (want) void this.d.models.resolve(want).then((m) => { if (m?.profileId === want && rec.pendingModel?.modelProfileId === want && this.applyModel(rec, m, rec.pendingModel.effort ?? undefined)) this.carryOn(rec); });
-    // 验收员退出：扔掉它跑检查留下的改动；验收过了，卡在工作树里做的，试着自动合回
+    // 验收员退出：再兜一次扔掉它跑检查留下的改动；验收过了，卡在工作树里做的，试着自动合回
     if (rec.subject.kind === "verify") void this.afterVerify(rec, finished && Boolean(rec.passed));
   }
 
   /**
-   * 验收员退出后（本人 11/18）：它在卡的工作树里跑检查命令留下的没提交的改动（测试生成的文件、被改写的文件）扔掉，
-   * 不让卡下次交回时提交进分支、也不挡自动合回。只扔快照以后多出来的，扔之前存一份到验收员的会话目录。
-   * 分不清是谁的就不扔、记一条：拍快照时卡还在做（busy），或者快照以后卡的日志里有事件（验收员自己报到卡上的结论、卡的状态变化不算）。
-   * 关机时不动，快照留着给下次续上的验收员。
+   * 验收员退出后：交结论前已经清过一次（submitVerdict），这里再兜一次结论之后才多出来的。快照用完去掉。
+   * 关机时不动：快照留着给下次续上的验收员；关机那一刻交完结论的卡没来得及自动合回，下次启动由 mergeMissed 补。
    */
   private async afterVerify(rec: SessionRecord, passed: boolean): Promise<void> {
     if (this.closing) return;
-    const base = rec.verifyBase;
-    const card = rec.parentId ? this.records.get(rec.parentId) : undefined;
-    const ws = card?.workspace;
-    if (base && card && ws?.kind === "worktree" && !ws.mergedCommit && existsSync(ws.path)) {
-      try {
-        const fresh = (await dirtyFiles(ws.path)).filter((f) => !base.files.includes(f.path));
-        const names = fresh.slice(0, 20).map((f) => f.path).join("、") + (fresh.length > 20 ? `，另有 ${fresh.length - 20} 个没列出` : "");
-        const cardMoved = this.d.log.after(card.id, base.cardSeq).some((e) => e.type !== "verdict" && e.type !== "status");
-        if (fresh.length && (base.busy || cardMoved)) {
-          const why = base.busy ? "交回时卡还在做" : "验收时卡也有动静";
-          this.emit(rec, { type: "notice", level: "warn", code: "verify_leftovers", text: `${why}，分不清工作树里没提交的改动是谁的，没清：${names}` });
-        } else if (fresh.length) {
-          const saved = await this.saveLeftovers(rec, ws.path, fresh);
-          await discardFiles(ws.path, fresh);
-          this.emit(rec, { type: "notice", level: "info", code: "verify_leftovers", text: `清掉了验收员跑检查留下的没提交的改动，不随卡合回（删之前存了一份：${saved}）：${names}` });
-        }
-      } catch (e) {
-        this.emit(rec, { type: "notice", level: "warn", code: "verify_leftovers", text: `验收员跑检查留下的改动没清掉：${e instanceof Error ? e.message : String(e)}` });
-      }
-    }
-    if (base) {
+    await this.dropLeftovers(rec);
+    if (rec.verifyBase) {
       delete rec.verifyBase;
       this.save(rec);
     }
     if (passed) await this.autoMerge(rec);
   }
 
-  /** 扔之前存一份到验收员的会话目录：新文件原样拷过去，改过的已有文件存成 changes.diff（对 HEAD）。返回存在哪。 */
-  private async saveLeftovers(rec: SessionRecord, tree: string, files: DirtyFile[]): Promise<string> {
+  /**
+   * 验收员（本人 11/18）在卡的工作树里跑检查命令留下的没提交的改动（测试生成的文件、被改写的文件）扔掉，
+   * 不让卡下次交回时提交进分支、也不挡自动合回。只扔快照以后多出来的，扔之前存一份到验收员的会话目录；超过 LEFTOVER_LIMIT 不存不扔。
+   * 分不清是谁的就不扔、记一条：快照以后卡的日志里有事件（验收员自己报到卡上的结论、卡的状态变化不算）。验收员排队时已经等卡这一轮做完（cardStillWorking），
+   * 拉起途中本人又让卡做了的，它这一轮的事件落在快照之后，也照这条不扔。
+   */
+  private async dropLeftovers(rec: SessionRecord): Promise<void> {
+    const base = rec.verifyBase;
+    const card = rec.parentId ? this.records.get(rec.parentId) : undefined;
+    const ws = card?.workspace;
+    if (!base || !card || ws?.kind !== "worktree" || ws.mergedCommit || !existsSync(ws.path)) return;
+    const note = (level: "info" | "warn", text: string): void => { this.emit(rec, { type: "notice", level, code: "verify_leftovers", text }); };
+    try {
+      const fresh = (await dirtyFiles(ws.path)).filter((f) => !base.files.includes(f.path));
+      if (!fresh.length) return;
+      const names = fresh.slice(0, 20).map((f) => f.path).join("、") + (fresh.length > 20 ? `，另有 ${fresh.length - 20} 个没列出` : "");
+      const cardMoved = this.d.log.after(card.id, base.cardSeq).some((e) => e.type !== "verdict" && e.type !== "status");
+      if (cardMoved) return note("warn", `验收时卡也有动静，分不清工作树里没提交的改动是谁的，没清：${names}`);
+      const tracked = fresh.filter((f) => !f.untracked).flatMap((f) => (f.orig ? [f.path, f.orig] : [f.path]));
+      const diff = tracked.length ? await git(ws.path, ["--literal-pathspecs", "diff", "HEAD", "--binary", "--", ...tracked]) : "";
+      const size = Buffer.byteLength(diff) + fresh.filter((f) => f.untracked).reduce((n, f) => n + sizeOf(join(ws.path, f.path)), 0);
+      if (size > LEFTOVER_LIMIT) return note("warn", `验收员跑检查留下的没提交的改动超过 50MB，没存也没清，要你看一下：${names}`);
+      const saved = this.saveLeftovers(rec, ws.path, fresh, diff);
+      await discardFiles(ws.path, fresh);
+      note("info", `清掉了验收员跑检查留下的没提交的改动，不随卡合回（删之前存了一份：${saved}）：${names}`);
+    } catch (e) {
+      note("warn", `验收员跑检查留下的改动没清掉：${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  /** 扔之前存一份到验收员的会话目录：新文件原样拷进 files/，改过的已有文件的改动存成 changes.diff（对 HEAD），两边撞不上。返回存在哪。 */
+  private saveLeftovers(rec: SessionRecord, tree: string, files: DirtyFile[], diff: string): string {
     const dir = join(this.dir, rec.id, "leftovers", nowIso().replace(/[:.]/g, "-"));
-    mkdirSync(dir, { recursive: true });
-    for (const f of files.filter((x) => x.untracked)) cpSync(join(tree, f.path), join(dir, f.path), { recursive: true });
-    const tracked = files.filter((f) => !f.untracked).flatMap((f) => (f.orig ? [f.path, f.orig] : [f.path]));
-    if (tracked.length) writeFileSync(join(dir, "changes.diff"), await git(tree, ["--literal-pathspecs", "diff", "HEAD", "--binary", "--", ...tracked]));
+    mkdirSync(join(dir, "files"), { recursive: true });
+    for (const f of files.filter((x) => x.untracked)) cpSync(join(tree, f.path), join(dir, "files", f.path), { recursive: true });
+    if (diff) writeFileSync(join(dir, "changes.diff"), diff);
     return dir;
+  }
+
+  /**
+   * 本机程序启动时：关机那一刻交完结论、验收过了的卡（验收员退出时的自动合回没做成，修复第 2 轮），补一次自动合回。
+   * 认法：卡在工作树里、没合回、没记「等你合」，最近一次验收过了。合不了 autoMerge 自己记 needsMerge，首页看得到。
+   */
+  async mergeMissed(): Promise<void> {
+    for (const card of [...this.records.values()]) {
+      const ws = card.workspace;
+      if (card.subject.kind !== "card" || ws?.kind !== "worktree" || ws.mergedCommit || ws.needsMerge) continue;
+      const v = this.latestVerifier(card);
+      if (v?.passed) await this.autoMerge(v);
+    }
   }
 
   /**
@@ -2696,7 +2740,7 @@ export class SessionManager {
   }
 
   /** 验收员交结论：每条完成标准判一次，经发件箱报给天枢；验收会话和被验的卡的会话里各记一条结论事件（只给网页显示；改法由云端写进那次交回后，网页按交回送回一次）。 */
-  submitVerdict(id: string, input: { summary: string; criteria: unknown[]; beyondScope?: unknown; sourceWordIssues?: unknown }): string {
+  async submitVerdict(id: string, input: { summary: string; criteria: unknown[]; beyondScope?: unknown; sourceWordIssues?: unknown }): Promise<string> {
     const rec = this.must(id);
     if (rec.subject.kind !== "verify") throw new SessionError("validation", "只有验收员交结论");
     if (rec.submitted) throw new SessionError("conflict", "这次交回已经交过结论了，不能再交");
@@ -2729,7 +2773,9 @@ export class SessionManager {
     };
     const problem = schemaProblem(LocalVerdict, verdict);
     if (problem) throw new SessionError("validation", `结论不合格：${problem}`);
-    rec.submitted = 1;
+    rec.submitted = 1; // 先占住：清理时再来一次交结论照样拦下
+    // 报给天枢之前先清一次验收员跑检查留下的（修复第 2 轮）：检查已经跑完，天枢还不知道结论，没过时改法不会比清理先送到卡上
+    await this.dropLeftovers(rec);
     rec.passed = verdict.passed;
     this.sync(rec, { type: "verdict", data: verdict });
     if (verdict.passed) void this.releaseWaiting(); // 文件夹里做的卡验收过了就算做完

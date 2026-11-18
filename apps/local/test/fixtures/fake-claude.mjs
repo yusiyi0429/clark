@@ -193,6 +193,7 @@ async function readOnlyTurn() {
   // 交完以后这一轮接下来的请求碰壁（现读配置）
   const after = readCfg().usageLimitAfterSubmit;
   if (result && after) { limitHit(after); return; }
+  if (result && cfg.hangAfterSubmit) return; // 交完以后这一轮一直没做完（测交完结论、退出之前就关机）
   out({ type: "assistant", message: { content: [{ type: "text", text: result ? "交好了" : "看完了" }] }, parent_tool_use_id: null });
   finish(true, result ? "交好了" : "看完了");
 }
