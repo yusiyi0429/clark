@@ -5,16 +5,20 @@ import type { Query } from "./meetingStore.js";
 /**
  * 伙伴在主线派出去的活（本人 11/18，迁移 289 的 buddy_dispatches）：open_session 开了哪个会话，或 message_project 转给了哪个项目的对话。
  * 每次派活出一张派活卡（ConversationCard 的 buddy_dispatch），读历史时接回那一轮；从主线开的会话做完一轮时主线出一行（taskFeed.ts 的 partnerWorkEvents）。
- * 卡上的项目名、会话名照现在的（改过名跟着变），表里存的是派活那一刻的。
+ * 卡上的项目名、会话名照现在的（改过名跟着变）；会话被真删了（topic_id 置空）用派活时存下的名字。state 在这里算好，网页照着画。
  */
 
 export type DispatchCard = Extract<TConversationCard, { kind: "buddy_dispatch" }>;
 
-type DispatchRow = { id: string; run_id: string | null; created_at: Date; project_id: string; project_name: string; topic_id: string | null; title: string | null };
-const SELECT = `SELECT d.id::text,d.run_id,d.created_at,d.project_id::text,COALESCE(p.name,d.project_name) AS project_name,d.topic_id::text,COALESCE(r.title,d.title) AS title
+type DispatchRow = { id: string; kind: "topic" | "project"; run_id: string | null; created_at: Date; project_id: string; project_name: string; topic_id: string | null;
+  title: string | null; state: DispatchCard["state"] };
+const SELECT = `SELECT d.id::text,d.kind,d.run_id,d.created_at,d.project_id::text,COALESCE(p.name,d.project_name) AS project_name,r.id::text AS topic_id,
+    COALESCE(r.title,d.title) AS title,
+    CASE WHEN d.kind='project' THEN CASE WHEN p.archived_at IS NOT NULL THEN 'archived' ELSE 'active' END
+      WHEN r.id IS NULL THEN 'gone' WHEN r.status='archived' OR r.trashed_at IS NOT NULL THEN 'archived' ELSE 'active' END AS state
   FROM buddy_dispatches d LEFT JOIN projects p ON p.id=d.project_id LEFT JOIN research_topics r ON r.id=d.topic_id`;
 const card = (row: DispatchRow): DispatchCard => ({ kind: "buddy_dispatch", dispatchId: row.id, projectId: row.project_id, projectName: row.project_name,
-  sub: row.topic_id ? { kind: "topic", id: row.topic_id, title: row.title ?? "" } : null });
+  sub: row.kind === "topic" ? { kind: "topic", id: row.topic_id, title: row.title ?? "" } : null, state: row.state });
 
 /** 这个键已经派过的那一张（同一轮重放时用）；没有为 null。 */
 export async function findDispatch(q: Query, ownerId: string, requestKey: string): Promise<DispatchCard | null> {
@@ -22,15 +26,15 @@ export async function findDispatch(q: Query, ownerId: string, requestKey: string
   return row ? card(row) : null;
 }
 
-/** 记一次派活；同一个键已经记过就回那一张。 */
+/** 记一次派活（topic 为 null 是转给项目对话）；同一个键已经记过就回那一张。 */
 export async function recordDispatch(q: Query, input: {
   ownerId: string; requestKey: string; runId: string | null; conversationId: string | null;
   projectId: string; projectName: string; topic: { id: string; title: string } | null; now: Date;
 }): Promise<DispatchCard> {
-  await q(`INSERT INTO buddy_dispatches(id,owner_id,request_key,run_id,conversation_id,project_id,project_name,topic_id,title,created_at)
-    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (owner_id,request_key) DO NOTHING`,
-  [randomUUID(), input.ownerId, input.requestKey, input.runId, input.conversationId, input.projectId, input.projectName, input.topic?.id ?? null,
-    input.topic?.title ?? null, input.now]);
+  await q(`INSERT INTO buddy_dispatches(id,owner_id,request_key,kind,run_id,conversation_id,project_id,project_name,topic_id,title,created_at)
+    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT (owner_id,request_key) DO NOTHING`,
+  [randomUUID(), input.ownerId, input.requestKey, input.topic ? "topic" : "project", input.runId, input.conversationId, input.projectId, input.projectName,
+    input.topic?.id ?? null, input.topic?.title ?? null, input.now]);
   return (await findDispatch(q, input.ownerId, input.requestKey))!;
 }
 

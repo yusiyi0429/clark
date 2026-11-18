@@ -247,15 +247,20 @@ export const ConversationCard = Type.Union([
   }, { additionalProperties: false }),
   /**
    * 派活卡（本人 11/18）：伙伴在主线派出去的活。open_session 开了哪个项目的哪个会话（sub），或 message_project 转给了哪个项目的对话（sub 为 null）。
-   * 跟着出它的那一轮画在对话记录里，读历史时也在那一轮的回答上。
+   * 跟着出它的那一轮画在对话记录里，读历史时也在那一轮的回答上。项目名、会话名照现在的；会话被真删以后 sub.id 为 null，名字是派活时存下的那份。
+   * state 由云端算好，网页照它画：
+   * - 开的会话：在用 active；已归档或进了回收站 archived；被真删了 gone。
+   * - 转给项目对话的（sub 为 null）：项目归档了 archived，否则 active。
    */
   Type.Object({
     kind: Type.Literal("buddy_dispatch"),
     dispatchId: Type.String({ format: "uuid" }),
     projectId: Type.String({ format: "uuid" }),
     projectName: Type.String(),
-    /** 开出来的会话；转给项目对话（message_project）时为 null。 */
-    sub: Type.Union([Type.Object({ kind: Type.Literal("topic"), id: Type.String({ format: "uuid" }), title: Type.String() }, { additionalProperties: false }), Type.Null()]),
+    /** 开出来的会话；转给项目对话（message_project）时为 null。会话被真删了 id 为 null。 */
+    sub: Type.Union([Type.Object({ kind: Type.Literal("topic"), id: Type.Union([Type.String({ format: "uuid" }), Type.Null()]), title: Type.String() },
+      { additionalProperties: false }), Type.Null()]),
+    state: Type.Union([Type.Literal("active"), Type.Literal("archived"), Type.Literal("gone")]),
   }, { additionalProperties: false }),
   /** 复盘草稿：摘要与「打开修改」。 */
   Type.Object({ kind: Type.Literal("review"), personalReviewId: Type.String({ minLength: 1 }), href: Type.String({ minLength: 1 }) }, { additionalProperties: false }),
@@ -326,8 +331,8 @@ export const ConversationMessage = Type.Object(
     recoveryNote: Type.Optional(ConversationRecoveryNote),
     /** 只在助手回答上：这一轮实际装进上下文的个人记忆 id。回答里的记忆标记只认这里有的。 */
     memoryUsed: Type.Optional(Type.Array(Type.String())),
-    /** 只在助手回答上：这一轮工具生成的卡（排在回答后面）。 */
-    cards: Type.Optional(Type.Array(ConversationCard, { maxItems: 4 })),
+    /** 只在助手回答上：这一轮工具生成的卡（排在回答后面），最多 12 张；多了先截别的卡，伙伴的选项框（buddy_question）一张不截。 */
+    cards: Type.Optional(Type.Array(ConversationCard, { maxItems: 12 })),
     /** 只在助手回答上：这一轮伙伴最后一张计划清单（17.4，见 buddyActions.ts 的 BuddyPlan）；没出清单的没有这个字段。 */
     plan: Type.Optional(BuddyPlan),
     /**

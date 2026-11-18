@@ -492,14 +492,18 @@ const handlers: Handlers = {
     // 项目对话还没开过就开（归档的、别人的照网页接口回错）。
     await web(deps, call.personId, "POST", `${path}/pipeline`);
     const requestId = call.runId ? forwardedInputId(call.runId, call.personId, args.projectId, args.text) : randomUUID();
+    // 同一轮同一句重放：排队那条是同一条（同一个 id），派活卡也不再出。
+    const earlier = await findDispatch(deps.q, call.personId, requestId);
     const item = await web(deps, call.personId, "POST", "/api/me/work-intake", { id: requestId, scope: `project:${args.projectId}`,
       message: BUDDY_FORWARD_PREFIX + args.text, attachments: [] });
-    const card = await recordDispatch(deps.q, { ownerId: call.personId, requestKey: requestId, runId: call.runId, conversationId: call.conversationId,
+    const card = earlier ? null : await recordDispatch(deps.q, { ownerId: call.personId, requestKey: requestId, runId: call.runId, conversationId: call.conversationId,
       projectId: args.projectId, projectName: name, topic: null, now: deps.now() });
-    return { summary: `已把这条要求排进项目「${name}」的对话`, result: item, undo: null, ui: [projectRefresh(args.projectId)], card };
+    return { summary: `已把这条要求排进项目「${name}」的对话`, result: item, undo: null, ui: [projectRefresh(args.projectId)], ...(card ? { card } : {}) };
   },
   open_session: async (deps, call, args) => {
     if (Boolean(args.projectId) === Boolean(args.scratch)) throw new BuddyError(400, "INVALID_ARGS", "projectId 和 scratch 带且只带一个");
+    const title = args.title.trim();
+    if (!title) throw new BuddyError(400, "INVALID_ARGS", "title 不能全是空白");
     if ((await conversationScope(deps.q, call.personId, call.conversationId)).startsWith("project:"))
       throw new BuddyError(409, "MAIN_ONLY", "这个动作只在伙伴主线用");
     // 归档了的项目不另拦：建会话的接口照旧回 404「找不到这个项目」。
@@ -514,11 +518,10 @@ const handlers: Handlers = {
       const sub = card.sub!;
       return { summary: `在项目「${card.projectName}」里开了「${sub.title}」，本人电脑上开着的网页接下后就开始`,
         result: { dispatchId: card.dispatchId, projectId: card.projectId, projectName: card.projectName, kind: "topic", id: sub.id, title: sub.title },
-        undo: null, ui: [subRefresh(sub.id, ["project"])], ...(replay ? {} : { card }) };
+        undo: null, ui: sub.id ? [subRefresh(sub.id, ["project"])] : [], ...(replay ? {} : { card }) };
     };
     const earlier = await findDispatch(deps.q, call.personId, requestKey);
     if (earlier) return opened(earlier, true);
-    const title = args.title.trim();
     const topic = await web<{ id: string }>(deps, call.personId, "POST", "/api/me/topics", { free: true, projectId, firstMessage: args.brief });
     await web(deps, call.personId, "PATCH", `/api/me/sub-sessions/topic/${encodeURIComponent(topic.id)}`, { title });
     const card = await recordDispatch(deps.q, { ownerId: call.personId, requestKey, runId: call.runId, conversationId: call.conversationId,

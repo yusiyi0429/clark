@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { describe, expect, it } from "vitest";
 import { PROJECT_MCP_ACTIONS } from "@warmap/contracts";
 import { boardFixture, THIRD } from "./boardFixture.js";
@@ -14,8 +16,8 @@ import { TEST_MEMBER } from "./helpers.js";
 
 const TOKEN = "chat-token";
 
-async function fixture() {
-  const f = await boardFixture({}, { boardCloudAgents: false, internalChatToken: TOKEN });
+async function fixture(seed: Parameters<typeof boardFixture>[1] = {}) {
+  const f = await boardFixture({}, { boardCloudAgents: false, internalChatToken: TOKEN, ...seed });
   const act = (name: string, args: unknown, options: { turn?: { runId: string; conversationId: string } } = {}) => f.t.app.inject({ method: "POST",
     url: `/internal/me/buddy-actions/${name}`, headers: { authorization: `Bearer ${TOKEN}`, "x-owner-id": TEST_MEMBER.personId }, payload: { args, ...options.turn } });
   const grant = () => f.call("PUT", "/api/me/buddy-authority", { authority: "full" });
@@ -140,7 +142,7 @@ describe("伙伴主线开会话（open_session）", { timeout: 60_000 }, () => {
         { projectId, title: "首页换深色", brief: BRIEF });
       const result = outcome.result as { dispatchId: string; id: string };
       expect(streamed.filter(({ event }) => event.type === "card")).toEqual([{ runId, event: { type: "card", card: { kind: "buddy_dispatch",
-        dispatchId: result.dispatchId, projectId, projectName: "品牌建设", sub: { kind: "topic", id: result.id, title: "首页换深色" } } } }]);
+        dispatchId: result.dispatchId, projectId, projectName: "品牌建设", sub: { kind: "topic", id: result.id, title: "首页换深色" }, state: "active" } } }]);
       expect(streamed.filter(({ event }) => event.type === "ui")).toEqual([{ runId, event: { type: "ui",
         ui: { kind: "refresh", what: ["work_home", "sub_session", "project"], id: result.id } } }]);
       expect((await f.said("global", runId)).buddyReactions).toEqual(["👍"]);
@@ -166,7 +168,7 @@ describe("伙伴主线开会话（open_session）", { timeout: 60_000 }, () => {
       expect(shape(asking)).toEqual([asked1.questionId, opened1.dispatchId]);
       expect(shape(opening)).toEqual([opened2.dispatchId, asked2.questionId]);
       expect(extras.get(asking)!.cards![1]).toEqual({ kind: "buddy_dispatch", dispatchId: opened1.dispatchId, projectId, projectName: "品牌建设",
-        sub: { kind: "topic", id: opened1.id, title: "首页换深色" } });
+        sub: { kind: "topic", id: opened1.id, title: "首页换深色" }, state: "active" });
       // 会话、项目后来改了名：卡上照现在的名字。
       await f.call("PATCH", `/api/me/sub-sessions/topic/${opened1.id}`, { title: "深色首页" });
       await f.call("PATCH", `/api/me/projects/${projectId}`, { name: "品牌" });
@@ -184,7 +186,7 @@ describe("伙伴主线开会话（open_session）", { timeout: 60_000 }, () => {
       const runId = randomUUID();
       await runAction(deps, { personId: TEST_MEMBER.personId, conversationId: randomUUID(), runId }, "message_project", { projectId, text: "录屏先停" });
       const card = streamed.find(({ event }) => event.type === "card")!.event.card as Record<string, unknown>;
-      expect(card).toEqual({ kind: "buddy_dispatch", dispatchId: expect.any(String), projectId, projectName: "品牌建设", sub: null });
+      expect(card).toEqual({ kind: "buddy_dispatch", dispatchId: expect.any(String), projectId, projectName: "品牌建设", sub: null, state: "active" });
       expect((await runExtras(deps.q, TEST_MEMBER.personId, [runId])).get(runId)!.cards).toEqual([card]);
     } finally { await f.close(); }
   });
@@ -202,6 +204,79 @@ describe("伙伴主线开会话（open_session）", { timeout: 60_000 }, () => {
       expect(await f.listed(conversationId)).not.toContain("open_session");
       expect(await f.listed(randomUUID())).toContain("open_session");
       expect(await f.listed()).toContain("open_session");
+    } finally { await f.close(); }
+  });
+
+  it("title 全是空白时不建会话", async () => {
+    const f = await fixture();
+    try {
+      await f.grant();
+      const projectId = await f.project("品牌建设");
+      const res = await f.act("open_session", { projectId, title: "   ", brief: BRIEF }, { turn: turn() });
+      expect([res.statusCode, res.json().code]).toEqual([400, "INVALID_ARGS"]);
+      expect(await f.t.sql("SELECT * FROM research_topics")).toEqual([]);
+      expect(await f.t.sql("SELECT * FROM session_starts")).toEqual([]);
+      expect(await f.t.sql("SELECT * FROM buddy_dispatches")).toEqual([]);
+    } finally { await f.close(); }
+  });
+
+  it("message_project 同一轮重放不再推卡", async () => {
+    const f = await fixture();
+    try {
+      await f.grant();
+      const projectId = await f.project("品牌建设");
+      const streamed: { runId: string; event: Record<string, unknown> }[] = [];
+      const deps = f.deps(streamed);
+      const call = { personId: TEST_MEMBER.personId, conversationId: randomUUID(), runId: randomUUID() };
+      for (let i = 0; i < 2; i++) await runAction(deps, call, "message_project", { projectId, text: "录屏先停" });
+      expect(streamed.filter(({ event }) => event.type === "card")).toHaveLength(1);
+      expect(await f.t.sql("SELECT count(*)::int AS n FROM buddy_dispatches")).toEqual([{ n: 1 }]);
+    } finally { await f.close(); }
+  });
+
+  it("会话归档后派活卡 state 是 archived，名字还是最新的", async () => {
+    const f = await fixture();
+    try {
+      await f.grant();
+      const projectId = await f.project("品牌建设");
+      const deps = f.deps();
+      const runId = randomUUID(), forwarded = randomUUID();
+      const opened = (await runAction(deps, { personId: TEST_MEMBER.personId, conversationId: randomUUID(), runId }, "open_session",
+        { projectId, title: "首页换深色", brief: BRIEF })).result as { id: string };
+      const card = async (run = runId) => (await runExtras(deps.q, TEST_MEMBER.personId, [run])).get(run)!.cards![0] as Record<string, unknown>;
+      expect(await card()).toMatchObject({ state: "active" });
+      expect((await f.call("PATCH", `/api/me/sub-sessions/topic/${opened.id}`, { title: "深色首页" })).statusCode).toBe(204);
+      expect((await f.call("PATCH", `/api/me/sub-sessions/topic/${opened.id}`, { archived: true })).statusCode).toBe(204);
+      expect(await card()).toMatchObject({ sub: { kind: "topic", id: opened.id, title: "深色首页" }, state: "archived" });
+      // 恢复了回到 active；删进回收站也算 archived。
+      expect((await f.call("PATCH", `/api/me/sub-sessions/topic/${opened.id}`, { archived: false })).statusCode).toBe(204);
+      expect(await card()).toMatchObject({ state: "active" });
+      expect((await f.call("DELETE", `/api/me/sub-sessions/topic/${opened.id}`)).statusCode).toBe(204);
+      expect(await card()).toMatchObject({ sub: { title: "深色首页" }, state: "archived" });
+      // 转给项目的那种按项目算。
+      await runAction(deps, { personId: TEST_MEMBER.personId, conversationId: randomUUID(), runId: forwarded }, "message_project", { projectId, text: "录屏先停" });
+      expect(await card(forwarded)).toMatchObject({ sub: null, state: "active" });
+      expect((await f.call("PATCH", `/api/me/projects/${projectId}`, { archived: true })).statusCode).toBe(200);
+      expect(await card(forwarded)).toMatchObject({ sub: null, state: "archived" });
+    } finally { await f.close(); }
+  });
+
+  it("会话被真删后派活卡还在，state 是 gone，名字用存下的那份", async () => {
+    const f = await fixture();
+    try {
+      await f.grant();
+      const projectId = await f.project("品牌建设");
+      const deps = f.deps();
+      const runId = randomUUID();
+      const opened = (await runAction(deps, { personId: TEST_MEMBER.personId, conversationId: randomUUID(), runId }, "open_session",
+        { projectId, title: "首页换深色", brief: BRIEF })).result as { id: string; dispatchId: string };
+      expect((await f.call("DELETE", `/api/me/sub-sessions/topic/${opened.id}`)).statusCode).toBe(204);
+      // 回收站满 30 天，读回收站时真删。
+      await f.t.sql("UPDATE research_topics SET trashed_at=trashed_at - interval '31 days' WHERE id=$1", [opened.id]);
+      expect((await f.call("GET", "/api/me/trash")).statusCode).toBe(200);
+      expect(await f.t.sql("SELECT id FROM research_topics WHERE id=$1", [opened.id])).toEqual([]);
+      expect((await runExtras(deps.q, TEST_MEMBER.personId, [runId])).get(runId)!.cards).toEqual([{ kind: "buddy_dispatch", dispatchId: opened.dispatchId,
+        projectId, projectName: "品牌建设", sub: { kind: "topic", id: null, title: "首页换深色" }, state: "gone" }]);
     } finally { await f.close(); }
   });
 
@@ -311,6 +386,28 @@ describe("从主线开的会话做完一轮，主线出一行", { timeout: 60_00
     } finally { await f.close(); }
   });
 
+  it("会话归档后不再出做完一轮那一行", async () => {
+    const f = await fixture();
+    try {
+      await f.grant();
+      const projectId = await f.project("品牌建设");
+      const topic = (await f.act("open_session", { projectId, title: "首页换深色", brief: BRIEF }, { turn: turn() })).json().result.id as string;
+      const report = await machineFor(f, topic);
+      await report(...running);
+      await report("stopped", { why: "turn_done", summary: "改好了", blocker: null, outputs: [] });
+      await report("status", { status: "exited", title: "首页换深色", agent: "claude-code", modelLabel: "Opus 5.5" });
+      expect((await events(f)).map((event) => event.done)).toEqual([true]);
+      const archived = await f.call("PATCH", `/api/me/sub-sessions/topic/${topic}`, { archived: true });
+      expect(archived.statusCode, archived.body).toBe(204);
+      expect(await events(f)).toEqual([]);
+      // 恢复了又出；删进回收站不出。
+      await f.call("PATCH", `/api/me/sub-sessions/topic/${topic}`, { archived: false });
+      expect((await events(f)).map((event) => event.done)).toEqual([true]);
+      expect((await f.call("DELETE", `/api/me/sub-sessions/topic/${topic}`)).statusCode).toBe(204);
+      expect(await events(f)).toEqual([]);
+    } finally { await f.close(); }
+  });
+
   it("项目里自己开的会话正常做完，主线事件里没有", async () => {
     const f = await fixture();
     try {
@@ -326,5 +423,65 @@ describe("从主线开的会话做完一轮，主线出一行", { timeout: 60_00
       expect(await events(f)).toEqual([expect.not.objectContaining({ fromMain: true })]);
       expect(await events(f)).toMatchObject([{ detail: "等素材", subjectId: topic }]);
     } finally { await f.close(); }
+  });
+});
+
+describe("读历史：一轮的卡", { timeout: 120_000 }, () => {
+  /** 假 Chat：一段对话，一轮（runId）本人一句、伙伴一句。只回列表和历史页。 */
+  async function fakeChat(runId: string) {
+    const conversationId = randomUUID();
+    const at = new Date().toISOString();
+    const message = (role: string, text: string, position: number) => ({ id: randomUUID(), position: String(position), role, text, runId, attachmentIds: [], attachments: [] });
+    const server = createServer((req, res) => {
+      const send = (status: number, body: unknown) => { res.writeHead(status, { "content-type": "application/json" }); res.end(JSON.stringify(body)); };
+      if (req.headers.authorization !== `Bearer ${TOKEN}`) return send(401, { error: { code: "UNAUTHORIZED", message: "内部服务凭据无效" } });
+      if (req.method === "GET" && req.url === "/conversations") return send(200, { conversations: [{ conversationId, createdAt: at, updatedAt: at }] });
+      if (req.method === "GET" && /^\/conversations\/[^/]+\/messages\?/.test(req.url ?? ""))
+        return send(200, { messages: [message("user", "开几个会话", 1), message("assistant", "开好了", 2)], runs: [{ runId, status: "completed", errorCode: null }], nextCursor: null });
+      send(404, { error: { code: "NOT_FOUND", message: "没有这个接口" } });
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    return { url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, conversationId,
+      close: () => new Promise<void>((resolve) => { server.closeAllConnections(); server.close(() => resolve()); }) };
+  }
+
+  it("一轮出了 5 张以上的卡，读历史全都在，选项框不丢", async () => {
+    const runId = randomUUID();
+    const chat = await fakeChat(runId);
+    const f = await fixture({ chatServiceUrl: chat.url });
+    try {
+      await f.grant();
+      const projectId = await f.project("品牌建设");
+      const call = { runId, conversationId: chat.conversationId };
+      const open = async (n: number) => {
+        const res = await f.act("open_session", { projectId, title: `第 ${n} 件`, brief: `做第 ${n} 件` }, { turn: call });
+        expect(res.statusCode, res.body).toBe(200);
+        return res.json().result.dispatchId as string;
+      };
+      const question = { header: "配色", question: "深到什么程度？", options: [{ label: "纯黑", detail: "对比最强" }, { label: "深灰", detail: "柔和一些" }] };
+      const cards = async () => ((await f.t.app.inject({ method: "GET", url: "/api/conversations/global/messages", headers: { cookie: f.member } })).json()
+        .messages as { role: string; cards?: Record<string, unknown>[] }[]).find((message) => message.role === "assistant")!.cards ?? [];
+      const ids = (list: Record<string, unknown>[]) => list.map((card) => (card.dispatchId ?? card.questionId) as string);
+
+      const dispatched: string[] = [];
+      for (let n = 1; n <= 6; n++) dispatched.push(await open(n));
+      const asked = await f.act("ask_user", { questions: [question] }, { turn: call });
+      expect(asked.statusCode, asked.body).toBe(200);
+      const questionId = asked.json().result.questionId as string;
+      const seven = await cards();
+      expect(seven).toHaveLength(7);
+      expect(ids(seven).sort()).toEqual([...dispatched, questionId].sort());
+
+      // 多到 12 张以上：截掉的是派活卡，选项框留着（让选项框排在最后，按先后截就会截到它）。
+      for (let n = 7; n <= 13; n++) dispatched.push(await open(n));
+      await f.t.sql("UPDATE buddy_questions SET created_at=created_at + interval '1 hour' WHERE id=$1", [questionId]);
+      const capped = await cards();
+      expect(capped).toHaveLength(12);
+      expect(ids(capped)).toContain(questionId);
+      expect(capped.filter((card) => card.kind === "buddy_dispatch")).toHaveLength(11);
+    } finally {
+      await f.close();
+      await chat.close();
+    }
   });
 });

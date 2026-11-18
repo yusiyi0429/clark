@@ -7265,10 +7265,10 @@ export interface components {
                     sub: {
                         /** @constant */
                         kind: "topic";
-                        /** Format: uuid */
-                        id: string;
+                        id: string | null;
                         title: string;
                     } | null;
+                    state: "active" | "archived" | "gone";
                 } | {
                     /** @constant */
                     kind: "review";
@@ -7572,10 +7572,10 @@ export interface components {
                 sub: {
                     /** @constant */
                     kind: "topic";
-                    /** Format: uuid */
-                    id: string;
+                    id: string | null;
                     title: string;
                 } | null;
+                state: "active" | "archived" | "gone";
             } | {
                 /** @constant */
                 kind: "review";
