@@ -1279,6 +1279,9 @@ describe("伙伴代本人做事走 Chat（17.4）", () => {
     const upstreams: ServerResponse[] = [];
     const frame = (event: Record<string, unknown>) => `data: ${JSON.stringify({ conversationId: "chat-conversation", runId: RUN, scope: "global", sequence: 9, ...event })}\n\n`;
     let busy = false;
+    /** Chat 收到「停下」、上一轮还没结束时库里的清单（每一轮都是同一个 RUN，结束时也会收起，只有这一刻分得出是插话收起的）。 */
+    let readPlan: (() => Promise<unknown>) | undefined;
+    let planAtCancel: unknown;
     const chat = await fakeChat({
       conversations: [randomUUID()],
       pages: { "0": { messages: [{ role: "user", text: "换成深色", runId: RUN }, { role: "assistant", text: "换好了", runId: RUN }],
@@ -1294,7 +1297,8 @@ describe("伙伴代本人做事走 Chat（17.4）", () => {
         upstreams.push(res);
         sse(res, [{ type: "turn_started" }, { type: "message", delta: "我来" }], false);
       },
-      cancel: (res, request) => {
+      cancel: async (res, request) => {
+        planAtCancel = await readPlan?.();
         upstreams.at(-1)!.end(frame({ type: "done", status: "aborted" }));
         busy = false;
         res.writeHead(200, { "content-type": "application/json" });
@@ -1336,17 +1340,23 @@ describe("伙伴代本人做事走 Chat（17.4）", () => {
         // 换外观做成了而伙伴没打勾：天枢替它把进行中的那一步标成完成。
         { type: "plan", plan: { entries: [{ ...entries[0], status: "completed" }, entries[1]], collapsed: false }, ui: undefined, card: undefined },
         { type: "card", plan: undefined, ui: undefined, card: { kind: "buddy_message", draftId } },
+        // 这一轮答完：清单收起，条目照伙伴最后交的（加天枢打的勾），不替它改。
+        { type: "plan", plan: { entries: [{ ...entries[0], status: "completed" }, entries[1]], collapsed: true }, ui: undefined, card: undefined },
       ]);
       expect(received.every((event) => event.runId === RUN && event.scope === "global")).toBe(true);
 
       // 读回历史：这一轮的回答带上最后那张清单和转达卡。
       const history = (await t.app.inject({ method: "GET", url: "/api/conversations/global/messages", headers: { cookie } })).json();
       expect(history.messages.find((message: { role: string }) => message.role === "assistant")).toMatchObject({
-        plan: { entries: [{ ...entries[0], status: "completed" }, entries[1]], collapsed: false }, cards: [{ kind: "buddy_message", draftId }] });
+        plan: { entries: [{ ...entries[0], status: "completed" }, entries[1]], collapsed: true }, cards: [{ kind: "buddy_message", draftId }] });
 
       // 回答到一半再发一句：上一轮停掉（以「已停止」结束，清单收起），新一句开新的一轮、回执照给。
       const second = await ask("算了，先别发");
       await second.until("我来");
+      // 这一轮又交了清单（重新展开），下面被插话打断时收起：Chat 收到「停下」时（上一轮还没结束）已经收起。
+      await act("update_plan", { entries });
+      readPlan = async () => (await t.sql("SELECT collapsed FROM buddy_plans WHERE run_id=$1", [RUN]))[0];
+      expect(await readPlan()).toEqual({ collapsed: false });
       const third = await ask("就这样");
       const thirdText = await (async () => { await third.until("我来"); upstreams.at(-1)!.end(frame({ type: "done", status: "completed" })); return third.rest(); })();
       const stopped = events(await second.rest());
@@ -1358,8 +1368,70 @@ describe("伙伴代本人做事走 Chat（17.4）", () => {
       expect(allEvents(thirdText).slice(0, 2)).toEqual([{ type: "receipt", state: "delivered", messageId: thirdTurns[0], scope: "global", sequence: 1 },
         { type: "receipt", state: "read", messageId: thirdTurns[0], runId: RUN, scope: "global", sequence: 2 }]);
       expect(events(thirdText).at(-1)).toMatchObject({ type: "done", status: "completed" });
+      expect(planAtCancel).toEqual({ collapsed: true });
       expect((await t.sql("SELECT collapsed FROM buddy_plans WHERE run_id=$1", [RUN]))[0]).toEqual({ collapsed: true });
     });
+  }, 30_000);
+
+  /** 一轮伙伴回答：开流写一句后停住，plan 给了就在这一轮里交一张清单，再用 last 那一帧结束；回界面收到的事件和库里的清单。 */
+  const endedTurn = async (last: Record<string, unknown>, plan?: { content: string; status: string }[]) => {
+    let upstream!: ServerResponse;
+    const chat = await fakeChat({ conversations: [randomUUID()], turn: (res) => { upstream = res; sse(res, [{ type: "turn_started" }, { type: "message", delta: "我来" }], false); } });
+    let received: Record<string, unknown>[] = [];
+    let rows: unknown[] = [];
+    await withChat(chat, countingRuntime(), async (t) => {
+      const cookie = await t.memberCookie();
+      await t.app.listen({ port: 0, host: "127.0.0.1" });
+      const base = `http://127.0.0.1:${(t.app.server.address() as AddressInfo).port}`;
+      const response = await fetch(`${base}/api/conversations/global/messages`, { method: "POST",
+        headers: { cookie, origin: t.publicOrigin, accept: "text/event-stream", "content-type": "application/json" }, body: JSON.stringify({ message: "查两件事" }) });
+      const reader = response.body!.getReader();
+      let text = "";
+      while (!text.includes("我来")) text += new TextDecoder().decode((await reader.read()).value);
+      if (plan) {
+        const res = await t.app.inject({ method: "POST", url: "/internal/me/buddy-actions/update_plan",
+          headers: { authorization: `Bearer ${CHAT_TOKEN}`, "x-owner-id": TEST_MEMBER.personId }, payload: { args: { entries: plan }, runId: RUN, conversationId: "chat-conversation" } });
+        expect(res.json()).toMatchObject({ summary: "清单更新了" });
+      }
+      upstream.end(`data: ${JSON.stringify({ conversationId: "chat-conversation", runId: RUN, scope: "global", sequence: 9, ...last })}\n\n`);
+      for (;;) { const { done, value } = await reader.read(); if (done) break; text += new TextDecoder().decode(value); }
+      received = events(text);
+      rows = await t.sql("SELECT entries,collapsed FROM buddy_plans WHERE run_id=$1", [RUN]);
+    });
+    return { received, rows };
+  };
+  const unfinished = [{ content: "查天枢项目最新进展", status: "in_progress" }, { content: "联网查上市信息", status: "in_progress" }, { content: "汇总两件事的结论", status: "pending" }];
+
+  it("一轮正常结束时清单收起，条目状态不改", async () => {
+    const { received, rows } = await endedTurn({ type: "done", status: "completed" }, unfinished);
+    // 收起的那一帧在 done 之前推给网页，条目原样。
+    expect(received.filter((event) => event.type === "plan" || event.type === "done").map(({ type, plan, status }) => ({ type, plan, status }))).toEqual([
+      { type: "plan", plan: { entries: unfinished, collapsed: false }, status: undefined },
+      { type: "plan", plan: { entries: unfinished, collapsed: true }, status: undefined },
+      { type: "done", plan: undefined, status: "completed" },
+    ]);
+    expect(rows).toEqual([{ entries: unfinished, collapsed: true }]);
+  }, 30_000);
+
+  it("一轮出错停下时清单也收起", async () => {
+    const { received, rows } = await endedTurn({ type: "error", code: "MODEL_FAILED", message: "模型出错" }, unfinished);
+    expect(received.filter((event) => event.type === "plan").at(-1)).toMatchObject({ plan: { entries: unfinished, collapsed: true } });
+    expect(received.at(-1)).toMatchObject({ type: "error" });
+    expect(rows).toEqual([{ entries: unfinished, collapsed: true }]);
+  }, 30_000);
+
+  it("没有清单的一轮结束时不报错", async () => {
+    const logged: string[] = [];
+    const spy = vi.spyOn(process.stdout, "write").mockImplementation((chunk: unknown) => { logged.push(String(chunk)); return true; });
+    try {
+      const { received, rows } = await endedTurn({ type: "done", status: "completed" });
+      expect(received.some((event) => event.type === "plan")).toBe(false);
+      expect(received.at(-1)).toMatchObject({ type: "done", status: "completed" });
+      expect(rows).toEqual([]);
+      expect(logged.filter((line) => line.includes("hook_failed"))).toEqual([]);
+    } finally {
+      spy.mockRestore();
+    }
   }, 30_000);
 
   it("中途插话给了第一个勾以后还是没开成：流里给一帧 error（不带 runId）就结束，码照开流前的拒绝", async () => {

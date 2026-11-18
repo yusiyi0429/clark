@@ -117,7 +117,7 @@ export function WorkTimeline({ data, blocks, modelRule }: { data: ConversationDa
         const rest = cards.filter((card) => card.kind !== "questions" && card.kind !== "buddy_question");
         const plan = data.messages[index].plan;
         if (!rest.length && !asks.length && !buddyAsks.length && !plan) return null;
-        return <>{plan ? <PlanChecklist entries={plan.entries} collapsed={plan.collapsed} /> : null}{rest.length ? <EntryCards cards={rest} createdAt={data.messages[index].createdAt} /> : null}{asks.map((card) => <AskDecision key={card.askId} card={card} />)}
+        return <>{plan ? <PlanChecklist entries={plan.entries} collapsed={plan.collapsed} finished /> : null}{rest.length ? <EntryCards cards={rest} createdAt={data.messages[index].createdAt} /> : null}{asks.map((card) => <AskDecision key={card.askId} card={card} />)}
           {buddyAsks.map((card) => <BuddyQuestionDecision key={card.questionId} card={card} busy={data.streaming} send={(text, questionId) => data.send(text, [], { buddyQuestionId: questionId })} />)}</>;
       }} />
     </AskContext.Provider>

@@ -71,7 +71,7 @@ export function ConversationTimeline({ data }: { data: ConversationData }) {
         const plan = data.messages[index].plan;
         if (!plan && !cards?.length) return null;
         return <>
-          {plan ? <PlanChecklist entries={plan.entries} collapsed={plan.collapsed} /> : null}
+          {plan ? <PlanChecklist entries={plan.entries} collapsed={plan.collapsed} finished /> : null}
           {cards?.length ? <EntryCards cards={cards} createdAt={data.messages[index].createdAt} /> : null}
         </>;
       }} />
