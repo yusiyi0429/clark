@@ -201,6 +201,8 @@ export const HomeProject = Type.Object({
   transfer: Nullable(ProjectTransfer),
   /** 项目总管线的蓝点（17.2 第 25 条）：项目对话里有新的回复或子会话汇报，而且晚于本人上次打开这个项目对话。云端算好，网页照着画。 */
   unseen: Type.Boolean(),
+  /** 本人的「随手」项目（同 Project.scratch）；别的项目不带。 */
+  scratch: Type.Optional(Type.Literal(true)),
 }, strict);
 
 /**

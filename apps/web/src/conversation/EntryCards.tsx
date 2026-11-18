@@ -71,6 +71,7 @@ function EntryCard({ card, createdAt }: { card: TConversationCard; createdAt?: s
     case "buddy_message": return <BuddyMessageCard draftId={card.draftId} />;
     // 伙伴的选项框由新首页的对话时间线画（WorkTimeline），这里不画。
     case "buddy_question": return null;
+    case "buddy_dispatch": return null;
   }
 }
 

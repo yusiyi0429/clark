@@ -124,7 +124,9 @@ export async function partnerWorkEvents(q: Query, owner: string): Promise<{items
     const event = workEventFromFeed(item,card.pid,card.pname);
     if (event) events.push(event);
   }
-  const notices = await q(`SELECT n.*,p.name FROM projects p JOIN (
+  // 从主线开的会话（buddy_dispatches 里有的专题）：卡住、提问、等批准那几条带 fromMain；最新一次停下是正常做完一轮的，出一行做完一轮（同一个会话只留最新一行；会话归档、进了回收站、被删了的不出）。
+  const notices = await q(`SELECT n.*,p.name,(n.kind='topic' AND EXISTS (SELECT 1 FROM buddy_dispatches d WHERE d.topic_id=n.subject_id)) AS from_main
+    FROM projects p JOIN (
     SELECT project_id,id,created_at,kind,subject_id,title,blocker AS detail,NULL::text AS action FROM sub_session_reports
       WHERE nullif(trim(blocker),'') IS NOT NULL
     UNION ALL
@@ -137,8 +139,17 @@ export async function partnerWorkEvents(q: Query, owner: string): Promise<{items
   for (const row of notices.rows) {
     const item = subEvent({ id: row.id, at: row.created_at.toISOString(), projectId: row.project_id, projectName: row.name,
       subjectId: row.subject_id, subjectKind: row.kind, title: row.title }, row.detail, row.action);
-    if (item) events.push(item);
+    if (item) events.push(row.from_main ? { ...item, fromMain: true } : item);
   }
+  const done = await q(`SELECT s.id::text,s.created_at,s.project_id::text,p.name,s.subject_id::text,r.title,s.summary FROM (
+      SELECT DISTINCT ON (s.subject_id) s.* FROM sub_session_reports s
+      WHERE s.kind='topic' AND s.subject_id IN (SELECT d.topic_id FROM buddy_dispatches d WHERE d.owner_id=$1 AND d.topic_id IS NOT NULL)
+      ORDER BY s.subject_id,s.created_at DESC,s.id DESC
+    ) s JOIN projects p ON p.id=s.project_id JOIN research_topics r ON r.id=s.subject_id
+    WHERE p.owner_id=$1 AND p.archived_at IS NULL AND r.status='active' AND r.trashed_at IS NULL
+      AND s.why='turn_done' AND nullif(trim(s.blocker),'') IS NULL`, [owner]);
+  for (const row of done.rows) events.push({ id: row.id, at: row.created_at.toISOString(), projectId: row.project_id, projectName: row.name, title: row.title,
+    detail: row.summary ?? "", subjectKind: "topic", subjectId: row.subject_id, waitingId: null, done: true, fromMain: true });
   return { items: events.sort((a,b) => byTime(b,a)).slice(0,80) };
 }
 

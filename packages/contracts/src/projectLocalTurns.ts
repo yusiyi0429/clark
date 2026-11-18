@@ -64,7 +64,7 @@ export const LocalProjectKeyResponse = Type.Object({
 
 /**
  * 项目会话的天枢 MCP 里多出的工具：就是给 Chat 用的那套伙伴动作（buddyActions.ts，名字、参数、说明原样），去掉两样，加一个读更早的对话。
- * - 去掉 open_page（只动网页界面，本机那一轮网页直接从本机读）和 message_project（已经在项目对话里，用不着转）。
+ * - 去掉 open_page（只动网页界面，本机那一轮网页直接从本机读）、message_project（已经在项目对话里，用不着转）和 open_session（只在伙伴主线用）。
  * - ask_user（选项框）、update_plan（步骤清单）留着：云端和本机说话口径一致（共用规矩里都是「用 ask_user 出选项框」「用 update_plan 列清单」）。
  *   天枢照云端的做法存下（按这一轮的 turnId），工具结果里带 card / plan（见 ProjectMcpToolResult），本机可以当场转给网页画；读回历史时照旧接在那一轮上。
  *   【待 D 确认】本机项目会话关掉 Claude Code 自带的 AskUserQuestion、TodoWrite（Codex 的对应工具），只用这两个；
@@ -72,7 +72,7 @@ export const LocalProjectKeyResponse = Type.Object({
  *   另一种做法：用本机自带的问答和清单（子会话现在的做法），结束时把清单和问题交给天枢存——两边口径就要各写一份，不推荐。
  * - read_earlier_conversation：读更早的对话（开始时只带了最近几轮），见 ReadEarlierConversationParams。
  */
-export const PROJECT_MCP_EXCLUDED_ACTIONS = ["open_page", "message_project"] as const;
+export const PROJECT_MCP_EXCLUDED_ACTIONS = ["open_page", "message_project", "open_session"] as const;
 export const PROJECT_MCP_ACTIONS = BUDDY_ACTION_NAMES.filter((name) => !(PROJECT_MCP_EXCLUDED_ACTIONS as readonly string[]).includes(name)) as BuddyActionName[];
 export const READ_EARLIER_CONVERSATION_TOOL = "read_earlier_conversation";
 export const PROJECT_MCP_TOOLS = [...PROJECT_MCP_ACTIONS, READ_EARLIER_CONVERSATION_TOOL] as const;

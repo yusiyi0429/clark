@@ -32855,7 +32855,7 @@
                   }
                 },
                 "cards": {
-                  "maxItems": 4,
+                  "maxItems": 12,
                   "type": "array",
                   "items": {
                     "anyOf": [
@@ -32964,6 +32964,87 @@
                               },
                               {
                                 "const": "dismissed",
+                                "type": "string"
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "kind",
+                          "dispatchId",
+                          "projectId",
+                          "projectName",
+                          "sub",
+                          "state"
+                        ],
+                        "properties": {
+                          "kind": {
+                            "const": "buddy_dispatch",
+                            "type": "string"
+                          },
+                          "dispatchId": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
+                          "projectId": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
+                          "projectName": {
+                            "type": "string"
+                          },
+                          "sub": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "kind",
+                                  "id",
+                                  "title"
+                                ],
+                                "properties": {
+                                  "kind": {
+                                    "const": "topic",
+                                    "type": "string"
+                                  },
+                                  "id": {
+                                    "anyOf": [
+                                      {
+                                        "format": "uuid",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "title": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "state": {
+                            "anyOf": [
+                              {
+                                "const": "active",
+                                "type": "string"
+                              },
+                              {
+                                "const": "archived",
+                                "type": "string"
+                              },
+                              {
+                                "const": "gone",
                                 "type": "string"
                               }
                             ]
@@ -34587,6 +34668,87 @@
                           },
                           {
                             "const": "dismissed",
+                            "type": "string"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "kind",
+                      "dispatchId",
+                      "projectId",
+                      "projectName",
+                      "sub",
+                      "state"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "const": "buddy_dispatch",
+                        "type": "string"
+                      },
+                      "dispatchId": {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      "projectId": {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      "projectName": {
+                        "type": "string"
+                      },
+                      "sub": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "kind",
+                              "id",
+                              "title"
+                            ],
+                            "properties": {
+                              "kind": {
+                                "const": "topic",
+                                "type": "string"
+                              },
+                              "id": {
+                                "anyOf": [
+                                  {
+                                    "format": "uuid",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "title": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "state": {
+                        "anyOf": [
+                          {
+                            "const": "active",
+                            "type": "string"
+                          },
+                          {
+                            "const": "archived",
+                            "type": "string"
+                          },
+                          {
+                            "const": "gone",
                             "type": "string"
                           }
                         ]
@@ -119807,6 +119969,10 @@
           },
           "unseen": {
             "type": "boolean"
+          },
+          "scratch": {
+            "const": true,
+            "type": "boolean"
           }
         }
       },
@@ -121726,6 +121892,10 @@
                   ]
                 },
                 "unseen": {
+                  "type": "boolean"
+                },
+                "scratch": {
+                  "const": true,
                   "type": "boolean"
                 }
               }
@@ -125843,6 +126013,10 @@
                 "type": "null"
               }
             ]
+          },
+          "scratch": {
+            "const": true,
+            "type": "boolean"
           }
         }
       },
@@ -126355,6 +126529,10 @@
                       "type": "null"
                     }
                   ]
+                },
+                "scratch": {
+                  "const": true,
+                  "type": "boolean"
                 }
               }
             }
@@ -127032,6 +127210,10 @@
                     "type": "null"
                   }
                 ]
+              },
+              "scratch": {
+                "const": true,
+                "type": "boolean"
               }
             }
           },
@@ -140742,6 +140924,14 @@
                       "type": "null"
                     }
                   ]
+                },
+                "done": {
+                  "const": true,
+                  "type": "boolean"
+                },
+                "fromMain": {
+                  "const": true,
+                  "type": "boolean"
                 }
               }
             }

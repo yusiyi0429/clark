@@ -19,7 +19,7 @@ export const CARD_PROJECT = (alias: string) =>
   `COALESCE((SELECT g.project_id FROM project_goals g WHERE g.task_id=${alias}.plan_task_id),${alias}.project_id)`;
 
 type ProjectRow = { id: string; owner_id: string; name: string; origin_mission_id: string | null; archived_at: Date | null; created_at: Date; updated_at: Date;
-  last_activity_at?: Date | null; permission_mode: TProject["permissionMode"]; auto_relay_limit: number | null; auto_relay_paused_at: Date | null };
+  last_activity_at?: Date | null; permission_mode: TProject["permissionMode"]; auto_relay_limit: number | null; auto_relay_paused_at: Date | null; scratch: boolean };
 type GoalRow = { task_id: string; project_id: string | null; owner_id: string; period: string; mission_id: string; mission_title: string | null; task_name: string;
   source: TProjectGoal["source"]; linked_at: Date; due_date: string | null };
 
@@ -27,7 +27,8 @@ const iso = (time: Date | null | undefined) => time ? new Date(time).toISOString
 /** transfer：正在转交的那一份，或本人交出去了的那一份（这时本人这边算归档，archivedAt 是接手的时间）。 */
 export const projectView = (row: ProjectRow, transfer: TProjectTransfer | null = null): TProject => ({ projectId: row.id, name: row.name,
   archivedAt: transfer?.status === "accepted" ? transfer.decidedAt : iso(row.archived_at), createdAt: iso(row.created_at)!,
-  lastActivityAt: iso(row.last_activity_at), transfer, permissionMode: row.permission_mode, autoRelayLimit: row.auto_relay_limit });
+  lastActivityAt: iso(row.last_activity_at), transfer, permissionMode: row.permission_mode, autoRelayLimit: row.auto_relay_limit,
+  ...(row.scratch ? { scratch: true as const } : {}) });
 
 /** 最近一次动静：挂接、项目里的卡和事项、专题（建项目本身不算，没有为 null）。 */
 const LAST_ACTIVITY = `(SELECT max(at) FROM (
@@ -79,6 +80,15 @@ export async function ownProject(q: Query, ownerId: string, projectId: string): 
 export async function createProject(q: Query, ownerId: string, name: string, now: Date, originMissionId: string | null = null): Promise<ProjectRow> {
   return (await q(`INSERT INTO projects(id,owner_id,name,origin_mission_id,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$5) RETURNING *,NULL::timestamptz AS last_activity_at`,
     [randomUUID(), ownerId, name.trim(), originMissionId, now])).rows[0] as ProjectRow;
+}
+
+export const SCRATCH_PROJECT_NAME = "随手";
+/** 本人的「随手」项目：没有就建，归档了就恢复。 */
+export async function ensureScratchProject(q: Query, ownerId: string, now: Date): Promise<ProjectRow> {
+  await q(`INSERT INTO projects(id,owner_id,name,scratch,created_at,updated_at) VALUES($1,$2,$3,true,$4,$4) ON CONFLICT (owner_id) WHERE scratch DO NOTHING`,
+    [randomUUID(), ownerId, SCRATCH_PROJECT_NAME, now]);
+  await q("UPDATE projects SET archived_at=NULL,updated_at=$2 WHERE owner_id=$1 AND scratch AND archived_at IS NOT NULL", [ownerId, now]);
+  return (await q(`SELECT p.*,${LAST_ACTIVITY} AS last_activity_at FROM projects p WHERE p.owner_id=$1 AND p.scratch`, [ownerId])).rows[0] as ProjectRow;
 }
 
 /** PATCH：改名、归档、恢复（只有现在的负责人）。回的项目不带转交（网页按需另读）。 */

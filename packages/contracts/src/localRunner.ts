@@ -701,6 +701,15 @@ export const LocalFolderCreateRequest = Type.Object({
 }, strict);
 /** 新建好的文件夹（已在允许的列表里）；带了 projectId 时 project 是绑好以后的样子。 */
 export const LocalFolderCreateResponse = Type.Object({ folder: LocalFolder, project: Type.Optional(LocalProjectFolder) }, strict);
+/** 「随手」项目在这台电脑上的文件夹：主目录下的这两层。 */
+export const LOCAL_SCRATCH_FOLDER = ["天枢", "随手"] as const;
+/**
+ * POST /v1/folders/scratch：保证「主目录/天枢/随手」在（没有就建，已经有了不报错），加进允许的文件夹，绑到 projectId。
+ * 这个项目在这台电脑上已经绑了文件夹：什么都不改，回现在绑着的。
+ * 路径只由本机程序自己算，网页不传。老版本本机程序没有这条路由（404），网页当作没做成，照旧问在哪个文件夹开工。
+ */
+export const LocalScratchFolderRequest = Type.Object({ projectId: Uuid, projectName: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })) }, strict);
+export const LocalScratchFolderResponse = Type.Object({ folder: LocalFolder, project: LocalProjectFolder }, strict);
 /**
  * POST /v1/folders/:id/open（「在资源管理器中显示」，11/16）：本机按 id 查出允许的文件夹的路径，用系统的文件管理器打开。体可以不带或是 {}，不收路径。
  * 没有这个 id、或文件夹在磁盘上已经没了回 404 not_found；打开了回 { ok: true }。
@@ -2027,6 +2036,8 @@ export type TLocalFolderPickResponse = Static<typeof LocalFolderPickResponse>;
 export type TLocalFolderPickRequest = Static<typeof LocalFolderPickRequest>;
 export type TLocalFolderCreateRequest = Static<typeof LocalFolderCreateRequest>;
 export type TLocalFolderCreateResponse = Static<typeof LocalFolderCreateResponse>;
+export type TLocalScratchFolderRequest = Static<typeof LocalScratchFolderRequest>;
+export type TLocalScratchFolderResponse = Static<typeof LocalScratchFolderResponse>;
 export type TLocalFolderOpenRequest = Static<typeof LocalFolderOpenRequest>;
 export type TLocalSessionModelRequest = Static<typeof LocalSessionModelRequest>;
 export type TLocalContextUsage = Static<typeof LocalContextUsage>;
@@ -2161,6 +2172,7 @@ export const LOCAL_RUNNER_ROUTES = {
   listFolders: { method: "GET", path: "/v1/folders", auth: true },
   pickFolder: { method: "POST", path: "/v1/folders/pick", auth: true },
   createFolder: { method: "POST", path: "/v1/folders/create", auth: true },
+  scratchFolder: { method: "POST", path: "/v1/folders/scratch", auth: true },
   deleteFolder: { method: "DELETE", path: "/v1/folders/:id", auth: true },
   openFolder: { method: "POST", path: "/v1/folders/:id/open", auth: true },
   listSessions: { method: "GET", path: "/v1/sessions", auth: true },

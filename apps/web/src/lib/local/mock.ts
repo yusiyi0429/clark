@@ -636,6 +636,16 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
       folders.push(folder);
       return { folder, ...(body.projectId ? { project: bind(body.projectId, folder, body.projectName) } : {}) };
     },
+    // 「随手」的文件夹：同本机，在主目录/天枢/随手，已经允许过的不再加；项目已经绑了文件夹就不换。
+    scratchFolder: async (body) => {
+      const current = projects.get(body.projectId);
+      const bound = current?.folder && folders.find((entry) => entry.id === current.folder!.id);
+      if (current && bound) return { folder: bound, project: current };
+      const path = "C:\\Users\\me\\天枢\\随手";
+      let folder = folders.find((entry) => entry.path === path);
+      if (!folder) { folder = { id: `f${folders.length + 1}`, path, label: "随手", addedAt: now() }; folders.push(folder); }
+      return { folder, project: bind(body.projectId, folder, body.projectName) };
+    },
     // 删掉一个允许的文件夹：它从绑着它的项目里一起拿掉（拿掉的是第一个时，剩下的第一个成了工作目录）。
     removeFolder: async (id) => {
       const i = folders.findIndex((f) => f.id === id);

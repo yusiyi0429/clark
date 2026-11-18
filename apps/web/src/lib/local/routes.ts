@@ -42,6 +42,7 @@ export const LOCAL_RUNNER_ROUTES: Contracts["LOCAL_RUNNER_ROUTES"] = {
   listFolders: { method: "GET", path: "/v1/folders", auth: true },
   pickFolder: { method: "POST", path: "/v1/folders/pick", auth: true },
   createFolder: { method: "POST", path: "/v1/folders/create", auth: true },
+  scratchFolder: { method: "POST", path: "/v1/folders/scratch", auth: true },
   deleteFolder: { method: "DELETE", path: "/v1/folders/:id", auth: true },
   openFolder: { method: "POST", path: "/v1/folders/:id/open", auth: true },
   listSessions: { method: "GET", path: "/v1/sessions", auth: true },
