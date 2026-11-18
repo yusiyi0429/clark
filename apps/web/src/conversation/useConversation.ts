@@ -324,7 +324,8 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
   /** 本轮（或刚结束那一轮）的思考摘要；换 scope、发下一句时清空。 */
   const [thought, setThought] = useState<TurnThought | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [lastReply, setLastReply] = useState<{ text: string; ms: number } | null>(null);
+  /** 刚收完的那一轮：正文、网页量到的用时、这一轮的 runId（对话里按它认出是哪条回答）。 */
+  const [lastReply, setLastReply] = useState<{ text: string; ms: number; runId?: string } | null>(null);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploading, setUploading] = useState(false);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
@@ -991,7 +992,7 @@ ${input}` : input;
       setPartial("");
       // 接上的那一轮不是这次发的：输入条里待发的附件不动。
       if (!attach) setAttachments([]);
-      setLastReply({ text: withNotice(notice, reply), ms: Date.now() - began });
+      setLastReply({ text: withNotice(notice, reply), ms: Date.now() - began, ...(runId ? { runId } : {}) });
       setStatus("complete");
       return true;
     } catch (cause) {

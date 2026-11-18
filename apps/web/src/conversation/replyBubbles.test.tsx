@@ -98,7 +98,7 @@ import { Presence } from "@/components/home/Presence";
 import { TransferHistory } from "@/components/home/Transfer";
 import { WorkTimeline } from "@/components/work/WorkTimeline";
 import { BubbleContext, HOLD_MS, ReplyBubbles, RevealContext, TypingBubble, resetReplyBubbles } from "./ReplyBubbles";
-import { ConversationTurn, MarkdownBody } from "./Transcript";
+import { ConversationTurn, ConversationTurns, MarkdownBody } from "./Transcript";
 import { AnswerOptions, QuickReplyContext } from "./AnswerOptionRow";
 
 const css = readFileSync(new URL("../styles/conversation-bubbles.module.css", import.meta.url), "utf8");
@@ -413,6 +413,33 @@ describe("出字的边角", () => {
   it("只有选项块、正文还空着：露「•••」", () => {
     const html = renderToStaticMarkup(<WorkTimeline data={data({ partial: "```options\n[{\"label\":\"先做灯塔\"}]\n```", stage: "answering" })} blocks={[]} />);
     expect(html).toContain('data-testid="typing"');
+  });
+});
+
+describe("用时（本人 11/18）", () => {
+  // 伙伴主线的历史来自 Chat：本人那句和回答的时间都是这一轮的开始时间，一模一样。
+  const at = "2026-11-18T03:00:00.000Z";
+  const turn = (runId = "r1", replyAt = at) => [{ sequence: 1, role: "user", content: "ANT 适合打新吗", createdAt: at, runId },
+    { sequence: 2, role: "assistant", content: "先说结论。", createdAt: replyAt, runId }] as Message[];
+  const done = { streaming: false, status: "complete", thinking: false, stage: "answering", steps: [{ id: "1", label: "查新股资料", status: "done" }] } as Partial<ConversationData>;
+  const timeline = (extra: Partial<ConversationData>) => renderToStaticMarkup(<WorkTimeline data={data({ ...done, ...extra })} blocks={[]} />);
+
+  it("提问和回答时间一样时不写用时", () => {
+    const html = timeline({ messages: turn() });
+    expect(html).not.toContain("用时");
+    // 「看过程」入口还在，这一行只剩入口。
+    expect(html).toContain("1 步");
+    expect(html).not.toMatch(/<span>用时/);
+    // 真正很快的一轮至少也有几十毫秒差：照常写「1 秒」。
+    expect(timeline({ messages: turn("r1", "2026-11-18T03:00:00.040Z") })).toContain("用时 1 秒");
+    // 旧界面也不写错的数。
+    expect(renderToStaticMarkup(<ConversationTurns messages={turn()} />)).not.toContain("用时");
+  });
+
+  it("刚答完的那一轮用网页量到的用时", () => {
+    expect(timeline({ messages: turn(), lastReply: { text: "先说结论。", ms: 29_000, runId: "r1" } })).toContain("用时 29 秒");
+    // 不是这一轮（换了对话、读回的是别的轮）：不借这个数。
+    expect(timeline({ messages: turn("r2"), lastReply: { text: "先说结论。", ms: 29_000, runId: "r1" } })).not.toContain("用时");
   });
 });
 
