@@ -14,23 +14,24 @@ import { ConversationNotice, ConversationStatusSlot, JumpToLatest } from "@/conv
 import type { ConversationChannel } from "@/conversation/ConversationColumn";
 import { useConversation } from "@/conversation/useConversation";
 import { useConversationScroll } from "@/conversation/useConversationScroll";
+import type { ScrollOnSend } from "@/conversation/scrollController";
 import type { Buddy } from "@/components/buddy/useBuddy";
 import s from "@/styles/v2-chat.module.css";
 
 const NOOP = () => undefined;
 
-/** 对话离开了顶部没有（data-scrolled）：新首页页头有伙伴时，离开顶部才淡出顶上 56px（v2-chat.module.css）。直接改属性，不让整列重画。 */
+/** 对话离开了顶部没有（data-scrolled）：新首页页头有在场时，离开顶部才把标题那一行淡出（v2-chat.module.css）。直接改属性，不让整列重画。 */
 export function markScrolled(log: HTMLElement) {
   log.toggleAttribute("data-scrolled", log.scrollTop > 0);
 }
 
 export function ChatPane(props: Omit<Parameters<typeof ChatColumn>[0], "data">) {
   const data = useConversation("global");
-  return <ChatColumn {...props} data={data} />;
+  return <ChatColumn {...props} data={data} onSend="pin" />;
 }
 
 /** 同一列，对话由调用方给（新首页：总管线是总线程，Task 管线是那件 Task 的对话）。 */
-export function ChatColumn({ data, buddy, head, extra, timeline, above, dock, input, variant = "page", label, tone = "light" }: {
+export function ChatColumn({ data, buddy, head, extra, timeline, above, dock, input, variant = "page", label, tone = "light", onSend = "bottom" }: {
   data: ConversationData;
   buddy: Buddy | null;
   /** 列和输入条的名字；不给时是伙伴的名字。 */
@@ -51,8 +52,10 @@ export function ChatColumn({ data, buddy, head, extra, timeline, above, dock, in
   variant?: "page" | "side";
   /** 对话正文用哪一套颜色；新首页跟着系统深浅，别处一直是浅色。 */
   tone?: "light" | "dark";
+  /** 发出后：bottom 到底部并跟着往下长（新首页两种对话，像微信）；pin 把刚发的那条推到顶部（ChatPane：Task 页、对话页）。 */
+  onSend?: ScrollOnSend;
 }) {
-  const scroll = useConversationScroll({ streaming: data.streaming });
+  const scroll = useConversationScroll({ streaming: data.streaming, onSend });
   const [composerHeight, setComposerHeight] = useState(52);
   const name = label ?? (buddy?.name?.trim() || "伙伴");
   const channels: ConversationChannel[] = [{ id: "agent", kind: "agent", label: "天枢", title: name, unread: 0 }];

@@ -8,6 +8,7 @@
  * - 回答进行中视图不动、不跟随；超过一屏时 ↓ 出现（`atBottom` 只看真实内容的末尾，不算留白），点 ↓ 跳到最新并跟随；
  * - 留白只在发送那一刻按真实内容重算（不跨轮叠加），之后只缩不涨，并且缩完当前位置仍然可达，视图不跳；
  * - 找不到刚发的那条（群聊：消息等服务端回来才出现）就照旧滚到底并跟随；
+ * - onSend="bottom"（新首页伙伴主线、项目对话，像微信）：发送时不置顶、不留白，滚到底并跟随，往上翻就停、点 ↓ 回到底部接着跟；
  * - 换频道直接落到底部；从气泡打开（anchor="reply"）停在最后一条回答的开头，不跟随。
  * - 宽度变了（讨论台展开 / 收起，正文重排）：置顶中按刚发那条的新位置重新置顶、留白重算；自由浏览时视口顶上那条留在原处；跟随照旧追到底。
  * - 滚动区正被整体缩放（展开动画的 transform）时，元素之间的距离按缩放比换回布局距离。
@@ -18,6 +19,8 @@
 import { onResize, resizing } from "./resizeGate";
 
 export type ScrollAnchor = "end" | "reply";
+/** 发送那一刻：pin 把刚发的那条推到顶部（默认）；bottom 滚到底并跟随。 */
+export type ScrollOnSend = "pin" | "bottom";
 export type ScrollMode = "follow" | "pinned" | "free";
 export type ScrollEvent =
   | { type: "open"; anchor: ScrollAnchor }
@@ -89,6 +92,7 @@ const RESIZE_GATE: ResizeGate = { resizing, onResize };
 
 export type ScrollControllerOptions = {
   anchor?: ScrollAnchor;
+  onSend?: ScrollOnSend;
   onAtBottom?: (atBottom: boolean) => void;
   reduced?: () => boolean;
   /** 滚动区上方留白（默认读 padding-top）。 */
@@ -303,11 +307,11 @@ export function createScrollController(options: ScrollControllerOptions = {}) {
       reserveEl = element;
       if (element) element.style.height = reserve ? `${reserve}px` : "";
     },
-    /** 发送：刚发的那条置顶；找不到就滚到底并跟随。只在回答开始的那一刻调用一次。 */
+    /** 发送：刚发的那条置顶；找不到、或 onSend="bottom" 就滚到底并跟随。只在回答开始的那一刻调用一次。 */
     send() {
       if (!scroller) return;
       cancel();
-      const users = content?.querySelectorAll<HTMLElement>('[data-chat-role="user"]');
+      const users = options.onSend === "bottom" ? undefined : content?.querySelectorAll<HTMLElement>('[data-chat-role="user"]');
       const sent = users?.[users.length - 1];
       mode = nextMode(mode, { type: "send", found: Boolean(sent) });
       if (!sent) {

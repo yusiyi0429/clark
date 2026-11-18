@@ -15,16 +15,18 @@
 
 /*
  * 主线（data-stage，本人 11/18 方案 A）：页头这一块加高到 88（手机 72），标题和右边按钮留在最上面 48 那一行，位置不变；
- * 形象在这一块里上下居中、左右正中（两边等宽，有没有右边按钮都在正中）。这一块在对话上面，不和对话叠，字不从形象后面过。
+ * 形象在这一块里上下居中、左右正中（两边等宽，有没有右边按钮都在正中）。这一块浮在对话上（v2-chat.module.css，本人 11/18），对话滚动时从形象两侧和后面过。
  * 形象大小只看这里的 --head-figure：圆的直径，不带单位（buddy-mark.module.css 换算）；横放胶囊按 96:36 跟着等比。
  * 手机上另给 --head-capsule：胶囊缩 .625 成 80×30。
  * 槽就是形象那么大，胶囊往上贴，压住形象下沿 6。
+ * 形象身后垫一块同形状、大一圈的底（实心多出约 4，再往外柔和约 12）：字从后面过去不透出来，默认胶囊底部是透明的。
  */
 .head[data-flush]:has(> .presence[data-stage]) { --head-figure: 64; min-height: 88px; align-items: start; }
 :global([data-phone]) .head[data-flush]:has(> .presence[data-stage]) { --head-figure: 56; --head-capsule: .625; min-height: 72px; }
 .head[data-flush]:has(> .presence[data-stage]) > .side { height: var(--row-48); }
 .presence[data-stage] { align-self: center; min-height: 0; }
 .presence[data-stage] > .hang { top: calc(100% - 6px); }
+.presence[data-stage]::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 999px; background: var(--surface); box-shadow: 0 0 12px 10px var(--surface); }
 
 /* 磨砂：对话从它下面滚过去。 */
 .pill {

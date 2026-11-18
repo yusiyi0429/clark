@@ -253,7 +253,7 @@ describe("页头在场：形象钉在正中，状态胶囊挂在下面（设计 
     expect(elements(dictating).some((element) => element.props["data-testid"] === "presence-pill")).toBe(false);
   });
 
-  it("滚离顶部才淡出：停在最上面不淡出、不多留白", () => {
+  it("页头叠在对话上：滚离顶部只在标题那一行淡出一层；形象身后垫一块底", () => {
     // 对话一滚动就按 scrollTop 记一下有没有离开顶部（不经 React 重画）。
     const log = { scrollTop: 0, toggleAttribute: vi.fn() };
     markScrolled(log as unknown as HTMLElement);
@@ -261,12 +261,16 @@ describe("页头在场：形象钉在正中，状态胶囊挂在下面（设计 
     log.scrollTop = 120;
     markScrolled(log as unknown as HTMLElement);
     expect(log.toggleAttribute).toHaveBeenLastCalledWith("data-scrolled", true);
-    // 只在有在场的对话里、离开顶部时，顶上 56px 淡出；不另加顶部留白。
-    const rules = chatCss.match(/\.pane:has\(\.head \[data-presence\]\)[^{]*\{[^}]*\}/g) ?? [];
-    expect(rules).toHaveLength(1);
-    expect(rules[0]).toMatch(/^\.pane:has\(\.head \[data-presence\]\) \.log\[data-scrolled\] \{/);
-    expect(rules[0]).toContain("mask-image: linear-gradient(to bottom, transparent 0, black 56px)");
-    expect(rules[0]).not.toMatch(/padding/);
+    const rule = (selector: string) => chatCss.split(/\r?\n/).find((line) => line.startsWith(`${selector} {`)) ?? "";
+    // 有在场的对话：页头浮在对话上（对话区一直延到面板顶），停在最上面时对话上沿让出原来页头那么高。
+    expect(rule(".pane:has(.head [data-presence]) > .head")).toMatch(/position: absolute/);
+    expect(rule(".pane:has(.head [data-presence]) > .log")).toMatch(/padding-top: calc\(var\(--head-block\) \+ 30px\)/);
+    // 只有一层淡出：标题那一行（14 + 48）看不见，往下 20 渐显；别处不再有遮罩或渐变。
+    expect(chatCss.match(/(?<!-webkit-)mask-image/g)).toHaveLength(1);
+    expect(chatCss).toContain("mask-image: linear-gradient(to bottom, transparent 62px, black 82px)");
+    expect(css).not.toMatch(/mask-image|linear-gradient/);
+    // 形象身后垫一块比它大一圈、边缘柔和的底，字从后面过去不透出来。
+    expect(css).toMatch(/\.presence\[data-stage\]::before \{[^}]*background: var\(--surface\);[^}]*box-shadow: 0 0 \d+px \d+px var\(--surface\)/);
   });
 
   it("新首页对话里思考只在胶囊下面，对话里没有", () => {
