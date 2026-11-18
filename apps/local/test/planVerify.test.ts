@@ -717,6 +717,28 @@ describe("规矩和交代（不起进程）", () => {
     expect(verify).toContain("这些话前后冲突时，以后说的为准。交代里有「约定后来改过」那段时，原话和本人改过或确认过的新约定冲突的地方以新约定为准，不写进 sourceWordIssues。");
   });
 
+  it("验收员的岗位规矩允许在本卡工作树里跑检查命令、仍不许改文件", () => {
+    const ws = { kind: "worktree" as const, folder: "C:/repo", path: "C:/data/worktrees/A", branch: "tianshu/a", baseBranch: "main", baseCommit: "0123456789abcdef", mergedCommit: null };
+    const verify = systemPrompt("verify", null, [], null, ws);
+    for (const rule of [
+      "可以运行检查命令（跑测试、类型检查、构建、lint）",
+      "只在这张卡的工作树（当前工作目录）里运行",
+      "不改文件、不提交、不装依赖、不联网下载",
+      "依据里写明跑了什么命令、结果如何",
+      "跑不了（缺依赖、环境不对）就照实写，不因为跑不了就判不通过，按读改动的结论判",
+    ]) expect(verify).toContain(rule);
+    expect(verify).not.toContain("不跑命令");
+    // 职责不变：判通过不通过、写依据，不替执行方补做；执行方那几句工作树的话（可以自己提交、要装依赖自己装）不给验收员
+    expect(verify).toContain("也不替执行方补做");
+    expect(verify).toContain("用 submit_verdict 交一次结论");
+    expect(verify).not.toContain("可以自己提交");
+    expect(verify).not.toContain("要装依赖就自己装");
+    // 卡不在工作树里（普通文件夹，就是本人自己的文件夹）：照旧只读、不跑命令；规划员照旧只读
+    expect(systemPrompt("verify", null, [], null)).toContain("你是验收员：只读，不改文件、不跑命令");
+    expect(systemPrompt("verify", null, [], null, { kind: "folder", folder: "C:/plain" })).toContain("你是验收员：只读，不改文件、不跑命令");
+    expect(systemPrompt("plan", null, [], null, ws)).toContain("你是规划员：只读，不改文件、不跑命令");
+  });
+
   it("没过的改法（3700 卡 U）：理由、改法、原因末尾带了「。」也不拼出「。。」", () => {
     const judged = [{ index: 1, verdict: "unmet", reason: "没截图", evidence: null, fix: "补一张登录后的截图。", fixBy: "worker" }] as TLocalVerdictCriterion[];
     const issues = [{ quote: "别动注册页", kind: "extra", reason: "注册页也改了。" }] as TLocalSourceWordIssue[];

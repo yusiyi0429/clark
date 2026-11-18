@@ -141,6 +141,21 @@ function askWrite() {
   out({ type: "control_request", request_id: permId, request: { subtype: "can_use_tool", tool_name: askTool, input: askInput, permission_suggestions: suggestions, tool_use_id: `toolu_w${turns}` } });
 }
 
+/** 验收员跑检查命令时等的批准：回来的 control_response 交给它。 */
+let checkDone = null;
+async function verifyCheck(check) {
+  const id = `check-${turns}`;
+  out({ type: "assistant", message: { content: [{ type: "tool_use", id: `toolu_${id}`, name: "Bash", input: check.input }] }, parent_tool_use_id: null });
+  const r = await new Promise((done) => {
+    checkDone = done;
+    out({ type: "control_request", request_id: id, request: { subtype: "can_use_tool", tool_name: "Bash", input: check.input, tool_use_id: `toolu_${id}` } });
+  });
+  appendFileSync(TRACE, JSON.stringify({ verifyCheck: sid, behavior: r.behavior }) + "\n");
+  // leaves 的值是字；写成 { size } 就是那么大的一个文件（大文件不往配置里塞）
+  if (r.behavior === "allow") for (const [file, text] of Object.entries(check.leaves ?? {})) writeFileSync(file, typeof text === "string" ? text : Buffer.alloc(text.size));
+  out({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: `toolu_${id}`, content: r.behavior === "allow" ? "3 passed" : r.message, is_error: r.behavior !== "allow" }] }, parent_tool_use_id: null });
+}
+
 // 只读会话（规划员、验收员）：和真 Claude Code 一样，--disallowedTools 里的 Write 根本不在工具里，不会来要写文件的权限。
 // 这时假 claude 照会话 MCP 给的工具交东西：有 submit_verdict 就交 .fake-claude.json 的 verdict（verdictOnTurn 指定第几轮才交），有 propose_plan 就交 plan。
 const disallowed = argv.includes("--disallowedTools") ? argv[argv.indexOf("--disallowedTools") + 1].split(",") : [];
@@ -158,8 +173,13 @@ async function readOnlyTurn() {
   const args = name === "submit_verdict" ? cfg.verdict : name === "propose_plan" ? cfg.plan : null;
   const onTurn = name === "submit_verdict" ? cfg.verdictOnTurn ?? 1 : 1;
   let result = null;
+  // 验收员能跑命令（--disallowedTools 里没有 Bash）、配置有 verifyCheck：交结论之前先跑一条检查命令，要本机批准，批了就照 leaves 在工作目录里留下文件（测试生成的那种）
+  if (name === "submit_verdict" && args && turns >= onTurn && cfg.verifyCheck && !disallowed.includes("Bash")) await verifyCheck(cfg.verifyCheck);
+  if (!turn) return; // 途中被停下，这一轮已经结束
   if (name && args && turns >= onTurn) {
     out({ type: "assistant", message: { content: [{ type: "tool_use", id: `toolu_m${turns}`, name: `mcp__tianshu-session__${name}`, input: args }] }, parent_tool_use_id: null });
+    // exitDuringSubmit：交结论的请求发出去，不等回就退出（测交结论途中进程没了）
+    if (cfg.exitDuringSubmit) { void sessionMcp("tools/call", { name, arguments: args }).catch(() => undefined); setTimeout(() => process.exit(1), cfg.exitDuringSubmit); return; }
     result = await sessionMcp("tools/call", { name, arguments: args });
     out({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: `toolu_m${turns}`, content: result.content, is_error: result.isError }] }, parent_tool_use_id: null });
   }
@@ -176,6 +196,7 @@ async function readOnlyTurn() {
   // 交完以后这一轮接下来的请求碰壁（现读配置）
   const after = readCfg().usageLimitAfterSubmit;
   if (result && after) { limitHit(after); return; }
+  if (result && cfg.hangAfterSubmit) return; // 交完以后这一轮一直没做完（测交完结论、退出之前就关机）
   out({ type: "assistant", message: { content: [{ type: "text", text: result ? "交好了" : "看完了" }] }, parent_tool_use_id: null });
   finish(true, result ? "交好了" : "看完了");
 }
@@ -337,7 +358,10 @@ rl.on("line", (line) => {
     const c = compacted ?? readCfg().context;
     if (c === false) { out({ type: "control_response", response: { subtype: "error", request_id: msg.request_id, error: "Unsupported control request subtype: get_context_usage" } }); return; }
     const usage = c ?? { totalTokens: 18000 + 1000 * turns, maxTokens: 200000 };
-    out({ type: "control_response", response: { subtype: "success", request_id: msg.request_id, response: { ...usage, percentage: Math.round((usage.totalTokens / usage.maxTokens) * 100), model: initModel() } } });
+    // contextDelayMs：过一会儿才回（真机约 1 秒，一轮结束以后才到）
+    const reply = () => out({ type: "control_response", response: { subtype: "success", request_id: msg.request_id, response: { ...usage, percentage: Math.round((usage.totalTokens / usage.maxTokens) * 100), model: initModel() } } });
+    const delay = readCfg().contextDelayMs;
+    if (delay) setTimeout(reply, delay); else reply();
   } else if (msg.type === "control_request" && msg.request.subtype === "stop_task") {
     const id = msg.request.task_id;
     appendFileSync(TRACE, JSON.stringify({ stopTask: id }) + "\n");
@@ -372,6 +396,10 @@ rl.on("line", (line) => {
   } else if (msg.type === "control_response" && msg.response.request_id === "perm-agent1") {
     appendFileSync(TRACE, JSON.stringify({ subagentPermission: msg.response.response }) + "\n");
     if (msg.response.response?.behavior === "allow" && cfg.subagentAsks !== "question") agentDone();
+  } else if (msg.type === "control_response" && checkDone && String(msg.response.request_id).startsWith("check-")) {
+    const done = checkDone;
+    checkDone = null;
+    done(msg.response.response ?? {});
   } else if (msg.type === "control_response") {
     const r = msg.response.response;
     if (!turn || msg.response.request_id !== turn.permId) return;

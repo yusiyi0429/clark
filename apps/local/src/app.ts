@@ -214,6 +214,7 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
   void claudeCatalog.refresh();
   void sessions.pruneWorktrees();
   void sessions.releaseWaiting();
+  void sessions.mergeMissed(); // 关机那一刻交完结论、没来得及自动合回的卡
   tools.start();
   await desktop.start((a) => void onMenu(a));
   updateTray();

@@ -68,8 +68,15 @@ const PLAN_RULES = `## 规矩
 - 交完就停，等本人在网页上看派活单；本人让你改，改完再用 propose_plan 交一次。
 ${CHINESE_RULE}`;
 
-const VERIFY_RULES = `## 规矩
-- 你是验收员：只读，不改文件、不跑命令，也不替执行方补做。
+/**
+ * 验收员的规矩。卡在自己的 git 工作树里做时（本人 11/18），验收员在那棵工作树里能跑检查命令，仍不改文件；
+ * 卡在普通文件夹里做（就是本人自己的文件夹）时照旧只读、不跑命令。
+ */
+const VERIFY_READ_ONLY = "- 你是验收员：只读，不改文件、不跑命令，也不替执行方补做。";
+const VERIFY_CHECKS = `- 你是验收员：不改文件，也不替执行方补做。可以运行检查命令（跑测试、类型检查、构建、lint），只在这张卡的工作树（当前工作目录）里运行；不改文件、不提交、不装依赖、不联网下载。
+- 跑了检查命令的，依据里写明跑了什么命令、结果如何。跑不了（缺依赖、环境不对）就照实写，不因为跑不了就判不通过，按读改动的结论判。`;
+const verifyRules = (checks: boolean) => `## 规矩
+${checks ? VERIFY_CHECKS : VERIFY_READ_ONLY}
 - 依据是交代里的约定、卡的完成标准、卡所属技能的验收口径和你自己的验收口径；材料是交回里的自评、证据和产出（产出文件在当前工作目录里，可以读）。需要时用天枢 MCP 的 get_task_context 读 Task 的上下文。
 - 每条完成标准判一次：达到（met）、部分（partial）、没达到（unmet）、要本人补（needs_person），写理由和依据，没达到的写怎么补；标准以外的建议放进 beyondScope，不算没达到。证据不够就判没达到。
 - 要本人补：执行方在自评里标了「要本人补」、而且确实只有本人能做（要登录、验证码、人工查询、网站拦自动访问、要本人的权限或判断），判 needs_person，fix 写一句人话：要本人做什么、做完给回什么。执行方其实能做的（换个公开的来源、自己查得到、自己能跑），照旧判 unmet 或 partial，fix 写执行方怎么补。
@@ -81,7 +88,7 @@ const VERIFY_RULES = `## 规矩
 - 判完用 submit_verdict 交一次结论，然后停下。
 ${CHINESE_RULE}`;
 
-const RULES: Record<TLocalSessionKind, string> = { card: CARD_RULES, topic: TOPIC_RULES, plan: PLAN_RULES, verify: VERIFY_RULES };
+const RULES: Record<Exclude<TLocalSessionKind, "verify">, string> = { card: CARD_RULES, topic: TOPIC_RULES, plan: PLAN_RULES };
 const INTRO: Record<TLocalSessionKind, string> = {
   card: "本人在天枢网页上把这张卡派给你，在本人自己的电脑上做。网页能看到你的每一步，本人会批权限、插话。",
   topic: "本人在天枢网页上把这个调研专题派给你，在本人自己的电脑上做。网页能看到你的每一步，本人会批权限、插话。",
@@ -138,10 +145,12 @@ export function systemPrompt(
   kind: TLocalSessionKind, role: TLocalRole | null, critics: TLocalRole[], feishu: FeishuSkills, workspace: TLocalWorkspace | null = null,
   customTools: { server: string; name: string }[] = [], extraDirs: string[] = [], free = false,
 ): string {
-  // 自由子会话（第 68 条）是带 free 的专题，换一套规矩
-  const parts = ["# 天枢本机会话", free ? FREE_INTRO : INTRO[kind], free ? FREE_RULES : RULES[kind]];
-  if (workspace?.kind === "worktree") parts.push(worktreeNote(workspace));
-  if (extraDirs.length) parts.push(extraDirsNote(extraDirs, workspace?.kind === "worktree"));
+  // 自由子会话（第 68 条）是带 free 的专题，换一套规矩。验收员的 workspace 是被验的卡的：只用来定能不能跑检查命令，执行方那几句工作树的话不给它
+  const rules = free ? FREE_RULES : kind === "verify" ? verifyRules(workspace?.kind === "worktree") : RULES[kind];
+  const own = kind === "verify" ? null : workspace;
+  const parts = ["# 天枢本机会话", free ? FREE_INTRO : INTRO[kind], rules];
+  if (own?.kind === "worktree") parts.push(worktreeNote(own));
+  if (extraDirs.length) parts.push(extraDirsNote(extraDirs, own?.kind === "worktree"));
   if (customTools.length) {
     const list = customTools.map((t) => `- ${t.name}：MCP 服务器 ${t.server} 里的工具`).join("\n");
     parts.push(`## 本人加的工具\n${list}\n查数据的照权限模式用，改数据的每次都要本人批准。`);
@@ -206,7 +215,7 @@ export function saidBrief(said: string[]): string {
   return ["## 本人在这个子会话里说的", "", "按先后排，接在本人原话后面。", "", ...said.flatMap((text) => [...text.split("\n").map((line) => `> ${line}`), ""])].join("\n").trimEnd();
 }
 
-/** 验收员交代末尾接上的这次交回的改动（卡在工作树里做时）：基线到交回的提交。验收员只读、不能跑命令，改动全靠这里和读文件。 */
+/** 验收员交代末尾接上的这次交回的改动（卡在工作树里做时）：基线到交回的提交。验收员不改文件，改动靠这里、读文件和跑检查命令核对。 */
 export function changesBrief(ws: { branch: string; baseBranch: string; baseCommit: string }, commit: string, diff: { stat: string; patch: string; truncated: boolean } | string): string {
   const head = [
     "## 这次交回的改动",
