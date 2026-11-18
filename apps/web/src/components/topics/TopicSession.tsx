@@ -208,9 +208,9 @@ export function TopicSession({ topicId, embedded = false, waiting = null, queued
           <div ref={scroll.reserveRef} aria-hidden />
         </div>
         {session || !embedded
-          ? <SessionComposer label={`给${topic.title}插话`} disabled={!canAct} onSend={say} mode={mode} context={contextUsage(view.context ?? session?.context)} onCompact={session ? () => local.runner.compactSession(session.id).then(() => local.refresh()) : undefined} subject={{ kind: "topic", id: topic.id }} place={place} model={model ? { label: model.label, title: model.title ?? undefined } : null}
+          ? <SessionComposer label={`给${topic.title}插话`} disabled={!canAct} onSend={say} mode={mode} context={contextUsage(view.context ?? session?.context)} onCompact={session ? () => local.runner.compactSession(session.id).then(() => local.refresh()) : undefined} compacting={view.compacting} compactBlocked={!!question} subject={{ kind: "topic", id: topic.id }} place={place} model={model ? { label: model.label, title: model.title ?? undefined } : null}
             models={models} pinned={pinned}
-            busy={running(status)} onStop={() => void local.runner.interrupt(session!.id).then(() => local.refresh()).catch(() => showWorkspaceToast({ text: "没停下" }))} dock={<PendingDock above latest={{ visible: !scroll.atBottom, jump: scroll.jumpToLatest }} />} />
+            busy={running(status) || view.compacting} onStop={() => void local.runner.interrupt(session!.id).then(() => local.refresh()).catch(() => showWorkspaceToast({ text: "没停下" }))} dock={<PendingDock above latest={{ visible: !scroll.atBottom, jump: scroll.jumpToLatest }} />} />
           : <div className={s.composerDock}>{pinned ? <div className={s.pinned} data-testid="pinned">{pinned}</div> : null}<PendingDock above latest={{ visible: !scroll.atBottom, jump: scroll.jumpToLatest }} /></div>}
       </div>
     </PendingBoxes>

@@ -266,6 +266,8 @@ const OCCUPYING: TLocalSessionStatus[] = ["starting", "running", "waiting_permis
 /** 每个会话记住最近几句带编号的话的结果（网页重发只在刚发完的那一会儿）。 */
 const SAID_KEPT = 20;
 const CANCELLED_WHILE_STARTING = "启动途中已被强停";
+/** 手打的压缩命令：/compact 后面是空白或没了，不分大小写；第 1 组是后面的压缩要求（含前面的空白）。 */
+const COMPACT_COMMAND = /^\/compact(\s[\s\S]*)?$/i;
 
 export class SessionManager {
   private readonly records = new Map<string, SessionRecord>();
@@ -315,8 +317,8 @@ export class SessionManager {
   private readonly balanceBlocked = new Set<string>();
   /** 换了执行方后给新的那家的「接着做」交代（拉起时整理好，接在给它的第一句话前面）：null 是没有它没看到的轮次。 */
   private readonly handoffs = new Map<string, string | null>();
-  /** 正在压缩上下文的会话（契约 POST /v1/sessions/:id/compact）：这期间说话、再压都回 409。 */
-  private readonly compacting = new Set<string>();
+  /** 正在压缩上下文的会话（契约 POST /v1/sessions/:id/compact）→ 压完（不论压没压成）的那一刻：这期间再压回 409，说的话等它压完再送。 */
+  private readonly compacting = new Map<string, Promise<unknown>>();
   /** 已记下、等执行方拉起再送的话（编号）：拉起时整理交代不算进去，它就是交代后面那句。 */
   private readonly unsent = new Set<string>();
   /** 网页带编号说的话（每个会话最近 SAID_KEPT 句）：重发时回同一个结果。 */
@@ -422,6 +424,7 @@ export class SessionManager {
       ...(workspace ? { workspace } : {}), ...(question ? { pendingQuestion: question } : {}), ...(waitingFor.length ? { waitingFor } : {}), ...(heldBy ? { heldBy } : {}),
       ...(background.length ? { background } : {}), ...(hold ? { hold } : {}), ...(run ? { run } : {}),
       ...(this.undoOf(rec, false) ? { undo: this.undoOf(rec, false)!.view() } : {}),
+      ...(this.compacting.has(rec.id) ? { compacting: true as const } : {}),
     };
   }
 
@@ -1155,46 +1158,58 @@ export class SessionManager {
     };
   }
 
-  /** 压缩前查：一轮在跑（含等批准、在问本人、启动中、排队中）、正在压缩时不压。 */
+  /**
+   * 压缩前查：一轮在跑（含等批准、在问本人、启动中、排队中）、正在压缩时不压。有后台任务在跑也不压（子 agent 跑完 Claude Code 自己开一轮，会和压缩串在一起）；
+   * 停着等（额度、预算、余额）也不压（到点本机往会话里送「接着做」，也会撞上）。
+   */
   private checkCompact(rec: SessionRecord) {
     if (this.compacting.has(rec.id)) throw new SessionError("conflict", "正在压缩上下文");
     if (rec.status === "queued" || OCCUPYING.includes(rec.status) || this.inTurn.has(rec.id) || this.questions.has(rec.id) || this.starting.has(rec.id)) {
       throw new SessionError("conflict", "这一轮还在跑，做完再压缩");
     }
+    if (rec.background.some((b) => b.state === "running")) throw new SessionError("conflict", "还有后台任务在跑，等它们结束或停掉再压缩");
+    if (rec.hold) throw new SessionError("conflict", "停着等的会话先不压缩");
   }
 
   /**
    * 压缩上下文（本人 11/18：子会话的上下文圆环点开「压缩」，手打 /compact 也走这里；契约 POST /v1/sessions/:id/compact）。
    * 进程不在就先续接上（启动中，起来了回到等你回复）。压缩不算一轮：执行方不报 agent_info、turn_end，不记成本人一句话、不报停了，状态不变；
    * 花的用量照记（cost 同步条目）。压完回摘要，context 已是压完读到的。没压成记一行、回 409。
+   * 压着的时候事件流里报 compacting（开、关），摘要带 compacting。text：手打的那句（带压缩要求，给 Claude Code），点按钮的不带。
    */
-  async compact(id: string): Promise<TLocalSessionSummary> {
+  async compact(id: string, text?: string): Promise<TLocalSessionSummary> {
     const rec = this.must(id);
     this.checkCompact(rec);
-    this.compacting.add(id);
-    try {
-      let run = this.runs.get(id);
-      if (!run) {
-        const before = rec.status;
-        this.setStatus(rec, "starting");
-        const p = this.startRun(rec, true);
-        this.starting.set(id, p);
-        try { run = await p; } catch (e) { if (rec.status === "starting") this.setStatus(rec, before); throw e; } finally { this.starting.delete(id); }
-        this.setStatus(rec, "idle");
-      }
-      const r = await run.compact();
-      this.addUsage(rec, r.usage);
-      this.save(rec);
-      void this.syncCost(rec, r.usage, run.lastTurn);
-      if (!r.ok) {
-        const text = r.text ? `没压缩成：${r.text}` : "没压缩成";
-        this.emit(rec, { type: "notice", level: "warn", code: "compact_failed", text });
-        throw new SessionError("conflict", text);
-      }
-    } finally {
+    const p = this.compactNow(rec, text);
+    this.compacting.set(id, p);
+    try { await p; } finally {
       this.compacting.delete(id);
+      this.emit(rec, { type: "compacting", on: false });
     }
     return this.summary(rec);
+  }
+
+  private async compactNow(rec: SessionRecord, text?: string): Promise<void> {
+    let run = this.runs.get(rec.id);
+    if (!run) {
+      const before = rec.status;
+      this.setStatus(rec, "starting");
+      const p = this.startRun(rec, true);
+      this.starting.set(rec.id, p);
+      try { run = await p; } catch (e) { if (rec.status === "starting") this.setStatus(rec, before); throw e; } finally { this.starting.delete(rec.id); }
+      this.setStatus(rec, "idle");
+    }
+    // 起来了才报开始（网页见到状态变了就当压完）
+    this.emit(rec, { type: "compacting", on: true });
+    const r = await run.compact(text);
+    this.addUsage(rec, r.usage);
+    this.save(rec);
+    void this.syncCost(rec, r.usage, run.lastTurn);
+    if (!r.ok) {
+      const why = r.text ? `没压缩成：${r.text}` : "没压缩成";
+      this.emit(rec, { type: "notice", level: "warn", code: "compact_failed", text: why });
+      throw new SessionError("conflict", why);
+    }
   }
 
   private onExit(rec: SessionRecord, run: AgentRun, code: number | null) {
@@ -1263,13 +1278,16 @@ export class SessionManager {
   private async sendNew(id: string, req: TLocalSendMessageRequest, messageId: string): Promise<TLocalSendMessageResponse> {
     const rec = this.must(id);
     if (rec.status === "queued") throw new SessionError("conflict", "还在等空位，开始后再说");
-    // 手打的 /compact：照「压缩」处理（不记成一句话），开始压了就回；别的斜杠开头的照旧原样送
-    if (req.kind !== "review" && !req.attachments?.length && req.text?.trim() === "/compact") {
+    // 手打的 /compact（带压缩要求、大小写不同也算）：照「压缩」处理（不记成一句话），开始压了就回；命令词写成小写，要求原样给 Claude Code。
+    // 别的斜杠开头的照旧原样送
+    const typed = req.kind !== "review" && !req.attachments?.length ? COMPACT_COMMAND.exec(req.text?.trim() ?? "") : null;
+    if (typed) {
       this.checkCompact(rec);
-      void this.compact(id).catch(() => undefined); // 没压成在 compact 里记了一行
+      void this.compact(id, `/compact${typed[1] ?? ""}`).catch(() => undefined); // 没压成在 compact 里记了一行
       return { delivery: "compact", messageId };
     }
-    if (this.compacting.has(id)) throw new SessionError("conflict", "正在压缩上下文，压完再说");
+    // 压缩途中说的话（含主管线转来的）：等压完再送，不丢
+    await this.compacting.get(id)?.catch(() => undefined);
     if (req.kind === "review" && (rec.subject.kind !== "topic" || !rec.critics.length)) throw new SessionError("validation", "评审会只给开工时带了挑刺技能的专题用");
     if (req.kind !== "review" && !req.text && !req.attachments?.length) throw new SessionError("validation", "说一句要有内容");
     if (rec.subject.kind === "plan" && !rec.planAsked) { rec.planAsked = true; this.save(rec); } // 本人说了话：开拆前要问的算交代过了
@@ -1462,8 +1480,8 @@ export class SessionManager {
     if (this.cancelQueued(rec)) return this.summary(rec);
     if (held) this.noteHold(rec);
     const run = this.runs.get(id);
-    // 在问本人时状态是 idle，但这一轮还没完（执行方在等回答），也要停
-    if (run && (rec.status !== "idle" || this.questions.has(id))) await run.interrupt();
+    // 在问本人时状态是 idle，但这一轮还没完（执行方在等回答），也要停；正在压缩（状态也是 idle）也停
+    if (run && (rec.status !== "idle" || this.questions.has(id) || this.compacting.has(id))) await run.interrupt();
     return this.summary(rec);
   }
 

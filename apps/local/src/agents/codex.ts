@@ -10,7 +10,7 @@ import { codexEnv, CodexRpcError, openCodex, withCodex, type CodexBin, type Code
 import { linkLarkSkills } from "./feishuPlugin.js";
 import { CONTEXT_COMPACTED, ContextReporter } from "./contextUsage.js";
 import { modeAllows, outsidePaths, permissionSummary, touchedPaths, type PathScope } from "./pathGuard.js";
-import { AgentStartError, type AgentAdapter, type AgentLaunch, type AgentRun, type CompactResult, type PermissionAnswer, type TurnModels } from "./types.js";
+import { AgentStartError, COMPACT_TIMEOUT_MS, compactFailed, type AgentAdapter, type AgentLaunch, type AgentRun, type CompactResult, type PermissionAnswer, type TurnModels } from "./types.js";
 
 /** 11/10 实测基于 codex-cli 0.159.2（app-server 的 turn/steer、两种批准、mcpServer/elicitation 都在稳定接口里）。 */
 export const MIN_CODEX_VERSION = "0.159.0";
@@ -61,9 +61,6 @@ function errorKindOf(info: unknown): string {
   return "other";
 }
 
-/** 压缩途中进程没了、Codex 不接：没压成，也没花。 */
-const compactFailed = (text: string): CompactResult => ({ ok: false, usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: null }, text });
-
 /** reason：Codex 请求批准时给的理由（主循环第 64 条，有才有）。 */
 interface Pending { kind: "command" | "file" | "mcp"; rpcId: number | string; steps: { tool: string; input: Record<string, unknown> }[]; hint: string | null; turnId: string; reason?: unknown }
 
@@ -94,6 +91,11 @@ export class CodexRun implements AgentRun {
   private contextNow: { used: number; max: number | null } | null = null;
   /** 正在压缩上下文（thread/compact/start 开的那一轮）：压完交回结果。这一轮不报 agent_info、turn_end。 */
   private compacting: ((r: CompactResult) => void) | null = null;
+  /** 压缩那一轮的编号（turn/started 报的）；超时放开以后它的 turn/completed 才到时认它、吞掉。 */
+  private compactTurn: string | null = null;
+  private lateCompactTurn: string | null = null;
+  /** 压缩那一轮里 Codex 报过新的用量：没报就不把压缩前的旧数再报一遍。 */
+  private compactUsage = false;
   private markReported: () => void = () => {};
   private readonly exitReported = new Promise<void>((r) => { this.markReported = r; });
   lastTurn: TurnModels | null = null;
@@ -162,11 +164,21 @@ export class CodexRun implements AgentRun {
   compact(): Promise<CompactResult> {
     if (this.rpc.exited) return Promise.resolve(compactFailed("执行方进程已结束"));
     return new Promise((resolve) => {
-      this.compacting = resolve;
-      this.rpc.request("thread/compact/start", { threadId: this.threadId }).catch((e: unknown) => {
-        if (this.compacting !== resolve) return;
+      const done = (r: CompactResult) => { clearTimeout(timer); resolve(r); };
+      const timer = setTimeout(() => {
+        if (this.compacting !== done) return;
         this.compacting = null;
-        resolve(compactFailed(e instanceof Error ? e.message : String(e)));
+        this.lateCompactTurn = this.compactTurn;
+        resolve(compactFailed("压缩 5 分钟没回"));
+      }, COMPACT_TIMEOUT_MS);
+      timer.unref?.();
+      this.compacting = done;
+      this.compactTurn = null;
+      this.compactUsage = false;
+      this.rpc.request("thread/compact/start", { threadId: this.threadId }).catch((e: unknown) => {
+        if (this.compacting !== done) return;
+        this.compacting = null;
+        done(compactFailed(e instanceof Error ? e.message : String(e)));
       });
     });
   }
@@ -294,7 +306,7 @@ export class CodexRun implements AgentRun {
         this.turnStartUsage = this.usage;
         this.requests = 0;
         this.lastText = null;
-        if (this.compacting) return; // 压缩不算一轮
+        if (this.compacting) { this.compactTurn = this.turnId; return; } // 压缩不算一轮
         this.emit({ type: "agent_info", agent: "codex", version: this.version, model: this.model, permissionMode: this.mode });
         return;
       }
@@ -370,6 +382,7 @@ export class CodexRun implements AgentRun {
       case "thread/tokenUsage/updated": {
         this.usage = p.tokenUsage?.total ?? this.usage;
         this.requests += 1;
+        if (this.compacting) this.compactUsage = true;
         const window = Number(p.tokenUsage?.modelContextWindow);
         if (p.tokenUsage?.last) {
           this.contextNow = { used: Math.round(n(p.tokenUsage.last.totalTokens)), max: window > 0 ? Math.round(window) : null };
@@ -403,14 +416,18 @@ export class CodexRun implements AgentRun {
         const retried = this.retried;
         this.retried = false;
         if (kind === "auth") this.emit({ type: "notice", level: "error", code: "auth_required", text: "Codex 还没登录或登录已失效，请在天枢里登录 Codex。" });
-        if (this.contextNow) this.context.report(this.contextNow.used, this.contextNow.max, true);
         const compacted = this.compacting;
-        if (compacted) {
-          // 压完了：不报 turn_end，交回结果（压完的用量上面刚报过）
+        const late = Boolean(turn.id) && turn.id === this.lateCompactTurn;
+        if (compacted || late) {
+          // 压完了（超时放开以后才到的也一样）：不报 turn_end；这一轮报过新的用量才报压完的数，没报就不把压缩前的旧数再报一遍
+          if (this.compactUsage && this.contextNow) this.context.report(this.contextNow.used, this.contextNow.max, true);
           this.compacting = null;
-          compacted({ ok: !isError, usage, text: isError && turn.error?.message ? String(turn.error.message) : null });
+          this.lateCompactTurn = null;
+          this.compactUsage = false;
+          compacted?.({ ok: !isError, usage, text: kind === "interrupted" ? "已停下" : isError && turn.error?.message ? String(turn.error.message) : null });
           return;
         }
+        if (this.contextNow) this.context.report(this.contextNow.used, this.contextNow.max, true);
         this.emit({
           type: "turn_end", isError,
           text: isError && turn.error?.message ? String(turn.error.message) : this.lastText,

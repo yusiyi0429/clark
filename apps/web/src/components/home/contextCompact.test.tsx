@@ -70,3 +70,15 @@ describe("子会话上下文圆环点开能压缩（本人 11/18）", () => {
     expect(render({ ...half }).some((node) => node.props?.["data-testid"] === "context-pop")).toBe(false);
   });
 });
+
+describe("压缩中、在等本人时（修复第 1 轮）", () => {
+  it("本机报着压缩中时写「正在压缩」；在问本人、有待批准时点不了", () => {
+    const half = contextUsage({ usedTokens: 500_000, maxTokens: 1_000_000 })!;
+    const onCompact = vi.fn(async () => undefined);
+    // 切走再回来、手打 /compact：组件里没点过，照本机报的压缩中画
+    expect(button(render({ ...half, compacting: true, onCompact })).props).toMatchObject({ isDisabled: true, children: "正在压缩" });
+    // 在问本人、有待批准（blocked）：点不了，字照旧
+    expect(button(render({ ...half, blocked: true, onCompact })).props).toMatchObject({ isDisabled: true, children: "压缩" });
+    expect(button(render({ ...half, onCompact })).props!.isDisabled).toBe(false);
+  });
+});

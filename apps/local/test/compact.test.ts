@@ -119,14 +119,13 @@ describe("压缩上下文", { timeout: 60_000 }, () => {
     expect(r.status).toBe(409);
     expect(r.body.error.code).toBe("conflict");
     expect(fakeTurns().filter((x) => x.compact)).toHaveLength(before);
-    // 压缩途中：再点、说一句都不收
+    // 压缩途中：再点不收（说一句等压完再送，见「压缩期间转来的话不丢」）
     fake({ compactMs: 500 });
     await call("POST", `/v1/sessions/${id}/interrupt`, {});
     await until(async () => (await session(id)).session.status === "idle");
     const compacting = call("POST", `/v1/sessions/${id}/compact`, {});
     await until(() => fakeTurns().filter((x) => x.compact).length > before);
     expect((await call("POST", `/v1/sessions/${id}/compact`, {})).status).toBe(409);
-    expect((await call("POST", `/v1/sessions/${id}/messages`, { text: "插一句" })).status).toBe(409);
     expect((await compacting).status).toBe(200);
     await call("POST", `/v1/sessions/${id}/kill`, {});
     fake({});
@@ -157,5 +156,97 @@ describe("压缩上下文", { timeout: 60_000 }, () => {
     await call("POST", `/v1/sessions/${id}/messages`, { text: "/review" });
     await until(() => fakeTurns().some((x) => x.turnText === "/review"));
     await call("POST", `/v1/sessions/${id}/kill`, {});
+  });
+
+  it("/compact 带参数、大小写不同也按压缩处理", async () => {
+    const id = await open("E", "做 E");
+    await idle(id);
+    const before = mark(id);
+    // Claude Code：带着参数送进去（命令词写成小写）
+    const r = await call("POST", `/v1/sessions/${id}/messages`, { text: "  /COMPACT 只留结论和没做完的  " });
+    expect(r.body.delivery).toBe("compact");
+    await until(() => fakeTurns().some((x) => x.compact && x.text === "/compact 只留结论和没做完的"));
+    await until(() => events(id).some((e) => e.type === "notice" && e.code === "context_compacted"));
+    noTurn(id, before);
+    // 只是开头像的不算
+    await until(async () => !(await session(id)).session.compacting && (await session(id)).session.status === "idle");
+    expect((await call("POST", `/v1/sessions/${id}/messages`, { text: "/compactx" })).body.delivery).toBe("new_turn");
+    await until(() => fakeTurns().some((x) => x.turnText === "/compactx"));
+    await call("POST", `/v1/sessions/${id}/kill`, {});
+    // Codex：不管参数，照样调 thread/compact/start
+    const cx = await open("F", "ctx 150000", { modelProfileId: SOL });
+    await idle(cx);
+    const starts = codexTrace().filter((l) => l.method === "thread/compact/start").length;
+    const turns = codexTrace().filter((l) => l.method === "turn/start").length;
+    expect((await call("POST", `/v1/sessions/${cx}/messages`, { text: "/Compact keep it short" })).body.delivery).toBe("compact");
+    await until(() => codexTrace().filter((l) => l.method === "thread/compact/start").length === starts + 1);
+    await until(() => events(cx).some((e) => e.type === "notice" && e.code === "context_compacted"));
+    expect(codexTrace().filter((l) => l.method === "turn/start")).toHaveLength(turns);
+    await call("POST", `/v1/sessions/${cx}/kill`, {});
+  });
+
+  it("压缩中能停", async () => {
+    fake({ compactMs: 5_000 });
+    const id = await open("G", "做 G");
+    await idle(id);
+    const compacts = fakeTurns().filter((x) => x.compact).length;
+    const compacting = call("POST", `/v1/sessions/${id}/compact`, {});
+    await until(() => fakeTurns().filter((x) => x.compact).length > compacts);
+    // 压缩中：摘要和事件流里都报着（网页据此当成在忙、出停止按钮）
+    expect((await session(id)).session.compacting).toBe(true);
+    expect(events(id).filter((e) => e.type === "compacting").map((e) => e.on)).toEqual([true]);
+    const t0 = Date.now();
+    const stopped = await call("POST", `/v1/sessions/${id}/interrupt`, {});
+    expect(stopped.status).toBe(200);
+    const r = await compacting;
+    expect(Date.now() - t0).toBeLessThan(4_000); // 没等到压完
+    expect(r.status).toBe(409);
+    const s = (await session(id)).session;
+    expect(s.compacting).toBeUndefined();
+    expect(s.status).toBe("idle");
+    expect(events(id).filter((e) => e.type === "compacting").map((e) => e.on)).toEqual([true, false]);
+    expect(events(id).some((e) => e.type === "turn_end" && e.errorKind === "interrupted")).toBe(false);
+    await call("POST", `/v1/sessions/${id}/kill`, {});
+    fake({});
+  });
+
+  it("压缩期间转来的话不丢，压完照常送到", async () => {
+    fake({ compactMs: 800 });
+    const id = await open("H", "做 H");
+    await idle(id);
+    const compacts = fakeTurns().filter((x) => x.compact).length;
+    const compacting = call("POST", `/v1/sessions/${id}/compact`, {});
+    await until(() => fakeTurns().filter((x) => x.compact).length > compacts);
+    // 主管线转来的话（网页调 POST messages）：不回 409，压完再送
+    const said = await call("POST", `/v1/sessions/${id}/messages`, { text: "转来的话" });
+    expect(said.status, JSON.stringify(said.body)).toBe(200);
+    expect(said.body.delivery).toBe("new_turn");
+    expect((await compacting).status).toBe(200);
+    await until(() => fakeTurns().some((x) => x.turnText === "转来的话"));
+    const ev = events(id);
+    // 先压完，再记这一句、开这一轮
+    expect(ev.findIndex((e) => e.type === "compacting" && !e.on)).toBeLessThan(ev.findIndex((e) => e.type === "user_message" && e.text === "转来的话"));
+    await call("POST", `/v1/sessions/${id}/kill`, {});
+    fake({});
+  });
+
+  it("有后台任务在跑时拒绝压缩", async () => {
+    fake({ background: true, agentMs: 60_000 });
+    const id = await open("I", "做 I");
+    await until(async () => { const s = (await session(id)).session; return s.status === "idle" && s.background?.some((b: any) => b.state === "running"); });
+    const compacts = fakeTurns().filter((x) => x.compact).length;
+    const r = await call("POST", `/v1/sessions/${id}/compact`, {});
+    expect([r.status, r.body.error?.code]).toEqual([409, "conflict"]);
+    expect((await call("POST", `/v1/sessions/${id}/messages`, { text: "/compact" })).status).toBe(409);
+    expect(fakeTurns().filter((x) => x.compact)).toHaveLength(compacts);
+    await call("POST", `/v1/sessions/${id}/kill`, {});
+    // 停着等额度的也不压（额度恢复时本机会往会话里送「接着做」，不和压缩撞在一起）
+    fake({ usageLimit: { resetsAt: Math.floor(Date.now() / 1000) + 3600 } });
+    const held = await open("J", "做 J");
+    await until(async () => (await session(held)).session.hold);
+    expect((await call("POST", `/v1/sessions/${held}/compact`, {})).status).toBe(409);
+    expect(fakeTurns().filter((x) => x.compact)).toHaveLength(compacts);
+    await call("POST", `/v1/sessions/${held}/kill`, {});
+    fake({});
   });
 });

@@ -282,14 +282,16 @@ function streamTurn(text, opt) {
  * 一条命令输出，result 的 result 是空的；之后读上下文用配置 compactTo（默认 2 万 / 20 万）。compactMs：压多久。
  */
 let compacted = null;
-function compactTurn() {
-  appendFileSync(TURNS, JSON.stringify({ compact: true, sid }) + "\n");
+function compactTurn(text) {
+  appendFileSync(TURNS, JSON.stringify({ compact: true, text, sid }) + "\n");
   out({ type: "system", subtype: "init", session_id: sid, model: initModel(), permissionMode: "default", claude_code_version: "2.1.318" });
   turn = { permId: null, work: true, timer: setTimeout(() => {
     out({ type: "system", subtype: "compact_boundary", session_id: sid, compact_metadata: { trigger: "manual", pre_tokens: 190000 } });
     out({ type: "user", message: { role: "user", content: "<local-command-stdout>Compacted </local-command-stdout>" }, parent_tool_use_id: null, session_id: sid });
     compacted = readCfg().compactTo ?? { totalTokens: 20000, maxTokens: 200000 };
-    finish(true, "");
+    // 不调模型的那种 result（2.1.327 里 compact 是 local 命令）：num_turns 0、result 空
+    out({ type: "result", subtype: "success", is_error: false, result: "", num_turns: 0, duration_ms: 30, usage: { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }, model_usage_since_last_result: {} });
+    turn = null;
   }, readCfg().compactMs ?? 20) };
 }
 
@@ -403,7 +405,7 @@ rl.on("line", (line) => {
     lifecycle(msg.uuid, "queued");
     if (turn && readCfg().holdInterjections) { held.push({ id: msg.uuid, text: msg.message.content }); return; }
     lifecycle(msg.uuid, "started");
-    if (!turn && msg.message.content === "/compact") compactTurn();
+    if (!turn && /^\/compact(\s|$)/.test(msg.message.content)) compactTurn(msg.message.content);
     else if (turn) {
       // 进行中插话：下一个工具步骤之前读到。
       appendFileSync(TURNS, JSON.stringify({ interjection: msg.message.content, sid }) + "\n");

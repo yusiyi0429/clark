@@ -867,9 +867,11 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
     compactSession: async (id) => {
       const s = must(id);
       if (s.summary.status === "queued" || OCCUPYING.has(s.summary.status)) throw new LocalRunnerError("conflict", "这一轮还在跑，做完再压缩", 409);
+      emit(s, { type: "compacting", on: true });
       await new Promise((resolve) => setTimeout(resolve, stepMs * 4));
       emit(s, { type: "notice", level: "info", code: "context_compacted", text: "压缩了上下文" });
       reportContext(s, 42_000);
+      emit(s, { type: "compacting", on: false });
       return summaryOf(s);
     },
     mergeSession: async (id): Promise<TLocalMergeResponse> => {

@@ -52,6 +52,10 @@ export interface AgentLaunch {
 }
 
 export interface CompactResult { ok: boolean; usage: TLocalUsage; text: string | null }
+/** 压缩多久没压完就放开（修复第 1 轮）：Claude Code 没回 result、Codex 没回 turn/completed 时不让会话一直卡在压缩中。 */
+export const COMPACT_TIMEOUT_MS = 5 * 60_000;
+/** 没压成、也没花（进程没了、超时、Codex 不接）。 */
+export const compactFailed = (text: string): CompactResult => ({ ok: false, usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0 }, text });
 
 export interface PermissionAnswer {
   allow: boolean;
@@ -89,11 +93,12 @@ export interface AgentRun {
    */
   setPermissionMode(mode: TLocalPermissionMode): Promise<boolean>;
   /**
-   * 压缩上下文（契约 POST /v1/sessions/:id/compact）：Claude Code 往会话里发 /compact，Codex 调 thread/compact/start。只在两轮之间调。
+   * 压缩上下文（契约 POST /v1/sessions/:id/compact）：Claude Code 往会话里发 command（手打的那句，带压缩要求；不给是 /compact），
+   * Codex 调 thread/compact/start（不管 command）。只在两轮之间调。
    * 这一次不算一轮：不报 agent_info、turn_end；压缩照常报 notice context_compacted，压完读一次上下文报 context_usage 再回。
-   * 回这一次花的用量；执行方没压成（出错、进程没了）ok 为 false，text 是它的原话。
+   * 回这一次花的用量；执行方没压成（出错、被停下、进程没了）ok 为 false，text 是原因。COMPACT_TIMEOUT_MS 还没压完也按没压成回，之后迟到的结束吞掉。
    */
-  compact(): Promise<CompactResult>;
+  compact(command?: string): Promise<CompactResult>;
   /** 强停：只杀本进程树。 */
   kill(): Promise<void>;
   /** 说完了：关掉输入，让执行方自己退出（验收员交完结论用）；一会儿还不退就强停。 */

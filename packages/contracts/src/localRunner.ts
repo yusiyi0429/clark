@@ -1114,6 +1114,8 @@ export const LocalSessionSummary = Type.Object({
   effort: Type.Optional(LocalEffort),
   /** 上下文用了多少（见 LocalContextUsage）：最近一次算出来的；还没有就不带。事件流里随 context_usage 更新。 */
   context: Type.Optional(LocalContextUsage),
+  /** 正在压缩上下文（见事件 compacting）；没在压不带。只在本机程序这次运行里，重启后没有。 */
+  compacting: Type.Optional(Type.Literal(true)),
 }, strict);
 export const LocalSessionListResponse = Type.Object({ sessions: Type.Array(LocalSessionSummary) }, strict);
 
@@ -1371,8 +1373,8 @@ export const LocalSendMessageRequest = Type.Object({
 export const LocalSendMessageResponse = Type.Object({
   /**
    * next_step：进行中，下一步前送达；new_turn：开了新一轮；resumed：进程已退出，续接后送达。
-   * compact：这句是手打的 /compact，照 POST /v1/sessions/:id/compact 压缩上下文（开始压了就回，不等压完），不记成一句话、没有 user_message；
-   * 在跑一轮、正在压缩时照那边回 409。
+   * compact：这句是手打的 /compact（去掉前后空白后以 /compact 开头、后面是空白或没了，不分大小写；后面的字是给 Claude Code 的压缩要求，Codex 不管），
+   * 照 POST /v1/sessions/:id/compact 压缩上下文（开始压了就回，不等压完），不记成一句话、没有 user_message；不能压时照那边回 409。
    */
   delivery: Type.Union([Type.Literal("next_step"), Type.Literal("new_turn"), Type.Literal("resumed"), Type.Literal("compact")]),
   /** 这句话的编号（请求带了就是它，没带是本机给的），事件流里 user_message 和 receipt 按它对上。 */
@@ -1418,7 +1420,8 @@ export const LocalQuestionAnswerRequest = Type.Object({
  * POST /v1/sessions/:id/compact（体 {}）：压缩上下文（本人 11/18，子会话输入框下的上下文圆环点开「压缩」；手打 /compact 也走这里），回执是 LocalSessionActionResponse。
  * Claude Code 往会话里发 /compact，Codex 调 thread/compact/start；进程不在就先续接上。压完才回，摘要的 context 已是压完读到的用量（事件流里随 context_usage、
  * notice context_compacted 更新）。压缩不算一轮：不记成本人说的一句话，没有 agent_info、turn_end，不报 stopped，状态不变；花的用量照记（cost 同步条目）。
- * 一轮在跑（含在等批准、在问本人、启动中、排队中）、正在压缩时回 409；执行方没压成也回 409（message 带它的原话）。压缩途中说话回 409。
+ * 一轮在跑（含在等批准、在问本人、启动中、排队中）、有后台任务在跑、停着等（hold）、正在压缩时回 409；执行方没压成也回 409（message 带它的原话）。
+ * 执行方 5 分钟没压完按没压成放开（之后迟到的结束不算一轮）。压缩途中说的话（含主管线转来的）等压完再送，不回 409。压缩途中停下（interrupt）照样打断。
  */
 /** POST /v1/sessions/:id/interrupt（停下，会话保留）与 /kill（强停，杀本会话进程树）的回执。 */
 export const LocalSessionActionResponse = Type.Object({ session: LocalSessionSummary }, strict);
@@ -1769,6 +1772,11 @@ export const LocalSessionEvent = Type.Union([
    * 百分比（取整）变了才报，免得事件太密；上限读不到时只在每轮做完报。压缩以后跟着报一条新的。
    */
   ev("context_usage", { usedTokens: Type.Integer({ minimum: 0 }), maxTokens: NullableInteger({ minimum: 1 }) }),
+  /**
+   * 开始、结束压缩上下文（POST /v1/sessions/:id/compact、手打 /compact；摘要的 compacting 同时变）：on true 开始，false 压完、没压成、被停下。
+   * 网页压缩中把「压缩」写成「正在压缩」，并当成在忙（出停止按钮）。进程没了、本机程序重启时不补 false：会话状态一变（status 事件）就算压完了。
+   */
+  ev("compacting", { on: Type.Boolean() }),
   /**
    * interjection_next_step：插话已送出，下一步生效；auth_required：执行方登录失效；agent_stderr：执行方报错输出；verify_waiting：验收在等交代（连不上天枢等）；
    * workspace：卡开工时在哪做（工作树的分支、从哪个提交开始、主文件夹里没提交的改动没带进来）；merged：卡的分支已合回主文件夹；

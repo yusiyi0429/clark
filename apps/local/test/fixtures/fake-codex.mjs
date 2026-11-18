@@ -178,17 +178,22 @@ process.stdin.setEncoding("utf8").on("data", (d) => {
         const t = { id: `turn-${++n}`, cwd: process.cwd(), done: false, steer: [] };
         turn = t;
         reply({});
+        note("turn/started", { threadId: thread, turn: { id: t.id, status: "inProgress" } });
+        // 压多久看 CODEX_HOME/fake-compact-ms（测超时）；有 fake-compact-nousage 时压完不报用量
+        const ms = existsSync(join(home, "fake-compact-ms")) ? Number(readFileSync(join(home, "fake-compact-ms"), "utf8")) : 20;
         setTimeout(() => {
-          note("turn/started", { threadId: thread, turn: { id: t.id, status: "inProgress" } });
+          if (t.done) return; // 途中被停下
           const c = item("contextCompaction", {});
           note("item/started", { item: c, threadId: thread, turnId: t.id });
           note("item/completed", { item: c, threadId: thread, turnId: t.id });
-          total = { ...total, totalTokens: total.totalTokens + 15, inputTokens: total.inputTokens + 10, outputTokens: total.outputTokens + 5 };
-          note("thread/tokenUsage/updated", { threadId: thread, turnId: t.id, tokenUsage: { total, last: { ...total, totalTokens: 20000 }, modelContextWindow: 200000 } });
+          if (!existsSync(join(home, "fake-compact-nousage"))) {
+            total = { ...total, totalTokens: total.totalTokens + 15, inputTokens: total.inputTokens + 10, outputTokens: total.outputTokens + 5 };
+            note("thread/tokenUsage/updated", { threadId: thread, turnId: t.id, tokenUsage: { total, last: { ...total, totalTokens: 20000 }, modelContextWindow: 200000 } });
+          }
           t.done = true;
           turn = null;
           note("turn/completed", { threadId: thread, turn: { id: t.id, status: "completed", error: null, durationMs: 80 } });
-        }, 20);
+        }, ms);
         break;
       }
       case "turn/steer":

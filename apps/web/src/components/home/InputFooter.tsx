@@ -109,15 +109,20 @@ export function Ring({ percent }: { percent: number }) {
  * 能压缩时（onCompact，这台电脑上跑着的子会话，本人 11/18）圆环点开一个小浮层，两行：「50 万 / 100 万」和「压缩」；
  * 会话在跑一轮（busy）时点不了，压着的时候写「正在压缩」，压完圆环跟着新的数（调用方换 context）。
  */
-export function ContextRing({ percent, warn, tip, amount, busy = false, onCompact }: {
-  percent: number; warn: boolean; tip: string; amount?: string; busy?: boolean; onCompact?: () => Promise<unknown>;
+export function ContextRing({ percent, warn, tip, amount, busy = false, blocked = false, compacting = false, onCompact }: {
+  percent: number; warn: boolean; tip: string; amount?: string; busy?: boolean;
+  /** 在问本人、有待批准：「压缩」点不了。 */
+  blocked?: boolean;
+  /** 本机报着正在压缩（切走再回来、手打 /compact 的也算）。 */
+  compacting?: boolean;
+  onCompact?: () => Promise<unknown>;
 }) {
   const hover = useHoverTip(tip, "top");
-  const [compacting, setCompacting] = useState(false);
+  const [pressed, setPressed] = useState(false);
   if (onCompact) {
     const compact = () => {
-      setCompacting(true);
-      void onCompact().catch(() => showWorkspaceToast({ text: "没压缩成" })).finally(() => setCompacting(false));
+      setPressed(true);
+      void onCompact().catch(() => showWorkspaceToast({ text: "没压缩成" })).finally(() => setPressed(false));
     };
     return (
       <Popover>
@@ -128,7 +133,7 @@ export function ContextRing({ percent, warn, tip, amount, busy = false, onCompac
         <Popover.Content placement="top" offset={8} className={`${h.pop} ${h.contextPop}`}>
           <Popover.Dialog aria-label="上下文" className={h.contextDialog} data-testid="context-pop">
             <span className={h.num}>{amount ?? tip}</span>
-            <HeroButton variant="tertiary" size="sm" isDisabled={busy || compacting} onPress={compact} data-testid="context-compact">{compacting ? "正在压缩" : "压缩"}</HeroButton>
+            <HeroButton variant="tertiary" size="sm" isDisabled={busy || blocked || pressed || compacting} onPress={compact} data-testid="context-compact">{pressed || compacting ? "正在压缩" : "压缩"}</HeroButton>
           </Popover.Dialog>
         </Popover.Content>
       </Popover>
