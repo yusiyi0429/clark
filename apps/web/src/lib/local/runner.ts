@@ -7,7 +7,7 @@ import type {
   TLocalModelProfile, TLocalModelProfileUpsert, TLocalTool, TLocalToolUpsert, TLocalPairingStartResponse, TLocalPairingStatusResponse,
   TLocalPermissionDecisionRequest, TLocalQuestionAnswerRequest, TLocalRunnerErrorCode, TLocalSendMessageRequest, TLocalSendMessageResponse, TLocalSessionDetailResponse,
   TLocalSessionEvent, TLocalSessionDraft, TLocalSessionSummary, TLocalSettings, TLocalSettingsPatch, TLocalStatusResponse, TLocalBudgetUpdateRequest, TLocalTaskBudgetView, TLocalAttachmentRef,
-  TLocalFolderCreateRequest, TLocalFolderCreateResponse, TLocalFolderPickRequest, TLocalFolderPickResponse, TLocalSessionModelRequest, TLocalSessionModelResponse,
+  TLocalFolderCreateRequest, TLocalFolderCreateResponse, TLocalFolderPickRequest, TLocalFolderPickResponse, TLocalScratchFolderRequest, TLocalScratchFolderResponse, TLocalSessionModelRequest, TLocalSessionModelResponse,
   TLocalSessionFileReadRequest, TLocalSessionFileReadResponse, TLocalSessionFilesResponse, TLocalSessionRestoreRequest, TLocalSessionRestoreResponse, TLocalFileChangesRequest, TLocalFileChangesResponse, TLocalFileChangesRestoreRequest, TLocalFileChangesRestoreResponse,
   TLocalHandoverCheck, TLocalProjectCloneRequest, TLocalProjectCloneResponse, TLocalProjectFolder, TLocalProjectFolderRequest, TLocalPermissionMode, TLocalRun, TLocalRunPreviewRequest,
   TLocalSourceListResponse, TLocalSourceCheckRequest, TLocalSourceCheckResponse, TLocalSourceAddRequest, TLocalSourceAddResponse,
@@ -90,6 +90,8 @@ export interface LocalRunner {
   pickFolder(body?: TLocalFolderPickRequest): Promise<TLocalFolderPickResponse>;
   /** 新建一个空文件夹（默认在桌面）并加进允许的；带 projectId 时一步绑上。重名 409，名字不合法 400（message 可直接给人看）。 */
   createFolder(body: TLocalFolderCreateRequest): Promise<TLocalFolderCreateResponse>;
+  /** 「随手」项目的文件夹：本机在主目录/天枢/随手 建好、加进允许的、绑到项目；已经绑了文件夹的不换。老本机程序没有这条（404），调用方当没做成。 */
+  scratchFolder(body: TLocalScratchFolderRequest): Promise<TLocalScratchFolderResponse>;
   removeFolder(id: string): Promise<void>;
   /** 在资源管理器中显示：本机按 id 查出路径用系统的文件管理器打开（只认允许的文件夹，没有回 404）。 */
   openFolder(id: string): Promise<void>;

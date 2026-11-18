@@ -5,7 +5,7 @@ import type { TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import {
   LOCAL_RUNNER_PROTOCOL, LOCAL_RUNNER_ROUTES, LOCAL_RUNNER_TOKEN_HEADER,
-  LocalSessionFileReadRequest, LocalSessionRestoreRequest, LocalFileChangesRequest, LocalFileChangesRestoreRequest, LocalPairingStartRequest, LocalAgentLoginCodeRequest, LocalCloudLinkRequest, LocalSettingsPatch, LocalModelProfileUpsert, LocalTokenHubConnectRequest, LocalSourceCheckRequest, LocalSourceAddRequest, LocalToolUpsert, LocalFolderPickRequest, LocalFolderCreateRequest, LocalFolderOpenRequest, LocalSessionModelRequest,
+  LocalSessionFileReadRequest, LocalSessionRestoreRequest, LocalFileChangesRequest, LocalFileChangesRestoreRequest, LocalPairingStartRequest, LocalAgentLoginCodeRequest, LocalCloudLinkRequest, LocalSettingsPatch, LocalModelProfileUpsert, LocalTokenHubConnectRequest, LocalSourceCheckRequest, LocalSourceAddRequest, LocalToolUpsert, LocalFolderPickRequest, LocalFolderCreateRequest, LocalScratchFolderRequest, LocalFolderOpenRequest, LocalSessionModelRequest,
   LocalCreateSessionRequest, LocalCreateSessionBatchRequest, LocalSendMessageRequest, LocalPermissionDecisionRequest, LocalQuestionAnswerRequest, LocalBudgetUpdateRequest, LocalProjectFolderRequest, LocalProjectCloneRequest, LocalRunPreviewRequest, LocalPermissionModeRequest,
   type TLocalRunnerErrorCode, type TLocalStatusResponse, type TLocalHealthResponse,
 } from "@warmap/contracts";
@@ -283,6 +283,19 @@ export function createServer(d: ServerDeps): http.Server {
       }
       const project = b.projectId ? d.folders.bindProject(b.projectId, folder.id, b.projectName) ?? undefined : undefined;
       return { folder, ...(project ? { project } : {}) };
+    },
+    // 「随手」项目的文件夹：路径本机自己算（主目录/天枢/随手）；这个项目已经绑了文件夹就不换，回现在绑着的
+    scratchFolder: (c) => {
+      const b = validate(LocalScratchFolderRequest, c.body);
+      const current = d.folders.projects().find((p) => p.projectId === b.projectId);
+      const bound = current?.folder && d.folders.list().find((f) => f.id === current.folder!.id);
+      if (current && bound) return { folder: bound, project: current };
+      let folder;
+      try { folder = d.folders.ensureScratch(); } catch (e) {
+        if (e instanceof FolderError) throw new HttpError(e.code === "conflict" ? 409 : 400, e.code, e.message);
+        throw e;
+      }
+      return { folder, project: d.folders.bindProject(b.projectId, folder.id, b.projectName)! };
     },
     // 在资源管理器中显示：只认允许的文件夹 id，路径本机自己查，不收网页给的路径
     openFolder: async (c) => {

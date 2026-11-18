@@ -7,7 +7,7 @@ import {
   LocalCreateSessionBatchRequest, LocalCreateSessionBatchResponse, LocalSettingsPatch, LocalSessionSummary, LocalHealthResponse,
   LocalVerifyBriefResponse, LOCAL_RUNNER_VERIFY_BRIEF_PATH, LocalMergeResponse, LocalVerdict, LocalQuestionAnswerRequest, LocalPlanCard, LocalBackgroundItem,
   LocalSettings, LocalMergeSync, LocalStatusResponse, LocalQuotaSource, LocalQuotaSync,
-  LocalFolder, LocalProjectFolder, LocalProjectListResponse, LocalProjectFolderRequest, LOCAL_PROJECT_FOLDER_LIMIT, LocalHandoverCheck, LocalProjectCloneRequest, LocalProjectCloneResponse, ProjectTransfer,
+  LocalFolder, LocalScratchFolderRequest, LocalScratchFolderResponse, LOCAL_SCRATCH_FOLDER, LocalProjectFolder, LocalProjectListResponse, LocalProjectFolderRequest, LOCAL_PROJECT_FOLDER_LIMIT, LocalHandoverCheck, LocalProjectCloneRequest, LocalProjectCloneResponse, ProjectTransfer,
   LocalTaskBudgetView, LocalBudgetListResponse, LocalBudgetUpdateRequest, LocalSendMessageRequest as SendMessage, LocalPermissionBrief, LOCAL_RUNNER_ATTACHMENT_PATH,
   LocalRunPreviewRequest, LocalPermissionModeRequest, LOCAL_AGENT_PERMISSION_MODES, LocalTool, LocalToolUpsert,
   LocalFolderPickRequest, LocalFolderPickResponse, LocalFolderCreateRequest, LocalSessionModelRequest, LocalSessionModelResponse,
@@ -129,6 +129,20 @@ describe("本机程序契约", () => {
     expect(Value.Check(LocalFolderCreateRequest, { name: "x", parent: "C:/Users/me/Desktop", projectId })).toBe(true);
     expect(Value.Check(LocalFolderCreateRequest, { name: "" })).toBe(false);
     expect(LOCAL_RUNNER_ROUTES.createFolder).toEqual({ method: "POST", path: "/v1/folders/create", auth: true });
+  });
+
+  it("路由表里有 scratchFolder", () => {
+    const projectId = "6b0f3a52-4d0c-4c1e-9a43-1f7d2c9b8e10";
+    expect(LOCAL_RUNNER_ROUTES.scratchFolder).toEqual({ method: "POST", path: "/v1/folders/scratch", auth: true });
+    expect(LOCAL_SCRATCH_FOLDER).toEqual(["天枢", "随手"]);
+    expect(Value.Check(LocalScratchFolderRequest, { projectId })).toBe(true);
+    expect(Value.Check(LocalScratchFolderRequest, { projectId, projectName: "随手" })).toBe(true);
+    expect(Value.Check(LocalScratchFolderRequest, {})).toBe(false);
+    expect(Value.Check(LocalScratchFolderRequest, { projectId, path: "C:/x" })).toBe(false); // 路径只由本机程序自己算
+    const folder = { id: "abc123", path: "C:\\Users\\me\\天枢\\随手", label: "随手", addedAt: "2026-11-18T00:00:00.000Z" };
+    const project = { projectId, name: "随手", folder: { id: "abc123", path: folder.path, label: "随手" }, folders: [{ id: "abc123", path: folder.path, label: "随手" }], updatedAt: "2026-11-18T00:00:00.000Z" };
+    expect(Value.Check(LocalScratchFolderResponse, { folder, project })).toBe(true);
+    expect(Value.Check(LocalScratchFolderResponse, { folder })).toBe(false);
   });
 
   it("子会话换模型：回执写明当场生效还是这一轮做完后生效", () => {
