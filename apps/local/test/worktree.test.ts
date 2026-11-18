@@ -1,7 +1,7 @@
 // 卡在自己的 git 工作树里做（ADR 0038）：用真的临时 git 仓库测两张卡同时做、交回提交、验收员只看这张卡的改动、合回、不是仓库时排队、清理。
 // 假 claude 的配置（.fake-claude.json）提交在仓库里，工作树里也有；它的两个记录文件在 .gitignore 里，不进提交。
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { api, pair, raw, startTestRunner, tempDir, ORIGIN } from "./helpers.js";
@@ -730,6 +730,52 @@ describe("卡在自己的工作树里做", { timeout: 60_000 }, () => {
     }
   });
 
+  it("卡这一轮结束后迟到的上下文用量等事件不算卡动过，验收员退出照样清理", async () => {
+    // 真 Claude Code 一轮结束后约 1 秒才回上下文用量：卡的 context_usage 落在验收员拍快照之后
+    const main = repo(false, { verifyCheck: PENDING, contextDelayMs: 1500 });
+    const h = await setup(main);
+    try {
+      const a = await h.open("A");
+      await h.waitStatus(a.id, "idle");
+      const late = () => h.events(a.id).filter((e) => e.type === "context_usage").length;
+      const before = late();
+      await h.handBack(a.id);
+      const v = await h.verifierOf("A");
+      await h.waitStatus(v.id, "waiting_permission");
+      await until(() => late() > before); // 迟到的那条到了（快照之后）
+      // 卡上还有几条不算干活的：一条提醒（交证据）
+      expect((await h.mcp(a.id, "add_evidence", { kind: "note", title: "补一条" })).isError).toBe(false);
+      await h.allow(v.id);
+      await h.waitStatus(v.id, "done");
+      expect((await leftoverNote(h, v.id)).text).toContain("清掉了");
+      expect(existsSync(join(a.workspace.path, "coverage.txt"))).toBe(false);
+    } finally {
+      await h.t.cleanup();
+    }
+  });
+
+  it("交结论清理中被强停，不会并发清理", async () => {
+    // 验收员把交结论的请求发出去就退出：交结论那次清理还在跑，退出又触发一次
+    const big = { size: 20 * 1024 * 1024 }; // 拷一份要点时间，两次清理容易撞上
+    const main = repo(false, { verifyCheck: { ...CHECK, leaves: { ...LEAVES, "big.txt": big } }, exitDuringSubmit: 20 });
+    const h = await setup(main);
+    try {
+      const a = await h.open("A");
+      await h.waitStatus(a.id, "idle");
+      await h.handBack(a.id);
+      const v = await h.verifierOf("A");
+      await until(() => h.events(v.id).some((e) => e.type === "verdict"));
+      await until(async () => !["starting", "running", "waiting_permission"].includes(await h.status(v.id)));
+      await new Promise((r) => setTimeout(r, 1500)); // 两次清理都跑完
+      const notes = h.events(v.id).filter((e) => e.type === "notice" && e.code === "verify_leftovers");
+      expect(notes.map((n) => n.text.slice(0, 6))).toEqual(["清掉了验收员"]);
+      expect(existsSync(join(a.workspace.path, "big.txt"))).toBe(false);
+      expect(readdirSync(join(h.t.dataDir, "sessions", v.id, "leftovers"))).toHaveLength(1);
+    } finally {
+      await h.t.cleanup();
+    }
+  });
+
   it("要清的东西超过 50MB 就不备份不删，只记提醒", async () => {
     const main = repo(false, { verifyCheck: { ...PENDING, leaves: {} } });
     const h = await setup(main);
@@ -774,7 +820,8 @@ describe("卡在自己的工作树里做", { timeout: 60_000 }, () => {
     }
   });
 
-  it("快照之后卡有任何事件就不清理", async () => {
+  // 修复第 3 轮：原来叫「快照之后卡有任何事件就不清理」，改成只认真干活的事件（新一轮、本人说话、后台任务）
+  it("快照之后卡真干了活（本人对卡说了话）就不清理", async () => {
     const main = repo(false, { verifyCheck: PENDING });
     const h = await setup(main);
     try {
@@ -783,8 +830,13 @@ describe("卡在自己的工作树里做", { timeout: 60_000 }, () => {
       await h.handBack(a.id);
       const v = await h.verifierOf("A");
       await h.waitStatus(v.id, "waiting_permission");
-      // 卡没开新的一轮，只是交了一条证据（卡的日志里多了一条事件）
+      // 交一条证据只是一条提醒，不算干活
       expect((await h.mcp(a.id, "add_evidence", { kind: "note", title: "又补了一条" })).isError).toBe(false);
+      // 本人对卡说了一句，卡又做了一轮
+      const turns = () => h.events(a.id).filter((e) => e.type === "turn_end").length;
+      const before = turns();
+      expect((await h.call("POST", `/v1/sessions/${a.id}/messages`, { text: "再看看" })).status).toBe(200);
+      await until(() => turns() > before);
       await h.allow(v.id);
       await h.waitStatus(v.id, "done");
       expect((await leftoverNote(h, v.id)).text).toContain("没清");

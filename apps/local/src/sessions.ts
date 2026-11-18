@@ -1,5 +1,6 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { lstat, readdir } from "node:fs/promises";
 import { basename, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
@@ -69,11 +70,24 @@ const GIT_WRITES = [
 ].flatMap((c) => [`Bash(${c}:*)`, `PowerShell(${c}:*)`]);
 /** 验收员留下的改动超过这么多就不存一份、也不扔（修复第 2 轮）。 */
 const LEFTOVER_LIMIT = 50 * 1024 * 1024;
-/** 文件或文件夹（不跟链接）一共多大。 */
-function sizeOf(path: string): number {
-  const s = lstatSync(path);
-  return s.isDirectory() ? readdirSync(path).reduce((n, name) => n + sizeOf(join(path, name)), 0) : s.size;
+/** 这些文件、文件夹（不跟链接）加起来超没超过 limit：异步一个个看，一超就停（没进 .gitignore 的 node_modules 这种大文件夹不用走完）。 */
+async function sizeOver(paths: string[], limit: number): Promise<boolean> {
+  let total = 0;
+  const todo = [...paths];
+  while (todo.length) {
+    const p = todo.pop()!;
+    const s = await lstat(p);
+    if (s.isDirectory()) todo.push(...(await readdir(p)).map((name) => join(p, name)));
+    else if ((total += s.size) > limit) return true;
+  }
+  return false;
 }
+/**
+ * 卡真在干活才会有的事件（修复第 3 轮）：快照之后卡有这些，验收员留下的改动就分不清是谁的。新一轮开始、本人说话、后台任务；
+ * 再加上一轮里才有的（工具调用和结果、说的话、要批准、提问、交回、交产出、一轮结束）：拉起途中本人又让卡开了一轮时，开头那条落在快照之前，后面这些落在之后。
+ * 一轮结束以后才异步到的上下文用量、压缩、提醒、回执、状态、结论都不算。
+ */
+const CARD_WORK_EVENTS = new Set(["agent_info", "user_message", "background", "tool_call", "tool_result", "assistant_text", "permission_request", "question", "handback", "artifact", "turn_end"]);
 /** 排队先后：验收员（短，而且卡着交付）→ 规划员 → 执行；同一档先来先跑。 */
 const PRIORITY: Record<TLocalSessionKind, number> = { verify: 0, plan: 1, card: 2, topic: 2 };
 /** 验收交代取不到（没连天枢、断网、天枢出错）时多久再试一次。 */
@@ -327,6 +341,8 @@ export class SessionManager {
   private readonly waitNotes = new Map<string, string>();
   /** 关机中：验收员退出时不清它留下的改动（快照留着，下次续上的验收员退出时再清）。 */
   private closing = false;
+  /** 正在清验收员留下的改动的（验收员 id → 这一次清理）：同一个验收员的清理排着一个个跑。 */
+  private readonly dropping = new Map<string, Promise<void>>();
   /** 在等本人回答的提问（会话 id → 提问），会话这时是 idle（等你回复）。 */
   private readonly questions = new Map<string, TLocalQuestionRequestView>();
   /** 前面的卡都做完、正在开工作树的卡（开好以前不能开始）。 */
@@ -1325,7 +1341,14 @@ export class SessionManager {
    * 分不清是谁的就不扔、记一条：快照以后卡的日志里有事件（验收员自己报到卡上的结论、卡的状态变化不算）。验收员排队时已经等卡这一轮做完（cardStillWorking），
    * 拉起途中本人又让卡做了的，它这一轮的事件落在快照之后，也照这条不扔。
    */
-  private async dropLeftovers(rec: SessionRecord): Promise<void> {
+  private dropLeftovers(rec: SessionRecord): Promise<void> {
+    // 同一个验收员的清理一次只跑一个（交结论那次还没跑完进程就没了，退出那次接在它后面）
+    const p = (this.dropping.get(rec.id) ?? Promise.resolve()).then(() => this.dropLeftoversNow(rec));
+    this.dropping.set(rec.id, p);
+    return p.finally(() => { if (this.dropping.get(rec.id) === p) this.dropping.delete(rec.id); });
+  }
+
+  private async dropLeftoversNow(rec: SessionRecord): Promise<void> {
     const base = rec.verifyBase;
     const card = rec.parentId ? this.records.get(rec.parentId) : undefined;
     const ws = card?.workspace;
@@ -1335,12 +1358,12 @@ export class SessionManager {
       const fresh = (await dirtyFiles(ws.path)).filter((f) => !base.files.includes(f.path));
       if (!fresh.length) return;
       const names = fresh.slice(0, 20).map((f) => f.path).join("、") + (fresh.length > 20 ? `，另有 ${fresh.length - 20} 个没列出` : "");
-      const cardMoved = this.d.log.after(card.id, base.cardSeq).some((e) => e.type !== "verdict" && e.type !== "status");
+      const cardMoved = this.d.log.after(card.id, base.cardSeq).some((e) => CARD_WORK_EVENTS.has(e.type));
       if (cardMoved) return note("warn", `验收时卡也有动静，分不清工作树里没提交的改动是谁的，没清：${names}`);
       const tracked = fresh.filter((f) => !f.untracked).flatMap((f) => (f.orig ? [f.path, f.orig] : [f.path]));
       const diff = tracked.length ? await git(ws.path, ["--literal-pathspecs", "diff", "HEAD", "--binary", "--", ...tracked]) : "";
-      const size = Buffer.byteLength(diff) + fresh.filter((f) => f.untracked).reduce((n, f) => n + sizeOf(join(ws.path, f.path)), 0);
-      if (size > LEFTOVER_LIMIT) return note("warn", `验收员跑检查留下的没提交的改动超过 50MB，没存也没清，要你看一下：${names}`);
+      const big = await sizeOver(fresh.filter((f) => f.untracked).map((f) => join(ws.path, f.path)), LEFTOVER_LIMIT - Buffer.byteLength(diff));
+      if (big) return note("warn", `验收员跑检查留下的没提交的改动超过 50MB，没存也没清，要你看一下：${names}`);
       const saved = this.saveLeftovers(rec, ws.path, fresh, diff);
       await discardFiles(ws.path, fresh);
       note("info", `清掉了验收员跑检查留下的没提交的改动，不随卡合回（删之前存了一份：${saved}）：${names}`);

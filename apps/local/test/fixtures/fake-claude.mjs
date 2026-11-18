@@ -151,7 +151,8 @@ async function verifyCheck(check) {
     out({ type: "control_request", request_id: id, request: { subtype: "can_use_tool", tool_name: "Bash", input: check.input, tool_use_id: `toolu_${id}` } });
   });
   appendFileSync(TRACE, JSON.stringify({ verifyCheck: sid, behavior: r.behavior }) + "\n");
-  if (r.behavior === "allow") for (const [file, text] of Object.entries(check.leaves ?? {})) writeFileSync(file, text);
+  // leaves 的值是字；写成 { size } 就是那么大的一个文件（大文件不往配置里塞）
+  if (r.behavior === "allow") for (const [file, text] of Object.entries(check.leaves ?? {})) writeFileSync(file, typeof text === "string" ? text : Buffer.alloc(text.size));
   out({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: `toolu_${id}`, content: r.behavior === "allow" ? "3 passed" : r.message, is_error: r.behavior !== "allow" }] }, parent_tool_use_id: null });
 }
 
@@ -177,6 +178,8 @@ async function readOnlyTurn() {
   if (!turn) return; // 途中被停下，这一轮已经结束
   if (name && args && turns >= onTurn) {
     out({ type: "assistant", message: { content: [{ type: "tool_use", id: `toolu_m${turns}`, name: `mcp__tianshu-session__${name}`, input: args }] }, parent_tool_use_id: null });
+    // exitDuringSubmit：交结论的请求发出去，不等回就退出（测交结论途中进程没了）
+    if (cfg.exitDuringSubmit) { void sessionMcp("tools/call", { name, arguments: args }).catch(() => undefined); setTimeout(() => process.exit(1), cfg.exitDuringSubmit); return; }
     result = await sessionMcp("tools/call", { name, arguments: args });
     out({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: `toolu_m${turns}`, content: result.content, is_error: result.isError }] }, parent_tool_use_id: null });
   }
@@ -355,7 +358,10 @@ rl.on("line", (line) => {
     const c = compacted ?? readCfg().context;
     if (c === false) { out({ type: "control_response", response: { subtype: "error", request_id: msg.request_id, error: "Unsupported control request subtype: get_context_usage" } }); return; }
     const usage = c ?? { totalTokens: 18000 + 1000 * turns, maxTokens: 200000 };
-    out({ type: "control_response", response: { subtype: "success", request_id: msg.request_id, response: { ...usage, percentage: Math.round((usage.totalTokens / usage.maxTokens) * 100), model: initModel() } } });
+    // contextDelayMs：过一会儿才回（真机约 1 秒，一轮结束以后才到）
+    const reply = () => out({ type: "control_response", response: { subtype: "success", request_id: msg.request_id, response: { ...usage, percentage: Math.round((usage.totalTokens / usage.maxTokens) * 100), model: initModel() } } });
+    const delay = readCfg().contextDelayMs;
+    if (delay) setTimeout(reply, delay); else reply();
   } else if (msg.type === "control_request" && msg.request.subtype === "stop_task") {
     const id = msg.request.task_id;
     appendFileSync(TRACE, JSON.stringify({ stopTask: id }) + "\n");
