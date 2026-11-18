@@ -175,7 +175,8 @@ export function QuotaBlock({ cell }: { cell: UsageCell }) {
     <div className={p.quota} data-tone={cell.tone} data-stale={cell.stale ? "" : undefined} data-testid="quota-block">
       <span className={p.quotaLine}>
         <span className={p.quotaName}>{cell.name}</span>
-        <span className={p.quotaAmount}>{cell.value}</span>
+        {cell.value ? <span className={p.quotaAmount}>{cell.value}</span> : null}
+        {cell.unreadable ? <span className={p.quotaTime}>暂时读不到</span> : null}
       </span>
       {cell.percent !== null ? <span className={p.quotaBar} aria-hidden><i style={{ width: `${cell.percent}%` }} /></span> : null}
       {cell.tip ? cell.tip.split("\n").map((line) => <p key={line} className={p.quotaDetail}>{line}</p>) : null}

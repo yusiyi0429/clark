@@ -48,8 +48,8 @@ describe("额度", () => {
     });
     expect(JSON.stringify(q)).not.toContain("someone@example.com");
     // 用量那一格：按模型分的周额度（Opus 81%）不算进剩多少，看 5 小时和本周的里用得最多的（40%）
-    expect(subscriptionSource("claude", "Claude", { ...q, updatedAt: null, error: null })).toMatchObject({ remainingPercent: 60, resetsAt: "2026-11-12T00:00:00.000Z" });
-    expect(subscriptionSource("claude", "Claude", { ...q, windows: [q.windows[2]!], updatedAt: null, error: null }).remainingPercent).toBe(19); // 只有它时才看它
+    expect(subscriptionSource("claude", "Claude", { ...q, updatedAt: null, error: null }, Date.parse("2026-11-07T00:00:00Z"))).toMatchObject({ remainingPercent: 60, resetsAt: "2026-11-12T00:00:00.000Z" });
+    expect(subscriptionSource("claude", "Claude", { ...q, windows: [q.windows[2]!], updatedAt: null, error: null }, Date.parse("2026-11-07T00:00:00Z")).remainingPercent).toBe(19); // 只有它时才看它
     const full = quotaFromUsage({ rate_limits: { limits: [
       { kind: "session", percent: 100, severity: "critical", resets_at: "2026-11-07T10:00:00Z" },
       { kind: "weekly_all", percent: 100, resets_at: "2026-11-09T00:00:00Z" },
@@ -133,6 +133,148 @@ describe("额度", () => {
     expect(trace.find((l) => l.getUsage)?.getUsage).toEqual({ subtype: "get_usage", skip_behaviors: true });
     expect(existsSync(join(dir, ".fake-claude-turns.jsonl"))).toBe(false); // 没开过一轮
     expect(trace[0].argv).toEqual(expect.arrayContaining(["--no-session-persistence", "--strict-mcp-config"]));
+  });
+
+  /** 11/18 实测：官方额度接口对这个登录回 429 时，get_usage 回成功，但 rate_limits 是 null（Claude Code 2.1.327）。 */
+  const LIMITED = { subscription_type: "max", rate_limits_available: true, rate_limits: null };
+
+  it("Claude 额度接口读不到时保留上一次的窗口，并标明暂时读不到", async () => {
+    let now = Date.parse("2026-11-07T08:00:00Z"); // USAGE 的窗口 11/07 10:00、11/12 才重置
+    let resp: Record<string, unknown> = USAGE;
+    const q = new QuotaTracker(tempDir("tl-quota-"), async () => resp, () => now);
+    await q.refresh();
+    expect(q.view()[0]).toMatchObject({ remainingPercent: 60, error: null });
+    resp = LIMITED;
+    now += QUOTA_TTL_MS;
+    await q.refresh();
+    expect(q.view()[0]!.windows).toHaveLength(3); // 不清空
+    expect(q.view()[0]).toMatchObject({ remainingPercent: 60, plan: "max", updatedAt: "2026-11-07T08:00:00.000Z" }); // 还是上一次读到的数和时间
+    expect(q.view()[0]!.error).toBeTruthy(); // 标明暂时读不到
+    // rate_limits 有、但一个认得的窗口都没有（比如只剩缓存的那几项）：也算读不到，不清空
+    const empty = new QuotaTracker(tempDir("tl-quota-"), async () => resp, () => now);
+    resp = USAGE;
+    await empty.refresh();
+    resp = { subscription_type: "max", rate_limits_available: true, rate_limits: { five_hour: null } };
+    now += 60 * 60_000;
+    await empty.refresh();
+    expect(empty.view()[0]!.windows).toHaveLength(3);
+    expect(empty.view()[0]!.error).toBeTruthy();
+    // 从来没读到过数的：照样报这个来源，带暂时读不到
+    const never = new QuotaTracker(tempDir("tl-quota-"), async () => LIMITED, () => now);
+    await never.refresh();
+    expect(never.view()).toHaveLength(1);
+    expect(never.view()[0]).toMatchObject({ id: "claude", name: "Claude", windows: [], remainingPercent: null, updatedAt: null });
+    expect(never.view()[0]!.error).toBeTruthy();
+    expect(never.syncView()).toEqual([]); // 没读到过，不报云端
+  });
+
+  it("读不到后停一段再读，不每次都去撞", async () => {
+    let now = Date.parse("2026-11-07T08:00:00Z"); // USAGE 的窗口 11/07 10:00、11/12 才重置
+    let reads = 0;
+    const q = new QuotaTracker(tempDir("tl-quota-"), async () => { reads += 1; return LIMITED; }, () => now);
+    await q.refresh();
+    expect(reads).toBe(1);
+    for (let i = 0; i < 8; i += 1) { now += QUOTA_TTL_MS; await q.refresh(); } // 40 分钟里网页一直在问状态
+    expect(reads).toBe(1);
+    now += QUOTA_TTL_MS; // 45 分钟到了
+    await q.refresh();
+    expect(reads).toBe(2);
+    // 读到了以后照旧每 5 分钟读一次
+    const ok = new QuotaTracker(tempDir("tl-quota-"), async () => { reads += 1; return reads === 3 ? LIMITED : USAGE; }, () => now);
+    await ok.refresh();
+    expect(reads).toBe(3);
+    now += 45 * 60_000;
+    await ok.refresh();
+    expect(reads).toBe(4);
+    expect(ok.view()[0]).toMatchObject({ remainingPercent: 60, error: null });
+    now += QUOTA_TTL_MS;
+    await ok.refresh();
+    expect(reads).toBe(5);
+  });
+
+  it("旧数的窗口过了重置时间按用量 0 算", async () => {
+    let now = Date.parse("2026-11-18T08:00:00Z");
+    let resp: Record<string, unknown> = { subscription_type: "max", rate_limits: { limits: [
+      { kind: "session", percent: 90, severity: "warning", resets_at: "2026-11-18T10:00:00Z", is_active: true },
+      { kind: "weekly_all", percent: 40, severity: "normal", resets_at: "2026-11-20T00:00:00Z", is_active: true },
+    ] } };
+    const q = new QuotaTracker(tempDir("tl-quota-"), async () => resp, () => now);
+    await q.refresh();
+    expect(q.usedPercent()).toBe(90);
+    expect(q.warning()).toBe(true);
+    expect(q.view()[0]).toMatchObject({ remainingPercent: 10, resetsAt: "2026-11-18T10:00:00.000Z" });
+    // 之后一直读不到；5 小时窗口过了重置时间：那一格按新的一期（用量 0、不警戒、没有过去的重置时间），本周的照旧
+    resp = LIMITED;
+    now = Date.parse("2026-11-18T10:00:00Z");
+    await q.refresh();
+    expect(q.view()[0]!.error).toBeTruthy();
+    expect(q.view()[0]!.windows).toEqual([
+      { kind: "session", model: null, usedPercent: 0, state: "ok", resetsAt: null },
+      { kind: "weekly_all", model: null, usedPercent: 40, state: "ok", resetsAt: "2026-11-20T00:00:00.000Z" },
+    ]);
+    expect(q.view()[0]).toMatchObject({ remainingPercent: 60, resetsAt: "2026-11-20T00:00:00.000Z" });
+    expect(q.usedPercent()).toBe(40);
+    expect(q.warning()).toBe(false);
+    // 本周也过了：全按 0；用完的恢复时间过了也不再报
+    q.fromEvent({ status: "rejected", resetsAt: Date.parse("2026-11-20T06:00:00Z") / 1000, unifiedWindows: { seven_day: { utilization: 1, resetsAt: Date.parse("2026-11-20T06:00:00Z") / 1000, status: "rejected" } } });
+    expect(q.view()[0]).toMatchObject({ remainingPercent: 0, blockedUntil: "2026-11-20T06:00:00.000Z" });
+    now = Date.parse("2026-11-21T00:00:00Z");
+    expect(q.view()[0]).toMatchObject({ remainingPercent: 100, resetsAt: null, blockedUntil: null });
+    expect(q.view()[0]!.windows.every((w) => w.usedPercent === 0 && w.state === "ok" && w.resetsAt === null)).toBe(true);
+    expect(q.usedPercent()).toBe(0);
+  });
+
+  it("本周用量过了重置时间按 0 算", async () => {
+    let now = Date.parse("2026-11-18T08:00:00Z");
+    let resp: Record<string, unknown> = { subscription_type: "max", rate_limits: { limits: [
+      { kind: "weekly_all", percent: 40, severity: "normal", resets_at: "2026-11-20T00:00:00Z", is_active: true },
+    ] } };
+    const q = new QuotaTracker(tempDir("tl-quota-"), async () => resp, () => now);
+    await q.refresh();
+    expect(q.weeklyPercent()).toBe(40);
+    // 之后一直读不到，本周已经重置：预算开工拿的起点是 0，不是上周的 40
+    resp = LIMITED;
+    now = Date.parse("2026-11-20T01:00:00Z");
+    await q.refresh();
+    expect(q.view()[0]!.error).toBeTruthy();
+    expect(q.weeklyPercent()).toBe(0);
+  });
+
+  it("跑着的卡报的额度不会被下一次空读清掉", async () => {
+    let now = Date.parse("2026-11-07T08:00:00Z"); // USAGE 的窗口 11/07 10:00、11/12 才重置
+    let resp: Record<string, unknown> = LIMITED;
+    let release: (() => void) | null = null;
+    let gate: Promise<void> | null = null;
+    const q = new QuotaTracker(tempDir("tl-quota-"), async () => { if (gate) await gate; return resp; }, () => now);
+    await q.refresh(); // 先读不到
+    expect(q.view()[0]!.error).toBeTruthy();
+    const resetsAt = Date.parse("2026-11-18T10:00:00Z") / 1000;
+    const event = { status: "allowed", unifiedWindows: { five_hour: { utilization: 0.3, resetsAt, status: "allowed" }, seven_day: { utilization: 0.55, resetsAt: resetsAt + 86400, status: "allowed" } } };
+    now += 60_000;
+    q.fromEvent(event);
+    expect(q.view()[0]).toMatchObject({ remainingPercent: 45, error: null }); // 卡报的为准，读得到了
+    // 下一次去读还是读不到：不覆盖卡报的
+    now += 45 * 60_000;
+    await q.refresh();
+    expect(q.view()[0]!.windows.map((w) => w.usedPercent)).toEqual([30, 55]);
+    expect(q.view()[0]!.remainingPercent).toBe(45);
+    // 读到了，但读的途中卡又报了一次（比这次读新）：以卡报的为准
+    resp = USAGE;
+    gate = new Promise((resolve) => { release = resolve; });
+    now += 45 * 60_000;
+    const reading = q.refresh();
+    now += 1_000;
+    q.fromEvent({ status: "allowed", unifiedWindows: { five_hour: { utilization: 0.35, resetsAt, status: "allowed" } } });
+    release!();
+    await reading;
+    expect(q.view()[0]!.windows.find((w) => w.kind === "session")!.usedPercent).toBe(35);
+    expect(q.view()[0]!.remainingPercent).toBe(45);
+    // 读到了、读的途中卡没报：读到的更新，以读到的为准
+    gate = null;
+    now += 10 * 60_000;
+    await q.refresh();
+    expect(q.view()[0]).toMatchObject({ remainingPercent: 60, error: null });
+    expect(q.view()[0]!.windows).toHaveLength(3);
   });
 });
 

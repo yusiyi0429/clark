@@ -365,7 +365,7 @@ describe("TokenHub 余额不足和花费", { timeout: 60_000 }, () => {
       if (String(url).includes("/api/tokavi/v1/log/usage")) return new Response(JSON.stringify(usage), { status: 200 });
       throw new Error("offline");
     }) as unknown as typeof fetch;
-    const codexLimits = async () => ({ ordinaryUsageAllowed: true, rateLimits: { planType: "plus", primary: { usedPercent: 3, windowDurationMins: 300, resetsAt: 1794049466 }, secondary: { usedPercent: 21, windowDurationMins: 10080, resetsAt: 1794383425 } } });
+    const codexLimits = async () => ({ ordinaryUsageAllowed: true, rateLimits: { planType: "plus", primary: { usedPercent: 3, windowDurationMins: 300, resetsAt: Math.floor(Date.now() / 1000) + 3_600 }, secondary: { usedPercent: 21, windowDurationMins: 10080, resetsAt: Math.floor(Date.now() / 1000) + 86_400 * 3 } } });
     const h = await setup({ fetchImpl, codexLimits });
     try {
       expect((await h.call("PUT", "/v1/models/gw", { label: "DeepSeek", source: "gateway", baseUrl: "https://tokenhub.example.com/api/anthropic", model: "deepseek-v4", apiKey: "tkv-test" })).status).toBe(200);

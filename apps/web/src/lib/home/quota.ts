@@ -23,6 +23,8 @@ export type UsageSourceLike = {
   blockedUntil: string | null;
   extraUsage?: boolean | null;
   updatedAt: string | null;
+  /** 本机最近一次没读到的原因（云端报的没有）：有就是「暂时读不到」，原因不上界面。 */
+  error?: string | null;
   /** 云端报的别的设备：名字后面加「 · 设备名」。 */
   device?: string;
 };
@@ -33,12 +35,14 @@ export type UsageCell = {
   name: string;
   /** 订阅：0–100 剩多少（圆环）；钱的为 null（画「¥」）。 */
   percent: number | null;
-  /** 「69%」「用完」「¥12.4」。 */
+  /** 「69%」「用完」「¥12.4」；一个数都没有、只是读不到时为空。 */
   value: string;
   tone: QuotaTone;
   /** 明细，一行一条（title 里换行）。 */
   tip: string;
   stale: boolean;
+  /** 订阅额度暂时读不到：有旧数照画旧数，旁边加淡色「暂时读不到」。 */
+  unreadable?: boolean;
 };
 
 const STALE_MS = 15 * 60_000;
@@ -60,7 +64,10 @@ export function money(amounts: MoneyLike[]): string {
   return amounts.map((entry) => `${SYMBOL[entry.currency.toUpperCase()] ?? `${entry.currency} `}${Number(entry.amount.toFixed(1))}`).join(" + ");
 }
 
-/** 一个来源一格。还没读到过的（没有更新时间，订阅也没有窗口）不画。 */
+/**
+ * 一个来源一格。还没读到过的（没有更新时间，订阅也没有窗口）不画；Claude 读不到过（error）的照样一格，只写名字和「暂时读不到」。
+ * 过了重置时间的窗口（读不到时留着的旧数）按新的一期画：用量 0、不写过去的重置时间；过了的恢复时间不算用完。
+ */
 export function usageCells(sources: UsageSourceLike[], now: number): UsageCell[] {
   return sources.flatMap((source): UsageCell[] => {
     const name = source.device ? `${source.name} · ${source.device}` : source.name;
@@ -73,19 +80,24 @@ export function usageCells(sources: UsageSourceLike[], now: number): UsageCell[]
         : [`余额 ${money(source.amounts)}`];
       return [{ id: source.id, name, percent: null, value: money(source.amounts), tone: "ok", tip: [...lines, ...staleLine].join("\n"), stale }];
     }
-    if (source.remainingPercent === null && !source.windows.length) return [];
-    const overall = source.windows.filter((window) => window.kind !== "weekly_scoped");
-    const counted = overall.length ? overall : source.windows;
+    const unreadable = !!source.error;
+    if (source.remainingPercent === null && !source.windows.length) {
+      return unreadable && source.id === "claude" ? [{ id: source.id, name, percent: null, value: "", tone: "ok", tip: "", stale: false, unreadable }] : [];
+    }
+    const windows = source.windows.map((window): QuotaWindowLike => (window.resetsAt && Date.parse(window.resetsAt) <= now ? { ...window, usedPercent: 0, state: "ok", resetsAt: null } : window));
+    const blockedUntil = source.blockedUntil && Date.parse(source.blockedUntil) > now ? source.blockedUntil : null;
+    const overall = windows.filter((window) => window.kind !== "weekly_scoped");
+    const counted = overall.length ? overall : windows;
     const used = counted.length ? Math.max(...counted.map((window) => window.usedPercent)) : 100 - (source.remainingPercent ?? 100);
-    const blocked = !!source.blockedUntil || counted.some((window) => window.state === "blocked" || window.usedPercent >= 100);
-    const left = blocked ? 0 : source.remainingPercent ?? 100 - used;
-    const lines = source.windows.map((window) => {
+    const blocked = !!blockedUntil || counted.some((window) => window.state === "blocked" || window.usedPercent >= 100);
+    const left = blocked ? 0 : counted.length ? 100 - used : source.remainingPercent ?? 100;
+    const lines = windows.map((window) => {
       const label = window.kind === "weekly_scoped" && window.model ? `${WINDOW[window.kind]} · ${window.model}` : WINDOW[window.kind];
       const rest = window.state === "blocked" || window.usedPercent >= 100 ? "用完" : `剩 ${100 - window.usedPercent}%`;
       return `${label}：${rest}${window.resetsAt ? ` · ${clock(window.resetsAt, now)} 重置` : ""}`;
     });
-    if (source.blockedUntil) lines.push(`${clock(source.blockedUntil, now)} 恢复`);
+    if (blockedUntil) lines.push(`${clock(blockedUntil, now)} 恢复`);
     if (source.extraUsage !== null && source.extraUsage !== undefined) lines.push(`额外额度：${source.extraUsage ? "已开" : "未开"}`);
-    return [{ id: source.id, name, percent: left, value: blocked ? "用完" : `${left}%`, tone: toneOf(left, blocked), tip: [...lines, ...staleLine].join("\n"), stale }];
+    return [{ id: source.id, name, percent: left, value: blocked ? "用完" : `${left}%`, tone: toneOf(left, blocked), tip: [...lines, ...staleLine].join("\n"), stale, unreadable }];
   });
 }

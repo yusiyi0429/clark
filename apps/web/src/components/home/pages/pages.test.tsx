@@ -31,7 +31,7 @@ const status = (patch: Partial<TLocalStatusResponse> = {}): TLocalStatusResponse
   cloud: { personId: "p-sunm", linked: true, apiBaseUrl: null, personName: "孙铭泽", outbox: { pending: 0, lastSyncedAt: null, lastError: null } },
   settings: { includePersonalConfigByDefault: false, allowedOrigins: [], paused: false, maxConcurrent: 3, autoMerge: true },
   quota: [{ id: "claude", name: "Claude", kind: "subscription", remainingPercent: null, amounts: [], resetsAt: null, plan: "max", extraUsage: false, updatedAt: fresh(), error: null, blockedUntil: null,
-    windows: [{ kind: "weekly_all", model: null, usedPercent: 83, state: "warning", resetsAt: fresh() }, { kind: "weekly_scoped", model: "Fable", usedPercent: 40, state: "ok", resetsAt: null }] }],
+    windows: [{ kind: "weekly_all", model: null, usedPercent: 83, state: "warning", resetsAt: new Date(Date.now() + 3_600_000).toISOString() }, { kind: "weekly_scoped", model: "Fable", usedPercent: 40, state: "ok", resetsAt: null }] }],
   tools: [
     { kind: "gh", state: "ready", version: "2.80.0", account: "sunm", checkedAt: fresh() },
     { kind: "lark-cli", state: "not_logged_in", version: "1.2.0", account: null, checkedAt: fresh() },
@@ -178,6 +178,24 @@ describe("连接（卡片网格 + 三组）", () => {
     expect(html).not.toContain('type="checkbox"');
     // 状态词只有那四个；不写「插件」。
     expect(text(html)).not.toContain("插件");
+  });
+
+  it("Claude 只有旧数时画旧数和暂时读不到；一个数都没有时写 Claude 暂时读不到", () => {
+    const base = status().quota[0]!;
+    const claudeRow = (quota: TLocalStatusResponse["quota"]) => {
+      const html = withLocal(<ConnectionsPage go={() => undefined} />, "ready", status({ quota }));
+      return html.split('data-testid="row-agent:claude-code"')[1]!.split("data-testid=\"row-")[0]!;
+    };
+    // 旧数照画（剩多少、额度条、本周剩余和重置时间），旁边淡色短语「暂时读不到」，不写原因
+    const stale = claudeRow([{ ...base, updatedAt: new Date(Date.now() - 50 * 60_000).toISOString(), error: "暂时读不到（get_usage 没给额度）" }]);
+    expect(text(stale)).toContain("Claude 17% 暂时读不到");
+    expect(text(stale)).toContain("本周：剩 17%");
+    expect(stale).not.toContain("get_usage");
+    // 一个数都没有：只写「Claude 暂时读不到」，没有额度条和明细
+    const empty = claudeRow([{ ...base, windows: [], updatedAt: null, extraUsage: null, error: "暂时读不到（get_usage 没给额度）" }]);
+    const block = empty.split('data-testid="quota-block"')[1]!;
+    expect(text(block.split("</div>")[0]!)).toBe('> Claude 暂时读不到');
+    expect(text(empty)).not.toContain("额外额度");
   });
 
   it("同时跑不设上限：能选到 10 以上；超过 10 个时这一行下面提醒一句，10 个以内不提醒", () => {

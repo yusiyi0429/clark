@@ -779,3 +779,5 @@ button.bgLabel:hover { background: var(--default-soft); }
 :global(:root:has([data-type-scale="one"])) .statusChip:has(> .ellipsis) { height: auto; min-height: 20px; }
 :global(:root:has([data-type-scale="one"])) .att { height: auto; min-height: 56px; }
 :global(:root:has([data-type-scale="one"])) .sendTo b, :global(:root:has([data-type-scale="one"])) .attName b { overflow: visible; white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+/* 用量一格的「暂时读不到」（额度读不到时，排在名字和数之间，数照旧靠右）：淡色、不折成一字一行。 */
+.usageNote { flex: none; color: var(--ink-faint); }

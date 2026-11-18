@@ -39,6 +39,30 @@ describe("右栏用量格子（14.4）", () => {
     expect(cells[1]!.tip).toBe("余额 ¥86");
   });
 
+  it("旧数的窗口过了重置时间按用量 0 算", () => {
+    // 5 小时那一格一小时前就重置了，本地记的剩余百分比还是旧的 17：按新的一期画（剩 100%、不写过去的时间），整格看本周的 60%
+    const [cell] = usageCells([claude({ error: "暂时读不到", updatedAt: new Date(now - 3 * 3_600_000).toISOString(),
+      windows: [
+        { kind: "session", model: null, usedPercent: 83, state: "warning", resetsAt: at(-1) },
+        { kind: "weekly_all", model: null, usedPercent: 40, state: "ok", resetsAt: at(72) },
+      ] })], now);
+    expect(cell).toMatchObject({ percent: 60, value: "60%", tone: "ok", unreadable: true });
+    expect(cell!.tip.split("\n").slice(0, 2)).toEqual(["5 小时：剩 100%", "本周：剩 60% · 11/10 06:00 重置"]);
+    // 用完了、恢复时间也过了：不再写「用完」和过去的恢复时间
+    const [over] = usageCells([claude({ remainingPercent: 0, blockedUntil: at(-1), windows: [{ kind: "session", model: null, usedPercent: 100, state: "blocked", resetsAt: at(-1) }] })], now);
+    expect(over).toMatchObject({ percent: 100, value: "100%", tone: "ok" });
+    expect(over!.tip).not.toContain("恢复");
+  });
+
+  it("没读到过额度的 Codex 不出暂时读不到那一格", () => {
+    const codex = (patch: Partial<UsageSourceLike>) => claude({ id: "codex", name: "Codex", extraUsage: null, error: "codex 没登录", ...patch });
+    expect(usageCells([codex({ windows: [], remainingPercent: null, updatedAt: null })], now)).toEqual([]);
+    // 有旧数的照画，旁边照样标暂时读不到
+    expect(usageCells([codex({})], now)[0]).toMatchObject({ name: "Codex", value: "17%", unreadable: true });
+    // Claude 一个数都没有也出一格
+    expect(usageCells([claude({ windows: [], remainingPercent: null, updatedAt: null, error: "暂时读不到" })], now)[0]).toMatchObject({ name: "Claude", value: "", unreadable: true });
+  });
+
   it("云端报的别的设备：名字带设备名；还没读到的不画；色阶 ≤10% 红、≤25% 琥珀", () => {
     expect(usageCells([claude({ device: "ThinkPad", remainingPercent: null })], now)[0]).toMatchObject({ name: "Claude · ThinkPad", value: "17%" });
     expect(usageCells([claude({ windows: [], remainingPercent: null })], now)).toEqual([]);

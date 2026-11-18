@@ -42,7 +42,7 @@ export class CodexQuota {
 
   constructor(private readonly read: () => Promise<Json | null>, private readonly now = () => Date.now()) {}
 
-  view(): TLocalQuotaSource[] { return this.state ? [subscriptionSource("codex", "Codex", this.state)] : []; }
+  view(): TLocalQuotaSource[] { return this.state ? [subscriptionSource("codex", "Codex", this.state, this.now())] : []; }
 
   syncView(): TLocalQuotaSync[] { return this.view().flatMap(syncOf); }
 

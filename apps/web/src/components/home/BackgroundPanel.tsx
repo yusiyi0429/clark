@@ -72,14 +72,16 @@ function UsageItem({ cell }: { cell: UsageCell }) {
   const r = 5.5, round = 2 * Math.PI * r;
   return (
     <li className={h.usageCell} data-tone={cell.tone} data-stale={cell.stale ? "" : undefined} title={`${cell.name}\n${cell.tip}`} data-testid="quota-row">
-      {cell.percent === null ? <span className={h.usageMoney} aria-hidden>¥</span> : (
+      {cell.percent === null && cell.value ? <span className={h.usageMoney} aria-hidden>¥</span> : (
+        // 一个数都没有（只是读不到）时只画底圈，占住位置
         <svg className={h.usageRing} viewBox="0 0 14 14" aria-hidden>
           <circle cx="7" cy="7" r={r} fill="none" strokeWidth="2" />
-          <circle cx="7" cy="7" r={r} fill="none" strokeWidth="2" strokeLinecap="round" strokeDasharray={`${(round * cell.percent / 100).toFixed(2)} ${round.toFixed(2)}`} />
+          {cell.percent !== null ? <circle cx="7" cy="7" r={r} fill="none" strokeWidth="2" strokeLinecap="round" strokeDasharray={`${(round * cell.percent / 100).toFixed(2)} ${round.toFixed(2)}`} /> : null}
         </svg>
       )}
       <span className={h.usageName}>{cell.name}</span>
-      <span className={`${h.usageValue} ${h.num}`}>{cell.value}</span>
+      {cell.unreadable ? <span className={h.usageNote}>暂时读不到</span> : null}
+      {cell.value ? <span className={`${h.usageValue} ${h.num}`}>{cell.value}</span> : null}
     </li>
   );
 }
