@@ -4,7 +4,7 @@ import type { AddressInfo } from "node:net";
 import { describe, expect, it } from "vitest";
 import { PROJECT_MCP_ACTIONS } from "@warmap/contracts";
 import { boardFixture, THIRD } from "./boardFixture.js";
-import { runAction, runExtras, type BuddyDeps } from "../src/buddyActions.js";
+import { actionList, runAction, runExtras, type BuddyDeps } from "../src/buddyActions.js";
 import type { Query } from "../src/meetingStore.js";
 import { projectHistoryReader } from "../src/sourceWords.js";
 import { TEST_MEMBER } from "./helpers.js";
@@ -348,6 +348,44 @@ describe("伙伴主线开会话（open_session）", { timeout: 60_000 }, () => {
       expect(list.find((entry) => entry.projectId === scratch)!.scratch).toBe(true);
       expect(list.find((entry) => entry.projectId === plain)).not.toHaveProperty("scratch");
     } finally { await f.close(); }
+  });
+});
+
+describe("动作说明里的判断规矩", () => {
+  const described = (name: string) => actionList({ authority: "full", grantedAt: null }, false).find((action) => action.name === name)!.description;
+
+  it("open_session 的说明里有三分法、随手、只对得上一个就直接开、同项目在跑不超过 2 个", () => {
+    const text = described("open_session");
+    expect(text).toContain("①某个项目手上的活");
+    expect(text).toContain("②这一轮里自己能做完的");
+    expect(text).toContain("③做不完的才是项目级");
+    expect(text).toContain("默认自己做");
+    expect(text).toContain("带 scratch 放进「随手」项目");
+    expect(text).toContain("只对得上一个项目就直接开");
+    expect(text).toContain("同一个项目同时在跑的子会话不超过 2 个（本机最多同时跑 3 个，留一个给本人）；已经有 2 个在跑就等一个停下再开，急的先问本人。");
+  });
+
+  it("message_project 的说明不再许诺回报", () => {
+    const text = described("message_project");
+    expect(text).not.toContain("再在总管线里回报本人");
+    expect(text).toContain("不要许诺你自己会再来汇报");
+  });
+
+  it("create_project 的说明写明一次性的活不建项目", () => {
+    expect(described("create_project")).toContain("（伙伴主线）一次性的活不建项目，用 open_session 带 scratch");
+  });
+
+  it("open_session 说明写明主线不直接拆卡、不直接开子会话", () => {
+    expect(described("open_session")).toContain("伙伴主线里起新活只走两条路：用 open_session 放进项目（一次性的放「随手」），或用 message_project 交给项目对话去拆卡；主线里起新活不直接用 split_cards、start_sub_session。已经拆好的卡或专题要开工，照旧用 start_sub_session。");
+    expect(described("split_cards").startsWith("（项目对话里用）")).toBe(true);
+    expect(described("message_project")).toContain("（伙伴主线）别的要动手的活用 open_session 直接开会话。");
+  });
+
+  it("规矩写明短版后用一句话问、不用 ask_user", () => {
+    const text = described("open_session");
+    expect(text).toContain("拿不准够不够大：先自己答个短版，末尾用一句话问要不要开会话做完整的；这句不用 ask_user。开会话这件事上，ask_user 只用来问放进哪个项目（对得上多个或一个都对不上时）。");
+    expect(text).not.toContain("先自己做个短版答了");
+    expect(described("ask_user")).toContain("问要不要开会话做完整版不用选项框");
   });
 });
 
