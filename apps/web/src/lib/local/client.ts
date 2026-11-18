@@ -161,6 +161,7 @@ export function createHttpRunner(base = localRunnerBase(), token: () => string =
     mergeSession: async (id) => call<Awaited<ReturnType<LocalRunner["mergeSession"]>>>("mergeSession", { id }, {}),
     answerQuestion: async (id, requestId, body) => (await call<{ session: Awaited<ReturnType<LocalRunner["kill"]>> }>("answerQuestion", { id, requestId }, body)).session,
     stopBackground: async (id, itemId) => (await call<{ session: Awaited<ReturnType<LocalRunner["kill"]>> }>("stopBackground", { id, itemId }, {})).session,
+    compactSession: async (id) => (await call<{ session: Awaited<ReturnType<LocalRunner["kill"]>> }>("compactSession", { id }, {})).session,
     putBudget: (body) => call("putBudget", {}, body),
     previewRun: (body) => call("previewRun", {}, body),
     listProjects: async () => (await call<{ projects: Awaited<ReturnType<LocalRunner["listProjects"]>> }>("listProjects")).projects,

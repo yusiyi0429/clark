@@ -267,7 +267,7 @@ export const sessionEnded = (status: TLocalSessionStatus | null) => status === "
  */
 export async function sayToSession(runner: LocalRunner, sessionId: string, pending: TLocalPermissionRequestView[], text: string, attachments: TLocalAttachmentRef[] = [], messageId?: string): Promise<boolean> {
   const waiting = pending[0];
-  if (!waiting) { await runner.sendMessage(sessionId, text, undefined, attachments, messageId); return true; }
+  if (!waiting || isCompact(text, attachments.length > 0)) { await runner.sendMessage(sessionId, text, undefined, attachments, messageId); return true; }
   // 带了附件的，批准那边只记换个做法，整句（连附件）照常插话。
   const fits = text.length <= DENY_MAX && !attachments.length;
   await runner.decidePermission(sessionId, waiting.requestId, { decision: "deny", ...(fits && text ? { message: text } : {}) });
@@ -276,7 +276,9 @@ export async function sayToSession(runner: LocalRunner, sessionId: string, pendi
 }
 
 /** 这句话会不会交给本机发（会才有 user_message 回来、才能先画）：有没批的批准且放得进「换个做法」的，只记换个做法、不发。 */
-const sendsMessage = (pending: readonly TLocalPermissionRequestView[], text: string, withFiles: boolean) => !pending[0] || text.length > DENY_MAX || withFiles;
+const sendsMessage = (pending: readonly TLocalPermissionRequestView[], text: string, withFiles: boolean) => !isCompact(text, withFiles) && (!pending[0] || text.length > DENY_MAX || withFiles);
+/** 手打的 /compact（本人 11/18；带压缩要求、大小写不同也算，同本机）：本机照「压缩」处理，不记成一句话、不回 user_message。 */
+const isCompact = (text: string, withFiles: boolean) => !withFiles && /^\/compact(\s|$)/i.test(text.trim());
 
 /** 网页先画的一句（还没在事件流里见到）。 */
 export type Outgoing = { sessionId: string; messageId: string; at: string; text: string; files: File[]; failed: boolean };
@@ -313,11 +315,12 @@ export function sessionOutbox(read: () => OutboxState, update: (change: (list: O
     } catch { mark(item.messageId, true); }
   };
   return {
-    say: async (text: string, files: File[] = []): Promise<boolean> => {
+    /** messageId：认领到的转话命令带命令的编号（另一个标签页再认领同一条，本机按编号只送一次）；本人自己打的话不给，用新的随机编号。 */
+    say: async (text: string, files: File[] = [], messageId?: string): Promise<boolean> => {
       const { runner, sessionId, pending } = read();
       if (!sessionId) return false;
-      if (!runner.clientMessageIds || !sendsMessage(pending, text, files.length > 0)) return sayToSession(runner, sessionId, [...pending], text, files.length ? await upload(files) : []);
-      const item: Outgoing = { sessionId, messageId: crypto.randomUUID(), at: new Date().toISOString(), text, files, failed: false };
+      if (!runner.clientMessageIds || !sendsMessage(pending, text, files.length > 0)) return sayToSession(runner, sessionId, [...pending], text, files.length ? await upload(files) : [], runner.clientMessageIds ? messageId : undefined);
+      const item: Outgoing = { sessionId, messageId: messageId ?? crypto.randomUUID(), at: new Date().toISOString(), text, files, failed: false };
       update((list) => [...list, item]);
       void deliver(item);
       return true;
@@ -534,7 +537,7 @@ export function useModelChangedRefresh(entries: SessionEntry[], refresh: () => u
   useEffect(() => { if (changed !== null) void refresh(); }, [changed, refresh]);
 }
 
-export function SessionComposer({ label, disabled, onSend, dock, pinned, subject, mode, place, model, models, context, busy = false, onStop, fill }: {
+export function SessionComposer({ label, disabled, onSend, dock, pinned, subject, mode, place, model, models, context, onCompact, compacting = false, compactBlocked = false, busy = false, onStop, fill }: {
   /** 发一句（useSessionSend.say）：附件由它传云端（POST /api/me/sub-sessions/:kind/:id/attachments）再交给本机。 */
   label: string; disabled: boolean; onSend: (text: string, files: File[]) => Promise<boolean>; dock?: ReactNode;
   subject: TSessionAttachment["subject"];
@@ -544,7 +547,12 @@ export function SessionComposer({ label, disabled, onSend, dock, pinned, subject
   /** 能换的模型（32、40 条，这台电脑上跑着的子会话才给）：右边的模型成胶囊，点开三行面板，选了 onPick。 */
   models?: ReturnType<typeof useSessionModels>;
   /** 上下文用了多少（42 条，contextUsage 算的）：模型胶囊旁边一个小圆环加百分比；还没有就不画。 */
-  context?: { percent: number; warn: boolean; tip: string } | null;
+  context?: { percent: number; warn: boolean; tip: string; amount?: string } | null;
+  /** 压缩上下文（本人 11/18，这台电脑上跑着的子会话才给）：圆环点开「压缩」；会话在跑（busy）时点不了。 */
+  onCompact?: () => Promise<unknown>;
+  /** 本机报着正在压缩（view.compacting）：「正在压缩」；调用方同时把 busy 算上它（出停止按钮）。在问本人（compactBlocked）时「压缩」点不了。 */
+  compacting?: boolean;
+  compactBlocked?: boolean;
   /** 会话在跑（27 条）：右边没字时是停止方块（onStop，本机 interrupt），有字时照样能发（插话），同项目对话、伙伴台。 */
   busy?: boolean;
   onStop?: () => void;
@@ -559,7 +567,7 @@ export function SessionComposer({ label, disabled, onSend, dock, pinned, subject
       <InputBar placeholder="" label={label} disabled={disabled} dock={dock} busy={busy} interruptible onStop={onStop} draftKey={`tianshu-home-draft-v1:${subject.kind}:${subject.id}`} fill={fill}
         footer={{
           left: place ? <FolderText name={place.name} title={place.title} path={place.path} /> : null,
-          right: <>{context ? <ContextRing {...context} /> : null}{models?.quota && models.quota.percent !== null && models.quota.percent <= QUOTA_RING_LEFT ? <QuotaRing used={100 - models.quota.percent} /> : null}{model && models?.rows.length && !disabled ? <ModelPanel label={model.label} title={model.title} rows={models.rows} onPick={models.onPick} busy={models.busy} testId="session-model" />
+          right: <>{context ? <ContextRing {...context} busy={busy} blocked={compactBlocked} compacting={compacting} onCompact={disabled ? undefined : onCompact} /> : null}{models?.quota && models.quota.percent !== null && models.quota.percent <= QUOTA_RING_LEFT ? <QuotaRing used={100 - models.quota.percent} /> : null}{model && models?.rows.length && !disabled ? <ModelPanel label={model.label} title={model.title} rows={models.rows} onPick={models.onPick} busy={models.busy} testId="session-model" />
             : model ? <FootText title={model.title} testId="session-model">{model.label}</FootText> : null}{mode ? <PermissionModeMenu modes={mode.modes} value={mode.value} disabled={disabled} onChange={mode.set} /> : null}</>,
         }}
         onSend={onSend} />

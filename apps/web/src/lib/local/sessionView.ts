@@ -52,6 +52,8 @@ export type SessionView = {
   permissionMode: TLocalPermissionMode | null;
   /** 上下文用了多少（事件 context_usage，17.2 第 42 条）；还没报过为 null，看会话摘要里的 context。maxTokens 读不到为 null。 */
   context: { usedTokens: number; maxTokens: number | null; at: string } | null;
+  /** 正在压缩上下文（事件 compacting；会话状态一变就算压完，本机程序重启时不补「压完」）。 */
+  compacting: boolean;
   /** 最近一次停下的原因（主循环第 65 条，status 事件的 why）：做完一轮、又跑起来了为 null；reason 是出错的那句，hold 是停着等的那件。 */
   stopped: { why: Exclude<TLocalStopReason, "turn_done">; reason: string | null; hold: TLocalHold | null } | null;
 };
@@ -60,12 +62,14 @@ export type SessionView = {
 const wan = (tokens: number) => `${Number((tokens / 10_000).toFixed(1))} 万`;
 /**
  * 上下文用了多少（17.2 第 42 条，输入框下面的小圆环）：百分比取整，到 80% 是警告色，悬停写「16.6 万 / 20 万」。
+ * amount 是圆环点开的浮层里那一行（本人 11/18）：「50 万 / 100 万」，单位万、取整。
  * 还没报过、读不到这个模型的上限（maxTokens 为 null）时为 null，不画。
  */
-export function contextUsage(context: { usedTokens: number; maxTokens: number | null } | null | undefined): { percent: number; warn: boolean; tip: string } | null {
+export function contextUsage(context: { usedTokens: number; maxTokens: number | null } | null | undefined): { percent: number; warn: boolean; tip: string; amount: string } | null {
   if (!context?.maxTokens) return null;
   const percent = Math.min(100, Math.round((context.usedTokens / context.maxTokens) * 100));
-  return { percent, warn: percent >= 80, tip: `${wan(context.usedTokens)} / ${wan(context.maxTokens)}` };
+  const whole = (tokens: number) => `${Math.round(tokens / 10_000)} 万`;
+  return { percent, warn: percent >= 80, tip: `${wan(context.usedTokens)} / ${wan(context.maxTokens)}`, amount: `${whole(context.usedTokens)} / ${whole(context.maxTokens)}` };
 }
 
 /** 对话里记下的那一行「问：…」；还没答时对话最后是选项框，这一行不重复画（SessionTranscript）。 */
@@ -74,7 +78,7 @@ export const questionNotice = (request: TLocalQuestionRequestView) => `问：${r
 export const EMPTY_VIEW: SessionView = {
   lastSeq: 0, status: null, startedAt: null, agentVersion: null, plan: [], entries: [], pending: [],
   usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: null },
-  lastActivity: null, interrupted: false, handedBack: false, place: null, queuedBecause: null, question: null, permissionMode: null, context: null, stopped: null,
+  lastActivity: null, interrupted: false, handedBack: false, place: null, queuedBecause: null, question: null, permissionMode: null, context: null, compacting: false, stopped: null,
 };
 
 const addUsage = (a: TLocalUsage, b: TLocalUsage): TLocalUsage => ({
@@ -93,6 +97,7 @@ export function foldEvent(view: SessionView, event: TLocalSessionEvent): Session
   switch (event.type) {
     case "status":
       next.status = event.status;
+      next.compacting = false;
       next.queuedBecause = event.status === "queued" ? event.reason ?? null : null;
       if (event.status === "running") next.interrupted = false;
       // 停了带原因的（第 65 条）：对话末尾那一行写它，不再另记一行出错。
@@ -117,6 +122,9 @@ export function foldEvent(view: SessionView, event: TLocalSessionEvent): Session
       return next;
     case "context_usage":
       next.context = { usedTokens: event.usedTokens, maxTokens: event.maxTokens, at: event.at };
+      return next;
+    case "compacting":
+      next.compacting = event.on;
       return next;
     case "user_message":
       next.entries = [...view.entries, { kind: "user", ...base, text: event.text, ...(event.attachments?.length ? { attachments: event.attachments.map(({ name, size }) => ({ name, size })) } : {}),

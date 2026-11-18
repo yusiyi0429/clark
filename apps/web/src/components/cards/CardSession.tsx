@@ -196,7 +196,7 @@ export function CardSession({ cardId, embedded = false, waiting, queued = null, 
   const openPane = () => (side ? side.toggle(true) : setDetails(true));
   // 约定改了、提议定了：云端登记了一句转话，这台电脑上跑着这张卡时马上说给执行方。
   // 登记了的转话（我来补、再改一轮、约定改了）：这一页马上认领，说给执行方的那句像平时发话一样先画出来。
-  const via = canAct && session ? { sessionId: session.id, say: (text: string) => say(text) } : null;
+  const via = canAct && session ? { sessionId: session.id, say: (text: string, messageId: string) => say(text, [], messageId) } : null;
   const settle = async () => { if (canAct) await relayNow(via); await refresh(); };
   const onSend = async (text: string, files: File[]) => {
     if (!supply) return say(text, files);
@@ -256,9 +256,9 @@ export function CardSession({ cardId, embedded = false, waiting, queued = null, 
   const model = (session ? sessionModelText(session, local.models.find((entry) => entry.id === session.modelProfileId)?.efforts) : null) ?? ((label) => (label ? { label, title: null } : null))(runLabel(session?.run) ?? run?.modelLabel ?? item.card?.model?.label ?? null);
   const place = session?.workspace ? { name: shortPlace(session.workspace), title: placeText(session.workspace), path: placePath(session.workspace) } : null;
   const composer = agent && (session || !embedded)
-    ? <SessionComposer label={`给${item.title}插话`} disabled={!canAct} onSend={onSend} mode={mode} dock={dock} context={contextUsage(view.context ?? session?.context)} subject={{ kind: "card", id: cardId }} place={place} model={model ? { label: model.label, title: model.title ?? undefined } : null}
+    ? <SessionComposer label={`给${item.title}插话`} disabled={!canAct} onSend={onSend} mode={mode} dock={dock} context={contextUsage(view.context ?? session?.context)} onCompact={session ? () => local.runner.compactSession(session.id).then(() => local.refresh()) : undefined} compacting={view.compacting} compactBlocked={!!question} subject={{ kind: "card", id: cardId }} place={place} model={model ? { label: model.label, title: model.title ?? undefined } : null}
       models={models} pinned={pinned} fill={supply ? { text: supply.text, nonce: supply.nonce } : null}
-      busy={sessionRunning} onStop={() => void control("interrupt").catch(() => showWorkspaceToast({ text: "没停下" }))} />
+      busy={sessionRunning || view.compacting} onStop={() => void control("interrupt").catch(() => showWorkspaceToast({ text: "没停下" }))} />
     : <div className={s.composerDock}>{pinned ? <div className={s.pinned} data-testid="pinned">{pinned}</div> : null}{dock}</div>;
   const chat = (
     <PendingBoxes>

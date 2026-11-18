@@ -2,7 +2,7 @@ import { spawn, execFile, type ChildProcessWithoutNullStreams } from "node:child
 import { randomUUID } from "node:crypto";
 import type { TLocalBackgroundItem, TLocalEffort, TLocalPermissionMode, TLocalPermissionRequestView, TLocalQuestion, TLocalUsage } from "@warmap/contracts";
 import type { EventBody } from "../eventLog.js";
-import { AgentStartError, type AgentAdapter, type AgentLaunch, type AgentRun, type PermissionAnswer, type TurnModels } from "./types.js";
+import { AgentStartError, COMPACT_TIMEOUT_MS, compactFailed, type AgentAdapter, type AgentLaunch, type AgentRun, type CompactResult, type PermissionAnswer, type TurnModels } from "./types.js";
 import { buildClaudeArgs, childEnv, describeTool, homeDir, personalSettingsSetKey, versionAtLeast } from "./claudeEnv.js";
 import { modeAllows, outsidePaths, permissionSummary, suggestionsReachOutside, touchedPaths, type PathScope } from "./pathGuard.js";
 import { planProgress } from "../plan.js";
@@ -144,6 +144,10 @@ class ClaudeRun implements AgentRun {
   private contextMax: number | null = null;
   /** 这个进程（或换了模型以后）还没读过上限：第一次模型回复后先读一次，不然第一轮中间估不出百分比。 */
   private contextAsked = false;
+  /** 正在压缩上下文（发了 /compact，等它的 result）：压完交回结果。这一次的 init、result 不报成一轮。 */
+  private compacting: ((r: CompactResult) => void) | null = null;
+  /** 压缩超时放开了、它的 result 还没来：下一轮真开始（system/init）之前来的 result 不管带不带字都吞掉，不报成一轮结束。 */
+  private lateCompact = false;
 
   constructor(
     private readonly child: ChildProcessWithoutNullStreams, private readonly sessionId: string, private readonly scope: PathScope & Pick<AgentLaunch, "beforeWrite">,
@@ -161,6 +165,8 @@ class ClaudeRun implements AgentRun {
     });
     child.on("exit", (code) => {
       this.exited = true;
+      this.compacting?.(compactFailed("执行方进程已结束"));
+      this.compacting = null;
       for (const r of this.hostRequests.values()) r({ subtype: "error", error: "process exited" });
       this.hostRequests.clear();
       // 退出时最后几行可能还没读完（额度用完时 Claude Code 报完 rate_limit_event 就退出）：读完再报退出，最多等 1 秒
@@ -203,6 +209,23 @@ class ClaudeRun implements AgentRun {
   send(text: string, messageId?: string) {
     if (messageId) this.receipts.add(messageId);
     this.write({ type: "user", message: { role: "user", content: text }, parent_tool_use_id: null, session_id: this.sessionId, ...(messageId ? { uuid: messageId } : {}) });
+  }
+
+  /** /compact（手打的带着压缩要求）当普通输入发进去就压（Claude Code 斜杠命令在 -p 里照样执行）；不带编号，没有回执。 */
+  compact(command = "/compact"): Promise<CompactResult> {
+    if (this.exited) return Promise.resolve(compactFailed("执行方进程已结束"));
+    return new Promise((resolve) => {
+      const done = (r: CompactResult) => { clearTimeout(timer); resolve(r); };
+      const timer = setTimeout(() => {
+        if (this.compacting !== done) return;
+        this.compacting = null;
+        this.lateCompact = true;
+        resolve(compactFailed("压缩 5 分钟没回"));
+      }, COMPACT_TIMEOUT_MS);
+      timer.unref?.();
+      this.compacting = done;
+      this.send(command);
+    });
   }
 
   async interrupt() {
@@ -452,6 +475,8 @@ class ClaudeRun implements AgentRun {
           this.emit(CONTEXT_COMPACTED);
         }
         if (ev.subtype === "init") {
+          if (this.compacting) return; // 压缩不算一轮
+          this.lateCompact = false; // 下一轮真开始了：之后的 result 是它的
           this.emit({ type: "agent_info", agent: "claude-code", version: String(ev.claude_code_version ?? ""), model: ev.model ?? null, permissionMode: ev.permissionMode ?? null });
         } else if (ev.subtype === "api_retry" && ev.error === "authentication_failed") {
           // 第一次认证失败就停，不必等它重试十次。
@@ -560,6 +585,20 @@ class ClaudeRun implements AgentRun {
         this.lastTurn = turnModelsOf(ev, this.turnIds);
         this.turnIds = new Map();
         const isError = Boolean(ev.is_error) || ev.subtype !== "success";
+        const compacted = this.compacting;
+        if (compacted) {
+          // 压完了：不报 turn_end，读一次压完的用量再交回
+          this.compacting = null;
+          const text = interrupted ? "已停下" : typeof ev.result === "string" && ev.result.trim() ? ev.result.trim() : null;
+          void this.refreshContext().then(() => compacted({ ok: !isError, usage: usageOf(ev), text }));
+          return;
+        }
+        if (this.lateCompact) {
+          // 超时放开以后、下一轮开始以前才到的 result 就是压缩的：吞掉（带报错原话的也是），只读一次用量
+          this.lateCompact = false;
+          void this.refreshContext();
+          return;
+        }
         const auth = this.authFailed || ev.api_error_status === 401;
         if (auth && !this.authFailed) this.authFailure("Claude 登录已失效，请在天枢里重新登录 Claude。");
         this.emit({

@@ -328,6 +328,7 @@ export function createServer(d: ServerDeps): http.Server {
     mergeSession: (c) => d.sessions.merge(c.params.id!),
     answerQuestion: (c) => ({ session: d.sessions.answerQuestion(c.params.id!, c.params.requestId!, validate(LocalQuestionAnswerRequest, c.body)) }),
     stopBackground: async (c) => ({ session: await d.sessions.stopBackground(c.params.id!, c.params.itemId!) }),
+    compactSession: async (c) => ({ session: await d.sessions.compact(c.params.id!) }),
     listBudgets: () => ({ budgets: d.sessions.budgets() }),
     putBudget: (c) => d.sessions.setBudget(validate(LocalBudgetUpdateRequest, c.body)),
     setSessionModel: async (c) => d.sessions.setModel(c.params.id!, validate(LocalSessionModelRequest, c.body)),

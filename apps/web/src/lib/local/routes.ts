@@ -57,6 +57,7 @@ export const LOCAL_RUNNER_ROUTES: Contracts["LOCAL_RUNNER_ROUTES"] = {
   mergeSession: { method: "POST", path: "/v1/sessions/:id/merge", auth: true },
   answerQuestion: { method: "POST", path: "/v1/sessions/:id/questions/:requestId", auth: true },
   stopBackground: { method: "POST", path: "/v1/sessions/:id/background/:itemId/stop", auth: true },
+  compactSession: { method: "POST", path: "/v1/sessions/:id/compact", auth: true },
   listBudgets: { method: "GET", path: "/v1/budgets", auth: true },
   putBudget: { method: "PUT", path: "/v1/budgets", auth: true },
   previewRun: { method: "POST", path: "/v1/runs/preview", auth: true },

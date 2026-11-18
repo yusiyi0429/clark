@@ -4,8 +4,10 @@
  * 输入框下面那一行（照 Claude Code 桌面版）：左边是上下文（首页「发给」、项目和子会话的文件夹），右边是模型和权限档。首页、伙伴台、项目对话、子会话四处一样高、一样对齐。
  */
 import { useContext, useState, type ReactNode } from "react";
-import { Dropdown } from "@heroui/react";
+import { Dropdown, Popover } from "@heroui/react";
+import { Button as Pressable } from "react-aria-components";
 import { Check, ChevronDown, Folder } from "lucide-react";
+import { HeroButton } from "@/components/HeroButton";
 import { FailedLine } from "@/components/work/DecisionBox";
 import { LocalContext, type LocalRunnerState } from "@/lib/local/LocalRunnerProvider";
 import { LocalRunnerError } from "@/lib/local/runner";
@@ -92,7 +94,7 @@ export function FolderMenu({ folders, onPick, onPickOther, onCreate }: {
 }
 
 /** 小圆环：画到 percent。 */
-function Ring({ percent }: { percent: number }) {
+export function Ring({ percent }: { percent: number }) {
   const r = 5.5, round = 2 * Math.PI * r;
   return (
     <svg className={h.usageRing} viewBox="0 0 14 14" aria-hidden>
@@ -102,9 +104,41 @@ function Ring({ percent }: { percent: number }) {
   );
 }
 
-/** 子会话的上下文用了多少（17.2 第 42 条）：小圆环加百分比，样式同右栏用量那颗；到 80% 是警告色，悬停写「16.6 万 / 20 万」（站内统一的提示，不用原生 title）。 */
-export function ContextRing({ percent, warn, tip }: { percent: number; warn: boolean; tip: string }) {
+/**
+ * 子会话的上下文用了多少（17.2 第 42 条）：小圆环加百分比，样式同右栏用量那颗；到 80% 是警告色，悬停写「16.6 万 / 20 万」（站内统一的提示，不用原生 title）。
+ * 能压缩时（onCompact，这台电脑上跑着的子会话，本人 11/18）圆环点开一个小浮层，两行：「50 万 / 100 万」和「压缩」；
+ * 会话在跑一轮（busy）时点不了，压着的时候写「正在压缩」，压完圆环跟着新的数（调用方换 context）。
+ */
+export function ContextRing({ percent, warn, tip, amount, busy = false, blocked = false, compacting = false, onCompact }: {
+  percent: number; warn: boolean; tip: string; amount?: string; busy?: boolean;
+  /** 在问本人、有待批准：「压缩」点不了。 */
+  blocked?: boolean;
+  /** 本机报着正在压缩（切走再回来、手打 /compact 的也算）。 */
+  compacting?: boolean;
+  onCompact?: () => Promise<unknown>;
+}) {
   const hover = useHoverTip(tip, "top");
+  const [pressed, setPressed] = useState(false);
+  if (onCompact) {
+    const compact = () => {
+      setPressed(true);
+      void onCompact().catch(() => showWorkspaceToast({ text: "没压缩成" })).finally(() => setPressed(false));
+    };
+    return (
+      <Popover>
+        <Pressable className={h.footText} data-tone={warn ? "warning" : undefined} aria-label={`上下文 ${percent}%，${amount ?? tip}`} data-testid="context-usage">
+          <Ring percent={percent} />
+          <span className={h.num}>{percent}%</span>
+        </Pressable>
+        <Popover.Content placement="top" offset={8} className={`${h.pop} ${h.contextPop}`}>
+          <Popover.Dialog aria-label="上下文" className={h.contextDialog} data-testid="context-pop">
+            <span className={h.num}>{amount ?? tip}</span>
+            <HeroButton variant="tertiary" size="sm" isDisabled={busy || blocked || pressed || compacting} onPress={compact} data-testid="context-compact">{pressed || compacting ? "正在压缩" : "压缩"}</HeroButton>
+          </Popover.Dialog>
+        </Popover.Content>
+      </Popover>
+    );
+  }
   return (
     <>
     <span ref={hover.ref} className={h.footText} data-tone={warn ? "warning" : undefined} role="img" aria-label={`上下文 ${percent}%，${tip}`} data-testid="context-usage" {...hover.props}>

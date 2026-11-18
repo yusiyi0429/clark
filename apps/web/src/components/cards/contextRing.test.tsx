@@ -10,8 +10,8 @@ const until = async (check: () => boolean) => { for (let i = 0; i < 300 && !chec
 
 describe("子会话显示上下文用了多少（17.2 第 42 条，D 契约 584eb5e9）", () => {
   it("百分比取整，到 80% 是警告色；悬停写「16.6 万 / 20 万」；还没报过、读不到上限时不画", () => {
-    expect(contextUsage({ usedTokens: 166_000, maxTokens: 200_000 })).toEqual({ percent: 83, warn: true, tip: "16.6 万 / 20 万" });
-    expect(contextUsage({ usedTokens: 42_000, maxTokens: 200_000 })).toEqual({ percent: 21, warn: false, tip: "4.2 万 / 20 万" });
+    expect(contextUsage({ usedTokens: 166_000, maxTokens: 200_000 })).toEqual({ percent: 83, warn: true, tip: "16.6 万 / 20 万", amount: "17 万 / 20 万" });
+    expect(contextUsage({ usedTokens: 42_000, maxTokens: 200_000 })).toEqual({ percent: 21, warn: false, tip: "4.2 万 / 20 万", amount: "4 万 / 20 万" });
     expect(contextUsage({ usedTokens: 158_800, maxTokens: 200_000 })).toMatchObject({ percent: 79, warn: false });
     expect(contextUsage({ usedTokens: 159_000, maxTokens: 200_000 })).toMatchObject({ percent: 80, warn: true });
     expect(contextUsage({ usedTokens: 1_200_000, maxTokens: 1_000_000 })).toMatchObject({ percent: 100, tip: "120 万 / 100 万" });
