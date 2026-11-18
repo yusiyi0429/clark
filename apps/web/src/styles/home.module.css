@@ -223,8 +223,8 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .history li > span:first-child { color: var(--ink-faint); font-size: var(--text-xs); }
 .historyName { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
 .statusChip[data-static] { cursor: default; }
-/* 胶囊里是会换行的名字（月份页 Task 挂的项目）：跟着长高。 */
-.statusChip:has(> .wrap) { height: auto; min-height: 20px; }
+/* 胶囊里是会换行的名字（月份页 Task 挂的项目）：跟着长高；最宽 20 个字（月份页里它和 Task 名各占一半，桌面上本来就到不了），只限宽不截，放不下换行。 */
+.statusChip:has(> .wrap) { height: auto; min-height: 20px; max-width: 20em; }
 .statusChip[data-static]:hover { background: var(--neutral-wash); color: var(--ink-muted); }
 /* 新建项目的小弹窗和文件夹列表（17.2 第 46 条）：弹窗用浮层同一套材质；列表一个一行——名字、淡色路径、行尾移除。 */
 .dialogBackdrop { background: var(--backdrop); }
@@ -436,7 +436,8 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 /* 首页只剩这一份清单，它就是正文（11/16 重新设计 4.7）：第一行 16/24，和左栏主字、对话正文一样。 */
 .waitTitle { font-size: var(--text-md); line-height: 24px; white-space: normal; overflow-wrap: anywhere; }
 /* 摘要（主循环第 66 条）：第一行下面，12/16 次一级的墨色；最多两行，多了往下渐隐（不出省略号）。 */
-.waitSummary { max-height: 2lh; overflow: hidden; color: var(--ink-muted); font-size: var(--text-xs); line-height: 16px; overflow-wrap: anywhere; -webkit-mask-image: linear-gradient(to bottom, black 1lh, transparent 2lh); mask-image: linear-gradient(to bottom, black 1lh, transparent 2lh); -webkit-mask-size: 100% 2lh; mask-size: 100% 2lh; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; }
+.waitSummary { max-height: 2lh; overflow: hidden; color: var(--ink-muted); font-size: var(--text-xs); line-height: 16px; overflow-wrap: anywhere; }
+.waitSummary[data-over] { -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 1lh), transparent); mask-image: linear-gradient(to bottom, black calc(100% - 1lh), transparent); }
 /* 第二行（9.6、9.10）：请你认可的先是对方 16 的头像和名字，再来源，再截止「剩 2 天」；不到 24 小时、已过截止用 --warning。来源放不下换行，截止不换行。 */
 .waitSource { display: flex; align-items: center; gap: var(--space-1); min-width: 0; color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; white-space: nowrap; }
 .waitAvatar { margin-right: var(--space-1); }
@@ -490,31 +491,32 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .barTool:focus-visible, .barSend:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .barContext { display: inline-flex; align-self: flex-start; align-items: center; gap: 6px; max-width: calc(100% - 8px); min-height: 24px; margin: 2px 0 0 4px; padding: 2px 4px 2px 8px; border-radius: var(--r-capsule, 999px); background: var(--neutral-wash); color: var(--ink-muted); font-size: var(--text-xs); line-height: 16px; }
 /* 引用的那句（「回复 …」）：最多两行，多了往下渐隐，不出省略号（本人 11/18）。 */
-.barQuote { min-width: 0; max-height: 2lh; overflow: hidden; overflow-wrap: anywhere; -webkit-mask-image: linear-gradient(to bottom, black 1lh, transparent 2lh); mask-image: linear-gradient(to bottom, black 1lh, transparent 2lh); -webkit-mask-size: 100% 2lh; mask-size: 100% 2lh; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; }
+.barQuote { min-width: 0; max-height: 2lh; overflow: hidden; overflow-wrap: anywhere; }
+.barQuote[data-over] { -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 1lh), transparent); mask-image: linear-gradient(to bottom, black calc(100% - 1lh), transparent); }
 .barContext button { display: grid; padding: 0; border: 0; background: none; color: var(--ink-faint); cursor: pointer; }
 .atts { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; padding: 4px 4px 2px; list-style: none; }
-.att { position: relative; display: flex; flex: none; align-items: center; gap: var(--space-2); max-width: 220px; min-height: 56px; padding: 8px 12px 8px 10px; border-radius: var(--r-inset); background: var(--neutral-wash); }
+.att { position: relative; display: flex; flex: none; align-items: center; gap: var(--space-2); max-width: 220px; height: 56px; padding: 8px 12px 8px 10px; border-radius: var(--r-inset); background: var(--neutral-wash); }
 .att[data-image] { width: 56px; padding: 0; background: none; }
 .att img { display: block; width: 56px; height: 56px; border-radius: var(--r-control); object-fit: cover; box-shadow: 0 0 0 1px var(--hairline); }
 .attType { display: grid; flex: none; place-items: center; width: 28px; height: 32px; border-radius: 6px; background: var(--surface); box-shadow: 0 0 0 1px var(--hairline); color: var(--ink-muted); font-size: 9px; font-weight: 600; line-height: 1; text-transform: uppercase; }
 .attName { display: flex; flex-direction: column; min-width: 0; }
-.attName b { font-size: var(--text-base); font-weight: 400; line-height: var(--lh-row); white-space: normal; overflow-wrap: anywhere; }
+.attName b { overflow: hidden; font-size: var(--text-base); font-weight: 400; line-height: var(--lh-row); text-overflow: ellipsis; white-space: nowrap; }
 .attName span { color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; }
 .attRemove { position: absolute; top: -6px; right: -6px; display: grid; place-items: center; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 50%; background: var(--surface); box-shadow: 0 0 0 1px var(--hairline-strong); color: var(--ink-muted); cursor: pointer; opacity: 0; transition: opacity var(--dur-snap) var(--ease-swift); }
 .att:hover .attRemove, .att:focus-within .attRemove { opacity: 1; }
 .barError { display: flex; align-items: center; min-height: 24px; margin: 0; padding: 0 4px; color: var(--danger); font-size: var(--text-xs); line-height: 16px; }
 .barFailed { padding: 0 4px; }
 /* 框下面一行（照 Claude Code 桌面版）：固定 28 高，左边上下文、右边模型和权限档；四处一样，空着也占位。 */
-.barFoot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-width: 0; height: 28px; padding: 0 var(--space-1); }
+.barFoot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-width: 0; min-height: 28px; padding: 0 var(--space-1); }
 .barFootSide { display: flex; align-items: center; gap: var(--space-1); min-width: 0; }
-.footText { display: inline-flex; align-items: center; gap: var(--space-1); min-width: 0; padding: 0 var(--space-2); overflow: hidden; color: var(--ink-muted); font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); white-space: nowrap; }
+.footText { display: inline-flex; align-items: center; gap: var(--space-1); min-width: 0; padding: 0 var(--space-2); color: var(--ink-muted); font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); overflow-wrap: anywhere; }
 .footText svg { flex: none; color: var(--ink-faint); }
 /* 本人气泡里的附件（14.5）：靠右，图片 96。 */
 .bubbleAtts { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); margin: 0 0 6px; padding: 0; list-style: none; }
-.sendTo { display: inline-flex; align-items: center; gap: var(--space-1); max-width: 320px; min-height: var(--row-32); padding: 4px var(--space-2); border: 0; border-radius: var(--r-control); background: none; color: var(--ink); font: inherit; font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); cursor: pointer; }
+.sendTo { display: inline-flex; align-items: center; gap: var(--space-1); max-width: 320px; height: var(--row-32); padding: 0 var(--space-2); border: 0; border-radius: var(--r-control); background: none; color: var(--ink); font: inherit; font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); cursor: pointer; }
 .sendTo:hover, .sendTo[data-pressed] { background: var(--default-soft); }
 .sendToLabel { color: var(--ink-faint); }
-.sendTo b { min-width: 0; font-weight: 400; white-space: normal; overflow-wrap: anywhere; }
+.sendTo b { min-width: 0; overflow: hidden; font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
 .sendTo svg { flex: none; color: var(--ink-faint); }
 .folderName { width: 180px; height: var(--row-32); font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); }
 .menuHeader { display: block; padding: var(--space-1) var(--space-3); color: var(--ink-faint); font-size: var(--text-xs); font-weight: 600; line-height: 16px; white-space: normal; overflow-wrap: anywhere; }
@@ -763,3 +765,13 @@ button.bgLabel:hover { background: var(--default-soft); }
 .noteTitle :global(button) { margin-left: var(--space-1); vertical-align: middle; }
 /* 左栏悬停全名提示里的第二行（子会话的「来源 · 模型」）。 */
 .tipDetail { display: block; font-size: var(--text-xs); opacity: .72; }
+
+/* 发给、附件名：没有新首页外壳的独立页（/me/cards/:id、/me/topics/:id）也用，原样单行；新首页里放不下换行，不出省略号（本人 11/18）。 */
+:global(:root:has([data-type-scale="one"])) .sendTo { height: auto; min-height: var(--row-32); padding-block: 4px; }
+/* 输入框下沿那一行挤的时候，「发给」/ 权限这颗按钮不被挤成一字一行：按字宽排（本身最宽 320）。 */
+:global(:root:has([data-type-scale="one"])) .barFoot .sendTo { flex: none; }
+/* 两边各占一半，名字都长时一起换行，不让一边被挤成一列字；右边那组照旧靠右。 */
+:global(:root:has([data-type-scale="one"])) .barFootSide { flex: 1 1 0; }
+:global(:root:has([data-type-scale="one"])) .barFootSide:last-child { justify-content: flex-end; }
+:global(:root:has([data-type-scale="one"])) .att { height: auto; min-height: 56px; }
+:global(:root:has([data-type-scale="one"])) .sendTo b, :global(:root:has([data-type-scale="one"])) .attName b { overflow: visible; white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }

@@ -19,6 +19,7 @@ import { useDictation } from "@/conversation/useDictation";
 import { EmojiButton, insertEmoji } from "@/conversation/Reactions";
 import { ATTACHMENT_ACCEPT, admit, attachmentKind, fileNameOf, sizeText } from "@/lib/home/attachments";
 import h from "@/styles/home.module.css";
+import { FadeText } from "@/lib/home/overflowFade";
 
 type Draft = { key: number; file: File; url: string | null };
 const MAX_HEIGHT = 168;
@@ -177,7 +178,7 @@ export function InputBar({ placeholder, label, onSend, busy = false, interruptib
           </span>
         ) : null}
         {quote ? (
-          <span className={h.barContext} data-testid="input-quote"><span className={h.barQuote}>{quote.label}</span>
+          <span className={h.barContext} data-testid="input-quote"><FadeText className={h.barQuote}>{quote.label}</FadeText>
             <button type="button" aria-label={`去掉 ${quote.label}`} onClick={quote.onClear}><X size={12} strokeWidth={1.8} aria-hidden /></button>
           </span>
         ) : null}

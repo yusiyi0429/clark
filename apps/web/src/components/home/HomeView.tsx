@@ -41,6 +41,7 @@ import { pageHref } from "./view";
 import h from "@/styles/home.module.css";
 import x from "@/styles/decision-box.module.css";
 import m from "./partner-meetings.module.css";
+import { FadeText } from "@/lib/home/overflowFade";
 
 export type SendTarget = "auto" | RouteTarget;
 type HomeSend = (text: string, target: SendTarget, files: File[]) => Promise<void> | void;
@@ -405,7 +406,7 @@ export function WaitingList({ items, rows: given, fold = false, meeting, api, go
             <button type="button" className={h.waitMain} aria-expanded={canOpen ? open : undefined} onClick={() => { if (!confirm) go(waitingHref(item)); else if (canOpen) toggle(); }}
               title={!waitTime(focus, now) && item.at ? relativeDayTime(item.at, new Date(now)) : undefined}>
               <span className={h.waitTitle}>{item.title}</span>
-              {summary ? <span className={h.waitSummary} title={summary} data-testid="wait-summary">{summary}</span> : null}
+              {summary ? <FadeText className={h.waitSummary} title={summary} data-testid="wait-summary">{summary}</FadeText> : null}
               {from ? (
                 <span className={h.waitSource}>
                   {item.person ? <PersonAvatar personId={item.person.personId} className={h.waitAvatar}>{null}</PersonAvatar> : null}

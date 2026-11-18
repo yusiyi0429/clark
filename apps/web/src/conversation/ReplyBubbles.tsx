@@ -21,6 +21,7 @@ import { MarkdownBody } from "./Transcript";
 import b from "@/styles/conversation-bubbles.module.css";
 import ts from "@/styles/conversation-transcript.module.css";
 import vs from "@/styles/v2-session.module.css";
+import { FadeText } from "@/lib/home/overflowFade";
 
 /** 这里的对话用气泡：WorkTimeline 给 true；TransferHistory 里包 false。 */
 export const BubbleContext = createContext(false);
@@ -257,7 +258,7 @@ function ReplyCard({ markdown, title, summary, open, at, delay, edge, part }: { 
         <span className={b.cardTitle}>{title}</span>
         {time ? <span className={b.faint}>{time}</span> : null}
       </div>
-      {open ? <div className={`${b.typing} ${b.cardTyping}`} data-testid="card-typing" aria-hidden><i /><i /><i /></div> : summary && !inPlace ? <div className={b.summary}>{summary}</div> : null}
+      {open ? <div className={`${b.typing} ${b.cardTyping}`} data-testid="card-typing" aria-hidden><i /><i /><i /></div> : summary && !inPlace ? <FadeText as="div" className={b.summary}>{summary}</FadeText> : null}
       {inPlace ? <div className={`${ts.prose} ${b.cardBody}`}><MarkdownBody text={withoutTitle(markdown, title)} streaming={false} /></div> : null}
       {open || inPlace ? null : <div className={b.acts}><button type="button" className={b.open} onClick={show}>打开</button></div>}
       {side && panel ? <SideContent side={side} kind="file"><CardPreview title={title} markdown={markdown} onClose={close} /></SideContent> : null}

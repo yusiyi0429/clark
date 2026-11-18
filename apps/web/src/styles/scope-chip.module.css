@@ -92,5 +92,5 @@ button.chip:focus-visible { outline: 2px solid #3a83f788; outline-offset: 2px; }
 
 /* 新首页不出省略号（本人 11/18）：放不下就换行，长预览限高往下渐隐；只在新首页的外壳里生效，旧界面照旧。 */
 :global(:root:has([data-type-scale="one"])) .text { overflow: visible; white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
-:global(:root:has([data-type-scale="one"])) .preview { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; max-height: 2lh; overflow: hidden; -webkit-mask-image: linear-gradient(to bottom, black 1lh, transparent 2lh); mask-image: linear-gradient(to bottom, black 1lh, transparent 2lh); -webkit-mask-size: 100% 2lh; mask-size: 100% 2lh; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; }
+:global(:root:has([data-type-scale="one"])) .preview { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; max-height: 2lh; overflow: hidden; -webkit-mask-image: linear-gradient(to bottom, black calc(100% - .5lh), transparent); mask-image: linear-gradient(to bottom, black calc(100% - .5lh), transparent); }
 :global(:root:has([data-type-scale="one"])) .chip { height: auto; min-height: 22px; }

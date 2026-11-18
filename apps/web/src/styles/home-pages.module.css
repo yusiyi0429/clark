@@ -275,7 +275,8 @@ button.cardMain:focus-visible::after { outline: 2px solid var(--focus); outline-
 .cardText { display: grid; gap: 2px; min-width: 0; }
 .cardName { color: var(--ink); font-size: var(--text-base); font-weight: 600; line-height: var(--lh-row); white-space: normal; overflow-wrap: anywhere; }
 /* 卡片说明最多两行，多了往下渐隐（不出省略号，本人 11/18）。 */
-.cardLine { max-height: 2lh; overflow: hidden; color: var(--ink-muted); font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); overflow-wrap: anywhere; -webkit-mask-image: linear-gradient(to bottom, black 1lh, transparent 2lh); mask-image: linear-gradient(to bottom, black 1lh, transparent 2lh); -webkit-mask-size: 100% 2lh; mask-size: 100% 2lh; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; }
+.cardLine { max-height: 2lh; overflow: hidden; color: var(--ink-muted); font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); overflow-wrap: anywhere; }
+.cardLine[data-over] { -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 1lh), transparent); mask-image: linear-gradient(to bottom, black calc(100% - 1lh), transparent); }
 .cardSource { color: var(--ink-faint); font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); }
 .cardState { color: var(--ink-muted); }
 .cardState[data-state="disconnected"], .cardState[data-state="unknown"], .cardState[data-state="not_enabled"] { color: var(--ink-faint); }

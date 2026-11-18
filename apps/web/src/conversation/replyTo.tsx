@@ -12,6 +12,7 @@ import { HeroButton } from "@/components/HeroButton";
 import { quoteExcerpt } from "./QuoteChips";
 import b from "@/styles/conversation-bubbles.module.css";
 import h from "@/styles/home.module.css";
+import { FadeText } from "@/lib/home/overflowFade";
 
 /** 挂着的那一条：id 每点一次换一个（输入框据此获得焦点、发出后只清掉发出去的那条）。 */
 export type ReplyTarget = { id: string; text: string };
@@ -43,7 +44,7 @@ export function SentReply({ text }: { text: string }) {
   return (
     <Popover isOpen={open} onOpenChange={setOpen}>
       <HeroButton variant="ghost" size="sm" className={b.replied} aria-label={`回复 ${excerpt}`} data-testid="sent-reply">
-        <Reply size={14} strokeWidth={1.8} aria-hidden /><span className={b.repliedText}>{excerpt}</span>
+        <Reply size={14} strokeWidth={1.8} aria-hidden /><FadeText className={b.repliedText}>{excerpt}</FadeText>
       </HeroButton>
       <Popover.Content placement="bottom end" offset={6} className={h.pop}>
         <Popover.Dialog aria-label="回复原文" className={b.repliedFull}>{text}</Popover.Dialog>
