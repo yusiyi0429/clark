@@ -150,11 +150,60 @@ describe("splitReply", () => {
     expect(splitReply(head, true).segments.map((s) => s.kind)).toEqual(["bubble"]);
     expect(splitReply(head, true).tail).toMatchObject({ kind: "card", title: "先确认 ANT 指的是哪家" });
   });
+  it("流式时加粗小标题一节的尾巴是卡片壳子，写长了不会从气泡变成卡", () => {
+    const reply = `**要做的事**\n\n先说一句。\n\n- ${"很长的一项".repeat(6)}\n- 第二项\n\n**风险**\n\n没有。`;
+    // 清单还没写到：尾巴已经是卡片壳子，标题是小标题。
+    expect(splitReply("**要做的事**\n\n先说一句。", true)).toEqual({ segments: [], tail: { kind: "card", markdown: "**要做的事**\n\n先说一句。", title: "要做的事" } });
+    expect(splitReply("**要做的事：**\n\n先", true).tail).toMatchObject({ kind: "card", title: "要做的事" });
+    expectNoBubbleTurnsCard(reply);
+    // 写完：照规则定，有长清单的一节成卡，只有一句话的一节成气泡（壳子展开成全文）。
+    expect(splitReply(reply).segments.map((s) => s.kind)).toEqual(["card", "bubble"]);
+  });
+  it("加粗小标题后先有一段铺垫再接表格：流式全程不出现气泡变卡", () => {
+    const reply = "开头一句。\n\n**数据**\n\n先看一下这张表，再说结论。\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n**下一步**\n\n说明。";
+    expectNoBubbleTurnsCard(reply);
+    expect(splitReply(reply).segments).toMatchObject([{ kind: "bubble" }, { kind: "card", title: "数据", summary: "先看一下这张表，再说结论。" }, { kind: "bubble" }]);
+  });
+  it("两行加粗只隔空行时并成一节，不出单独的粗体小气泡", () => {
+    const longItem = `- ${"很长的一项".repeat(6)}`;
+    expect(splitReply(`**甲**\n\n**乙**\n\n${longItem}\n\n**丙**\n\n说明。`).segments).toEqual([
+      { kind: "card", markdown: `**甲**\n\n**乙**\n\n${longItem}`, title: "甲", summary: "乙" },
+      { kind: "bubble", markdown: "**丙**\n\n说明。" },
+    ]);
+    expect(splitReply("**甲**\n\n**乙**\n\n说明。").segments).toEqual([{ kind: "bubble", markdown: "**甲**\n\n**乙**\n\n说明。" }]);
+    expectNoBubbleTurnsCard(`**甲**\n\n**乙**\n\n${longItem}\n\n**丙**\n\n说明。`);
+  });
   it("空的回复", () => {
     expect(splitReply("")).toEqual({ segments: [], tail: null });
     expect(splitReply("  \n")).toEqual({ segments: [], tail: null });
   });
 });
+
+/**
+ * 按字喂进流式：已经出过的块不变；同一个位置（segments 加上尾巴）出现过气泡，之后（含写完）就不能变成卡。
+ * 尾巴第一行还没写完时不算（「*」「**要做」这几个字还看不出是清单、加粗行还是一句话；尾巴开头 2 秒本来就不露）。
+ */
+function expectNoBubbleTurnsCard(reply: string) {
+  const chars = [...reply];
+  let previous: ReturnType<typeof splitReply>["segments"] = [];
+  const bubbleAt = new Set<number>();
+  const check = ({ segments, tail }: ReturnType<typeof splitReply>, step: string) => {
+    const kinds = [...segments.map((s) => s.kind), ...(tail?.markdown.includes("\n") ? [tail.kind] : [])];
+    kinds.forEach((kind, index) => {
+      if (kind === "card") expect(bubbleAt.has(index), `${step}：第 ${index + 1} 块从气泡变成了卡`).toBe(false);
+      else bubbleAt.add(index);
+    });
+  };
+  for (let length = 1; length <= chars.length; length++) {
+    const result = splitReply(chars.slice(0, length).join(""), true);
+    expect(result.segments.slice(0, previous.length), `第 ${length} 个字`).toEqual(previous);
+    previous = result.segments;
+    check(result, `第 ${length} 个字`);
+  }
+  const final = splitReply(reply);
+  expect(final.segments.slice(0, previous.length)).toEqual(previous);
+  check(final, "写完");
+}
 
 /** 本人 11/18 截图里那一轮的原文：Chat 还没接伙伴人设，用单独一行的加粗当小标题。 */
 const ANT_ANSWER = `这次没调查成：联网搜索还没配置好（缺少搜索接口的密钥），我查不到 ANT 现在的上市进度、招股时间、定价和认购情况。所以我给不出“这一只适不适合打新”的结论。下面先说清楚有哪几件事会决定答案，等信息拿到了，可以逐项对照。

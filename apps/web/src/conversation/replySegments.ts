@@ -4,9 +4,11 @@ import { splitStableBlocks } from "./smoothText";
  * 伙伴的一条回复拆成气泡和卡片（设计稿 6.2）。
  * - 卡片：以标题开头的一节（吞到下一个标题或末尾）、表格、代码块 / 富块 / 公式块、长清单；相邻的非标题卡片料并成一张。
  * - 单独一行的加粗当小标题，吞到下一个小标题：里面有卡片料就整节成卡（标题是小标题），否则整节一个气泡。
+ *   小标题紧跟着又是加粗行（中间只隔空行）：并成一节，标题取第一行。
  * - 其余是气泡；以冒号结尾的段落和紧跟着的短清单并成一个气泡。
  * - 流式中 `segments` 只往后长：还没写完、或还可能被后面的内容改写的块（标题还可能往下吞、卡片料还可能并上下一块、
  *   冒号结尾的话还要看下一块、短清单还可能变长）连同它后面已经到的文字放进 `tail`。
+ *   还没定下来的加粗小标题一节，尾巴一律是卡片壳子（同 # 那一节），只会展开成全文，不会从气泡变成卡。
  */
 
 export type ReplySegment =
@@ -187,7 +189,8 @@ function group(parts: Part[]): Group[] {
     if (part.kind === "heading") {
       while (to < parts.length && parts[to].kind !== "heading") to++;
     } else if (isBoldHeading(part)) {
-      // 一节吞到下一个小标题（# 标题或加粗行）；里面有卡片料就整节成卡，否则整节一个气泡。
+      // 小标题后面紧跟着又是加粗行：并进这一节。再吞到下一个小标题（# 标题或加粗行）；里面有卡片料就整节成卡，否则整节一个气泡。
+      while (to < parts.length && isBoldHeading(parts[to])) to++;
       while (to < parts.length && parts[to].kind !== "heading" && !isBoldHeading(parts[to])) to++;
       const card = parts.slice(from + 1, to).some(isCardMaterial);
       groups.push({ kind: card ? "card" : "bubble", from, to, lookahead: true, bold: true });
@@ -266,5 +269,7 @@ export function splitReply(markdown: string, streaming = false): { segments: Rep
   if (done === -1) return { segments, tail: null };
   const pending = groups[done];
   const text = markdownOf(parts.slice(pending.from));
-  return { segments, tail: { kind: pending.kind, markdown: text, title: pending.kind === "card" ? describeGroup(pending, text).title : "" } };
+  // 加粗小标题那一节还没定下来：先出卡片壳子，写完再按有没有卡片料定成卡或气泡。
+  const kind = pending.bold ? "card" : pending.kind;
+  return { segments, tail: { kind, markdown: text, title: kind === "card" ? describeGroup(pending, text).title : "" } };
 }
