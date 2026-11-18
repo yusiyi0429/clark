@@ -91,18 +91,14 @@
 .leftInner { display: flex; flex-direction: column; height: 100%; min-height: 0; padding: var(--space-2) var(--space-2) 0; }
 
 /*
- * 伙伴名片（设计 4.1）：64 高，左边形象槽（胶囊 56×22、Q 版 48 的圆，槽宽 56）、右边伙伴名；开会录音时名字下面一行 --counter 色的走秒。
- * 悬停淡底，在伙伴主线时选中底；鼠标移上去右边出「⋯」进「伙伴」二级页。
+ * 伙伴门牌（设计 4.1；本人 11/18 方案 A）：一行 48 高，左边小形象（胶囊 56×21、Q 版圆 36，上下居中）、右边伙伴名字，右边给「⋯」留位。
+ * 悬停淡底，在伙伴主线时只是选中底；鼠标移上去右边出「⋯」进「伙伴」二级页。
  */
 .buddyCard { position: relative; flex: none; border-radius: var(--r-card); }
 .buddyCard:hover { background: var(--default-soft); }
 .buddyCard:has(> .buddyHit[aria-current="page"]) { background: var(--default-soft-hover); }
-.buddyHit { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 64px; padding: 0; border: 0; border-radius: inherit; background: none; color: var(--ink); font: inherit; cursor: pointer; }
-/* 在主线时页头那颗是活的，名片这颗变淡（本人 11/17 晚）。 */
-.buddySlot { transition: opacity 200ms var(--ease-swift), filter 200ms var(--ease-swift); }
-.buddySlot[data-dim] { opacity: .3; filter: blur(1.5px); }
-@media (prefers-reduced-motion: reduce) { .buddySlot { transition: none; } }
-:global([data-reduce-motion='true']) .buddySlot { transition: none; }
+.buddyHit { display: flex; align-items: center; gap: var(--space-2); width: 100%; height: var(--row-48); padding: 0 calc(var(--space-2) * 2 + var(--row-32)) 0 var(--space-2); border: 0; border-radius: inherit; background: none; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.buddyName { flex: 1; min-width: 0; overflow: hidden; color: var(--ink); text-overflow: ellipsis; white-space: nowrap; }
 .buddyMore { position: absolute; top: 50%; right: var(--space-2); opacity: 0; transform: translateY(-50%); transition: opacity var(--dur-snap) var(--ease-swift); }
 .buddyCard:hover .buddyMore, .buddyMore:focus-within { opacity: 1; }
 

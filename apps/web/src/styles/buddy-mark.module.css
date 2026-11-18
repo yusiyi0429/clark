@@ -46,16 +46,21 @@
 .mark[data-place="note"]:is([data-skin="miles"], [data-skin="cmei"]) .scale { transform: scale(.5); width: max-content; }
 
 /*
- * 新首页页头正中（head）、左上角伙伴名片（card），设计 5.1：横放胶囊按 48 高画（眼睛、耳朵照 48 画），
- * 页头缩一半成 64×24，名片按 128×48 画、缩 0.625 成 80×30（本人 11/17 晚放大一号）。Miles、C妹 是 Q 版圆：页头直径 40，名片直径 56，铺满这一格。
+ * 新首页页头正中（head）、左上角伙伴门牌（card），设计 5.1；本人 11/18 方案 A：页头那颗是活的、大一档，门牌那颗小、一下都不动。
+ * 横放胶囊都按 128×48 画（眼睛、耳朵照 48 画）再整体缩。Miles、C妹 是 Q 版圆，铺满这一格。
+ * - 页头：大小只看页头上的 --head-figure（圆的直径，不带单位，没给时 64）。圆就是这么大；胶囊按 96:36 跟着等比（64 时缩 .75 成 96×36），
+ *   页头另给 --head-capsule 时按它缩（手机 .625，80×30）。
+ * - 门牌：圆 36，胶囊缩 .4375 成 56×21（熊猫这类再小就难看了）。
  */
-.mark[data-place="head"] { --coagent-capsule-width: 128px; --coagent-capsule-height: 48px; width: 64px; height: 24px; }
-.mark[data-place="head"] .scale { transform: scale(.5); }
-.mark[data-place="card"] { --coagent-capsule-width: 128px; --coagent-capsule-height: 48px; width: 80px; height: 30px; }
-.mark[data-place="card"] .scale { transform: scale(.625); }
-.mark[data-place="head"][data-shape="circle"] { width: 40px; height: 40px; }
-.mark[data-place="card"][data-shape="circle"] { width: 56px; height: 56px; }
+.mark[data-place="head"] { --coagent-capsule-width: 128px; --coagent-capsule-height: 48px; --head-k: var(--head-capsule, calc(var(--head-figure, 64) * 3 / 256)); width: calc(128px * var(--head-k)); height: calc(48px * var(--head-k)); }
+.mark[data-place="head"] .scale { transform: scale(var(--head-k)); }
+.mark[data-place="card"] { --coagent-capsule-width: 128px; --coagent-capsule-height: 48px; width: 56px; height: 21px; }
+.mark[data-place="card"] .scale { transform: scale(.4375); }
+.mark[data-place="head"][data-shape="circle"] { width: calc(var(--head-figure, 64) * 1px); height: calc(var(--head-figure, 64) * 1px); }
+.mark[data-place="card"][data-shape="circle"] { width: 36px; height: 36px; }
 .mark[data-shape="circle"] .scale { width: 100%; height: 100%; transform: none; }
+/* 门牌（still）：不出场、不眨眼、不过渡。 */
+.mark[data-still] * { animation: none; transition: none; }
 
 @media (prefers-reduced-motion: reduce) {
   .mark[data-place="sheet"] { transition: none; }

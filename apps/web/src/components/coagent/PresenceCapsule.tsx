@@ -39,7 +39,7 @@ export function PresenceCapsule({ skin, pose, level: preview, leaving = false, n
   milesSize?: MilesCapsuleSize;
   /** 只有 Miles、C妹 用：circle 是 Q 版圆形头像。 */
   shape?: MilesShape;
-  /** 默认那道光停着不动（新首页页头、伙伴名片里空闲时）。 */
+  /** 停着不动：默认那道光不流（新首页页头空闲时、门牌）；Miles、C妹 不出场、不眨眼（只有门牌）。 */
   still?: boolean;
   /** 0–1：只有选形象时的预览传（模拟的声音）；不传就读会议录音那条麦克风流。 */
   level?: number;
@@ -50,7 +50,7 @@ export function PresenceCapsule({ skin, pose, level: preview, leaving = false, n
   const level = preview ?? live;
   const patchId = useId();
   const status = preview === undefined ? <span className={s.sr} role="status">{`Co-Agent ${pose === "listening" ? "在录这场会" : "已在群内说明背景"}`}</span> : null;
-  if (isFigureSkin(skin)) return <MilesCapsule skin={skin} name={name} pose={pose} level={level} leaving={leaving} size={milesSize} shape={shape}>{status}</MilesCapsule>;
+  if (isFigureSkin(skin)) return <MilesCapsule skin={skin} name={name} pose={pose} level={level} leaving={leaving} size={milesSize} shape={shape} still={still}>{status}</MilesCapsule>;
   return (
     <div className={s.capsule} data-skin={skin} data-pose={pose} data-leaving={leaving || undefined} data-still={still || undefined}>
       {skin === "panda" ? <><span className={s.ear} data-side="left" aria-hidden /><span className={s.ear} data-side="right" aria-hidden /></> : null}

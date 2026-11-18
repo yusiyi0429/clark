@@ -21,9 +21,6 @@ import { projectHref, projectInfoHref, projectLine, type Project } from "@/lib/h
 import type { THomeItem as HomeItem } from "@warmap/contracts";
 import type { WorkHomeData } from "@/lib/home/types";
 import { PersonAvatar } from "@/components/avatar/PersonAvatar";
-import { useDictationSignal } from "@/conversation/dictationSignal";
-import { useListeningLevel } from "@/components/coagent/presence";
-import { useHomeMeetingState } from "./meetingState";
 import { PersonRow } from "./PersonMenu";
 import { NewProjectDialog } from "./NewProjectDialog";
 import { isTruncated, useNameTip } from "./NameTip";
@@ -41,25 +38,17 @@ import h from "@/styles/home.module.css";
 export const deleteProjectFail = (error: unknown) => conflictText(error, { PROJECT_BUSY: null, PROJECT_TRANSFERRING: "正在转交" }, "没删成");
 
 /**
- * 伙伴名片（设计 4.1；本人 11/17 晚）：64 高，只放形象、水平垂直都居中（名字只给读屏）；点了进伙伴主线，在主线时是选中底；
- * 鼠标移上去右边出「⋯」进「伙伴」二级页（贴右浮着，不挤形象）。
- * 开会录音、听写时形象「在听」、跟着响度动（响度一秒十几次，只让名片这一块跟着重画）；其余时候不动。
- * 在主线时页头有一颗活的形象，名片这颗变淡、停在空闲。
+ * 伙伴门牌（设计 4.1；本人 11/18 方案 A：对话顶上为主，这里退成门牌）：一行 48 高，左边小形象、右边伙伴名字；
+ * 形象永远不动（开会、听写时也不动），活的那颗只在主线页头。点了进伙伴主线，在主线时只是选中底；
+ * 鼠标移上去右边出「⋯」进「伙伴」二级页（贴右浮着）。
  */
 function BuddyCard({ buddy, name, view, go }: { buddy: Buddy | null; name: string; view: View; go: (href: string) => void }) {
-  const dictation = useDictationSignal();
-  const meetingLevel = useListeningLevel();
-  const meeting = useHomeMeetingState();
-  const inMeeting = meeting.listening;
-  const level = inMeeting ? meetingLevel : dictation?.level ?? 0;
   const current = view.kind === "buddy";
-  const listening = !current && (inMeeting || !!dictation);
   return (
     <div className={h.buddyCard}>
       <button type="button" className={h.buddyHit} aria-label={name} aria-current={current ? "page" : undefined} onClick={() => go(BUDDY_HREF)} data-testid="buddy-entry">
-        <span className={h.buddySlot} data-dim={current ? "" : undefined}>
-          <BuddyMark buddy={buddy} place="card" state={listening ? "listening" : "idle"} level={level} />
-        </span>
+        <BuddyMark buddy={buddy} place="card" still />
+        <span className={h.buddyName}>{name}</span>
       </button>
       <span className={h.buddyMore}>
         <HeroButton variant="ghost" size="sm" isIconOnly title="伙伴" aria-label="伙伴" onPress={() => go(pageHref("buddy"))}><Ellipsis {...ICON} /></HeroButton>
