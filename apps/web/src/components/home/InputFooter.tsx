@@ -17,7 +17,7 @@ import h from "@/styles/home.module.css";
 
 /** 只看不能点的一段字（模型），悬停出完整说法。 */
 export const FootText = ({ children, title, testId }: { children: ReactNode; title?: string; testId?: string }) => (
-  <span className={h.footText} title={title} data-testid={testId}><span className={h.wrap}>{children}</span></span>
+  <span className={h.footText} title={title} data-testid={testId}><span className={h.ellipsis}>{children}</span></span>
 );
 
 /** 新建文件夹那一项。 */
@@ -150,7 +150,7 @@ export function FolderText({ name, title, path, onAdd }: { name: string; title: 
   const [failed, setFailed] = useState<string | null>(null);
   if (!path) return (
     <>
-      <span ref={hover.ref} className={h.footText} data-testid="footer-folder" {...hover.props}><Folder {...ICON} /><span className={h.wrap}>{name}</span></span>
+      <span ref={hover.ref} className={h.footText} data-testid="footer-folder" {...hover.props}><Folder {...ICON} /><span className={h.ellipsis}>{name}</span></span>
       {hover.tip}
     </>
   );

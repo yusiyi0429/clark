@@ -27,6 +27,7 @@ import { ICON, Loading, Section, useMe } from "./parts";
 import h from "@/styles/home.module.css";
 import p from "@/styles/home-pages.module.css";
 import m from "@/components/memory/memory.module.css";
+import { FadeText } from "@/lib/home/overflowFade";
 
 type Status = MemoryItem["status"];
 const STATUS: { id: Status; label: string }[] = [{ id: "active", label: "现行" }, { id: "superseded", label: "已被替代" }, { id: "forgotten", label: "已忘掉" }];
@@ -228,7 +229,7 @@ function MemoryRow({ item, query, role, replacedBy, onSaved, onForget, onRestore
       <div className={m.body} onClick={start} onKeyDown={(event) => { if (event.key === "Enter" && editable) start(); }}
         role={editable ? "button" : undefined} tabIndex={editable ? 0 : undefined} aria-label={editable ? `修改：${item.title}` : undefined}>
         <p className={m.title}>{marked(item.title, query)}</p>
-        <p className={m.text}>{marked(item.text, query)}</p>
+        <FadeText as="p" className={m.text}>{marked(item.text, query)}</FadeText>
       </div>
       <div className={m.meta}>
         <time dateTime={item.createdAt}>{shortDate(item.createdAt)}</time>

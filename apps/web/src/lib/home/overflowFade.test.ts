@@ -28,14 +28,6 @@ describe("预览的渐隐（本人 11/18）", () => {
       expect(fades.length).toBeGreaterThan(0);
       expect(fades.filter((rule) => !rule.selector.split(",").every((part) => part.includes("[data-over]"))).map((rule) => rule.selector)).toEqual([]);
     }
-    // 共用模块里挂不上量高的覆盖：只淡最后一行的后半段，没溢出的也读得清。
-    for (const file of ["styles/conversation-quotes.module.css", "styles/scope-chip.module.css", "styles/issue-suggest.module.css", "styles/rich-blocks.module.css",
-      "styles/meeting-workspace.module.css", "styles/entry-cards.module.css", "components/memory/memory.module.css"]) {
-      for (const rule of rules(file).filter((entry) => VERTICAL.test(entry.body))) {
-        expect(rule.body).toMatch(/black calc\(100% - \.5lh\), transparent\)/);
-        expect(rule.body).toMatch(/max-height:/);
-        expect(rule.body).not.toMatch(/mask-size/);
-      }
-    }
+    // 共用模块的覆盖也只在 [data-over] 上渐隐（修复第 2 轮），见 sharedFade.test.tsx。
   });
 });

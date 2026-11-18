@@ -127,6 +127,8 @@ label.row:hover { background: var(--default-soft); }
 /* 当月（11/16 重新设计第 6 节）：Task 行尾项目那一格；标题下一行小字；Mission 里按验收时间点分段的段头；页头翻月。 */
 .monthTaskLine { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
 .monthTaskLine > button { flex: 1; min-width: 0; }
+/* 手机上放不下就折行：项目胶囊到 Task 名下面自己占一行（胶囊那一半写在 home.module.css 的 .app[data-phone]）。 */
+:global([data-phone]) .monthTaskLine { flex-wrap: wrap; }
 .monthSummary { margin: 0 0 var(--space-2); padding: 0 var(--space-2); color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; font-variant-numeric: tabular-nums; }
 .segmentTitle { margin: var(--space-1) 0 0; padding: 4px var(--space-2); color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; font-variant-numeric: tabular-nums; }
 .monthNav { display: inline-flex; align-items: center; gap: var(--space-1); }

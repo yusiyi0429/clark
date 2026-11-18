@@ -23,7 +23,7 @@ export function useOverflowFade(ref: RefObject<HTMLElement | null>, content: unk
 }
 
 /** 一段限高的预览字：放得下照常，放不下才往下渐隐（列表里一行一个，用不了 hook 的地方用它）。 */
-export function FadeText({ as: Tag = "span", children, ...rest }: { as?: "span" | "div" } & HTMLAttributes<HTMLElement>) {
+export function FadeText({ as: Tag = "span", children, ...rest }: { as?: "span" | "div" | "p" } & HTMLAttributes<HTMLElement>) {
   const ref = useRef<HTMLElement>(null);
   useOverflowFade(ref, children);
   return <Tag ref={ref as never} {...rest}>{children}</Tag>;

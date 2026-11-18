@@ -30,6 +30,7 @@ import { relativeDayTime } from "@/lib/companyTime";
 import r from "@/components/requests/requests.module.css";
 import { PersonAvatar } from "@/components/avatar/PersonAvatar";
 import s from "@/styles/entry-cards.module.css";
+import { FadeText } from "@/lib/home/overflowFade";
 
 type Answer = { text: string; source: "body" | "question"; questionId: string | null };
 /** 头像上的字：三个字的名字取名（「斯一」），两个字的取全名，和飞书一样。 */
@@ -284,7 +285,7 @@ function WeeklyReviewCard({ id, href }: { id: string; href: string }) {
       </header>
       {drafting ? <StepList className={s.steps} steps={review.generationSteps.map((step) => ({ id: step.id, label: step.label,
         status: step.status === "running" ? "active" : step.status === "failed" ? "stopped" : step.status, ...(step.result ? { result: step.result } : {}) }))} /> : null}
-      {!drafting && lines.length ? <div className={s.summary}>{lines.map((line, index) => <p key={index}>{line}</p>)}</div> : null}
+      {!drafting && lines.length ? <div className={s.summary}>{lines.map((line, index) => <FadeText as="p" key={index}>{line}</FadeText>)}</div> : null}
       {review.status === "draft_failed" && review.draftError ? <p className={r.error}>{review.draftError.message}</p> : null}
       <footer className={s.foot}>
         {kept && !drafting ? <span className={r.tag} data-tone="done">{kept}</span> : <span />}
@@ -325,7 +326,7 @@ function ReviewCard({ id, href }: { id: string; href: string }) {
       </header>
       {drafting ? <StepList className={s.steps} steps={review.generationSteps.map((step) => ({ id: step.id, label: step.label,
         status: step.status === "running" ? "active" : step.status === "failed" ? "stopped" : step.status, ...(step.result ? { result: step.result } : {}) }))} /> : null}
-      {!drafting && lines.length ? <div className={s.summary}>{lines.map((line, index) => <p key={index}>{line}</p>)}</div> : null}
+      {!drafting && lines.length ? <div className={s.summary}>{lines.map((line, index) => <FadeText as="p" key={index}>{line}</FadeText>)}</div> : null}
       {review.status === "draft_failed" && review.draftError ? <p className={r.error}>{review.draftError.message}</p> : null}
       <footer className={s.foot}>
         {kept && !drafting ? <span className={r.tag} data-tone="done">{kept}</span> : <span />}

@@ -63,5 +63,6 @@ input.input { height: 36px; font-weight: 600; }
 }
 @media (prefers-reduced-motion: reduce) { .place, .doneLink svg:last-child { transition: none; } }
 
-/* 新首页不出省略号（本人 11/18）：放不下就换行，长预览限高往下渐隐；只在新首页的外壳里生效，旧界面照旧。 */
-:global(:root:has([data-type-scale="one"])) .why { display: block; -webkit-line-clamp: none; max-height: 2lh; overflow: hidden; -webkit-mask-image: linear-gradient(to bottom, black calc(100% - .5lh), transparent); mask-image: linear-gradient(to bottom, black calc(100% - .5lh), transparent); }
+/* 新首页不出省略号（本人 11/18）：放不下就换行，长预览限高、只在真的放不下时（data-over，FadeText 量高）往下渐隐；只在新首页的外壳里生效，旧界面照旧。 */
+:global(:root:has([data-type-scale="one"])) .why { display: block; -webkit-line-clamp: none; max-height: 2lh; overflow: hidden; }
+:global(:root:has([data-type-scale="one"])) .why[data-over] { -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 1lh), transparent); mask-image: linear-gradient(to bottom, black calc(100% - 1lh), transparent); }

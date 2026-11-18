@@ -114,11 +114,35 @@ describe("新首页不出省略号（本人 11/18）", () => {
   });
 
   it("输入框下沿那一行名字长时换行，不溢出", () => {
+    // 旧界面（/me/cards/:id、/me/topics/:id 经 CardSession 也用这个 InputBar）照旧：28 高、单行。新首页里放开。
     const all = rules("styles/home.module.css");
-    const body = (selector: string) => all.filter((rule) => rule.selectors.includes(selector)).map((rule) => rule.body).join(";");
-    expect(body(".barFoot")).not.toMatch(/(^|[;\s])height\s*:/);
-    expect(body(".barFoot")).toMatch(/min-height:\s*28px/);
-    expect(body(".footText")).not.toMatch(/white-space:\s*nowrap|overflow:\s*hidden/);
-    expect(body(".footText")).toMatch(/overflow-wrap:\s*anywhere/);
+    const base = (selector: string) => all.filter((rule) => rule.selectors.includes(selector)).map((rule) => rule.body).join(";");
+    const home = (selector: string) => all.filter((rule) => rule.selectors.includes(`${NEW_HOME} ${selector}`)).map((rule) => rule.body).join(";");
+    expect(base(".barFoot")).toMatch(/(^|[;\s])height:\s*28px/);
+    expect(base(".footText")).toMatch(/white-space:\s*nowrap/);
+    expect(base(".ellipsis")).toMatch(/text-overflow:\s*ellipsis/);
+    expect(home(".barFoot")).toMatch(/height:\s*auto/);
+    expect(home(".barFoot")).toMatch(/min-height:\s*28px/);
+    expect(home(".footText")).toMatch(/white-space:\s*normal/);
+    expect(home(".ellipsis")).toMatch(/white-space:\s*normal/);
+    // 左边占剩下的；右边按内容占，左边有字时最多一半，左边空着时可以占满。「发给」不被挤成一字一行，也不撑出自己那边。
+    expect(home(".barFootSide:first-child")).toMatch(/flex:\s*1 1 0/);
+    expect(home(".barFootSide:last-child")).toMatch(/flex:\s*0 1 auto/);
+    expect(home(".barFootSide:last-child")).toMatch(/min-width:\s*0/);
+    expect(home(".barFoot:has(> .barFootSide:first-child .footText) > .barFootSide:last-child")).toMatch(/max-width:\s*50%/);
+    expect(home(".barFoot .sendTo")).not.toMatch(/flex:\s*none/);
+    expect(home(".barFoot .sendTo")).toMatch(/max-width:\s*100%/);
+  });
+
+  it("手机上月份页的项目胶囊单独占一行", () => {
+    const home = rules("styles/home.module.css");
+    const chip = home.filter((rule) => rule.selectors.some((selector) => selector.includes(".app[data-phone]") && selector.includes(".statusChip:has(> .ellipsis)")));
+    expect(chip.map((rule) => rule.body).join(";")).toMatch(/flex:\s*1 0 calc\(100% - /);
+    expect(chip.map((rule) => rule.body).join(";")).toMatch(/max-width:\s*none/);
+    // 一行里放不下就折到下一行：只在手机上（新首页外壳的 data-phone）。
+    const line = rules("styles/home-pages.module.css").filter((rule) => rule.selectors.some((selector) => selector.includes("[data-phone]") && selector.includes(".monthTaskLine")));
+    expect(line.map((rule) => rule.body).join(";")).toMatch(/flex-wrap:\s*wrap/);
+    // 电脑上没有用不上的最大宽度。
+    expect(home.filter((rule) => rule.selectors.some((selector) => selector.includes(".statusChip:has(")) && /max-width:\s*20em/.test(rule.body))).toEqual([]);
   });
 });

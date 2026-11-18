@@ -33,7 +33,7 @@ export function TaskInfo({ task, mission, gate, go, foreign = false }: {
       <header className={h.viewHead}>
         <button type="button" className={h.icon} aria-label="返回" title="返回" onClick={back}><ArrowLeft {...ICON} /></button>
         <h1 className={h.viewTitle} tabIndex={-1}>
-          {foreign ? task.name : <><button type="button" className={h.crumb} onClick={() => go(taskHref(task.taskId))}>{task.name} / </button><span className={h.wrap}>详情</span></>}
+          {foreign ? task.name : <><button type="button" className={h.crumb} onClick={() => go(taskHref(task.taskId))}>{task.name} / </button><span className={h.ellipsis}>详情</span></>}
         </h1>
         {chrome.trail}
       </header>

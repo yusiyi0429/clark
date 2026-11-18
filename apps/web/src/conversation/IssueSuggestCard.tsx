@@ -16,6 +16,7 @@ import { CONVERSATION_RELOAD } from "./useConversation";
 import r from "@/components/requests/requests.module.css";
 import e from "@/styles/entry-cards.module.css";
 import s from "@/styles/issue-suggest.module.css";
+import { FadeText } from "@/lib/home/overflowFade";
 
 /** 块里的 JSON：只认 draftId。 */
 export function parseIssueSuggest(source: string): string | null {
@@ -105,7 +106,7 @@ export function IssueSuggestCard({ draftId }: { draftId: string }) {
         <DraftEditor view={view} busy={busy} onCancel={() => { setEditing(false); setError(""); }} onSubmit={create} />
       ) : (
         <>
-          <p className={s.why}>{draft.whyNow}</p>
+          <FadeText as="p" className={s.why}>{draft.whyNow}</FadeText>
           <p className={s.facts}>
             <span>{view.turns} 轮对话</span>
             {draft.options.length ? <span>{draft.options.length} 个方案</span> : null}

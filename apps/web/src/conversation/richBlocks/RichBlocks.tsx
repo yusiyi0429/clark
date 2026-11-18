@@ -19,6 +19,7 @@ import { IssueSuggestCard, parseIssueSuggest } from "../IssueSuggestCard";
 import "katex/dist/katex.min.css";
 import r from "@/styles/rich-blocks.module.css";
 import { useDots } from "@/lib/home/noEllipsis";
+import { FadeText } from "@/lib/home/overflowFade";
 
 /**
  * 对话里的富内容块（docs/superpowers/specs/2026-10-10-discussion-desk-design.md「对话里的富内容块」）：
@@ -313,7 +314,7 @@ export function TimelineBody({ block, layout, edges = { start: false, end: false
               <li key={index} className={r.node} data-kind={item.kind} data-phase={phase}>
                 <span className={r.dot} aria-hidden />
                 <time className={r.date}>{formatDate(item.date, year)}</time>
-                <span className={r.nodeLabel}>{item.label}</span>
+                <FadeText className={r.nodeLabel}>{item.label}</FadeText>
                 {item.kind === "deadline" ? <span className={r.kindTag}>{KIND_TEXT.deadline}</span> : null}
               </li>
             );

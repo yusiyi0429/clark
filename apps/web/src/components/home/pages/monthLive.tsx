@@ -64,7 +64,7 @@ function ProjectSlot({ task, showProject, projects, go }: { task: HomeTask; show
   const { project } = task;
   if (failed) return <FailedLine inline {...failed} />;
   if (project) return showProject
-    ? <button type="button" className={h.statusChip} onClick={() => go(projectHref(project.projectId))} data-testid="task-project" title={project.name}><span className={h.wrap}>{project.name}</span></button>
+    ? <button type="button" className={h.statusChip} onClick={() => go(projectHref(project.projectId))} data-testid="task-project" title={project.name}><span className={h.ellipsis}>{project.name}</span></button>
     : null;
   return <AttachMenu taskName={task.name} projects={projects.projects} onPick={(projectId) => attempt(() => projects.actions.attach(task.taskId, projectId))}
     onCreate={() => attempt(() => projects.actions.create(task.name, task.taskId))} />;

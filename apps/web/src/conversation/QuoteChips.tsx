@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { Quote, X } from "lucide-react";
 import { isReplyQuote, type TextQuote } from "./quotes";
 import s from "@/styles/conversation-quotes.module.css";
+import { FadeText } from "@/lib/home/overflowFade";
 
 /** 待发送的引用块直接露出原文开头这么多个字（够两行），不拼省略号，放不下由样式收起；全文仍在悬停 / 点开的预览里（本人 11/18）。 */
 export const QUOTE_EXCERPT_LENGTH = 40;
@@ -74,7 +75,7 @@ export function QuoteChips({ quotes, onRemove, sent = false }: { quotes: TextQuo
         onClick={(event) => { if (preview?.id === quote.id && preview.pinned) close(); else open(quote, event.currentTarget, true); }}>
         <Quote size={12} aria-hidden />
         {/* 已发送的（对话记录里）仍只写短标签；待发送的直接露出开头几个字，省得悬停才知道引了什么。 */}
-        <span>{sent ? `${word}${quotes.length > 1 ? ` ${index + 1}` : ""}${quote.source?.label ? ` · ${quote.source.label}` : ""}` : quoteExcerpt(quote.text)}</span>
+        <FadeText>{sent ? `${word}${quotes.length > 1 ? ` ${index + 1}` : ""}${quote.source?.label ? ` · ${quote.source.label}` : ""}` : quoteExcerpt(quote.text)}</FadeText>
       </button>
       {onRemove ? <button type="button" className={s.remove} aria-label={`移除${word}${quotes.length > 1 ? ` ${index + 1}` : ""}`} onClick={() => { onRemove([quote.id]); if (preview?.id === quote.id) close(); }}><X size={12} aria-hidden /></button> : null}
     </span>; })}

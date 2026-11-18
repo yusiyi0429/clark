@@ -223,8 +223,6 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .history li > span:first-child { color: var(--ink-faint); font-size: var(--text-xs); }
 .historyName { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
 .statusChip[data-static] { cursor: default; }
-/* 胶囊里是会换行的名字（月份页 Task 挂的项目）：跟着长高；最宽 20 个字（月份页里它和 Task 名各占一半，桌面上本来就到不了），只限宽不截，放不下换行。 */
-.statusChip:has(> .wrap) { height: auto; min-height: 20px; max-width: 20em; }
 .statusChip[data-static]:hover { background: var(--neutral-wash); color: var(--ink-muted); }
 /* 新建项目的小弹窗和文件夹列表（17.2 第 46 条）：弹窗用浮层同一套材质；列表一个一行——名字、淡色路径、行尾移除。 */
 .dialogBackdrop { background: var(--backdrop); }
@@ -252,8 +250,8 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .monthRow { display: flex; align-items: center; gap: var(--space-2); }
 .monthRow .taskLine { flex: 1; min-width: 0; }
 .monthRow > .statusChip { max-width: 30%; overflow: hidden; }
-/* 放在 flex 容器（胶囊、按钮）里的一段字：太长换行，不出省略号（本人 11/18）。 */
-.wrap { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+/* 放在 flex 容器（胶囊、按钮）里的一段字：太长出省略号（省略号写在 flex 容器上不生效，要写在字这一层）。 */
+.ellipsis { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* 项目转交（16.7）：阶段行、选项框照用；交接说明卡同选项框的框（--surface 底、发丝边、--r-card），段名 12/16 600 淡色，行 14/20。 */
 .transfer { display: grid; gap: var(--space-2); margin: var(--space-2) 0; }
 .noteCard { display: grid; gap: var(--space-3); padding: var(--space-3); border-radius: var(--r-card); background: var(--surface); box-shadow: inset 0 0 0 1px var(--hairline); }
@@ -507,9 +505,9 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .barError { display: flex; align-items: center; min-height: 24px; margin: 0; padding: 0 4px; color: var(--danger); font-size: var(--text-xs); line-height: 16px; }
 .barFailed { padding: 0 4px; }
 /* 框下面一行（照 Claude Code 桌面版）：固定 28 高，左边上下文、右边模型和权限档；四处一样，空着也占位。 */
-.barFoot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-width: 0; min-height: 28px; padding: 0 var(--space-1); }
+.barFoot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-width: 0; height: 28px; padding: 0 var(--space-1); }
 .barFootSide { display: flex; align-items: center; gap: var(--space-1); min-width: 0; }
-.footText { display: inline-flex; align-items: center; gap: var(--space-1); min-width: 0; padding: 0 var(--space-2); color: var(--ink-muted); font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); overflow-wrap: anywhere; }
+.footText { display: inline-flex; align-items: center; gap: var(--space-1); min-width: 0; padding: 0 var(--space-2); overflow: hidden; color: var(--ink-muted); font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); white-space: nowrap; }
 .footText svg { flex: none; color: var(--ink-faint); }
 /* 本人气泡里的附件（14.5）：靠右，图片 96。 */
 .bubbleAtts { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); margin: 0 0 6px; padding: 0; list-style: none; }
@@ -768,10 +766,18 @@ button.bgLabel:hover { background: var(--default-soft); }
 
 /* 发给、附件名：没有新首页外壳的独立页（/me/cards/:id、/me/topics/:id）也用，原样单行；新首页里放不下换行，不出省略号（本人 11/18）。 */
 :global(:root:has([data-type-scale="one"])) .sendTo { height: auto; min-height: var(--row-32); padding-block: 4px; }
-/* 输入框下沿那一行挤的时候，「发给」/ 权限这颗按钮不被挤成一字一行：按字宽排（本身最宽 320）。 */
-:global(:root:has([data-type-scale="one"])) .barFoot .sendTo { flex: none; }
-/* 两边各占一半，名字都长时一起换行，不让一边被挤成一列字；右边那组照旧靠右。 */
-:global(:root:has([data-type-scale="one"])) .barFootSide { flex: 1 1 0; }
-:global(:root:has([data-type-scale="one"])) .barFootSide:last-child { justify-content: flex-end; }
+/* 输入框下沿（本人 11/18）：旧界面（/me/cards、/me/topics 也用这个输入框）照旧 28 高单行；新首页里名字长就换行，跟着长高。
+ * 左边（文件夹）占剩下的；右边（模型、发给）按内容占，左边有字时最多一半，左边没字时可以占满；名字长就在自己那边里换行。 */
+:global(:root:has([data-type-scale="one"])) .barFoot { height: auto; min-height: 28px; }
+:global(:root:has([data-type-scale="one"])) .barFootSide:first-child { flex: 1 1 0; min-width: min-content; }
+:global(:root:has([data-type-scale="one"])) .barFootSide:last-child { flex: 0 1 auto; min-width: 0; justify-content: flex-end; }
+:global(:root:has([data-type-scale="one"])) .barFoot:has(> .barFootSide:first-child .footText) > .barFootSide:last-child { max-width: 50%; }
+:global(:root:has([data-type-scale="one"])) .barFoot .sendTo { flex-shrink: 0; max-width: 100%; }
+:global(:root:has([data-type-scale="one"])) .footText { overflow: visible; white-space: normal; overflow-wrap: anywhere; }
+/* 胶囊、按钮里的一段字（.ellipsis）：新首页里换行；装它的胶囊跟着长高（月份页 Task 挂的项目）。 */
+:global(:root:has([data-type-scale="one"])) .ellipsis { overflow: visible; white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+:global(:root:has([data-type-scale="one"])) .statusChip:has(> .ellipsis) { height: auto; min-height: 20px; }
+/* 手机上月份页：项目胶囊折到 Task 名下面，自己占一行，长名字照样换行；左边让出状态图标那一格（16 + 间距），和 Task 名对齐。 */
+.app[data-phone] .statusChip:has(> .ellipsis) { flex: 1 0 calc(100% - 16px - var(--space-2)); max-width: none; margin-left: calc(16px + var(--space-2)); justify-content: flex-start; text-align: left; }
 :global(:root:has([data-type-scale="one"])) .att { height: auto; min-height: 56px; }
 :global(:root:has([data-type-scale="one"])) .sendTo b, :global(:root:has([data-type-scale="one"])) .attName b { overflow: visible; white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
