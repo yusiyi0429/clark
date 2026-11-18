@@ -54,11 +54,18 @@ export async function listTopics(q: Query, ownerId: string, status: "active" | "
     [ownerId, status])).rows as TopicRow[]);
 }
 
-/** 自由子会话的标题（第 68 条）：第一句话的第一行，照卡标题的规矩最多 12 个字，截了加「…」。 */
+/**
+ * 自由子会话的标题（第 68 条）：第一句话的第一行全文，不加省略号（任何地方不出省略号；左栏右端淡出、页头换行）。
+ * 标题字段最多 60 个字（research_topics 的约束、契约的 maxLength 按 UTF-16 算）：超出的只留前面放得下的整字，不切坏半个字。
+ */
 export function freeTitle(firstMessage: string): string {
   const line = firstMessage.split(/\r?\n/).map((text) => text.trim()).find(Boolean) ?? "新的子会话";
-  const chars = [...line];
-  return chars.length > 12 ? `${chars.slice(0, 12).join("")}…` : line;
+  let title = "";
+  for (const char of line) {
+    if (title.length + char.length > 60) break;
+    title += char;
+  }
+  return title;
 }
 
 /**

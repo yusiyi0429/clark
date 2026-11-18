@@ -64,7 +64,7 @@ export const TopicListResponse = Type.Object({ topics: Type.Array(ResearchTopicV
 /**
  * 新建专题：planTaskId 只能是本人 Mission 下的 Task，roleId 是本人没归档的岗位。建好以后网页对本机「开始」（kind=topic）。
  * 自由子会话（第 68 条，项目下的「+」）：带 free、projectId（本人的、没归档的项目）和 firstMessage（本人说的第一句话），不带 title、planTaskId、roleId。
- * 云端取第一句话的第一行当标题，照卡标题的规矩截到 12 个字，截了加「…」；在项目里编下一个字母；登记要开工（同伙伴的 open_topic），
+ * 云端取第一句话的第一行全文当标题，不加省略号（标题最多 60 个字，超出的只留前 60 个字）；在项目里编下一个字母；登记要开工（同伙伴的 open_topic），
  * 交代（TopicBriefResponse.markdown）就是这句话，所以手机上开的也由那台电脑上开着的网页认领开工。
  * 不是 free 时 title 必带（400）；free 时缺 projectId、firstMessage，或带了 title、planTaskId、roleId 也 400。
  */
