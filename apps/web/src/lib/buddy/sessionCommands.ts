@@ -20,7 +20,8 @@ export async function runSessionCommand(runner: LocalRunner, sessions: TLocalSes
   if (!sessions.some((session) => session.id === entry.sessionId)) return { result: "not_running" };
   const { command } = entry;
   try {
-    if (command.type === "message") await runner.sendMessage(entry.sessionId, command.text, undefined, undefined, undefined, command.agreementRevision);
+    // 转话带命令编号（本机收编号时）：租期过了被再认领一次（另一个标签页、同一批排在后面的），本机按编号认出是同一句，不再送
+    if (command.type === "message") await runner.sendMessage(entry.sessionId, command.text, undefined, undefined, runner.clientMessageIds ? entry.id : undefined, command.agreementRevision);
     else if (command.type === "answer") await runner.answerQuestion(entry.sessionId, command.requestId, command.answer);
     else await runner.decidePermission(entry.sessionId, command.requestId, command.decision);
     return { result: "done" };

@@ -19,6 +19,16 @@ const runner = (fail?: Error) => {
 };
 
 describe("网页认领主管线按字母发来的动作（18.10）", () => {
+  it("同一条转话命令被认领两次，本机只送一次", async () => {
+    // 本机收编号（protocol ≥ 2）：转话带命令的编号，被认领两次（租期过了另一个标签页又认领）时本机按编号认出是同一句
+    const { runner: r, call } = runner();
+    const withIds = Object.assign(r, { clientMessageIds: true });
+    const twice = entry({ type: "message", text: "先停一下改测试" });
+    await runSessionCommand(withIds, sessions, twice);
+    await runSessionCommand(withIds, sessions, twice);
+    expect(call.mock.calls).toEqual([[SESSION, "先停一下改测试", undefined, undefined, twice.id, undefined], [SESSION, "先停一下改测试", undefined, undefined, twice.id, undefined]]);
+  });
+
   it("转话、回答、批准各调本机对应的接口，报 done", async () => {
     const { runner: r, call } = runner();
     expect(await runSessionCommand(r, sessions, entry({ type: "message", text: "先停一下改测试" }))).toEqual({ result: "done" });

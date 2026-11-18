@@ -98,4 +98,25 @@ describe("压缩的超时兜底", { timeout: 60_000 }, () => {
     expect((await codex.compact()).ok).toBe(true);
     expect(cxEvents.filter((e) => e.type === "context_usage")).toHaveLength(before);
   });
+
+  it("超时后迟到的压缩结果带文字也吞掉", async () => {
+    // 迟到的压缩 result 带着报错原话（不是 num_turns 0、result 空的那种）：照样吞掉，直到下一轮真开始
+    const work = tempDir("tl-ctimeout-text-");
+    writeFileSync(join(work, ".fake-claude.json"), JSON.stringify({ compactMs: 2_000, compactResult: { is_error: true, result: "Error: 压缩失败了", num_turns: 1 } }));
+    const claude = await new ClaudeCodeAdapter(async () => ({ command: process.execPath, prefixArgs: [FAKE_CLAUDE] }))
+      .start(launch(work, { profileId: "p", label: "Claude 订阅", source: "subscription", baseUrl: null, model: null, smallModel: null, webSearch: true, apiKey: null, origin }));
+    runs.push(claude);
+    const events: EventBody[] = [];
+    claude.onEvent((e) => events.push(e));
+    const at = await timesOut(claude, events);
+    await until(() => events.some((e) => e.type === "notice" && e.code === "context_compacted"));
+    await new Promise((r) => setTimeout(r, 500));
+    expect(events.slice(at).map((e) => e.type)).not.toContain("turn_end");
+    // 下一轮真开始以后照常报
+    writeFileSync(join(work, ".fake-claude.json"), JSON.stringify({}));
+    claude.send("做一件事");
+    await until(() => events.some((e) => e.type === "turn_end"));
+    expect(events.filter((e) => e.type === "turn_end")).toHaveLength(1);
+    expect(events.filter((e) => e.type === "agent_info")).toHaveLength(1);
+  });
 });

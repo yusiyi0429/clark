@@ -290,7 +290,8 @@ function compactTurn(text) {
     out({ type: "user", message: { role: "user", content: "<local-command-stdout>Compacted </local-command-stdout>" }, parent_tool_use_id: null, session_id: sid });
     compacted = readCfg().compactTo ?? { totalTokens: 20000, maxTokens: 200000 };
     // 不调模型的那种 result（2.1.327 里 compact 是 local 命令）：num_turns 0、result 空
-    out({ type: "result", subtype: "success", is_error: false, result: "", num_turns: 0, duration_ms: 30, usage: { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }, model_usage_since_last_result: {} });
+    // 配置 compactResult：改这条 result 的字段（测带报错原话的那种）
+    out({ type: "result", subtype: "success", is_error: false, result: "", num_turns: 0, duration_ms: 30, usage: { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }, model_usage_since_last_result: {}, ...readCfg().compactResult });
     turn = null;
   }, readCfg().compactMs ?? 20) };
 }

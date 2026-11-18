@@ -146,7 +146,7 @@ class ClaudeRun implements AgentRun {
   private contextAsked = false;
   /** 正在压缩上下文（发了 /compact，等它的 result）：压完交回结果。这一次的 init、result 不报成一轮。 */
   private compacting: ((r: CompactResult) => void) | null = null;
-  /** 压缩超时放开了、它的 result 还没来：来了（num_turns 0、result 空的那种）吞掉，不报成一轮结束。 */
+  /** 压缩超时放开了、它的 result 还没来：下一轮真开始（system/init）之前来的 result 不管带不带字都吞掉，不报成一轮结束。 */
   private lateCompact = false;
 
   constructor(
@@ -476,6 +476,7 @@ class ClaudeRun implements AgentRun {
         }
         if (ev.subtype === "init") {
           if (this.compacting) return; // 压缩不算一轮
+          this.lateCompact = false; // 下一轮真开始了：之后的 result 是它的
           this.emit({ type: "agent_info", agent: "claude-code", version: String(ev.claude_code_version ?? ""), model: ev.model ?? null, permissionMode: ev.permissionMode ?? null });
         } else if (ev.subtype === "api_retry" && ev.error === "authentication_failed") {
           // 第一次认证失败就停，不必等它重试十次。
@@ -593,9 +594,10 @@ class ClaudeRun implements AgentRun {
           return;
         }
         if (this.lateCompact) {
-          // 超时放开以后才到的压缩结束：吞掉，只读一次压完的用量（别的轮照常）
+          // 超时放开以后、下一轮开始以前才到的 result 就是压缩的：吞掉（带报错原话的也是），只读一次用量
           this.lateCompact = false;
-          if (Number(ev.num_turns) === 0 && (ev.result ?? "") === "") { void this.refreshContext(); return; }
+          void this.refreshContext();
+          return;
         }
         const auth = this.authFailed || ev.api_error_status === 401;
         if (auth && !this.authFailed) this.authFailure("Claude 登录已失效，请在天枢里重新登录 Claude。");

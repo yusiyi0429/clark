@@ -230,6 +230,31 @@ describe("压缩上下文", { timeout: 60_000 }, () => {
     fake({});
   });
 
+  it("同一条转话命令被认领两次，本机只送一次", async () => {
+    // 压缩时转话挂着等；租期过了另一个标签页又认领，带着同一个编号（命令编号）再送一次：本机只记一句、只送一次
+    fake({ compactMs: 800 });
+    const id = await open("K", "做 K");
+    await idle(id);
+    const compacts = fakeTurns().filter((x) => x.compact).length;
+    const compacting = call("POST", `/v1/sessions/${id}/compact`, {});
+    await until(() => fakeTurns().filter((x) => x.compact).length > compacts);
+    const messageId = "22222222-2222-4222-8222-222222222222";
+    const [a, b] = await Promise.all([1, 2].map(() => call("POST", `/v1/sessions/${id}/messages`, { text: "转来的一句", messageId })));
+    expect([a.status, b.status]).toEqual([200, 200]);
+    expect(b.body).toEqual(a.body);
+    await compacting;
+    await until(() => fakeTurns().some((x) => x.turnText === "转来的一句"));
+    await new Promise((r) => setTimeout(r, 300));
+    expect(events(id).filter((e) => e.type === "user_message" && e.text === "转来的一句")).toHaveLength(1);
+    expect(fakeTurns().filter((x) => x.turnText === "转来的一句" || x.interjection === "转来的一句")).toHaveLength(1);
+    // 送到以后再认领一次也不再送
+    expect((await call("POST", `/v1/sessions/${id}/messages`, { text: "转来的一句", messageId })).status).toBe(200);
+    await new Promise((r) => setTimeout(r, 300));
+    expect(events(id).filter((e) => e.type === "user_message" && e.text === "转来的一句")).toHaveLength(1);
+    await call("POST", `/v1/sessions/${id}/kill`, {});
+    fake({});
+  });
+
   it("有后台任务在跑时拒绝压缩", async () => {
     fake({ background: true, agentMs: 60_000 });
     const id = await open("I", "做 I");
