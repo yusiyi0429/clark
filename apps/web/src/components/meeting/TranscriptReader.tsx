@@ -7,6 +7,7 @@ import { COMPANY_TIMEZONE } from "@/lib/companyTime";
 import { transcriptTurnAnchorId } from "@/cards/meetingSources";
 import { flashElement, scrollToElement } from "./readingScroll";
 import r from "./transcriptReader.module.css";
+import { useDots } from "@/lib/home/noEllipsis";
 
 /**
  * 逐字稿按发言阅读：一行一段（说话人、时间、正文），按页取（GET /api/meetings/:id/transcript），滚到底接着取。
@@ -23,6 +24,7 @@ function clock(iso: string | null): string {
 }
 
 export function TranscriptReader({ meetingId, focusTurnId }: { meetingId: string; focusTurnId: string | null }) {
+  const dots = useDots();
   const [state, setState] = useState<ReaderState>({ turns: [], nextTurn: null, status: "loading" });
   const listRef = useRef<HTMLOListElement | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
@@ -87,7 +89,7 @@ export function TranscriptReader({ meetingId, focusTurnId }: { meetingId: string
           ))}
         </ol>
       ) : null}
-      {state.status === "loading" ? <p className={r.status} aria-busy="true">读取中…</p> : null}
+      {state.status === "loading" ? <p className={r.status} aria-busy="true">{dots("读取中…")}</p> : null}
       {state.status === "error" ? (
         <p className={r.status} role="alert">
           没有读到逐字稿

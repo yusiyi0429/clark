@@ -127,10 +127,10 @@
 @media (prefers-reduced-motion: reduce) {
   .meetPill i { animation: none; }
 }
-/* 点开的那一小块：全站那一种弹层，宽 320；已约的会在上，「新的一场」（现场 | 远程）在下。列写成 minmax(0, 1fr)：长 Mission 名省略，不撑框。 */
+/* 点开的那一小块：全站那一种弹层，宽 320；已约的会在上，「新的一场」（现场 | 远程）在下。列写成 minmax(0, 1fr)：长 Mission 名换行，不撑框。 */
 .meetPop { width: min(320px, calc(100vw - 32px)); }
 .meetDialog { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); padding: var(--space-2); outline: none; }
-.meetTitle { display: block; margin: 0; overflow: hidden; color: var(--ink); font-size: var(--text-base); font-weight: 600; line-height: var(--lh-row); text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
+.meetTitle { display: block; margin: 0; color: var(--ink); font-size: var(--text-base); font-weight: 600; line-height: var(--lh-row); text-decoration: none; white-space: normal; overflow-wrap: anywhere; }
 a.meetTitle:hover { text-decoration: underline; text-underline-offset: 3px; }
 a.meetTitle:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-control); }
 .meetMeta { margin: 0; color: var(--ink-muted); font-size: var(--text-xs); line-height: 16px; font-variant-numeric: tabular-nums; }
@@ -139,14 +139,14 @@ a.meetTitle:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px
 .meetBooked .menuItem { flex: 1; min-width: 0; border: 0; font: inherit; text-align: left; }
 .meetBooked .menuItem:hover, .meetBooked .menuItem:focus-visible { background: var(--default-soft); }
 .meetBooked .menuItem:disabled { cursor: default; opacity: .5; }
-.meetRowTitle { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.meetRowTitle { flex: 1; min-width: 0; white-space: normal; overflow-wrap: anywhere; }
 .meetField { display: flex; align-items: center; gap: var(--space-2); min-width: 0; min-height: var(--row-32); }
 .meetField > :first-child { flex: none; width: 3em; }
-.meetAnchor { flex: 1; min-width: 0; padding: 0 var(--space-2); overflow: hidden; color: var(--ink); font-size: var(--text-base); line-height: var(--row-32); text-overflow: ellipsis; white-space: nowrap; }
+.meetAnchor { flex: 1; min-width: 0; padding: 0 var(--space-2); color: var(--ink); font-size: var(--text-base); line-height: var(--row-32); white-space: normal; overflow-wrap: anywhere; }
 .meetAnchor[data-empty] { color: var(--ink-faint); }
 /* 名称直接写成字（本人 11/16：生成好了就不摆输入框），右边一颗改的图标，点了才换成输入框。 */
 .meetNameRow { display: flex; align-items: center; gap: var(--space-1); min-width: 0; min-height: var(--row-36); }
-.meetName { flex: 1; min-width: 0; padding: 0 var(--space-2); overflow: hidden; color: var(--ink); font-size: var(--text-base); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.meetName { flex: 1; min-width: 0; padding: 0 var(--space-2); color: var(--ink); font-size: var(--text-base); font-weight: 600; white-space: normal; overflow-wrap: anywhere; }
 .meetError { margin: 0; color: var(--danger); font-size: var(--text-xs); line-height: 16px; }
 /* 远程的参会人：选了的一颗颗 chip（× 去掉），后面接着选人下拉；飞书日历没连时这一行是一句话加「去连接」。 */
 .meetPeople { display: flex; flex: 1; flex-wrap: wrap; align-items: center; gap: var(--space-1); min-width: 0; }
@@ -168,12 +168,12 @@ a.meetTitle:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px
 .meetDialog button[aria-pressed="true"] { background: var(--default-soft-hover); }
 
 /* 「今天」行：就是首页。行尾是等你的计数（在首页时不显示）。 */
-.today { display: flex; flex: none; align-items: center; gap: var(--space-2); height: var(--row-36); margin-top: var(--space-2); padding: 0 var(--space-2); border: 0; border-radius: var(--r-control); background: none; color: var(--ink); font: inherit; font-size: var(--text-base); line-height: var(--lh-row); text-align: left; cursor: pointer; }
+.today { display: flex; flex: none; align-items: center; gap: var(--space-2); min-height: var(--row-36); margin-top: var(--space-2); padding: 0 var(--space-2); border: 0; border-radius: var(--r-control); background: none; color: var(--ink); font: inherit; font-size: var(--text-base); line-height: var(--lh-row); text-align: left; cursor: pointer; }
 button.today:hover { background: var(--default-soft); }
 .today[aria-current="page"] { background: var(--default-soft-hover); }
 .todayIcon { display: inline-grid; flex: none; place-items: center; width: 16px; color: var(--ink-faint); }
 button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: var(--ink-muted); }
-.todayText { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.todayText { flex: 1; min-width: 0; white-space: normal; overflow-wrap: anywhere; }
 .todayTrail { display: inline-flex; flex: none; }
 /* 「今天」「会议」「本月」一组三行（11/16 重新设计第 3 节）：挨着排，行尾淡色小字是下一场会、下一个验收时间点。 */
 .today + .today { margin-top: 0; }
@@ -181,11 +181,11 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 /* 计划（本体）读不到：一行「本体读取失败」加弱按钮「重试」，不画成空树（5.4.2、5.4.4）。 */
 .planFailed { display: flex; align-items: center; gap: var(--space-2); min-height: var(--row-36); margin: 0; padding: 0 var(--space-2); color: var(--ink-muted); font-size: var(--text-base); line-height: var(--lh-row); }
 
-/* 树和里面的组、项目都是单列 grid：列宽给 minmax(0, 1fr)，长标题截断，不把列撑得比左栏宽（左栏随窗口变窄时）。 */
+/* 树和里面的组、项目都是单列 grid：列宽给 minmax(0, 1fr)，长标题换行（项目、子会话行右端淡出），不把列撑得比左栏宽（左栏随窗口变窄时）。 */
 .tree { display: grid; grid-template-columns: minmax(0, 1fr); flex: 1; align-content: start; gap: var(--space-4); min-height: 0; overflow-y: auto; padding: var(--space-4) 0; scrollbar-width: thin; }
 .group { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; }
 /* 「其他」组头：12/16 600 淡色，不能点。 */
-.groupTitle { display: block; height: var(--row-28); margin: 0; padding: 6px var(--space-2); overflow: hidden; color: var(--ink-faint); font-size: var(--text-xs); font-weight: 600; line-height: 16px; text-overflow: ellipsis; white-space: nowrap; }
+.groupTitle { display: block; min-height: var(--row-28); margin: 0; padding: 2px var(--space-2); color: var(--ink-faint); font-size: var(--text-xs); font-weight: 600; line-height: 16px; white-space: normal; overflow-wrap: anywhere; }
 .groupTitle span { font-weight: 400; }
 /* 「项目」组头（16.2）：12/16 600 淡色，右边 20 见方的「+」；就地新建时下面一行输入框（14）。 */
 .groupHead { display: flex; align-items: center; height: var(--row-28); padding: 0 var(--space-2); color: var(--ink-faint); font-size: var(--text-xs); font-weight: 600; line-height: 16px;
@@ -208,7 +208,7 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .goalMain:disabled { cursor: default; }
 .goalMain:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .goalMain .chevron { color: var(--ink-faint); }
-.goalName { flex: 1; min-width: 0; overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.goalName { flex: 1; min-width: 0; font-weight: 600; white-space: normal; overflow-wrap: anywhere; }
 .goalMeta { flex: none; color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; }
 .goal .criteria { padding: 0 var(--space-2) var(--space-2) calc(var(--space-2) + 22px); color: var(--ink-muted); }
 .criteria li[data-met] svg { color: var(--ink-muted); }
@@ -219,8 +219,10 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .history { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
 .history li { display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; align-items: center; gap: var(--space-2); min-height: var(--row-36); padding: 0 var(--space-2); font-size: var(--text-base); line-height: var(--lh-row); }
 .history li > span:first-child { color: var(--ink-faint); font-size: var(--text-xs); }
-.historyName { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.historyName { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
 .statusChip[data-static] { cursor: default; }
+/* 胶囊里是会换行的名字（月份页 Task 挂的项目）：跟着长高。 */
+.statusChip:has(> .wrap) { height: auto; min-height: 20px; }
 .statusChip[data-static]:hover { background: var(--neutral-wash); color: var(--ink-muted); }
 /* 新建项目的小弹窗和文件夹列表（17.2 第 46 条）：弹窗用浮层同一套材质；列表一个一行——名字、淡色路径、行尾移除。 */
 .dialogBackdrop { background: var(--backdrop); }
@@ -230,8 +232,8 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .dialogActions { display: flex; justify-content: flex-end; gap: var(--space-2); }
 .folderList { display: grid; margin: 0; padding: 0; list-style: none; }
 .folderList li { display: flex; align-items: center; gap: var(--space-2); min-height: var(--row-36); padding: 0 0 0 var(--space-2); }
-.folderLabel { flex: none; max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.folderPath { flex: 1; min-width: 0; overflow: hidden; color: var(--ink-faint); font-size: var(--text-xs); text-overflow: ellipsis; white-space: nowrap; }
+.folderLabel { flex: none; max-width: 50%; white-space: normal; overflow-wrap: anywhere; }
+.folderPath { flex: 1; min-width: 0; color: var(--ink-faint); font-size: var(--text-xs); white-space: normal; overflow-wrap: anywhere; }
 .folderList li > .menuFaint { flex: none; font-size: var(--text-xs); }
 /* 「设为工作目录」：和第一行的「工作目录」同一个位置，移上去、键盘走到才显出来；触屏没有悬停，一直显着。 */
 .folderFirst { flex: none; padding: 0 var(--space-1); border: 0; border-radius: var(--r-control); background: none; color: var(--ink-faint); font: inherit; font-size: var(--text-xs); line-height: var(--row-28); opacity: 0; cursor: pointer; transition: opacity var(--dur-fast) linear; }
@@ -248,8 +250,8 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .monthRow { display: flex; align-items: center; gap: var(--space-2); }
 .monthRow .taskLine { flex: 1; min-width: 0; }
 .monthRow > .statusChip { max-width: 30%; overflow: hidden; }
-/* 放在 flex 容器（胶囊、按钮）里的一段字：太长出省略号（省略号写在 flex 容器上不生效，要写在字这一层）。 */
-.ellipsis { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 放在 flex 容器（胶囊、按钮）里的一段字：太长换行，不出省略号（本人 11/18）。 */
+.wrap { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
 /* 项目转交（16.7）：阶段行、选项框照用；交接说明卡同选项框的框（--surface 底、发丝边、--r-card），段名 12/16 600 淡色，行 14/20。 */
 .transfer { display: grid; gap: var(--space-2); margin: var(--space-2) 0; }
 .noteCard { display: grid; gap: var(--space-3); padding: var(--space-3); border-radius: var(--r-card); background: var(--surface); box-shadow: inset 0 0 0 1px var(--hairline); }
@@ -275,12 +277,12 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .taskMain { display: flex; flex: 1; align-items: center; gap: var(--space-2); min-width: 0; padding: 6px var(--space-2); border: 0; border-radius: inherit; background: none; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
 .slotState { display: inline-grid; flex: none; place-items: center; width: 16px; height: 16px; }
 .taskText { display: grid; min-width: 0; }
-.taskName { overflow: hidden; font-size: var(--text-base); font-weight: 600; line-height: var(--lh-row); text-overflow: ellipsis; white-space: nowrap; }
-.taskSub { overflow: hidden; color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; text-overflow: ellipsis; white-space: nowrap; }
+.taskName { font-size: var(--text-base); font-weight: 600; line-height: var(--lh-row); white-space: normal; overflow-wrap: anywhere; }
+.taskSub { color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; white-space: normal; overflow-wrap: anywhere; }
 .taskNode[data-done] .taskName { color: var(--ink-faint); }
 /* 项目行：名字放不下时右端淡出；行尾的状态点（34 条）和子会话行的点在同一列、一样大。 */
 .projectText { flex: 1; }
-.projectText .taskName { text-overflow: clip; }
+.projectText .taskName { overflow: hidden; white-space: nowrap; }
 .projectText .taskName[data-cut] { -webkit-mask-image: var(--fade-end); mask-image: var(--fade-end); }
 /*
  * 名字按钮按字宽排，点的范围用 ::after 铺满整行；信息按钮、「…」是定位的、排在后面，盖在它上面。行尾的点挪到按钮外面，靠右、不接点击。
@@ -352,11 +354,11 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 
 /* 本人行：贴底，上沿发丝线；头像 24 + 名字 14/20。菜单开着、在二级页上时是选中底。 */
 .me { flex: none; margin: 0 calc(-1 * var(--space-2)); padding: var(--space-1) var(--space-2); box-shadow: inset 0 1px 0 var(--hairline); }
-.meRow { display: flex; align-items: center; gap: var(--space-2); width: 100%; height: 40px; padding: 0 var(--space-2); border: 0; border-radius: var(--r-control); background: none; color: var(--ink); font: inherit; font-size: var(--text-base); line-height: var(--lh-row); text-align: left; cursor: pointer; }
+.meRow { display: flex; align-items: center; gap: var(--space-2); width: 100%; min-height: 40px; padding: 8px var(--space-2); border: 0; border-radius: var(--r-control); background: none; color: var(--ink); font: inherit; font-size: var(--text-base); line-height: var(--lh-row); text-align: left; cursor: pointer; }
 .meRow:hover { background: var(--default-soft); }
 .meRow[data-current] { background: var(--default-soft-hover); }
 .meAvatar { display: inline-grid; flex: none; place-items: center; width: 24px; height: 24px; overflow: hidden; border-radius: 50%; background: var(--neutral-wash); color: var(--ink-muted); font-size: var(--text-xs); font-weight: 600; line-height: 1; }
-.meName { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.meName { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
 /* 本人行尾的点（第 73 条）：这台电脑就绪时淡，有一项不对时琥珀色；点了去连接页。骑在行的右端，行给它留出位置。 */
 .me { position: relative; }
 .me:has(> .meDot) .meRow { padding-right: 36px; }
@@ -389,13 +391,13 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .menuItem[data-focus-visible], .menuWho[data-focus-visible] { outline: 2px solid var(--focus); outline-offset: -2px; }
 .menuItem .chevron { color: var(--ink-faint); }
 /* 选模型的三行面板（17.2 第 40 条）：行尾现在的值；第二页顶上「‹ 行名」；置灰的项照基础组件的禁用样子；点不开的行照常色、只是不能点。 */
-.panelValue { min-width: 0; overflow: hidden; color: var(--ink-muted); text-overflow: ellipsis; white-space: nowrap; }
+.panelValue { min-width: 0; color: var(--ink-muted); white-space: normal; overflow-wrap: anywhere; }
 .panelBody { outline: none; }
 .panelMark { display: inline-flex; flex: none; width: 16px; }
 .panelBack { display: inline-flex; flex: 1; align-items: center; gap: var(--space-1); color: var(--ink-muted); }
 .menuItem[data-static] { opacity: 1; cursor: default; }
 .menuWhoText { display: grid; min-width: 0; }
-.menuWhoText b { overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.menuWhoText b { font-weight: 600; white-space: normal; overflow-wrap: anywhere; }
 .menuWhoText small { color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; }
 .menuVersion { margin: var(--space-1) 0 0; padding: var(--space-1) var(--space-3); color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; box-shadow: inset 0 1px 0 var(--hairline); }
 
@@ -422,7 +424,7 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .taskLine .taskText { flex: 1; }
 .taskLine .taskSub { display: flex; align-items: center; }
 .taskLine .taskSub .count { margin-right: 0; }
-.taskGate { flex: 0 1 auto; min-width: 0; max-width: 40%; overflow: hidden; color: var(--ink-faint); text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-xs); line-height: 16px; font-variant-numeric: tabular-nums; }
+.taskGate { flex: 0 1 auto; min-width: 0; max-width: 40%; color: var(--ink-faint); white-space: normal; overflow-wrap: anywhere; font-size: var(--text-xs); line-height: 16px; font-variant-numeric: tabular-nums; }
 
 /* 等你：两行，至少 48 高；第一行原话 14/20，第二行来源 · 哪件 Task · 截止 12/16 淡色。行首不放强调色点。 */
 .waiting { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
@@ -430,13 +432,13 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .wait:hover { background: var(--default-soft); }
 .waitMain { display: grid; flex: 1; align-content: center; min-width: 0; min-height: var(--row-48); padding: 6px var(--space-2); border: 0; border-radius: var(--r-control); background: none; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
 /* 首页只剩这一份清单，它就是正文（11/16 重新设计 4.7）：第一行 16/24，和左栏主字、对话正文一样。 */
-.waitTitle { overflow: hidden; font-size: var(--text-md); line-height: 24px; text-overflow: ellipsis; white-space: nowrap; }
-/* 摘要（主循环第 66 条）：第一行下面，12/16 次一级的墨色，放不下省略。 */
-.waitSummary { overflow: hidden; color: var(--ink-muted); font-size: var(--text-xs); line-height: 16px; text-overflow: ellipsis; white-space: nowrap; }
-/* 第二行（9.6、9.10）：请你认可的先是对方 16 的头像和名字，再来源，再截止「剩 2 天」；不到 24 小时、已过截止用 --warning。来源放不下省略，截止不省略。 */
+.waitTitle { font-size: var(--text-md); line-height: 24px; white-space: normal; overflow-wrap: anywhere; }
+/* 摘要（主循环第 66 条）：第一行下面，12/16 次一级的墨色；最多两行，多了往下渐隐（不出省略号）。 */
+.waitSummary { max-height: 2lh; overflow: hidden; color: var(--ink-muted); font-size: var(--text-xs); line-height: 16px; overflow-wrap: anywhere; -webkit-mask-image: linear-gradient(to bottom, black 1lh, transparent 2lh); mask-image: linear-gradient(to bottom, black 1lh, transparent 2lh); -webkit-mask-size: 100% 2lh; mask-size: 100% 2lh; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; }
+/* 第二行（9.6、9.10）：请你认可的先是对方 16 的头像和名字，再来源，再截止「剩 2 天」；不到 24 小时、已过截止用 --warning。来源放不下换行，截止不换行。 */
 .waitSource { display: flex; align-items: center; gap: var(--space-1); min-width: 0; color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; white-space: nowrap; }
 .waitAvatar { margin-right: var(--space-1); }
-.waitFrom { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.waitFrom { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
 .waitFrom[data-tone="danger"] { color: var(--danger); }
 /* 行尾时间位（4.7）：只写钟点事实，12/16 等宽数字淡色；24 小时内、已到点用 --warning。桌面在按钮左边。 */
 .waitTime { flex: none; color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -484,15 +486,17 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .barSend { background: var(--accent); color: #ffffff; }
 .barSend:disabled { cursor: default; opacity: .5; }
 .barTool:focus-visible, .barSend:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-.barContext { display: inline-flex; align-self: flex-start; align-items: center; gap: 6px; height: 24px; margin: 2px 0 0 4px; padding: 0 4px 0 8px; border-radius: var(--r-capsule, 999px); background: var(--neutral-wash); color: var(--ink-muted); font-size: var(--text-xs); line-height: 16px; }
+.barContext { display: inline-flex; align-self: flex-start; align-items: center; gap: 6px; max-width: calc(100% - 8px); min-height: 24px; margin: 2px 0 0 4px; padding: 2px 4px 2px 8px; border-radius: var(--r-capsule, 999px); background: var(--neutral-wash); color: var(--ink-muted); font-size: var(--text-xs); line-height: 16px; }
+/* 引用的那句（「回复 …」）：最多两行，多了往下渐隐，不出省略号（本人 11/18）。 */
+.barQuote { min-width: 0; max-height: 2lh; overflow: hidden; overflow-wrap: anywhere; -webkit-mask-image: linear-gradient(to bottom, black 1lh, transparent 2lh); mask-image: linear-gradient(to bottom, black 1lh, transparent 2lh); -webkit-mask-size: 100% 2lh; mask-size: 100% 2lh; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; }
 .barContext button { display: grid; padding: 0; border: 0; background: none; color: var(--ink-faint); cursor: pointer; }
 .atts { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; padding: 4px 4px 2px; list-style: none; }
-.att { position: relative; display: flex; flex: none; align-items: center; gap: var(--space-2); max-width: 220px; height: 56px; padding: 8px 12px 8px 10px; border-radius: var(--r-inset); background: var(--neutral-wash); }
+.att { position: relative; display: flex; flex: none; align-items: center; gap: var(--space-2); max-width: 220px; min-height: 56px; padding: 8px 12px 8px 10px; border-radius: var(--r-inset); background: var(--neutral-wash); }
 .att[data-image] { width: 56px; padding: 0; background: none; }
 .att img { display: block; width: 56px; height: 56px; border-radius: var(--r-control); object-fit: cover; box-shadow: 0 0 0 1px var(--hairline); }
 .attType { display: grid; flex: none; place-items: center; width: 28px; height: 32px; border-radius: 6px; background: var(--surface); box-shadow: 0 0 0 1px var(--hairline); color: var(--ink-muted); font-size: 9px; font-weight: 600; line-height: 1; text-transform: uppercase; }
 .attName { display: flex; flex-direction: column; min-width: 0; }
-.attName b { overflow: hidden; font-size: var(--text-base); font-weight: 400; line-height: var(--lh-row); text-overflow: ellipsis; white-space: nowrap; }
+.attName b { font-size: var(--text-base); font-weight: 400; line-height: var(--lh-row); white-space: normal; overflow-wrap: anywhere; }
 .attName span { color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; }
 .attRemove { position: absolute; top: -6px; right: -6px; display: grid; place-items: center; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 50%; background: var(--surface); box-shadow: 0 0 0 1px var(--hairline-strong); color: var(--ink-muted); cursor: pointer; opacity: 0; transition: opacity var(--dur-snap) var(--ease-swift); }
 .att:hover .attRemove, .att:focus-within .attRemove { opacity: 1; }
@@ -505,20 +509,20 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .footText svg { flex: none; color: var(--ink-faint); }
 /* 本人气泡里的附件（14.5）：靠右，图片 96。 */
 .bubbleAtts { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); margin: 0 0 6px; padding: 0; list-style: none; }
-.sendTo { display: inline-flex; align-items: center; gap: var(--space-1); max-width: 320px; height: var(--row-32); padding: 0 var(--space-2); border: 0; border-radius: var(--r-control); background: none; color: var(--ink); font: inherit; font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); cursor: pointer; }
+.sendTo { display: inline-flex; align-items: center; gap: var(--space-1); max-width: 320px; min-height: var(--row-32); padding: 4px var(--space-2); border: 0; border-radius: var(--r-control); background: none; color: var(--ink); font: inherit; font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); cursor: pointer; }
 .sendTo:hover, .sendTo[data-pressed] { background: var(--default-soft); }
 .sendToLabel { color: var(--ink-faint); }
-.sendTo b { min-width: 0; overflow: hidden; font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
+.sendTo b { min-width: 0; font-weight: 400; white-space: normal; overflow-wrap: anywhere; }
 .sendTo svg { flex: none; color: var(--ink-faint); }
 .folderName { width: 180px; height: var(--row-32); font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); }
-.menuHeader { display: block; padding: var(--space-1) var(--space-3); overflow: hidden; color: var(--ink-faint); font-size: var(--text-xs); font-weight: 600; line-height: 16px; text-overflow: ellipsis; white-space: nowrap; }
+.menuHeader { display: block; padding: var(--space-1) var(--space-3); color: var(--ink-faint); font-size: var(--text-xs); font-weight: 600; line-height: 16px; white-space: normal; overflow-wrap: anywhere; }
 
 /* ---------- 对话（总管线、Task 管线）和详情的页头 ---------- */
 .convo { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; min-height: 0; }
 /* 页头（5.4.3，五种内容和二级页同一个）：高 48，标题就是左栏当前那一行的字（14/20 600），右边只放这一页自己的东西；下沿不画线。 */
 .viewHead { display: flex; align-items: center; gap: var(--space-2); min-height: var(--row-48); padding: 0 var(--space-4) 0 var(--space-6); }
 .viewHead[data-flush] { min-height: var(--row-48); padding: 0; }
-.viewTitle { flex: 1; min-width: 0; margin: 0; overflow: hidden; font-size: var(--text-base); font-weight: 600; line-height: var(--lh-row); text-overflow: ellipsis; white-space: nowrap; outline: none; }
+.viewTitle { flex: 1; min-width: 0; margin: 0; font-size: var(--text-base); font-weight: 600; line-height: var(--lh-row); white-space: normal; overflow-wrap: anywhere; outline: none; }
 
 /* ---------- 开工的选项框里的几步（5.4.3「开工的特别规矩」）、规划员一行、开了以后的事件行 ---------- */
 .steps { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
@@ -550,22 +554,22 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .stepMain input:focus { border-color: var(--field-border-focus); }
 .stepSide { display: flex; align-items: center; gap: var(--space-1); }
 /* 弹层的触发器（岗位、模型、文件夹）：中性 chip，悬停加深一档。 */
-.chip { display: inline-flex; align-items: center; gap: var(--space-1); max-width: 200px; height: var(--row-28); padding: 0 var(--space-2); overflow: hidden; border: 0; border-radius: var(--r-capsule); background: var(--neutral-wash); color: var(--ink-muted); font: inherit; font-size: var(--text-xs); line-height: 16px; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.chip { display: inline-flex; align-items: center; gap: var(--space-1); max-width: 200px; min-height: var(--row-28); padding: 2px var(--space-2); border: 0; border-radius: var(--r-capsule); background: var(--neutral-wash); color: var(--ink-muted); font: inherit; font-size: var(--text-xs); line-height: 16px; white-space: normal; overflow-wrap: anywhere; cursor: pointer; }
 .chip:hover, .chip[data-pressed] { background: var(--default-hover); color: var(--ink); }
 /* 状态 chip（5.4.3、5.4.6）：高 20、胶囊、左右 8、12/16 400 中性底；「今天」行的「复盘」「12 月待敲定」用它（不是 28 高的弹层触发器）。 */
 .statusChip { display: inline-flex; flex: none; align-items: center; height: 20px; padding: 0 var(--space-2); border: 0; border-radius: var(--r-capsule); background: var(--neutral-wash); color: var(--ink-muted); font: inherit; font-size: var(--text-xs); line-height: 16px; white-space: nowrap; cursor: pointer; }
 .statusChip:hover { background: var(--default-hover); color: var(--ink); }
 .chip svg { flex: none; color: var(--ink-faint); }
-/* 胶囊里的字（模型、岗位、文件夹）：太长出省略号，下拉箭头始终在（.chip 本身是 flex，省略号要写在字这一层）。 */
-.chip > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 胶囊里的字（模型、岗位、文件夹）：太长换行，下拉箭头始终在。 */
+.chip > span { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
 .slotsLine { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--ink-faint); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
 .line { display: flex; align-items: center; gap: var(--space-2); min-height: var(--row-32); margin: var(--space-2) 0; color: var(--ink-faint); font-size: var(--text-base); line-height: var(--lh-row); }
 /* Task 管线里的验收行（结果那句话、推翻）：一行字，点了进那张卡。 */
-.lineLink { min-width: 0; overflow: hidden; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.lineLink { min-width: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; white-space: normal; overflow-wrap: anywhere; cursor: pointer; }
 .lineLink:hover { color: var(--ink); }
 .lineAct { flex: none; padding: 0; border: 0; background: none; color: var(--ink-faint); font: inherit; cursor: pointer; }
 .lineAct:hover { color: var(--ink-muted); }
-.lineMore { min-width: 0; overflow: hidden; color: var(--ink-faint); text-overflow: ellipsis; white-space: nowrap; }
+.lineMore { min-width: 0; color: var(--ink-faint); white-space: normal; overflow-wrap: anywhere; }
 /* 开了以后：答完那一行（勾 · 问题 · 答案，12/16），下面是子会话事件行（带竖线，和左栏子会话行同一个样子）。 */
 
 /* ---------- Task 详情 ---------- */
@@ -601,12 +605,12 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 /* 「同时在跑」：14，右边位置条加「2/3」（12 淡）。 */
 .runLine { display: flex; align-items: center; gap: var(--space-2); min-height: var(--row-32); font-size: var(--text-base); line-height: var(--lh-row); }
 .runCount { color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; }
-/* 「用量」：组头 12/16 600 淡色；两列小格，一格 28 高：14 的圆环或「¥」、名字 12 淡、数 12 --ink-muted（≤25% 琥珀、≤10% 红）。 */
+/* 「用量」：组头 12/16 600 淡色；小格每格至少 180 宽（右栏默认宽度下一列、拉宽了两列，名字放不下换行，不出省略号），一格至少 28 高：14 的圆环或「¥」、名字 12 淡、数 12 --ink-muted（≤25% 琥珀、≤10% 红）。 */
 .usageHead { display: flex; align-items: center; height: var(--row-28); margin: 0; color: var(--ink-faint); font-size: var(--text-xs); font-weight: 600; line-height: 16px; }
-.usage { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px var(--space-1); margin: 0 0 0 calc(-1 * var(--space-1)); padding: 0; list-style: none; }
-.usageCell { display: flex; align-items: center; gap: 6px; min-width: 0; height: var(--row-28); padding: 0 var(--space-1); border-radius: var(--r-control); color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; }
+.usage { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 180px), 1fr)); gap: 2px var(--space-1); margin: 0 0 0 calc(-1 * var(--space-1)); padding: 0; list-style: none; }
+.usageCell { display: flex; align-items: center; gap: 6px; min-width: 0; min-height: var(--row-28); padding: 2px var(--space-1); border-radius: var(--r-control); color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; }
 .usageCell:hover { background: var(--default-soft); }
-.usageName { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.usageName { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
 .usageValue { flex: none; margin-left: auto; color: var(--ink-muted); }
 .usageCell[data-tone="warning"] .usageValue { color: var(--warning); }
 .usageCell[data-tone="danger"] .usageValue { color: var(--danger); }
@@ -629,19 +633,19 @@ button.bgLabel { cursor: pointer; }
 button.bgLabel:hover { background: var(--default-soft); }
 .bgSpin { color: var(--ink-muted); animation: spin 1.1s linear infinite; }
 .bgFailCount { color: var(--danger); font-weight: 400; }
-/* 列宽 minmax(0, 1fr)：长名字在行里省略，不把整栏撑出横向滚动。 */
+/* 列宽 minmax(0, 1fr)：长名字在行里换行，不把整栏撑出横向滚动。 */
 .bgGroup ul { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; margin: 0; padding: 0; list-style: none; }
 /* 行高 36：种类、名字、用时、停止（悬停或有焦点才出）；没有悬停底。 */
 .bgRow { display: flex; align-items: center; gap: var(--space-2); min-height: var(--row-36); padding: 0 var(--space-2); font-size: var(--text-base); line-height: var(--lh-row); }
 .bgFail { display: inline-grid; flex: none; color: var(--danger); }
 .bgKind { flex: none; color: var(--ink-faint); }
-.bgTitle { flex: 1; min-width: 0; overflow: hidden; color: var(--ink); text-overflow: ellipsis; white-space: nowrap; }
+.bgTitle { flex: 1; min-width: 0; color: var(--ink); white-space: normal; overflow-wrap: anywhere; }
 /* 规划、验收那一行：名字下面一行淡色小字「来源 · 模型 · 思考」（56 条），行跟着高一点。 */
 .bgMain { display: grid; flex: 1; min-width: 0; padding-block: var(--space-1); }
-.bgModel { min-width: 0; overflow: hidden; color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; text-overflow: ellipsis; white-space: nowrap; }
+.bgModel { min-width: 0; color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; white-space: normal; overflow-wrap: anywhere; }
 .bgTime { flex: none; color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .bgRow[data-state="failed"] .bgTime { color: var(--danger); }
-.bgHold { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.bgHold { flex: 0 1 auto; min-width: 0; white-space: normal; overflow-wrap: anywhere; }
 .bgStop { display: inline-flex; flex: none; opacity: 0; transition: opacity var(--dur-snap) var(--ease-swift); }
 .bgRow:hover .bgStop, .bgStop:focus-within, .bgRow[data-handheld] .bgStop { opacity: 1; }
 /* 右栏里的会话详情（11/11）：页头「详情」加关闭，下面一起滚——详情内容，再是这个会话的后台任务（上面一条发丝线）。 */
@@ -653,7 +657,7 @@ button.bgLabel:hover { background: var(--default-soft); }
 /* 右边「会话」面板（设计 4.3）：子会话按项目分组（组名只是淡一点）、「新会话」「已归档 N」→ 发丝线 → 这台电脑 → 后台任务。 */
 .sessions { --fade-end: linear-gradient(to right, #000 calc(100% - 24px), transparent); }
 .sessionsList { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; padding: var(--space-2); }
-.sessionsGroup { margin: 0; padding: var(--space-2) var(--space-2) 2px; overflow: hidden; color: var(--ink-faint); text-overflow: ellipsis; white-space: nowrap; }
+.sessionsGroup { margin: 0; padding: var(--space-2) var(--space-2) 2px; color: var(--ink-faint); white-space: normal; overflow-wrap: anywhere; }
 .sessionsList > section:first-child .sessionsGroup { padding-top: 0; }
 /* 面板里子会话是正文：名字用 --ink（深色下 --ink-muted 和 --ink-faint 一样，组名靠这个分开）；做完的、已归档的照左栏淡。 */
 .sessions .sub:not([data-state="done"]) { color: var(--ink); }
@@ -668,12 +672,12 @@ button.bgLabel:hover { background: var(--default-soft); }
 .threads > .thread { margin: 0; }
 .thread:hover { background: var(--default-soft); }
 .thread:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-.threadName { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.threadName { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
 .threadStatus { flex: none; color: var(--ink-faint); white-space: nowrap; }
 .threadStatus[data-wait] { color: var(--judgment); }
 .threadDot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
 /* 右边的 thread 视图：页头写子会话名；下面子会话自己滚（不再套一层滚动）。 */
-.threadTitle { min-width: 0; overflow: hidden; color: var(--ink); text-overflow: ellipsis; white-space: nowrap; }
+.threadTitle { min-width: 0; color: var(--ink); white-space: normal; overflow-wrap: anywhere; }
 .threadBody { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; min-height: 0; }
 /* 「…」出来时盖在行尾，短状态同状态点一起让开。 */
 .subItem:is(:hover, :focus-within, :has(> .rowMore[data-open])) .subStatus { visibility: hidden; }
@@ -743,11 +747,10 @@ button.bgLabel:hover { background: var(--default-soft); }
 
 /* 页头标题前的上一级（「首页改版 / 」）：12 淡色，点了回到 Task 管线。 */
 /*
- * 带上一级的标题（「项目名 / 本页」，排查清单第 3 条）：一行 flex，上一级最多占一半、太长出省略号，本页标题也出省略号。
- * 上一级是按钮（不可拆的行内块），原来标题上的省略号管不到它，它被整块切掉、本页标题被挤出去。
+ * 带上一级的标题（「项目名 / 本页」，排查清单第 3 条）：一行 flex，上一级最多占一半，太长两边各自换行（不出省略号，本人 11/18）。
  */
 .viewTitle:has(> .crumb) { display: flex; align-items: center; }
-.crumb { display: block; flex: 0 1 auto; min-width: 0; max-width: 50%; margin-right: var(--space-1); padding: 0; overflow: hidden; border: 0; background: none; color: var(--ink-faint); font: inherit; font-size: var(--text-xs); font-weight: 400; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.crumb { display: block; flex: 0 1 auto; min-width: 0; max-width: 50%; margin-right: var(--space-1); padding: 0; border: 0; background: none; color: var(--ink-faint); font: inherit; font-size: var(--text-xs); font-weight: 400; white-space: normal; overflow-wrap: anywhere; cursor: pointer; }
 .crumb:hover { color: var(--ink-muted); }
 .crumb:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
 

@@ -18,6 +18,7 @@ import { feishuConnectHref, readFeishuConnection } from "@/lib/feishuLogin";
 import { readMeetingMinutesLink, refetchMeetingMinutes } from "./meetingDecisionApi";
 import { CARD_EXPECTED_MS, MINUTES_EXPECTED_MS, elapsed, useNow, type FeishuLive } from "./MeetingHeader";
 import p from "@/styles/meeting-progress.module.css";
+import { useDots } from "@/lib/home/noEllipsis";
 
 export type ProgressStepKey = "booked" | "waiting" | "live" | "record" | "card" | "confirm";
 export type ProgressStep = { key: ProgressStepKey; label: string; state: "done" | "current" | "todo" };
@@ -161,6 +162,7 @@ export function MinutesRecovery({ meetingId, status, failure, canFetch, onFetche
   uploading?: boolean;
   uploadError?: string | null;
 }) {
+  const dots = useDots();
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -187,14 +189,14 @@ export function MinutesRecovery({ meetingId, status, failure, canFetch, onFetche
   const others = [
     retry && !connectHref ? <button key="retry" type="button" className={p.quiet} disabled={busy} onClick={() => void run(() => refetchMeetingMinutes(meetingId))}>再读一次</button> : null,
     connectHref ? <a key="connect" className={p.quiet} href={connectHref}>连接飞书</a> : null,
-    onUpload ? <button key="upload" type="button" className={p.quiet} disabled={uploading} onClick={onUpload}>{uploading ? "上传中…" : "上传会议记录"}</button> : null,
+    onUpload ? <button key="upload" type="button" className={p.quiet} disabled={uploading} onClick={onUpload}>{uploading ? dots("上传中…") : "上传会议记录"}</button> : null,
   ].filter(Boolean);
   return (
     <div className={p.recovery}>
       {canFetch ? (
         <form className={p.link} onSubmit={(event) => { event.preventDefault(); read(); }}>
           <input type="url" aria-label="妙记链接" placeholder="贴妙记链接" value={url} disabled={busy} onChange={(event) => setUrl(event.target.value)} />
-          <button type="submit" className={p.read} disabled={busy || !url.trim()}>{busy ? "读取中…" : "读取"}</button>
+          <button type="submit" className={p.read} disabled={busy || !url.trim()}>{busy ? dots("读取中…") : "读取"}</button>
         </form>
       ) : null}
       {others.length ? <div className={p.others}>{others}</div> : null}

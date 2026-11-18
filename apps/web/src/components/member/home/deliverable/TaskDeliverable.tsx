@@ -26,6 +26,7 @@ import { VersionItems } from "./VersionItems";
 import { DeliverableComposer } from "./DeliverableComposer";
 import { VersionNote } from "./VersionNote";
 import d from "@/styles/task-deliverable.module.css";
+import { useDots } from "@/lib/home/noEllipsis";
 
 const ICON = { size: 16, strokeWidth: 1.8 } as const;
 
@@ -41,6 +42,7 @@ export function TaskDeliverable({ task, activities, activityCount = 0, newItem, 
   /** 打开就对一次表（从飞书「请 X 看」的链接进来）。 */
   checkOnOpen?: boolean;
 }) {
+  const dots = useDots();
   const api = useTaskDeliverable(task.taskId);
   const pact = useTaskAgreement(task.taskId);
   const [picked, setPicked] = useState<string | null>(null);
@@ -134,7 +136,7 @@ export function TaskDeliverable({ task, activities, activityCount = 0, newItem, 
             {agreement?.basisChanged ? <span className={d.changed}>标准改过</span> : null}
             {agreement ? <DraftAgreement agreement={agreement} onConfirm={pact.save} /> : null}
             <span className={d.grow} />
-            <HeroButton variant="tertiary" size="sm" isDisabled={pact.checking} onPress={() => void runCheck()}>{pact.checking ? "对表中…" : "对表"}</HeroButton>
+            <HeroButton variant="tertiary" size="sm" isDisabled={pact.checking} onPress={() => void runCheck()}>{pact.checking ? dots("对表中…") : "对表"}</HeroButton>
           </>}
           lead={<>
             {pact.checkError ? <p className={d.error} role="alert">{pact.checkError}</p> : null}
@@ -176,7 +178,7 @@ export function TaskDeliverable({ task, activities, activityCount = 0, newItem, 
             <HeroButton variant="tertiary" size="sm" onPress={() => { setComposer("statement"); setPicked(null); }}>说说现状</HeroButton>
             <span className={d.grow} />
             {!latest.deliveredAt ? (
-              <HeroButton variant="primary" size="sm" isDisabled={reviewing || delivering} onPress={() => void deliver()}>{delivering ? "正在交付…" : "交付"}</HeroButton>
+              <HeroButton variant="primary" size="sm" isDisabled={reviewing || delivering} onPress={() => void deliver()}>{delivering ? dots("正在交付…") : "交付"}</HeroButton>
             ) : null}
           </div>
         ) : null}

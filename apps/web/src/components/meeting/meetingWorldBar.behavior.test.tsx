@@ -15,6 +15,7 @@ vi.mock("react", async (original) => ({ ...(await original<typeof import("react"
   useState: hooks.useState, useEffect: () => undefined, useMemo: (fn: () => unknown) => fn() }));
 const api = vi.hoisted(() => ({ put: vi.fn(), get: vi.fn(), post: vi.fn() }));
 vi.mock("@/lib/api/client", () => ({ browserApi: { PUT: api.put, GET: api.get, POST: api.post } }));
+vi.mock("@/lib/home/noEllipsis", () => ({ useDots: () => (text: string) => text }));
 
 import { MeetingWorldBar } from "./MeetingWorldBar";
 import { MinutesRecovery } from "./MeetingProgress";

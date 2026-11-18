@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { ReactNode } from "react";
@@ -119,6 +120,22 @@ describe("右栏（5.4.5）", () => {
     expect(ready).toContain("Claude 70%");
     expect(ready).not.toContain("ThinkPad");
     expect(text(render(panel([], [cloud("ThinkPad", 83, 1)]), "ready", []))).toContain("Claude · ThinkPad");
+  });
+
+  it("这台电脑块里用量来源名字放不下时换行，不出省略号", () => {
+    const long = { ...sub(70), id: "tokenhub", name: "TokenHub 团队共享额度" };
+    const html = render(panel([], []), "ready", [long], [tool("claude-code")]);
+    const block = html.slice(html.indexOf('data-testid="resources"'));
+    expect(text(block)).toContain("TokenHub 团队共享额度");
+    expect(block).not.toContain("…");
+    // 块里用到的每个类（CSS 模块在测试里是 _名字_哈希）：home.module.css 里带它的规则都不截断，用量名字换行，格子跟着长高。
+    const used = new Set([...block.matchAll(/class="([^"]+)"/g)].flatMap((match) => match[1].split(/\s+/)).map((name) => /^_(\w+)_[0-9a-f]+$/.exec(name)?.[1]).filter(Boolean));
+    const css = readFileSync(new URL("../../styles/home.module.css", import.meta.url), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+    const rules = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((match) => ({ selector: match[1].trim(), body: match[2] }));
+    const mine = (name: string) => rules.filter((rule) => new RegExp(`\\.${name}(?![\\w-])`).test(rule.selector));
+    for (const name of used) for (const rule of mine(name!)) expect(`${rule.selector} { ${rule.body} }`).not.toMatch(/text-overflow:\s*ellipsis|line-clamp/);
+    expect(mine("usageName").map((rule) => rule.body).join(";")).toMatch(/white-space:\s*normal;[\s\S]*overflow-wrap:\s*anywhere/);
+    expect(mine("usageCell").map((rule) => rule.body).join(";")).not.toMatch(/(^|[;\s])height:/);
   });
 
   it("没连上（第 73 条：本人行琥珀、「等你」里一行）：离线、没配对、浏览器拦着算；就绪、检查中不算", () => {

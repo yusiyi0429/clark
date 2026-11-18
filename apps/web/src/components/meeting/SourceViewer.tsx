@@ -24,6 +24,7 @@ import {
 } from "@/cards/meetingSources";
 import d from "@/styles/decision-workspace.module.css";
 import { knowledgeName } from "@/lib/displayText";
+import { useDots, useNoEllipsis } from "@/lib/home/noEllipsis";
 
 /**
  * 依据直达（feedback 14 / H07）：页面里每一个来源都是一颗按钮。
@@ -150,8 +151,9 @@ export function useSourceNavigator({ context, rootRef, onNavigate, onShowRecord,
 /** 一条依据：可以打开的是按钮，当前会议本身只是文字。 */
 export function SourceChip({ sourceRef, issueId }: { sourceRef: string; issueId?: string | null }) {
   const navigator = useSourceNavigatorApi();
-  if (!navigator) return <span className={d.sourceStatic} data-source-ref={sourceRef}>{sourceLabel(sourceRef, emptySourceContext(), issueId)}</span>;
-  const label = sourceLabel(sourceRef, navigator.context, issueId);
+  const whole = useNoEllipsis();
+  if (!navigator) return <span className={d.sourceStatic} data-source-ref={sourceRef}>{sourceLabel(sourceRef, emptySourceContext(), issueId, whole)}</span>;
+  const label = sourceLabel(sourceRef, navigator.context, issueId, whole);
   const target = sourceTarget(sourceRef, navigator.context, issueId);
   if (target.type === "none") return <span className={d.sourceStatic} data-source-ref={sourceRef}>{label}</span>;
   return (
@@ -210,7 +212,8 @@ function SourceDrawer({ state, context, objects, meetingId, onClose, onOpen }: {
   onOpen: (ref: string) => void;
 }) {
   const closeRef = useRef<HTMLButtonElement>(null);
-  const label = sourceLabel(state.ref, context, state.issueId);
+  const whole = useNoEllipsis();
+  const label = sourceLabel(state.ref, context, state.issueId, whole);
   useEffect(() => {
     closeRef.current?.focus({ preventScroll: true });
     // Escape 只关抽屉：标记已处理，外壳（C-06）就不会接着关掉整页。
@@ -303,6 +306,7 @@ const MATERIAL_ERROR: Record<string, string> = {
 };
 
 function MaterialSource({ target, objects, label }: { target: Extract<SourceTarget, { type: "material" }>; objects: SourceObject[]; label: string }) {
+  const dots = useDots();
   const [load, setLoad] = useState<Load<{ text: MaterialText; object: SourceMaterial }>>({ state: "loading" });
   const [attempt, setAttempt] = useState(0);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -337,7 +341,7 @@ function MaterialSource({ target, objects, label }: { target: Extract<SourceTarg
     if (body && cited) body.scrollTop = Math.max(0, cited.offsetTop - 96);
   }, [load.state, target.paragraph]);
 
-  if (load.state === "loading") return <div className={d.drawerBody}><p className={d.muted} role="status">正在读取该版本材料…</p></div>;
+  if (load.state === "loading") return <div className={d.drawerBody}><p className={d.muted} role="status">{dots("正在读取该版本材料…")}</p></div>;
   if (load.state === "error") {
     return (
       <div className={d.drawerBody}>
@@ -413,6 +417,7 @@ function LegacySource({ meetingId, material }: { meetingId: string; material: Le
 type ThreadMessage = { id: number; authorName: string | null; content: string; createdAt: string; quote: { text?: string } | null };
 
 function DiscussionSource({ target, objects, label }: { target: Extract<SourceTarget, { type: "discussion" }>; objects: SourceObject[]; label: string }) {
+  const dots = useDots();
   const known = target.change;
   const [load, setLoad] = useState<Load<ThreadMessage | null>>(known ? { state: "ready", value: null } : { state: "loading" });
   useEffect(() => {
@@ -439,7 +444,7 @@ function DiscussionSource({ target, objects, label }: { target: Extract<SourceTa
     return () => controller.abort();
   }, [known, objects, target.messageId]);
   if (known) return <ChangeDetail change={known} label={label} />;
-  if (load.state === "loading") return <div className={d.drawerBody}><p className={d.muted} role="status">正在读取这条群讨论…</p></div>;
+  if (load.state === "loading") return <div className={d.drawerBody}><p className={d.muted} role="status">{dots("正在读取这条群讨论…")}</p></div>;
   if (load.state === "error") return <div className={d.drawerBody}><p className={d.errorLine} role="alert">{load.message}</p></div>;
   const message = load.value;
   if (!message) return <div className={d.drawerBody}><p className={d.muted}>该群讨论不在可查看的群组中，或已删除。</p></div>;
@@ -481,6 +486,7 @@ function ChangeDetail({ change, label }: { change: TDecisionHistoryChange; label
 }
 
 function DetailSource({ target, label, onOpen }: { target: Extract<SourceTarget, { type: "detail" }>; label: string; onOpen: (ref: string) => void }) {
+  const whole = useNoEllipsis();
   const hit: HistoryHit | null = target.hit;
   if (target.parsed.kind === "memory") return <KnowledgeSource file={target.parsed.file} section={target.parsed.section} label={label} />;
   if (hit && (hit.layer === "effective" || hit.layer === "inactive")) {
@@ -509,7 +515,7 @@ function DetailSource({ target, label, onOpen }: { target: Extract<SourceTarget,
   return (
     <div className={d.drawerBody}>
       <p className={d.muted}>该依据暂无法在此打开</p>
-      <p className={d.drawerMeta}>{clip(label, 40)}</p>
+      <p className={d.drawerMeta}>{clip(label, 40, whole)}</p>
     </div>
   );
 }
@@ -532,6 +538,7 @@ export async function fetchKnowledgeSource(file: string, section: number | null,
 
 /** 依据面板里的企业知识：直接显示原文（和群材料段落同样的排版）；读不出来时可以让天枢去找。 */
 export function KnowledgeSource({ file, section, label }: { file: string; section: number | null; label: string }) {
+  const dots = useDots();
   const { compose } = useWorkspace();
   const [load, setLoad] = useState<Load<KnowledgeSection[]>>({ state: "loading" });
   const [attempt, setAttempt] = useState(0);
@@ -547,7 +554,7 @@ export function KnowledgeSource({ file, section, label }: { file: string; sectio
 
   const name = knowledgeName(file);
   const where = section ? `第 ${section} 节` : "";
-  if (load.state === "loading") return <div className={d.drawerBody}><p className={d.muted} role="status">正在读取该节原文…</p></div>;
+  if (load.state === "loading") return <div className={d.drawerBody}><p className={d.muted} role="status">{dots("正在读取该节原文…")}</p></div>;
   if (load.state === "error") {
     return (
       <>

@@ -484,7 +484,7 @@ export function HomeComposer({ buddy, projects, route, onSend }: { buddy: Buddy 
   );
   return (
     <div className={h.composerDock}>
-      <InputBar placeholder="说点什么…" textRequired onText={setText} onSend={send} draftKey="tianshu-home-draft-v1:home"
+      <InputBar placeholder="说点什么" textRequired onText={setText} onSend={send} draftKey="tianshu-home-draft-v1:home"
         footer={{ left: (
           <Dropdown>
             <Dropdown.Trigger className={h.sendTo} data-testid="send-to"><span className={h.sendToLabel}>发给</span><b>{label}</b><ChevronDown {...ICON} /></Dropdown.Trigger>

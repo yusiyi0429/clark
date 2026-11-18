@@ -6,11 +6,10 @@ import { Quote, X } from "lucide-react";
 import { isReplyQuote, type TextQuote } from "./quotes";
 import s from "@/styles/conversation-quotes.module.css";
 
-/** 待发送的引用块直接露出原文开头这么多个字，超出用省略号；全文仍在悬停 / 点开的预览里。 */
-export const QUOTE_EXCERPT_LENGTH = 16;
+/** 待发送的引用块直接露出原文开头这么多个字（够两行），不拼省略号，放不下由样式收起；全文仍在悬停 / 点开的预览里（本人 11/18）。 */
+export const QUOTE_EXCERPT_LENGTH = 40;
 export function quoteExcerpt(text: string, length = QUOTE_EXCERPT_LENGTH): string {
-  const chars = Array.from(text.replace(/\s+/gu, " ").trim());
-  return chars.length > length ? `${chars.slice(0, length).join("")}…` : chars.join("");
+  return Array.from(text.replace(/\s+/gu, " ").trim()).slice(0, length).join("");
 }
 
 /** Hover and keyboard focus preview only this small control; clicking pins the readable selection. */

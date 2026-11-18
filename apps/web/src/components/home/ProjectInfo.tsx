@@ -198,7 +198,7 @@ export function ProjectInfo({ project, period, go, actions, folders = [], folder
           </>
         ) : transfer ? <span className={h.line}>已交给 {transfer.to.name}</span> : project.archived ? <span className={h.line}>已归档</span> : (
           <Dropdown>
-            <Dropdown.Trigger className={h.sendTo} data-testid="transfer-to"><b>转给…</b></Dropdown.Trigger>
+            <Dropdown.Trigger className={h.sendTo} data-testid="transfer-to"><b>转给</b></Dropdown.Trigger>
             <Dropdown.Popover placement="bottom start" offset={8} className={h.pop}>
               <Dropdown.Menu aria-label="转给" className={`${h.menuList} ${h.menuScroll}`} onAction={(key) => {
                 const person = people.find((entry) => entry.personId === key);
@@ -239,7 +239,7 @@ export function ProjectInfo({ project, period, go, actions, folders = [], folder
     <div className={h.infoView} data-type-scale="doc" data-testid="project-info-view">
       <header className={h.viewHead}>
         {chrome.lead ?? <button type="button" className={h.icon} aria-label="返回" title="返回" onClick={() => go(projectHref(project.id))}><ArrowLeft {...ICON} /></button>}
-        <h1 className={h.viewTitle} tabIndex={-1}><button type="button" className={h.crumb} onClick={() => go(projectHref(project.id))}>{project.name} / </button><span className={h.ellipsis}>详情</span></h1>
+        <h1 className={h.viewTitle} tabIndex={-1}><button type="button" className={h.crumb} onClick={() => go(projectHref(project.id))}>{project.name} / </button><span className={h.wrap}>详情</span></h1>
         {chrome.trail}
       </header>
       <div className={h.infoScroll}>

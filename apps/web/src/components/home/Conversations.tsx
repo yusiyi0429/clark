@@ -178,7 +178,7 @@ export function BuddyView({ buddy, outbox, consume, onSpeaking, waiting, go, con
           )}
           timeline={(current) => <>{meetingFeed.notice}{handoffFeed.notice}<ReactionsProvider scope={current.scope} buddyName={name}><WorkTimeline data={current} blocks={[...team.blocks, ...events, ...meetingFeed.blocks, ...handoffFeed.blocks]} modelRule={modelRule} /></ReactionsProvider></>}
           dock={(latest) => <>{team.composer}<PendingDock latest={latest} /></>}
-          input={(onHeight) => <ChatInput data={data} placeholder={`与${name}讨论…`} onHeight={onHeight} intercept={team.intercept} footer={{ left: team.launcher, right: <ModelText data={data} /> }}
+          input={(onHeight) => <ChatInput data={data} placeholder={`与${name}讨论`} onHeight={onHeight} intercept={team.intercept} footer={{ left: team.launcher, right: <ModelText data={data} /> }}
             context={context ? { label: context, onClear: () => onClearContext?.() } : null} />} />
         </ReplyProvider>
       </div>
@@ -477,7 +477,7 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
           )}
           timeline={(current) => <ReactionsProvider scope={current.scope} buddyName={buddy?.name?.trim() || "伙伴"}><WorkTimeline data={current} blocks={blocks} modelRule={modelRule} /></ReactionsProvider>}
           dock={(latest) => <PendingDock latest={latest} />}
-          input={readOnly ? () => null : (onHeight) => <ChatInput data={data} placeholder={handheld ? "说点什么…" : `与${project.name}讨论…`} onHeight={onHeight} footer={{
+          input={readOnly ? () => null : (onHeight) => <ChatInput data={data} placeholder={handheld ? "说点什么" : `与${project.name}讨论`} onHeight={onHeight} footer={{
             left: folder,
             right: <><PipelineModelMenu projectId={project.id} fallback={<ModelText data={data} />} sheet={handheld} />{mode ? <PermissionModeMenu modes={mode.modes} value={mode.value} sheet={handheld} onChange={mode.set} /> : null}</>,
           }} />} />

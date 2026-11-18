@@ -225,7 +225,8 @@ describe("回复", () => {
     expect(quoteBar(input(own, replies()))).toBeNull();
     replyOn(replies(), 0, "第一段，先把清单发给财务，周二之前要发出去。");
     const first = input(own, replies());
-    expect(quoteBar(first)).toContain("回复 第一段，先把清单发给财务，周二之…");
+    expect(quoteBar(first)).toContain("回复 第一段，先把清单发给财务，周二之前要发出去。");
+    expect(quoteBar(first)).not.toContain("…");
     // 换了一条，输入框获得焦点（InputBar 按 key 换了聚焦）。
     const key = (first.props.quote as { key: string }).key;
     replyOn(replies(), 1, "第二段，周三再确认一遍。");
@@ -275,7 +276,8 @@ describe("回复", () => {
     const sent: Message = { ...mine, content: quotedMessage("好的", [{ id: "q", text: full, source: { scope: "global", intent: MESSAGE_REPLY } }]) };
     const html = inBubbles(sent);
     const line = html.match(/<button[^>]*data-testid="sent-reply"[^>]*>.*?<\/button>/)?.[0] ?? "";
-    expect(line).toContain("第二段，周三再确认一遍：清单里的三家供应商都要回…");
+    expect(line).toContain(full);
+    expect(line).not.toContain("…");
     expect(html.indexOf('data-testid="sent-reply"')).toBeLessThan(html.indexOf('data-bubble="mine"'));
     // 旧的引用胶囊不出（新首页一种字号、不用写死的颜色）。
     expect(html).not.toContain("data-quote-chip");

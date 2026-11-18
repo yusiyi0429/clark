@@ -13,8 +13,8 @@ const TIANSHU = "C:\\work\\tianshu";
 const labels = (input: Parameters<typeof folderActions>[0]) => folderActions(input).map((entry) => entry.label);
 
 describe("输入框下面的文件夹菜单（11/16）", () => {
-  it("这台电脑上登记过的：在资源管理器中显示、复制路径；项目对话再加「添加文件夹…」；系统不同叫法不同", () => {
-    expect(labels({ reveal: true, add: true, userAgent: WIN })).toEqual(["在资源管理器中显示", "复制路径", "添加文件夹…"]);
+  it("这台电脑上登记过的：在资源管理器中显示、复制路径；项目对话再加「添加文件夹」；系统不同叫法不同", () => {
+    expect(labels({ reveal: true, add: true, userAgent: WIN })).toEqual(["在资源管理器中显示", "复制路径", "添加文件夹"]);
     expect(labels({ reveal: true, add: false, userAgent: MAC })).toEqual(["在访达中显示", "复制路径"]);
     expect(labels({ reveal: true, add: false, userAgent: LINUX })).toEqual(["在文件管理器中显示", "复制路径"]);
   });

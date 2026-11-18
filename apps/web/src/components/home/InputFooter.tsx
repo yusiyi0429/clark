@@ -17,11 +17,11 @@ import h from "@/styles/home.module.css";
 
 /** 只看不能点的一段字（模型），悬停出完整说法。 */
 export const FootText = ({ children, title, testId }: { children: ReactNode; title?: string; testId?: string }) => (
-  <span className={h.footText} title={title} data-testid={testId}><span className={h.ellipsis}>{children}</span></span>
+  <span className={h.footText} title={title} data-testid={testId}><span className={h.wrap}>{children}</span></span>
 );
 
 /** 新建文件夹那一项。 */
-export const CREATE_FOLDER = "新建文件夹…";
+export const CREATE_FOLDER = "新建文件夹";
 
 /** 新建文件夹没成时就地写的一句：重名 409 写「已有同名文件夹」，名字不行照本机说的，别的「没建成」。 */
 export function createFolderError(error: unknown): string {
@@ -132,7 +132,7 @@ export function QuotaRing({ used }: { used: number }) {
 /** 知道路径时文件夹菜单里有哪几项（照 Claude Code 桌面版，本人 11/16 定）：这台电脑上登记过的才能「在资源管理器中显示」（按系统叫法），复制路径总有，项目对话才能添加。 */
 export function folderActions({ reveal, add, userAgent }: { reveal: boolean; add: boolean; userAgent: string }): { id: "reveal" | "copy" | "add"; label: string }[] {
   const show = /Mac/i.test(userAgent) ? "在访达中显示" : /Win/i.test(userAgent) ? "在资源管理器中显示" : "在文件管理器中显示";
-  return [...(reveal ? [{ id: "reveal" as const, label: show }] : []), { id: "copy", label: "复制路径" }, ...(add ? [{ id: "add" as const, label: "添加文件夹…" }] : [])];
+  return [...(reveal ? [{ id: "reveal" as const, label: show }] : []), { id: "copy", label: "复制路径" }, ...(add ? [{ id: "add" as const, label: "添加文件夹" }] : [])];
 }
 
 /** 这个路径是不是这台电脑的本机程序登记过的文件夹（连着本机时）。 */
@@ -150,7 +150,7 @@ export function FolderText({ name, title, path, onAdd }: { name: string; title: 
   const [failed, setFailed] = useState<string | null>(null);
   if (!path) return (
     <>
-      <span ref={hover.ref} className={h.footText} data-testid="footer-folder" {...hover.props}><Folder {...ICON} /><span className={h.ellipsis}>{name}</span></span>
+      <span ref={hover.ref} className={h.footText} data-testid="footer-folder" {...hover.props}><Folder {...ICON} /><span className={h.wrap}>{name}</span></span>
       {hover.tip}
     </>
   );

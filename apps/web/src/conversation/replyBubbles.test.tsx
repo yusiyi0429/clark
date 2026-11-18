@@ -379,6 +379,19 @@ describe("出字的边角", () => {
     expect(delays(tree)).toEqual([0, 60, 120, 180, 180, 180]);
   });
 
+  it("流式卡片壳子用正在输入的点，不出省略号", () => {
+    vi.useFakeTimers();
+    const bubbles = (markdown: string) => call("bubbles", () => ReplyBubbles({ markdown, streaming: true }));
+    bubbles("## 计划\n\n- 先做");
+    vi.advanceTimersByTime(HOLD_MS);
+    const tree = bubbles("## 计划\n\n- 先做，再");
+    expect(pieces(tree)).toEqual([{ kind: "card", markdown: "## 计划\n\n- 先做，再", open: true }]);
+    const html = renderToStaticMarkup(<>{expand("card", named(tree, "ReplyCard")[0]!)}</>);
+    expect(html).toContain("计划");
+    expect(html).not.toContain("…");
+    expect(html).toMatch(/data-testid="card-typing"[^>]*><i><\/i><i><\/i><i><\/i><\/div>/);
+  });
+
   it("没写完的那段等满 2 秒一定会出：计时器到了、没有新字也出", () => {
     // 只换计时器、不换 Date：计时器比 Date.now() 先到一点（浏览器里常有）。
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });

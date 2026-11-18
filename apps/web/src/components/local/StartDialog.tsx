@@ -17,6 +17,7 @@ import type { TLocalEffort } from "@warmap/contracts";
 import type { TLocalFolder, TLocalModelProfile } from "@/lib/local/runner";
 import { TIER_LABEL, listRoles, modelForTier, type CardRole, type RoleView } from "@/lib/team/roles";
 import s from "@/styles/v2-local.module.css";
+import { useDots } from "@/lib/home/noEllipsis";
 
 export function StartDialog({ title, needsFolder = true, role: given, onClose, onStart }: {
   title: string;
@@ -26,6 +27,7 @@ export function StartDialog({ title, needsFolder = true, role: given, onClose, o
   onClose: () => void;
   onStart: (model: TLocalModelProfile, folder: TLocalFolder | null, role: RoleView | null, effort: TLocalEffort | null) => Promise<void>;
 }) {
+  const dots = useDots();
   const local = useLocalRunner();
   const last = readLast();
   const withRole = given !== undefined;
@@ -120,7 +122,7 @@ export function StartDialog({ title, needsFolder = true, role: given, onClose, o
         {error ? <p className={s.error} role="alert">{error}</p> : null}
         <div className={s.actions}>
           <HeroButton variant="ghost" size="sm" onPress={onClose}>取消</HeroButton>
-          <HeroButton variant="primary" size="sm" onPress={() => void start()} isDisabled={!model || (needsFolder && !folder) || busy}>{busy ? "正在开始…" : "开始"}</HeroButton>
+          <HeroButton variant="primary" size="sm" onPress={() => void start()} isDisabled={!model || (needsFolder && !folder) || busy}>{busy ? dots("正在开始…") : "开始"}</HeroButton>
         </div>
       </div>
     </MenuDialog>

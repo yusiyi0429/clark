@@ -26,3 +26,7 @@ div[data-urgency]>.quoteButton[aria-pressed=true]:is(:hover,:focus-visible)::bef
 /* 对话里「批注了 N 项」那一行：手持 13 字、整行热区 44（原来 11 字、20 高）。 */
 @media(max-width:959px){.sentReferences,.sentReferences small{font-size:13px}.sentReferences>summary{min-height:44px}}
 @media(prefers-reduced-motion:reduce){.quoteButton,.tray,.chip{animation:none;transition:none}.quoteButton::before{transition:none}}
+
+/* 新首页不出省略号（本人 11/18）：放不下就换行，长预览限高往下渐隐；只在新首页的外壳里生效，旧界面照旧。 */
+:global(:root:has([data-type-scale="one"])) .chip .chipTitle { overflow: visible; white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+:global(:root:has([data-type-scale="one"])) .chip { height: auto; min-height: 26px; }

@@ -5,7 +5,7 @@ import { DecisionBox } from "@/components/work/DecisionBox";
 import type { TLocalFolder } from "@/lib/local/runner";
 
 /** 选项框里最后一项：本机弹出选择框选别的文件夹。 */
-export const PICK_OTHER = "选择其他文件夹…";
+export const PICK_OTHER = "选择其他文件夹";
 
 /** 选了第几项：前面是这台电脑上的文件夹，最后一项（「选择其他文件夹…」）弹本机的选择框，取消回 null。 */
 export async function folderChoice(index: number | undefined, folders: readonly TLocalFolder[], pickOther: () => Promise<TLocalFolder | null>): Promise<TLocalFolder | null> {

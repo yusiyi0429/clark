@@ -13,6 +13,7 @@ const hooks = vi.hoisted(() => ({ values: [] as unknown[], index: 0, refs: [] as
   useRef(initial: unknown) { return hooks.refs[hooks.refIndex++] ??= { current: initial }; },
 }));
 vi.mock("react", async (original) => ({ ...(await original<typeof import("react")>()), useState: hooks.useState, useRef: hooks.useRef }));
+vi.mock("@/lib/home/noEllipsis", () => ({ useDots: () => (text: string) => text }));
 
 import { HeroButton } from "@/components/HeroButton";
 import { DeliverableComposer } from "./DeliverableComposer";

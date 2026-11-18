@@ -84,7 +84,7 @@ function ReplyForm({ deliveryId, recipientId, kind, onSaved, onClose }: {
     <TeamFilePicker selection={selection} disabled={busy} onChange={(next) => { changed(); setSelection(next); }} />
     {error ? <p className={s.error} role="alert">{error}</p> : null}
     <div className={s.actions}><button type="button" className={s.linkButton} disabled={busy} onClick={onClose}>取消</button>
-      <button type="submit" className={s.primary} disabled={busy || !canSubmit}>{busy ? "正在发送…" : kind === "answered" ? "提交回复" : kind === "needs_info" ? "请求补充" : "发送说明"}</button></div>
+      <button type="submit" className={s.primary} disabled={busy || !canSubmit}>{busy ? "正在发送" : kind === "answered" ? "提交回复" : kind === "needs_info" ? "请求补充" : "发送说明"}</button></div>
   </form>;
 }
 
@@ -107,7 +107,7 @@ function Recipient({ delivery, person, sent, onSaved, onForward }: {
       <span className={s.status} data-failed={person.status === "failed" || undefined}>{STATUS[person.status]}</span></div>
     {person.error ? <p className={s.error}>{person.error}</p> : null}
     {error ? <p className={s.error} role="alert">{error}</p> : null}
-    {sent && person.status === "failed" ? <button className={s.linkButton} type="button" disabled={retrying} onClick={() => void retry()}>{retrying ? "正在重试…" : "重试给" + person.displayName + "的投递"}</button> : null}
+    {sent && person.status === "failed" ? <button className={s.linkButton} type="button" disabled={retrying} onClick={() => void retry()}>{retrying ? "正在重试" : "重试给" + person.displayName + "的投递"}</button> : null}
     {writing ? <ReplyForm key={writing} deliveryId={delivery.id} recipientId={person.personId} kind={writing} onSaved={onSaved} onClose={() => setWriting(null)} /> :
       question && person.status !== "failed" ? <div className={s.rowTools}>
         {!sent ? <>

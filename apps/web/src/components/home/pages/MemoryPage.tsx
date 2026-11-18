@@ -258,7 +258,7 @@ function MemoryRow({ item, query, role, replacedBy, onSaved, onForget, onRestore
             <Dropdown.Popover placement="bottom end" offset={8} className={h.pop}>
               <Dropdown.Menu aria-label="这条记忆的更多操作" className={h.menuList} onAction={(key) => (key === "forget" ? onForget() : setPurging("ask"))}>
                 {item.status === "active" ? <Dropdown.Item id="forget" textValue="忘掉" aria-label="忘掉" className={h.menuItem}>忘掉</Dropdown.Item> : null}
-                <Dropdown.Item id="purge" textValue="彻底删除" aria-label="彻底删除" className={`${h.menuItem} ${m.danger}`}>彻底删除…</Dropdown.Item>
+                <Dropdown.Item id="purge" textValue="彻底删除" aria-label="彻底删除" className={`${h.menuItem} ${m.danger}`}>彻底删除</Dropdown.Item>
               </Dropdown.Menu>
             </Dropdown.Popover>
           </Dropdown>

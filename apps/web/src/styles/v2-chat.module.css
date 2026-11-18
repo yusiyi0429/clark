@@ -128,3 +128,7 @@
 .taskTag span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .taskTag i { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--c, var(--accent)); }
 .sideHead { display: flex; align-items: center; gap: 10px; min-height: 40px; }
+
+/* 新首页不出省略号（本人 11/18）：放不下就换行，长预览限高往下渐隐；只在新首页的外壳里生效，旧界面照旧。 */
+:global(:root:has([data-type-scale="one"])) .row b, :global(:root:has([data-type-scale="one"])) .taskTag span { overflow: visible; white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+:global(:root:has([data-type-scale="one"])) .taskTag { height: auto; min-height: 26px; padding-block: 2px; }

@@ -226,7 +226,7 @@ function withoutTitle(markdown: string, title: string): string {
 
 /**
  * 一张卡：标题、摘要（淡色）、时间（淡色）、「打开」。电脑上「打开」在右边文件预览那一格看全文；手机上（没有那一格）就地展开。
- * open：还在写，只出壳子（标题 +「…」）。
+ * open：还在写，只出壳子（标题 + 正在输入的「•••」，同气泡）。
  */
 function ReplyCard({ markdown, title, summary, open, at, delay, edge, part }: { markdown: string; title: string; summary: string; open: boolean; at?: string; delay: number | null; edge?: ReactNode; part: PartMark }) {
   const side = useSideDetail();
@@ -257,7 +257,7 @@ function ReplyCard({ markdown, title, summary, open, at, delay, edge, part }: { 
         <span className={b.cardTitle}>{title}</span>
         {time ? <span className={b.faint}>{time}</span> : null}
       </div>
-      {open ? <div className={b.faint}>…</div> : summary && !inPlace ? <div className={b.summary}>{summary}</div> : null}
+      {open ? <div className={`${b.typing} ${b.cardTyping}`} data-testid="card-typing" aria-hidden><i /><i /><i /></div> : summary && !inPlace ? <div className={b.summary}>{summary}</div> : null}
       {inPlace ? <div className={`${ts.prose} ${b.cardBody}`}><MarkdownBody text={withoutTitle(markdown, title)} streaming={false} /></div> : null}
       {open || inPlace ? null : <div className={b.acts}><button type="button" className={b.open} onClick={show}>打开</button></div>}
       {side && panel ? <SideContent side={side} kind="file"><CardPreview title={title} markdown={markdown} onClose={close} /></SideContent> : null}

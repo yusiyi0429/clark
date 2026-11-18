@@ -18,6 +18,7 @@ import { VISUAL_SHEET_MIN_SCALE } from "./visualSandbox";
 import { IssueSuggestCard, parseIssueSuggest } from "../IssueSuggestCard";
 import "katex/dist/katex.min.css";
 import r from "@/styles/rich-blocks.module.css";
+import { useDots } from "@/lib/home/noEllipsis";
 
 /**
  * 对话里的富内容块（docs/superpowers/specs/2026-10-10-discussion-desk-design.md「对话里的富内容块」）：
@@ -86,11 +87,12 @@ function IssueSuggestBlock({ source }: { source: string }) {
 
 /** 没收全的块（含没写完的公式）：标题 + 「正在生成…」，两道浅灰占位。 */
 export function RichSkeleton({ title }: { title: string }) {
+  const dots = useDots();
   return (
     <div className={r.skeleton} role="status" aria-label={`${title}，正在生成`} data-rich-skeleton="">
       <div className={r.head}>
         <span className={r.title}>{title}</span>
-        <span className={r.pending}>正在生成…</span>
+        <span className={r.pending}>{dots("正在生成…")}</span>
       </div>
       <span className={r.shimmer} aria-hidden />
       <span className={r.shimmer} data-short="" aria-hidden />

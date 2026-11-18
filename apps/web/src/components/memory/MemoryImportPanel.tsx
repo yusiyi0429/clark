@@ -13,6 +13,7 @@ import { browserApi } from "@/lib/api/client";
 import { SegmentedSwitch } from "@/components/SegmentedSwitch";
 import { MEMORY_EXPORT_PROMPT, SOURCE_HOME, SOURCE_LABEL, textFile, uploadFile, type ImportFile, type MemoryImport } from "./memoryModel";
 import s from "./memory.module.css";
+import { useDots } from "@/lib/home/noEllipsis";
 
 type Source = "chatgpt" | "claude";
 const ACCEPT = ".zip,.json,.md,.txt";
@@ -21,6 +22,7 @@ const MAX_PASTE = 64 * 1024;
 const size = (chars: number) => (chars >= 1000 ? `${(chars / 1000).toFixed(1)}k 字` : `${chars} 字`);
 
 export function MemoryImportPanel({ onCreated }: { onCreated: (created: MemoryImport) => void }) {
+  const dots = useDots();
   const [source, setSource] = useState<Source>("chatgpt");
   const [text, setText] = useState("");
   const [files, setFiles] = useState<File[]>([]);
@@ -100,7 +102,7 @@ export function MemoryImportPanel({ onCreated }: { onCreated: (created: MemoryIm
       ) : null}
       <div className={s.reviewBar}>
         {error ? <span className={s.error} role="alert">{error}</span> : null}
-        <HeroButton variant="primary" size="sm" isDisabled={!ready || busy} onPress={() => void submit()}>{busy ? "导入中…" : "导入"}</HeroButton>
+        <HeroButton variant="primary" size="sm" isDisabled={!ready || busy} onPress={() => void submit()}>{busy ? dots("导入中…") : "导入"}</HeroButton>
       </div>
     </div>
   );

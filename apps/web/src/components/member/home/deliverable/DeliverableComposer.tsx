@@ -11,6 +11,7 @@ import type { TDeliverableVersion } from "@warmap/contracts";
 import { HeroButton } from "@/components/HeroButton";
 import { itemTag } from "./deliverableFormat";
 import d from "@/styles/task-deliverable.module.css";
+import { useDots } from "@/lib/home/noEllipsis";
 
 const ICON = { size: 16, strokeWidth: 1.8 } as const;
 
@@ -54,6 +55,7 @@ export function DeliverableComposer({ previous, startWithStatement, onSubmit, on
   onSubmit: (input: { files: File[]; links: string[]; statement: string; keep: string[] }) => Promise<string | null>;
   onCancel: (() => void) | null;
 }) {
+  const dots = useDots();
   const [keep, setKeep] = useState<string[]>(() => previous?.items.map((item) => item.id) ?? []);
   const [files, setFiles] = useState<File[]>([]);
   const [links, setLinks] = useState<string[]>([]);
@@ -147,7 +149,7 @@ export function DeliverableComposer({ previous, startWithStatement, onSubmit, on
       {error ? <p className={d.error} role="alert">{error}</p> : null}
       <div className={d.composerActions}>
         {onCancel ? <HeroButton variant="ghost" size="sm" isDisabled={busy} onPress={onCancel}>取消</HeroButton> : null}
-        <HeroButton variant="primary" size="sm" isDisabled={empty || busy} onPress={() => void submit()}>{busy ? "正在上传…" : "评审这一版"}</HeroButton>
+        <HeroButton variant="primary" size="sm" isDisabled={empty || busy} onPress={() => void submit()}>{busy ? dots("正在上传…") : "评审这一版"}</HeroButton>
       </div>
     </div>
   );

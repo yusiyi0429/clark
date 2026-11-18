@@ -288,7 +288,6 @@ export function todayLabel(today: string | null): string {
   return `${Number(date.slice(5, 7))} 月 ${Number(date.slice(8, 10))} 日 周${weekday}`;
 }
 
-const short = (text: string, max = 28) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
 
 /** 「2026-11」→「2026-11-30」：本体的 Task 没有截止日，验收截止取所在月份的最后一天（契约 HomeProjectGoal.dueDate）。 */
 export function monthEnd(period: string): string {
@@ -424,7 +423,7 @@ function mergeWaiting(subs: SubSession[], task: { taskId: string; name: string }
     const issue = merges.find((entry) => entry.cardId === sub.id);
     return {
       id: `merge:${sub.id}`, kind: "merge", title: issue ? "无法合回" : `合进 ${sub.merge?.baseBranch ?? "原分支"}`,
-      source: issue ? `${sub.title} · ${short(issue.text, 40)}` : [sub.title, task?.name].filter(Boolean).join(" · "),
+      source: issue ? `${sub.title} · ${issue.text}` : [sub.title, task?.name].filter(Boolean).join(" · "),
       open: { kind: "card", id: sub.id }, taskId: task?.taskId ?? null, projectId: projectOf(task?.taskId ?? null)?.projectId ?? null, sessionId: sub.sessionId, deviceId: sub.deviceId, at: sub.merge?.at ?? sub.updatedAt, ...fields("inline_local"),
     };
   });
@@ -434,7 +433,7 @@ function mergeWaiting(subs: SubSession[], task: { taskId: string; name: string }
 function orphanMerges(merges: MergeIssue[], subs: SubSession[]): WaitingItem[] {
   const shown = new Set(subs.map((sub) => sub.id));
   return merges.filter((issue) => !issue.cardId || !shown.has(issue.cardId)).map((issue) => ({
-    id: `merge:${issue.sessionId}`, kind: "merge", title: "无法合回", source: `${issue.title} · ${short(issue.text, 40)}`,
+    id: `merge:${issue.sessionId}`, kind: "merge", title: "无法合回", source: `${issue.title} · ${issue.text}`,
     open: issue.cardId ? { kind: "card", id: issue.cardId } : { kind: "href", href: HOME_HREF }, taskId: null, projectId: null, sessionId: issue.sessionId, deviceId: null, at: null, ...fields("inline_local"),
   }));
 }

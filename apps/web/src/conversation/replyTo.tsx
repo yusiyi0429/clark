@@ -36,14 +36,14 @@ export function ReplyProvider({ scope, children }: { scope: string; children: Re
   return <ReplyContext.Provider value={value}>{children}</ReplyContext.Provider>;
 }
 
-/** 发出去的那句上方：回复图标加原文开头约 24 个字，淡色；点开看全文。 */
+/** 发出去的那句上方：回复图标加原文开头一段，淡色，最多两行往下渐隐（不出省略号）；点开看全文。 */
 export function SentReply({ text }: { text: string }) {
   const [open, setOpen] = useState(false);
-  const excerpt = quoteExcerpt(text, 24);
+  const excerpt = quoteExcerpt(text, 80);
   return (
     <Popover isOpen={open} onOpenChange={setOpen}>
       <HeroButton variant="ghost" size="sm" className={b.replied} aria-label={`回复 ${excerpt}`} data-testid="sent-reply">
-        <Reply size={14} strokeWidth={1.8} aria-hidden />{excerpt}
+        <Reply size={14} strokeWidth={1.8} aria-hidden /><span className={b.repliedText}>{excerpt}</span>
       </HeroButton>
       <Popover.Content placement="bottom end" offset={6} className={h.pop}>
         <Popover.Dialog aria-label="回复原文" className={b.repliedFull}>{text}</Popover.Dialog>

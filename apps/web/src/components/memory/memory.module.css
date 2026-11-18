@@ -144,3 +144,7 @@ a.anchor:hover { text-decoration: underline; text-underline-offset: 3px; }
 .content { box-sizing: border-box; width: 100%; min-width: 0; padding: var(--space-2) var(--space-6) var(--space-8); }
 .stack { display: grid; gap: var(--space-6); min-width: 0; max-width: var(--doc-measure); margin-inline: auto; }
 @media (max-width: 759px) { .content { padding-inline: var(--space-4); } }
+
+/* 新首页不出省略号（本人 11/18）：放不下就换行，长预览限高往下渐隐；只在新首页的外壳里生效，旧界面照旧。 */
+:global(:root:has([data-type-scale="one"])) .anchor, :global(:root:has([data-type-scale="one"])) .quote q, :global(:root:has([data-type-scale="one"])) .fileList li span { overflow: visible; white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+:global(:root:has([data-type-scale="one"])) .text { display: block; -webkit-line-clamp: none; max-height: 3lh; overflow: hidden; -webkit-mask-image: linear-gradient(to bottom, black 2lh, transparent 3lh); mask-image: linear-gradient(to bottom, black 2lh, transparent 3lh); -webkit-mask-size: 100% 3lh; mask-size: 100% 3lh; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; }

@@ -268,7 +268,7 @@ function AddLink({ task, criterion, actions }: { task: ReviewTask; criterion: Re
                 {fresh.map((candidate) => (
                   <li key={candidate.id}>
                     <button type="button" className={h.menuItem} disabled={busy} onClick={() => add({ candidate: { kind: candidate.kind, id: candidate.id } })} title={candidate.url} data-testid="review-candidate">
-                      <span className={h.ellipsis}>{candidate.title}</span><span className={h.grow} /><span className={p.reviewMeta}>{candidate.kind === "deliverable" ? "交付物" : "产出"}</span>
+                      <span className={h.wrap}>{candidate.title}</span><span className={h.grow} /><span className={p.reviewMeta}>{candidate.kind === "deliverable" ? "交付物" : "产出"}</span>
                     </button>
                   </li>
                 ))}

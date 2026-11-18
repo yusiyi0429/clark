@@ -31,6 +31,7 @@
 :is(.buddy, .mine, .card):is(:hover, :focus-within) > .actions, .actions:has([aria-expanded="true"]) { opacity: 1; }
 /* 发出的那句回复了哪一块：气泡上方一行淡色，回复图标加开头几个字；点开看全文。 */
 .replied { display: inline-flex; align-items: center; gap: 4px; min-width: 0; max-width: min(75%, 560px); height: auto; margin: 0 4px 4px; padding: 0; border: 0; background: none; color: var(--ink-faint); font: inherit; cursor: pointer; }
+.repliedText { min-width: 0; max-height: 2lh; overflow: hidden; text-align: left; white-space: normal; overflow-wrap: anywhere; -webkit-mask-image: linear-gradient(to bottom, black 1lh, transparent 2lh); mask-image: linear-gradient(to bottom, black 1lh, transparent 2lh); -webkit-mask-size: 100% 2lh; mask-size: 100% 2lh; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; }
 .replied:hover { background: none; color: var(--ink-muted); }
 .replied:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
 .repliedFull { max-width: 360px; max-height: 320px; overflow: auto; padding: var(--space-2); color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; outline: none; }
@@ -65,9 +66,10 @@
   color: var(--ink);
 }
 .cardHead { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
-.cardTitle { flex: 1; min-width: 0; }
+.cardTitle { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .faint { flex: none; color: var(--ink-faint); white-space: nowrap; }
-.summary { margin-top: 2px; color: var(--ink-muted); }
+/* 摘要最多两行，多了第二行往下渐隐（不出省略号，本人 11/18）。 */
+.summary { max-height: 2lh; margin-top: 2px; overflow: hidden; color: var(--ink-muted); overflow-wrap: anywhere; -webkit-mask-image: linear-gradient(to bottom, black 1lh, transparent 2lh); mask-image: linear-gradient(to bottom, black 1lh, transparent 2lh); -webkit-mask-size: 100% 2lh; mask-size: 100% 2lh; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; }
 .acts { display: flex; margin-top: 12px; }
 .open { height: 34px; padding: 0 14px; border: 0; border-radius: var(--r-control); background: var(--ink); color: var(--surface); font: inherit; cursor: pointer; transition: background-color var(--dur-fast) linear; }
 .open:hover { background: var(--ink-muted); }
@@ -78,6 +80,8 @@
 .typing i { width: 7px; height: 7px; border-radius: 50%; background: var(--ink-faint); opacity: .35; animation: dot 1.2s ease-in-out infinite; }
 .typing i:nth-child(2) { animation-delay: .18s; }
 .typing i:nth-child(3) { animation-delay: .36s; }
+/* 卡片壳子还在写：标题下面一行同样的「•••」，不另起气泡。 */
+.cardTyping { align-items: center; height: 1lh; margin-top: 2px; padding: 0; }
 @keyframes dot { 30% { opacity: 1; transform: translateY(-2px); } }
 
 /* 入场：第一次出现时淡入、轻轻上来；一起到的几块错开 60ms。读历史来的不动。 */

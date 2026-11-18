@@ -1,6 +1,6 @@
 /*
  * 页头在场（设计 4.2、components/home/Presence.tsx）：新首页伙伴主线、项目对话的页头。
- * 页头三栏：左边标题、正中伙伴、右边按钮；两边等宽，正中那一栏永远在正中，标题再长也只在左边那栏里省略。
+ * 页头三栏：左边标题、正中伙伴、右边按钮；两边等宽，正中那一栏永远在正中，标题再长也只在左边那栏里换行。
  * 状态胶囊绝对定位挂在形象下面，形象的位置不因它出现、变长短而挪；也不把页头撑高。
  */
 /* 页头是尺寸容器：胶囊和它下面那一块最宽是页头的宽（对话栏两边留白以内；右边面板打开时跟着变窄），不按整个窗口。 */
@@ -47,7 +47,7 @@
 }
 .pill[data-rec] { padding-right: 12px; color: var(--counter); }
 .hit { display: inline-flex; align-items: center; min-width: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; white-space: pre; }
-.what { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.what { min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 button.hit { cursor: pointer; }
 .time { flex: none; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
 .pill[data-rec] .hit { font-variant-numeric: tabular-nums; }

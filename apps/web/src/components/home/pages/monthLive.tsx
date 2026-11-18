@@ -64,7 +64,7 @@ function ProjectSlot({ task, showProject, projects, go }: { task: HomeTask; show
   const { project } = task;
   if (failed) return <FailedLine inline {...failed} />;
   if (project) return showProject
-    ? <button type="button" className={h.statusChip} onClick={() => go(projectHref(project.projectId))} data-testid="task-project" title={project.name}><span className={h.ellipsis}>{project.name}</span></button>
+    ? <button type="button" className={h.statusChip} onClick={() => go(projectHref(project.projectId))} data-testid="task-project" title={project.name}><span className={h.wrap}>{project.name}</span></button>
     : null;
   return <AttachMenu taskName={task.name} projects={projects.projects} onPick={(projectId) => attempt(() => projects.actions.attach(task.taskId, projectId))}
     onCreate={() => attempt(() => projects.actions.create(task.name, task.taskId))} />;
@@ -74,7 +74,7 @@ function ProjectSlot({ task, showProject, projects, go }: { task: HomeTask; show
 function AttachMenu({ taskName, projects, onPick, onCreate }: { taskName: string; projects: Project[]; onPick: (projectId: string) => void; onCreate: () => void }) {
   return (
     <Dropdown>
-      <Dropdown.Trigger className={h.statusChip} data-testid="task-attach">挂到…</Dropdown.Trigger>
+      <Dropdown.Trigger className={h.statusChip} data-testid="task-attach">挂到</Dropdown.Trigger>
       <Dropdown.Popover placement="bottom end" offset={8} className={h.pop}>
         <Dropdown.Menu aria-label="挂到" className={h.menuList} onAction={(key) => (key === "new" ? onCreate() : onPick(String(key)))}>
           <Dropdown.Section className={h.menuSection}>

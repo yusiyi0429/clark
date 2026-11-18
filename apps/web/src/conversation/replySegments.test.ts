@@ -173,6 +173,26 @@ describe("splitReply", () => {
     expect(splitReply("**甲**\n\n**乙**\n\n说明。").segments).toEqual([{ kind: "bubble", markdown: "**甲**\n\n**乙**\n\n说明。" }]);
     expectNoBubbleTurnsCard(`**甲**\n\n**乙**\n\n${longItem}\n\n**丙**\n\n说明。`);
   });
+  it("卡片标题完整显示，摘要不拼省略号", () => {
+    const title = "这是一个很长很长的标题，用来确认卡片标题放不下时完整显示交给样式去换行，而不是在后面截断再拼省略号";
+    const summary = "摘要也很长：".repeat(30);
+    const six = Array.from({ length: 6 }, (_, i) => `- 第${i + 1}项`).join("\n");
+    // describeCard：# 标题一节。
+    const heading = splitReply(`## ${title}\n\n${summary}`).segments[0] as { title: string; summary: string };
+    expect(heading.title).toBe(title);
+    expect(heading.summary).not.toContain("…");
+    expect(summary.startsWith(heading.summary)).toBe(true);
+    expect(heading.summary.length).toBeGreaterThan(0);
+    // describeGroup：加粗小标题一节，去掉末尾冒号，其余完整。
+    const bold = splitReply(`**${title}**：\n\n${six}`).segments[0] as { title: string; summary: string };
+    expect(bold.title).toBe(title);
+    // 流式时卡片壳子的标题也完整。
+    expect(splitReply(`## ${title}\n\n- 先做`, true).tail).toMatchObject({ kind: "card", title });
+    // 表格卡：第一行拼成标题，也不截。
+    const cells = Array.from({ length: 12 }, (_, i) => `第${i + 1}列标题`);
+    const table = splitReply(`| ${cells.join(" | ")} |\n|${"---|".repeat(12)}\n| ${cells.map(() => "x").join(" | ")} |`).segments[0] as { title: string };
+    expect(table.title).toBe(cells.join(" · "));
+  });
   it("空的回复", () => {
     expect(splitReply("")).toEqual({ segments: [], tail: null });
     expect(splitReply("  \n")).toEqual({ segments: [], tail: null });

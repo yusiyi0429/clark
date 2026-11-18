@@ -38,12 +38,12 @@ describe("派活单照对话里说的模型要求预选（第 69 条）", () => 
     expect(picks(await render(null)).every((label) => label!.endsWith(" · 自动"))).toBe(true);
   });
 
-  it("没对上：单子顶上一行「没找到「原话」」（太长截断、悬停看全），模型用自动", async () => {
+  it("没对上：单子顶上一行「没找到「原话」」（太长换行，不出省略号），模型用自动", async () => {
     const html = await render("用 Kimi 做");
     expect(html).toMatch(/<p[^>]*title="用 Kimi 做"[^>]*data-testid="model-words-missing"[^>]*>没找到「用 Kimi 做」<\/p>/);
     expect(picks(html).every((label) => label!.endsWith(" · 自动"))).toBe(true);
     const long = "这几件都用一个我们还没接进来的新模型来做，思考程度先随便，回头再说具体用哪个";
-    expect(await render(long)).toMatch(new RegExp(`title="${long}"[^>]*>没找到「${long.slice(0, 23)}…」`));
+    expect(await render(long)).toMatch(new RegExp(`title="${long}"[^>]*>没找到「${long}」`));
   });
 
   it("同一张单里两批原话不同（再拆一次接在后面）：各批按自己的原话对，前一批照 Opus 预选，后一批写「没找到」、用自动，不互相盖", async () => {

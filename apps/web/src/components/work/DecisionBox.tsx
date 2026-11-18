@@ -17,6 +17,7 @@ import { ArrowDown, ArrowUp, Check, ChevronLeft, ChevronRight, LoaderCircle } fr
 import { HeroButton } from "@/components/HeroButton";
 import { CloudError } from "@/lib/board/cloud";
 import x from "@/styles/decision-box.module.css";
+import { useDots } from "@/lib/home/noEllipsis";
 
 /** noEnter：回车不提交这一项（批准框的「同类以后都批准」），回车提交推荐的那个。 */
 export type DecisionOption = { label: string; detail?: ReactNode; recommended?: boolean; noEnter?: boolean };
@@ -73,6 +74,7 @@ export function DecisionBox({ kind, title, body, options, onPick, onTicks, initi
   autoFocus?: boolean;
   testId?: string;
 }) {
+  const dots = useDots();
   const recommended = Math.max(0, options.findIndex((option) => option.recommended));
   const [selected, setSelected] = useState(recommended);
   const [picks, setPicks] = useState<number[]>([]);
@@ -225,7 +227,7 @@ export function DecisionBox({ kind, title, body, options, onPick, onTicks, initi
           <div className={x.option} data-other="" data-selected={selected === otherIndex ? "" : undefined} data-sending={sending === otherIndex ? "" : undefined}
             onMouseEnter={() => setSelected(otherIndex)} onClick={() => textRef.current?.focus()} data-testid="decision-other">
             <kbd className={x.key} aria-hidden>{otherIndex + 1}</kbd>
-            <textarea ref={textRef} className={x.otherInput} rows={1} maxLength={other.maxLength ?? 4000} value={text} placeholder={`${otherName}…`} aria-label={otherName}
+            <textarea ref={textRef} className={x.otherInput} rows={1} maxLength={other.maxLength ?? 4000} value={text} placeholder={dots(`${otherName}…`)} aria-label={otherName}
               aria-keyshortcuts={String(otherIndex + 1)} tabIndex={selected === otherIndex ? 0 : -1} disabled={disabled}
               onFocus={() => setSelected(otherIndex)} onChange={(event) => setText(event.target.value)} data-testid="decision-other-input" />
             <span className={x.trail}>

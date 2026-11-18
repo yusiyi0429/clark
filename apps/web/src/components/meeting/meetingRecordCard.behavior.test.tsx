@@ -19,6 +19,7 @@ vi.mock("react", async (original) => ({ ...(await original<typeof import("react"
   useState: hooks.useState, useRef: hooks.useRef, useEffect: () => undefined, useCallback: (fn: unknown) => fn, useMemo: (fn: () => unknown) => fn() }));
 const api = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn(), post: vi.fn() }));
 vi.mock("@/lib/api/client", () => ({ browserApi: { GET: api.get, PUT: api.put, POST: api.post } }));
+vi.mock("@/lib/home/noEllipsis", () => ({ useNoEllipsis: () => false, useDots: () => (text: string) => text }));
 
 import { ActionItemRow } from "./ActionItemRow";
 import { CardItemMenu } from "./CardItemMenu";

@@ -538,7 +538,7 @@ export function StartForm({ meeting, onStarted, onBook }: { meeting: HomeMeeting
       {picking ? options ? (
         <WorldAnchorPicker options={options} value={anchors} viewerId={me} nameOf={nameOf} company={ceo}
           onChange={(next) => { setAnchors(next); if (next[0]?.kind !== "po") setPicking(false); }} />
-      ) : optionsFailed ? <p className={h.meetError}>没读到 <button type="button" onClick={() => setRetry(retry + 1)}>重试</button></p> : <p className={h.meetMeta}>…</p> : null}
+      ) : optionsFailed ? <p className={h.meetError}>没读到 <button type="button" onClick={() => setRetry(retry + 1)}>重试</button></p> : <p className={h.meetMeta}>正在读取</p> : null}
       {ceo ? (
         <div className={h.meetField}>
           <span className={h.menuFaint}>主持人</span>
@@ -550,7 +550,7 @@ export function StartForm({ meeting, onStarted, onBook }: { meeting: HomeMeeting
       {remote ? (
         <div className={h.meetField} role="group" aria-label="参会">
           <span className={h.menuFaint}>参会</span>
-          {!feishu ? <span className={h.menuFaint}>…</span>
+          {!feishu ? <span className={h.menuFaint}>正在读取</span>
             : !feishu.enabled ? <span className={h.meetError}>飞书日历暂不可用 <button type="button" onClick={() => setRetry(retry + 1)}>重试</button></span>
             : !feishu.calendar ? <span className={h.meetNote}>飞书日历未连接 <a href={feishuConnectHref(window.location.pathname)} target="_blank" rel="noopener">去连接</a></span>
             : peopleFailed ? <span className={h.meetError} role="alert">没读到同事 <button type="button" onClick={() => setRetry(retry + 1)}>重试</button></span>
@@ -571,7 +571,7 @@ export function StartForm({ meeting, onStarted, onBook }: { meeting: HomeMeeting
       {error ? <p className={h.meetError} role="alert">{error}</p> : null}
       <div className={h.meetActions}>
         {me ? <HeroButton variant="tertiary" size="sm" isDisabled={busy} onPress={onBook}>预约会议</HeroButton> : <span />}
-        <HeroButton ref={startButton} variant="primary" isDisabled={!ready} onPress={startNew} data-testid="meeting-start">{remote ? inviting ? "正在发起…" : "发起会议" : "开始录音"}</HeroButton>
+        <HeroButton ref={startButton} variant="primary" isDisabled={!ready} onPress={startNew} data-testid="meeting-start">{remote ? inviting ? "正在发起" : "发起会议" : "开始录音"}</HeroButton>
       </div>
     </>
   );

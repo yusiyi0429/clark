@@ -23,7 +23,7 @@ export function NewSubView({ project, onCreate }: { project: Pick<Project, "id" 
       <header className={h.viewHead}>{chrome.lead}<h1 className={h.viewTitle} tabIndex={-1}>{project.name}</h1>{chrome.trail}</header>
       <div className={h.homeScroll} />
       <div className={h.composerDock}>
-        <InputBar placeholder="说点什么…" textRequired onSend={send} draftKey={`tianshu-home-draft-v1:new:${project.id}`} />
+        <InputBar placeholder="说点什么" textRequired onSend={send} draftKey={`tianshu-home-draft-v1:new:${project.id}`} />
       </div>
     </div>
   );

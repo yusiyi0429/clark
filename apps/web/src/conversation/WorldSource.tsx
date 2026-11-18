@@ -8,6 +8,7 @@ import { parseSourceRef, shortDate } from "@/cards/meetingSources";
 import { cleanDisplayText } from "@/lib/displayText";
 import d from "@/styles/decision-workspace.module.css";
 import s from "@/styles/citation-panel.module.css";
+import { useDots } from "@/lib/home/noEllipsis";
 
 /**
  * 本体出处（cite:world:<object_id>@<version>）：浮层写「本体 · 类型 · 第几版」，依据面板里是出处卡——
@@ -58,6 +59,7 @@ export function useWorldSource(ref: string | null, active: boolean): WorldLoad |
 
 /** 依据面板里的出处卡（同议题依据一套 .drawer）。 */
 export function WorldEvidence({ citeRef, trigger, onClose }: { citeRef: string; trigger: HTMLElement | null; onClose: () => void }) {
+  const dots = useDots();
   const parsed = parseSourceRef(citeRef);
   const load = useWorldSource(citeRef, true) ?? { state: "missing" };
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -93,7 +95,7 @@ export function WorldEvidence({ citeRef, trigger, onClose }: { citeRef: string; 
         </button>
       </header>
       <div className={d.drawerBody}>
-        {load.state === "loading" ? <p className={d.muted} role="status">正在读取…</p>
+        {load.state === "loading" ? <p className={d.muted} role="status">{dots("正在读取…")}</p>
           : load.state === "missing" ? <p className={d.muted} role="alert">读不到这个本体对象，可能已删除或不在你可读的范围里。</p>
             : load.state === "error" ? <p className={d.muted} role="alert">本体暂时读不到，请稍后再试。</p>
               : (

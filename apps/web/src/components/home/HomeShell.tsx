@@ -75,6 +75,7 @@ import { ViewChrome, PAGE_TITLE, monthHref, scopeOf, viewOf, type View } from ".
 import { MONTH_PAGE, SECONDARY_PAGES, type MonthHead, type SecondaryPageProps } from "./pages";
 import { useMonthExtras } from "./pages/monthLive";
 import { useHomeArrival } from "@/components/onboarding/useHomeArrival";
+import { NoEllipsis } from "@/lib/home/noEllipsis";
 import { ICON } from "./StateIcon";
 import { useTabTitle } from "./useTabTitle";
 import { HomeMeetingProvider, MeetingControl, useHomeMeeting } from "./MeetingControl";
@@ -698,6 +699,7 @@ function HomeFrame({ account }: { account: Account }) {
   const panel = (slot === "thread" && !threadSub) || (buddyMain && (slot === "sessions" || slot === "thread")) ? null : slot;
   if (handheld) {
     return (
+      <NoEllipsis.Provider value>
       <WorkspaceContext.Provider value={workspace}>
         <ViewChrome.Provider value={chrome}>
           <SeenContext.Provider value={seen}>
@@ -721,9 +723,11 @@ function HomeFrame({ account }: { account: Account }) {
           </SeenContext.Provider>
         </ViewChrome.Provider>
       </WorkspaceContext.Provider>
+      </NoEllipsis.Provider>
     );
   }
   return (
+    <NoEllipsis.Provider value>
     <WorkspaceContext.Provider value={workspace}>
       <ViewChrome.Provider value={chrome}>
         <SideDetailContext.Provider value={side}>
@@ -763,6 +767,7 @@ function HomeFrame({ account }: { account: Account }) {
         </SideDetailContext.Provider>
       </ViewChrome.Provider>
     </WorkspaceContext.Provider>
+    </NoEllipsis.Provider>
   );
 }
 

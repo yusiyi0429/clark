@@ -101,3 +101,6 @@
 .fold { display: flex; align-items: center; gap: var(--space-1); width: fit-content; margin: 0; padding: 0; border: 0; background: none; color: var(--ink-faint); font: inherit; font-size: var(--text-xs); line-height: 16px; text-align: left; cursor: pointer; }
 .fold:hover { color: var(--ink-muted); }
 .fold:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-bar); }
+
+/* 新首页不出省略号（本人 11/18）：放不下就换行，长预览限高往下渐隐；只在新首页的外壳里生效，旧界面照旧。 */
+:global(:root:has([data-type-scale="one"])) .label small, :global(:root:has([data-type-scale="one"])) .rTitle, :global(:root:has([data-type-scale="one"])) .rAnswer { overflow: visible; white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
