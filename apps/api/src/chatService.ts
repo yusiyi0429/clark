@@ -153,6 +153,13 @@ function segmentMessages(messages: ChatMessage[], runs: ChatRun[]) {
 }
 
 /** 首页界面拼最近几天的几段、最多约这么多条（拼够了就不再往前读，每 10 秒的轮询请求数有上限）。 */
+/** 一轮回答后面最多挂几张卡；多了先截别的卡，伙伴的选项框一张不截（本人要答的不能丢）。 */
+const CARD_LIMIT = 12;
+function capCards(cards: TConversationCard[]): TConversationCard[] {
+  let room = CARD_LIMIT - cards.filter((card) => card.kind === "buddy_question").length;
+  return cards.filter((card) => card.kind === "buddy_question" || room-- > 0);
+}
+
 const HISTORY_DAYS = 7;
 const HISTORY_MESSAGES = 200;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -298,7 +305,7 @@ export function createChatService(options: {
     }
   };
   /**
-   * 读回历史时接上伙伴每一轮的计划清单和卡（卡排在 Chat 存的卡后面，最多 4 张）。
+   * 读回历史时接上伙伴每一轮的计划清单和卡（卡排在 Chat 存的卡后面，最多 CARD_LIMIT 张；多了先截别的卡，选项框一张不截）。
    * project（项目对话）：每条回答标上在哪跑（不是本机跑的就是云端），本机没跑成改在云端的标 fallback。
    */
   const withExtras = async <M extends { role: string; runId: string; kind?: string; cards?: TConversationCard[] }>(viewer: ChatViewer, messages: M[], project = false) => {
@@ -308,7 +315,7 @@ export function createChatService(options: {
     return messages.map((message) => {
       if (message.role !== "assistant" || message.kind) return message;
       const extra = extras?.get(message.runId) ?? {};
-      const cards = [...(message.cards ?? []), ...(extra.cards ?? [])].slice(0, 4);
+      const cards = capCards([...(message.cards ?? []), ...(extra.cards ?? [])]);
       return { ...message, ...(cards.length ? { cards } : {}), ...(extra.plan ? { plan: extra.plan } : {}), ...(extra.model ? { model: extra.model } : {}),
         ...(project ? { ranOn: extra.ranOn ?? "cloud" } : {}), ...(project && extra.fallback ? { fallback: extra.fallback } : {}) };
     });

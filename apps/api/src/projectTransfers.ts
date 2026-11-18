@@ -183,6 +183,7 @@ async function composeNote(deps: TransferDeps, row: Pick<TransferRow, "project_i
 export async function startTransfer(deps: TransferDeps, fromId: string, projectId: string, toId: string, afterSequence?: number): Promise<TProjectTransfer> {
   const { q, names, now } = deps;
   const project = await ownProject(q, fromId, projectId);
+  if (project.scratch) throw new CardError(409, "SCRATCH_PROJECT", "「随手」项目不转交");
   if (project.archived_at) throw new CardError(409, "PROJECT_ARCHIVED", "这个项目已经归档了");
   if (toId === fromId) throw new CardError(400, "INVALID_INPUT", "不能转给自己");
   if (!names.has(toId)) throw new CardError(404, "PERSON_NOT_FOUND", "人员目录里没有这个人");

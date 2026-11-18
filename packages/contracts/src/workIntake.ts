@@ -20,6 +20,10 @@ export type TCreateWorkIntake = Static<typeof CreateWorkIntake>;
 export type TWorkIntakeChange = Static<typeof WorkIntakeChange>;
 export const PartnerWorkEvent = Type.Object({id: Type.String(), at: Type.String(), projectId: Type.String(), projectName: Type.String(),
   title: Type.String(), detail: Type.String(), subjectKind: Type.Union([Type.Literal("card"),Type.Literal("topic")]), subjectId: Type.String(),
-  waitingId: Type.Union([Type.String(),Type.Null()])}, strict);
+  waitingId: Type.Union([Type.String(),Type.Null()]),
+  /** 从主线开的会话正常做完一轮（同一个会话只留最新一行，最新一次卡住时不出）。 */
+  done: Type.Optional(Type.Literal(true)),
+  /** 这个会话是从主线开的（open_session）。 */
+  fromMain: Type.Optional(Type.Literal(true))}, strict);
 export const PartnerWorkEvents = Type.Object({items:Type.Array(PartnerWorkEvent)},strict);
 export type TPartnerWorkEvent = Static<typeof PartnerWorkEvent>;

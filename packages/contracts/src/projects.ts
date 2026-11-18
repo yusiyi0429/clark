@@ -48,6 +48,8 @@ export const Project = Type.Object({
   transfer: Nullable(ProjectTransfer),
   permissionMode: LocalPermissionMode,
   autoRelayLimit: Nullable(AutoRelayLimit),
+  /** 本人的「随手」项目（一次性的活都开在它里面，本人 11/18）；别的项目不带。 */
+  scratch: Type.Optional(Type.Literal(true)),
 }, strict);
 
 /** GET /api/me/projects（DRI 工作台）：本人全部项目（含交出去了的，算归档），没归档的在前，各自按最近动静从近到远。 */

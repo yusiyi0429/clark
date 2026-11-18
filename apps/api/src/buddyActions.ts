@@ -3,7 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { FormatRegistry } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import {
-  BuddyActionParams, BUDDY_ACTION_NAMES, PROJECT_ONLY_ACTIONS, type BuddyActionName, type TBudget, type TBuddyActionSpec, type TBuddyAskQuestion, type TBuddyAuditEntry, type TBuddyAuthority,
+  BuddyActionParams, BUDDY_ACTION_NAMES, MAIN_ONLY_ACTIONS, PROJECT_ONLY_ACTIONS, type BuddyActionName, type TBudget, type TBuddyActionSpec, type TBuddyAskQuestion, type TBuddyAuditEntry, type TBuddyAuthority,
   type TBuddyMessageDraft, type TBuddyPlan, type TBuddyUiEffect, type TConversationCard, type TSessionCommand, type TSessionCommandView,
   type TSessionStopView, type TTrashItem, type TWorkHomeResponse, type TTeamDelivery,
 } from "@warmap/contracts";
@@ -23,6 +23,9 @@ import { companyPeriod } from "./monthlyPlans.js";
 import { checkedWords, recentOwnerWords, type ProjectHistory } from "./sourceWords.js";
 import { addBuddyReaction } from "./conversationReactions.js";
 import { logEvent } from "./observability.js";
+import { dispatchCards, findDispatch, recordDispatch, type DispatchCard } from "./buddyDispatches.js";
+import { ensureScratchProject } from "./projects.js";
+import { projectPaused } from "./projectTransfers.js";
 
 /**
  * 伙伴代本人做事（新首页 17.4，契约 buddyActions.ts）。Chat 每轮读动作清单（actionList），模型调哪个就按名字执行（runAction）。
@@ -47,7 +50,7 @@ const KIND: Record<BuddyActionName, Kind> = {
   read_partner_inbox: "read", read_partner_item: "read",
   set_appearance: "write", set_feishu_push: "write", start_sub_session: "write", stop_sub_session: "write", archive_sub_session: "write",
   delete_sub_session: "write", create_project: "write", rename_project: "write", archive_project: "write", link_task_to_project: "write",
-  transfer_project: "write", split_cards: "write", set_budget: "write", set_task_due_date: "write", message_project: "write", send_message: "write",
+  transfer_project: "write", split_cards: "write", set_budget: "write", set_task_due_date: "write", message_project: "write", open_session: "write", send_message: "write",
   sub_session_tell: "write", sub_session_stop: "write", sub_session_rename: "write", sub_session_link: "write", sub_session_restart: "write", sub_session_answer: "write", sub_session_approve: "write",
   update_card: "write",
 };
@@ -94,6 +97,9 @@ const DESCRIPTION: Record<BuddyActionName, string> = {
   set_budget: "改预算：带 taskId 改这件 Task 的，不带改本人新 Task 的缺省预算。",
   message_project: "把本人关于某个项目的话转给这个项目的对话，由项目对话去派活、问子会话（伙伴不直接和子会话对话；凡是要改子会话手上的活的都用它）。"
     + "立即返回，不等项目对话回完；项目对话做完、出问题、要本人拿主意时再在总管线里回报本人。",
+  open_session: "只在伙伴主线用：在一个项目里开一个新会话做一件项目级的活。projectId 是哪个项目；一次性的活不带 projectId、带 scratch: true，放进本人的「随手」项目。两样带且只带一样。"
+    + "title 是会话名字，一个短的动宾短语；brief 是交代：由你整理，写清要做成什么样，带上本人的关键原话。"
+    + "登记开工，本人电脑上开着的网页接下后就开始，立即返回；会话做完一轮时主线会出一行。" + RUNNING_LIMIT,
   send_message: "给同事转达一句话（toPersonIds 是人员目录里的 id）。不会直接发：先出一张卡给本人看，本人点「发出」才由天枢机器人发，开头是「本人名字请我转达：」。",
   update_plan: "计划清单：要做两步以上的事时，先列出步骤（每次交整张清单，status 为 pending / in_progress / completed），做的过程中更新。少于两步不用列。最后一步做完、回答收尾前，把清单全部标好状态再交一次。",
   ask_user: "出一个选项框问本人。开工前要本人拍板、或者有几种做法可选时用它，不要把问题写成一段话让本人自己组织回答。"
@@ -141,9 +147,14 @@ export async function writeAuthority(q: Query, personId: string, authority: "non
 }
 
 const PROJECT_ONLY = new Set<BuddyActionName>(PROJECT_ONLY_ACTIONS);
-/** 本人现在能用的动作：没授权时只有读、界面和计划清单。inProject 为 false（知道这一轮不在项目对话里）时不列只给项目对话的那几个。 */
+const MAIN_ONLY = new Set<BuddyActionName>(MAIN_ONLY_ACTIONS);
+/**
+ * 本人现在能用的动作：没授权时只有读、界面和计划清单。inProject 为 false（知道这一轮不在项目对话里）时不列只给项目对话的那几个；
+ * 为 true（知道在项目对话里）时不列只在伙伴主线用的那几个。
+ */
 export function actionList(authority: TBuddyAuthority, inProject?: boolean): TBuddyActionSpec[] {
   return BUDDY_ACTION_NAMES.filter((name) => authority.authority === "full" || KIND[name] !== "write").filter((name) => inProject !== false || !PROJECT_ONLY.has(name))
+    .filter((name) => inProject !== true || !MAIN_ONLY.has(name))
     .map((name) => ({ name, description: DESCRIPTION[name], kind: KIND[name], parameters: BuddyActionParams[name] }));
 }
 
@@ -481,9 +492,41 @@ const handlers: Handlers = {
     // 项目对话还没开过就开（归档的、别人的照网页接口回错）。
     await web(deps, call.personId, "POST", `${path}/pipeline`);
     const requestId = call.runId ? forwardedInputId(call.runId, call.personId, args.projectId, args.text) : randomUUID();
+    // 同一轮同一句重放：排队那条是同一条（同一个 id），派活卡也不再出。
+    const earlier = await findDispatch(deps.q, call.personId, requestId);
     const item = await web(deps, call.personId, "POST", "/api/me/work-intake", { id: requestId, scope: `project:${args.projectId}`,
       message: BUDDY_FORWARD_PREFIX + args.text, attachments: [] });
-    return { summary: `已把这条要求排进项目「${name}」的对话`, result: item, undo: null, ui: [projectRefresh(args.projectId)] };
+    const card = earlier ? null : await recordDispatch(deps.q, { ownerId: call.personId, requestKey: requestId, runId: call.runId, conversationId: call.conversationId,
+      projectId: args.projectId, projectName: name, topic: null, now: deps.now() });
+    return { summary: `已把这条要求排进项目「${name}」的对话`, result: item, undo: null, ui: [projectRefresh(args.projectId)], ...(card ? { card } : {}) };
+  },
+  open_session: async (deps, call, args) => {
+    if (Boolean(args.projectId) === Boolean(args.scratch)) throw new BuddyError(400, "INVALID_ARGS", "projectId 和 scratch 带且只带一个");
+    const title = args.title.trim();
+    if (!title) throw new BuddyError(400, "INVALID_ARGS", "title 不能全是空白");
+    if ((await conversationScope(deps.q, call.personId, call.conversationId)).startsWith("project:"))
+      throw new BuddyError(409, "MAIN_ONLY", "这个动作只在伙伴主线用");
+    // 归档了的项目不另拦：建会话的接口照旧回 404「找不到这个项目」。
+    const project = args.scratch ? await ensureScratchProject(deps.q, call.personId, deps.now()) : null;
+    const projectId = project?.id ?? args.projectId!;
+    const name = project?.name ?? await projectName(deps, call.personId, projectId);
+    if (await projectPaused(deps.q, projectId)) throw new BuddyError(409, "PROJECT_PAUSED", "这个项目在交接，先等负责人开口");
+    // 同一轮同一句交代重放（模型重试、工具重放）只开一个，也不再出卡；换一轮是本人又要了一次。
+    const requestKey = call.runId
+      ? createHash("sha256").update(JSON.stringify([call.runId, call.personId, "open_session", projectId, args.brief])).digest("hex") : randomUUID();
+    const opened = (card: DispatchCard, replay: boolean): Outcome => {
+      const sub = card.sub!;
+      return { summary: `在项目「${card.projectName}」里开了「${sub.title}」，本人电脑上开着的网页接下后就开始`,
+        result: { dispatchId: card.dispatchId, projectId: card.projectId, projectName: card.projectName, kind: "topic", id: sub.id, title: sub.title },
+        undo: null, ui: sub.id ? [subRefresh(sub.id, ["project"])] : [], ...(replay ? {} : { card }) };
+    };
+    const earlier = await findDispatch(deps.q, call.personId, requestKey);
+    if (earlier) return opened(earlier, true);
+    const topic = await web<{ id: string }>(deps, call.personId, "POST", "/api/me/topics", { free: true, projectId, firstMessage: args.brief });
+    await web(deps, call.personId, "PATCH", `/api/me/sub-sessions/topic/${encodeURIComponent(topic.id)}`, { title });
+    const card = await recordDispatch(deps.q, { ownerId: call.personId, requestKey, runId: call.runId, conversationId: call.conversationId,
+      projectId, projectName: name, topic: { id: topic.id, title }, now: deps.now() });
+    return opened(card, false);
   },
   send_message: async (deps, call, args) => {
     const names = deps.names();
@@ -675,7 +718,7 @@ export async function runAction(deps: BuddyDeps, call: Call, name: string, args:
 }
 
 /** 派活的动作：做成了伙伴在本人这一轮那句话上点 👍。 */
-const DISPATCH = new Set<BuddyActionName>(["split_cards", "start_sub_session", "sub_session_tell", "sub_session_restart", "message_project"]);
+const DISPATCH = new Set<BuddyActionName>(["split_cards", "start_sub_session", "sub_session_tell", "sub_session_restart", "message_project", "open_session"]);
 /** 点 👍 并插进这一轮的流；失败只记日志，不让动作失败。 */
 async function thumbsUp(deps: BuddyDeps, personId: string, conversationId: string, runId: string) {
   try {
@@ -727,16 +770,18 @@ export async function runExtras(q: Query, ownerId: string, runIds: string[]): Pr
   if (!runIds.length) return extras;
   for (const row of (await q("SELECT run_id,entries,collapsed FROM buddy_plans WHERE owner_id=$1 AND run_id=ANY($2::text[])", [ownerId, runIds])).rows as
     { run_id: string; entries: TBuddyPlan["entries"]; collapsed: boolean }[]) extras.set(row.run_id, { plan: { entries: row.entries, collapsed: row.collapsed } });
-  // 转达草稿和选项框按出的先后排。
-  for (const row of (await q(`SELECT id::text,run_id,created_at,NULL::jsonb AS questions,NULL AS status FROM buddy_messages WHERE owner_id=$1 AND run_id=ANY($2::text[])
-      UNION ALL SELECT id::text,run_id,created_at,questions,status FROM buddy_questions WHERE owner_id=$1 AND run_id=ANY($2::text[])
-      ORDER BY created_at,id`, [ownerId, runIds])).rows as
-    { id: string; run_id: string; questions: TBuddyAskQuestion[] | null; status: "open" | "answered" | "dismissed" | null }[]) {
-    const entry = extras.get(row.run_id) ?? {};
-    const card: TConversationCard = row.questions ? { kind: "buddy_question", questionId: row.id, questions: row.questions, status: row.status! }
-      : { kind: "buddy_message", draftId: row.id };
-    entry.cards = [...(entry.cards ?? []), card];
-    extras.set(row.run_id, entry);
+  // 转达草稿、选项框、派活卡按出的先后排。
+  const cards = ((await q(`SELECT id::text,run_id,created_at,NULL::jsonb AS questions,NULL AS status FROM buddy_messages WHERE owner_id=$1 AND run_id=ANY($2::text[])
+      UNION ALL SELECT id::text,run_id,created_at,questions,status FROM buddy_questions WHERE owner_id=$1 AND run_id=ANY($2::text[])`, [ownerId, runIds])).rows as
+    { id: string; run_id: string; created_at: Date; questions: TBuddyAskQuestion[] | null; status: "open" | "answered" | "dismissed" | null }[])
+    .map((row) => ({ id: row.id, runId: row.run_id, createdAt: row.created_at, card: (row.questions
+      ? { kind: "buddy_question", questionId: row.id, questions: row.questions, status: row.status! } : { kind: "buddy_message", draftId: row.id }) as TConversationCard }))
+    .concat((await dispatchCards(q, ownerId, runIds)).map((row) => ({ ...row, id: row.card.dispatchId })));
+  cards.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id));
+  for (const row of cards) {
+    const entry = extras.get(row.runId) ?? {};
+    entry.cards = [...(entry.cards ?? []), row.card];
+    extras.set(row.runId, entry);
   }
   return extras;
 }
