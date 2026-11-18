@@ -140,7 +140,8 @@ function HomeFrame({ account }: { account: Account }) {
   const [shown, setShown] = useState<PanelKind | null>(null);
   const [wide, setWide] = useState(false);
   const [sideNode, setSideNode] = useState<HTMLElement | null>(null);
-  const [thread, setThread] = useState<{ kind: "card" | "topic"; id: string } | null>(null);
+  // from：从主线开的会话所在的项目名（伙伴主线上 thread 页头写「项目名 · 从主线开的」）。
+  const [thread, setThread] = useState<{ kind: "card" | "topic"; id: string; from?: string } | null>(null);
   const sideView = view.kind === "card" || view.kind === "topic" || view.kind === "project";
   const slot = handheld || (shown === "detail" && !sideView) ? null : shown;
   const show = useCallback((kind: PanelKind | null) => { setShown(kind); setWide(false); }, []);
@@ -148,7 +149,7 @@ function HomeFrame({ account }: { account: Account }) {
   const side = useMemo<SideDetail | null>(() => (handheld ? null : {
     open: slot === "detail", node: slot === "detail" || slot === "file" ? sideNode : null, shown: slot, show, wide: slot === "file" && wide, setWide,
     toggle: (open) => { const next = open ?? slot !== "detail"; if (next) show("detail"); else if (slot === "detail") show(null); },
-    openThread: (subject) => { if (inCenter(viewOf(pathname), subject)) return; setThread(subject); show("thread"); },
+    openThread: (subject, from) => { if (inCenter(viewOf(pathname), subject)) return; setThread({ ...subject, from }); show("thread"); },
   }), [handheld, slot, sideNode, show, wide, pathname]);
   useEffect(() => { setSheet(false); }, [pathname]);
   // 换了展示区的内容：焦点落到页头上（5.2 交互状态）。新内容自己抢了焦点（选项框、输入框）就不动；第一次打开页面不动。
@@ -528,7 +529,7 @@ function HomeFrame({ account }: { account: Account }) {
   const parent = useMemo(() => (owner ? (
     <button type="button" className={h.crumb} onClick={() => go(projectHref(owner.id))}>{owner.name} / </button>
   ) : null), [owner, go]);
-  // 伙伴主线（本人 11/18）：页头不放「会话」按钮，「会话」「thread」面板当作关着（slot 不动，切回项目对话照旧开着）。
+  // 伙伴主线（本人 11/18）：页头不放「会话」按钮，「会话」面板当作关着（slot 不动，切回项目对话照旧开着）；主线小条、事件行点开的 thread 照常出。
   const buddyMain = view.kind === "buddy";
   const trail = buddyMain ? null : backgroundButton;
   const chrome = useMemo(() => (handheld ? {
@@ -562,8 +563,10 @@ function HomeFrame({ account }: { account: Account }) {
     await local.refresh();
   };
   /** 项目对话里项目自己的几块：转交（16.7）从「准备交接」那一刻起，到发出、等接手。 */
+  /** 这个项目的卡或自由子会话在等它在这台电脑上绑文件夹（这台电脑连着本机程序、还没绑）。 */
+  const waitingFolder = useCallback((projectId: string) => here && needFolder.has(projectId) && !projects.bound.has(projectId), [here, needFolder, projects.bound]);
   /** 「在哪个文件夹开工？」（17.2 第 32 条）：卡或自由子会话等着这个项目在这台电脑上绑文件夹时才有，选完绑上就收起、接着开。 */
-  const folderAsk = (project: Project) => (here && needFolder.has(project.id) && !projects.bound.has(project.id)
+  const folderAsk = (project: Project) => (waitingFolder(project.id)
     ? <FolderAsk folders={local.folders} onBind={(folder) => projects.actions.setFolder(project.id, folder.id, project.name)} onPickOther={() => local.pickFolder()} /> : null);
   const projectBlocks = (project: Project): TimedBlock[] => [
     ...(project.transfer && (project.transfer.status === "preparing" || project.transfer.status === "sent") ? [{
@@ -609,7 +612,8 @@ function HomeFrame({ account }: { account: Account }) {
       case "transfer": return <TransferView key={current.id} id={current.id} go={go} onChanged={api.refresh} />;
       case "meetings": return <MeetingsPage meeting={meeting} go={go} />;
       case "meeting": return <MeetingView key={current.id} id={current.id} go={go} />;
-      case "buddy": return <BuddyView buddy={buddy} outbox={outbox} consume={consume} onSpeaking={setSpeaking} waiting={data.waiting} go={go} context={buddyContext} onClearContext={() => setBuddyContext(null)} />;
+      case "buddy": return <BuddyView buddy={buddy} outbox={outbox} consume={consume} onSpeaking={setSpeaking} waiting={data.waiting} go={go} context={buddyContext} onClearContext={() => setBuddyContext(null)}
+        subs={subs} projects={projects.all} waitingFolder={waitingFolder} />;
       case "mission": {
         const mission = data.month.missions.find((entry) => entry.missionId === current.id);
         if (!mission) return <Missing loading={!api.ready} onRetry={api.planFailed ? () => void api.retryPlan() : undefined} />;
@@ -696,7 +700,9 @@ function HomeFrame({ account }: { account: Account }) {
   const seen = useMemo(() => ({ seen: seenMarks, onOpen: markSeen }), [seenMarks, markSeen]);
   const threadSub = slot === "thread" && thread ? subs.find((sub) => sub.kind === thread.kind && sub.id === thread.id) ?? null : null;
   // thread 里那个子会话不在了（开着时被归档、删了）：面板当作关着，不留一块空的。
-  const panel = (slot === "thread" && !threadSub) || (buddyMain && (slot === "sessions" || slot === "thread")) ? null : slot;
+  const panel = (slot === "thread" && !threadSub) || (buddyMain && slot === "sessions") ? null : slot;
+  // thread 里的自由子会话等着项目绑文件夹：同中间那一页，问的框钉在它的输入框上方。
+  const threadOwner = threadSub?.free ? projects.all.find((project) => project.subSessions.some((entry) => entry.id === threadSub.id)) : undefined;
   if (handheld) {
     return (
       <NoEllipsis.Provider value>
@@ -745,7 +751,8 @@ function HomeFrame({ account }: { account: Account }) {
               <aside className={h.right} aria-label={PANEL_LABEL[panel]} data-testid="side-panel">
                 {/* 文件预览自己有页头（名字、改动、放大、关闭），这里只给它一块地方；thread 也自己画页头（名字、放大、关闭）。 */}
                 {panel === "file" ? <div ref={setSideNode} className={h.sideFile} />
-                  : panel === "thread" && threadSub ? <ThreadPane key={`${threadSub.kind}:${threadSub.id}`} sub={threadSub} go={go} onClose={() => show(null)} /> : (
+                  : panel === "thread" && threadSub ? <ThreadPane key={`${threadSub.kind}:${threadSub.id}`} sub={threadSub} go={go} onClose={() => show(null)}
+                    from={buddyMain ? thread?.from ?? null : null} ask={threadOwner ? folderAsk(threadOwner) : null} /> : (
                   <div className={h.side} data-testid={panel === "detail" ? "side-detail" : "side-sessions"}>
                     <div className={h.sideHead}>
                       <span className={h.resName}>{PANEL_LABEL[panel]}</span><span className={h.grow} />

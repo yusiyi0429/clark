@@ -4,8 +4,9 @@
  * 新首页中间的对话时间线（总管线、Task 管线）：「在做什么」和思考摘要不在这里，在页头的状态胶囊（Presence）下面；和 ConversationTimeline 一样画对话（同一套零件，不改它们），另外把网页插入的块
  * （开工的选项框、开了哪几个子会话、验收结果和全部完成）按时间插在对话之间：插在它之前最近的一条消息后面，比第一条消息还早的放在最前；有消息不带时间时放最后。
  * 伙伴的提问卡画成就地答的选项框（AskDecision），不再是「开始回答」弹窗。
+ * 伙伴主线的派活卡（buddy_dispatch）由外面给的 dispatch 画（同伙伴的选项框）：读历史时在那条回答后面，正在回答时在状态那一块里、卡一到就出；不给 dispatch 不画（项目对话）。
  */
-import { useMemo, type ReactNode } from "react";
+import { Fragment, useMemo, type ReactNode } from "react";
 import type { TBuddyPlan } from "@warmap/contracts";
 import { ConversationStatusSlot, ConversationThinking, ConversationTurns, LocalTurnRow, STAGE_COPY } from "@/conversation/Transcript";
 import { QuickReplyContext } from "@/conversation/AnswerOptionRow";
@@ -19,6 +20,7 @@ import { RescopeContext } from "@/conversation/ScopeChip";
 import { withoutSupersededCards } from "@/conversation/ConversationTimeline";
 import { BubbleContext, RevealContext, TypingBubble, revealTurn } from "@/conversation/ReplyBubbles";
 import type { ConversationData, ThinkingStage, TurnProgress } from "@/conversation/useConversation";
+import type { DispatchCard } from "@/components/home/DispatchChip";
 import { AskDecision, BuddyQuestionDecision } from "./decisions";
 
 /**
@@ -70,7 +72,10 @@ export function buddyQuestionOpen(card: { status: string }, messages: readonly {
   return card.status === "open" && !messages.slice(index + 1).some((message) => message.role === "user");
 }
 
-export function WorkTimeline({ data, blocks, modelRule }: { data: ConversationData; blocks: TimedBlock[]; modelRule?: (label: string) => ReactNode }) {
+const isDispatch = (card: { kind: string }): card is DispatchCard => card.kind === "buddy_dispatch";
+
+export function WorkTimeline({ data, blocks, modelRule, dispatch }: { data: ConversationData; blocks: TimedBlock[]; modelRule?: (label: string) => ReactNode; dispatch?: (card: DispatchCard) => ReactNode }) {
+  const dispatched = (cards: readonly { kind: string }[]) => (dispatch ? cards.filter(isDispatch).map((card) => <Fragment key={card.dispatchId}>{dispatch(card)}</Fragment>) : null);
   const lastIndex = data.messages.length - 1;
   const last = data.messages[lastIndex];
   // 最新一条回答的选项画成它最后一个气泡下面的一排小胶囊，点了直接发出（设计 6.4）。
@@ -92,6 +97,7 @@ export function WorkTimeline({ data, blocks, modelRule }: { data: ConversationDa
       {/* 伙伴这一轮的计划清单和出的卡（17.4，同 ConversationTimeline）：写完读回历史后挂在那条回答上。 */}
       {data.plan ? <PlanChecklist entries={data.plan.entries} collapsed={data.plan.collapsed} /> : null}
       {data.turnCards?.length ? <EntryCards cards={data.turnCards} /> : null}
+      {dispatched(data.turnCards ?? [])}
     </ConversationStatusSlot>
   ) : null;
   const rescope = useMemo(() => ({ rescope: (params: Parameters<typeof data.rescope>[0], label: string) => void data.rescope(params, label), busy: data.streaming }),
@@ -114,10 +120,11 @@ export function WorkTimeline({ data, blocks, modelRule }: { data: ConversationDa
         // 伙伴的选项框（buddy_question）：只画还 open、而且本人之后没再说过话的；答了、发了别的话就收起（云端随后标 answered / dismissed）。
         const buddyAsks = cards.filter((card): card is Extract<typeof card, { kind: "buddy_question" }> => card.kind === "buddy_question")
           .filter((card) => buddyQuestionOpen(card, data.messages, index));
-        const rest = cards.filter((card) => card.kind !== "questions" && card.kind !== "buddy_question");
+        const rest = cards.filter((card) => card.kind !== "questions" && card.kind !== "buddy_question" && card.kind !== "buddy_dispatch");
         const plan = data.messages[index].plan;
-        if (!rest.length && !asks.length && !buddyAsks.length && !plan) return null;
-        return <>{plan ? <PlanChecklist entries={plan.entries} collapsed={plan.collapsed} finished /> : null}{rest.length ? <EntryCards cards={rest} createdAt={data.messages[index].createdAt} /> : null}{asks.map((card) => <AskDecision key={card.askId} card={card} />)}
+        const sent = dispatched(cards);
+        if (!rest.length && !asks.length && !buddyAsks.length && !plan && !sent?.length) return null;
+        return <>{plan ? <PlanChecklist entries={plan.entries} collapsed={plan.collapsed} finished /> : null}{rest.length ? <EntryCards cards={rest} createdAt={data.messages[index].createdAt} /> : null}{sent}{asks.map((card) => <AskDecision key={card.askId} card={card} />)}
           {buddyAsks.map((card) => <BuddyQuestionDecision key={card.questionId} card={card} busy={data.streaming} send={(text, questionId) => data.send(text, [], { buddyQuestionId: questionId })} />)}</>;
       }} />
     </AskContext.Provider>
