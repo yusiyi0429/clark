@@ -48,8 +48,8 @@ const sub = { id: CARD, kind: "card", letter: null, title: "首页手机检查",
 const local = { runner: createMockRunner(), phase: "offline", version: null, status: null, models: [], folders: [], sessions: [], pairing: null, error: null, sources: null,
   refresh: vi.fn(), pair: vi.fn(), unpair: vi.fn(), pickFolder: vi.fn(), setIncludePersonal: vi.fn() } as unknown as LocalRunnerState;
 const outer = () => ({ open: false, toggle: vi.fn(), node: null, shown: "thread", show: vi.fn(), wide: false, setWide: vi.fn(), openThread: vi.fn() }) as SideDetail & { show: ReturnType<typeof vi.fn>; toggle: ReturnType<typeof vi.fn> };
-const render = (side: SideDetail, go = vi.fn(), onClose = vi.fn(), extra: { sub?: SubSession; from?: string | null; ask?: ReactNode } = {}) => renderToStaticMarkup(
-  <LocalContext.Provider value={local}>
+const render = (side: SideDetail, go = vi.fn(), onClose = vi.fn(), extra: { sub?: SubSession; from?: string | null; ask?: ReactNode; local?: LocalRunnerState } = {}) => renderToStaticMarkup(
+  <LocalContext.Provider value={extra.local ?? local}>
     <SideDetailContext.Provider value={side}>
       <ViewChrome.Provider value={{ lead: <i>返回键</i>, trail: <i>会话按钮</i>, parent: <i>天枢新版 / </i> }}>
         <ThreadPane sub={extra.sub ?? sub} go={go} onClose={onClose} from={extra.from} ask={extra.ask} />
@@ -91,6 +91,25 @@ describe("右边的 thread 视图（设计 6.6）", () => {
     const html = render(outer(), vi.fn(), vi.fn(), { sub: topic, ask: <div data-testid="folder-ask">在哪个文件夹开工？</div> });
     expect(html).toContain('data-testid="folder-ask"');
     expect(html).toContain("在哪个文件夹开工？");
+  });
+
+  it("等你回答的事件行在右边开，提问框在右边就能答", async () => {
+    // 主线事件行（带 waitingId 的提问）在右边开的是这个子会话：首页数据说它在问你，这台电脑上就有那个会话、正挂着这个问题。
+    const runner = createMockRunner();
+    const answer = vi.spyOn(runner, "answerQuestion").mockResolvedValue(undefined as never);
+    const session = { permissionMode: "auto", id: "00000000-0000-4000-8000-0000000000e1", subject: { kind: "card", cardId: CARD }, title: "首页手机检查", agent: "claude-code",
+      modelProfileId: "subscription", modelLabel: "Sonnet", cwd: "C:/w", status: "idle", includePersonalConfig: false, createdAt: "2026-11-17T01:00:00Z", updatedAt: "2026-11-17T01:10:00Z",
+      lastSeq: 3, pendingPermissions: 0, queuePosition: null, usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: null },
+      pendingQuestion: { requestId: "q1", askedAt: "2026-11-17T01:09:00Z", questions: [{ question: "字体用哪个？", header: "", multiSelect: false, options: [{ label: "思源黑体", description: "" }, { label: "系统字体", description: "" }] }] } };
+    const here = { ...local, runner, phase: "ready", sessions: [session] } as unknown as LocalRunnerState;
+    const html = render(outer(), vi.fn(), vi.fn(), { sub: { ...sub, waiting: "question" } as unknown as SubSession, local: here });
+    // 提问框钉在右边那个会话的输入框上方，能点（不是「等你 · 别的电脑」那种只读）。
+    expect(html).toMatch(/data-testid="question-decision"/);
+    expect(html).toContain("字体用哪个？");
+    expect(html).not.toMatch(/data-blocked=""[^>]*data-testid="question-decision"/);
+    // 当场答：选一项，就交给这台电脑上的那个会话。
+    (tap.props.get("decision-option")?.onClick as () => void)();
+    await vi.waitFor(() => expect(answer).toHaveBeenCalledWith(session.id, "q1", expect.objectContaining({ choices: [[expect.any(String)]] })));
   });
 
   it("放大去中间", () => {

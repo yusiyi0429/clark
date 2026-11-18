@@ -27,12 +27,6 @@ export const rightOpener = (side: SideDetail | null, subs: readonly Pick<SubSess
   return true;
 };
 
-/** 主线上的会话小条：能在右边开就在右边开，不能就去那个会话。 */
-export const mainOpener = (side: SideDetail | null, subs: readonly Pick<SubSession, "kind" | "id">[], go: (href: string) => void) => {
-  const right = rightOpener(side, subs);
-  return (sub: Pick<SubSession, "kind" | "id">, from?: string) => { if (!right(sub, from)) go(subHref(sub)); };
-};
-
 /** 中间展示区现在就是这个子会话（同一张卡 / 同一个专题）：再点它的行或小条不在右边再开一份。 */
 export const inCenter = (view: View, sub: Pick<SubSession, "kind" | "id">) =>
   (view.kind === "card" || view.kind === "topic") && view.kind === sub.kind && view.id === sub.id;

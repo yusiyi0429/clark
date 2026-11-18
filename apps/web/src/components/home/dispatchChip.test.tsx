@@ -22,7 +22,7 @@ import type { SubSession } from "@/lib/home/types";
 import { WorkTimeline } from "@/components/work/WorkTimeline";
 import { DispatchChip, type DispatchCard } from "./DispatchChip";
 import type { SideDetail } from "./SideDetail";
-import { mainOpener } from "./ThreadChip";
+import { threadOpener } from "./ThreadChip";
 
 const TOPIC = "00000000-0000-4000-8000-0000000000a1";
 const PROJECT = "00000000-0000-4000-8000-000000000001";
@@ -68,19 +68,14 @@ describe("伙伴主线的派活卡（本人 11/18）", () => {
   it("手机上点小条全屏打开那个会话", () => {
     const go = vi.fn();
     // 手机上没有右边的面板位：去那个会话。
-    mainOpener(null, [sub()], go)({ kind: "topic", id: TOPIC }, "品牌建设");
+    threadOpener(null, go)({ kind: "topic", id: TOPIC }, "品牌建设");
     expect(go).toHaveBeenCalledWith(`/me/work/topics/${TOPIC}`);
     // 电脑上在右边开，带上项目名，不跳。
     const panel = side();
     const desk = vi.fn();
-    mainOpener(panel, [sub()], desk)({ kind: "topic", id: TOPIC }, "品牌建设");
+    threadOpener(panel, desk)({ kind: "topic", id: TOPIC }, "品牌建设");
     expect(panel.openThread).toHaveBeenCalledWith({ kind: "topic", id: TOPIC }, "品牌建设");
     expect(desk).not.toHaveBeenCalled();
-    // 电脑上、首页数据里还没有它（刚开、还没读回来）：照旧去那个会话，不开一块空的。
-    const fresh = side();
-    mainOpener(fresh, [], desk)({ kind: "topic", id: TOPIC }, "品牌建设");
-    expect(fresh.openThread).not.toHaveBeenCalled();
-    expect(desk).toHaveBeenCalledWith(`/me/work/topics/${TOPIC}`);
   });
 
   it("转给项目的小条写项目名，点了去那个项目的对话", () => {

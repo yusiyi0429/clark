@@ -40,7 +40,7 @@ import { useViewChrome } from "./view";
 import { usePhone } from "./usePhone";
 import { useSideDetail } from "./SideDetail";
 import { planOrder } from "./SubRows";
-import { ThreadChip, mainOpener, rightOpener, threadOpener } from "./ThreadChip";
+import { ThreadChip, rightOpener, threadOpener } from "./ThreadChip";
 import { DispatchChip, type DispatchCard } from "./DispatchChip";
 import h from "@/styles/home.module.css";
 import p from "@/styles/presence.module.css";
@@ -149,7 +149,8 @@ function useEscStopsReply(data: ConversationData) {
 /**
  * context：从 Mission 详情「问伙伴」带来的「关于：{Mission}」，输入框左上角一枚胶囊（14.5），去掉调 onClearContext。
  * subs、projects：首页数据里的会话和项目（派活卡的小条照它们画名字、状态）；waitingFolder：这个项目的会话在等本人选文件夹。
- * 派活卡的小条、主线事件行：电脑上、首页数据里有这个会话就在右边开（页头写「项目名 · 从主线开的」），手机上、找不到的去那个会话。
+ * 派活卡的小条：电脑上在右边开（页头写「项目名 · 从主线开的」），刚开、首页数据里还没有的也是，数据到了右边就画出来；手机上去那个会话。
+ * 主线事件行：电脑上、首页数据里有这个会话就在右边开，手机上、找不到的照旧跳。
  */
 export function BuddyView({ buddy, outbox, consume, onSpeaking, waiting, go, context = null, onClearContext, subs, projects, waitingFolder }: {
   buddy: Buddy | null; outbox: Outbox; consume: (id: number) => void; onSpeaking: (speaking: boolean) => void; context?: string | null; onClearContext?: () => void;
@@ -163,7 +164,7 @@ export function BuddyView({ buddy, outbox, consume, onSpeaking, waiting, go, con
   const openRight = useMemo(() => rightOpener(side, subs), [side, subs]);
   const events = usePartnerWorkEvents(waiting, go, openRight);
   const dispatch = useMemo(() => {
-    const openSub = mainOpener(side, subs, go);
+    const openSub = threadOpener(side, go);
     return (card: DispatchCard) => <DispatchChip card={card} subs={subs} projects={projects} waitingFolder={waitingFolder} onOpenSub={openSub} onOpenProject={(id) => go(projectHref(id))} />;
   }, [side, subs, projects, waitingFolder, go]);
   const meetingFeed = usePartnerMeetingFeed();
