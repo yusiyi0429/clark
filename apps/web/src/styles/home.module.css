@@ -789,8 +789,7 @@ button.bgLabel:hover { background: var(--default-soft); }
 /* 右边 thread 的页头：会话名下面一行淡字「项目名 · 从主线开的」（只在主线上、从主线开的会话）。 */
 .threadHead { display: grid; flex: 1; min-width: 0; }
 .threadFrom { min-width: 0; color: var(--ink-faint); white-space: normal; overflow-wrap: anywhere; }
-/* 伙伴话里的会话名（本人 11/18）：看上去是带下划线的字，不是按钮；点了在右边看那个会话（BuddyView 那一层接）。
- * 这一轮结束时名字才插进来，那几个字和紧跟在后面的字是新挂上的到达段，不再淡入一遍（已经出过了）。 */
+/* 伙伴话里的会话名（本人 11/18）：行内文字（role="button"），带下划线，放不下在中间折行；点了、Enter、空格在右边看那个会话（BuddyView 那一层接）。
+ * 手形指针和键盘焦点框用全局的（[role="button"]、:focus-visible）。 */
 .threadNames { display: contents; }
-.threadLink { display: inline; margin: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
-.threadLink span[data-arrival], .threadLink ~ span[data-arrival] { animation: none; }
+.threadLink { text-decoration: underline; text-underline-offset: 3px; }

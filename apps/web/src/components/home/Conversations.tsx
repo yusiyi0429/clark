@@ -9,7 +9,7 @@
  *   B 的接口没上时是这个标签页里的假对话（lib/home/pipeline）。
  * 首页输入框发来的话（outbox）进了对应的对话就发出去。
  */
-import { useContext, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import { useContext, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import type { TCardPlanView, TConversationCard, THomePlanTask } from "@warmap/contracts";
 import type { Buddy } from "@/components/buddy/useBuddy";
 import { ChatColumn } from "@/components/rail/ChatPane";
@@ -173,10 +173,21 @@ export function BuddyView({ buddy, outbox, consume, onSpeaking, waiting, go, con
   // 名字没变就是同一份（气泡按这一份记住带下划线的部件，不重新解析）。
   const signature = JSON.stringify([...threads].map(([key, thread]): ThreadName => ({ key, title: thread.sub.title })));
   const names = useMemo(() => JSON.parse(signature) as ThreadName[], [signature]);
+  const named = (target: EventTarget) => {
+    const key = (target as Element).closest("[data-thread]")?.getAttribute("data-thread");
+    return key ? threads.get(key) : undefined;
+  };
   const openNamed = (event: MouseEvent) => {
-    const key = (event.target as Element).closest("[data-thread]")?.getAttribute("data-thread");
-    const thread = key ? threads.get(key) : undefined;
+    const thread = named(event.target);
     if (thread) openSub(thread.sub, thread.from);
+  };
+  // 会话名是 role="button" 的行内文字：Enter、空格也打开（空格不让页面滚）。
+  const keyNamed = (event: ReactKeyboardEvent) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    const thread = named(event.target);
+    if (!thread) return;
+    if (event.key === " ") event.preventDefault();
+    openSub(thread.sub, thread.from);
   };
   const meetingFeed = usePartnerMeetingFeed();
   const handoffFeed = useMeetingWorkHandoffFeed();
@@ -200,7 +211,7 @@ export function BuddyView({ buddy, outbox, consume, onSpeaking, waiting, go, con
           )}
           timeline={(current) => <>{meetingFeed.notice}{handoffFeed.notice}<ReactionsProvider scope={current.scope} buddyName={name}>
             <ThreadNamesContext.Provider value={names}>
-              <div className={h.threadNames} onClick={openNamed} data-testid="thread-names">
+              <div className={h.threadNames} onClick={openNamed} onKeyDown={keyNamed} data-testid="thread-names">
                 <WorkTimeline data={current} blocks={[...team.blocks, ...events, ...meetingFeed.blocks, ...handoffFeed.blocks]} modelRule={modelRule} dispatch={dispatch} />
               </div>
             </ThreadNamesContext.Provider>

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
@@ -58,11 +59,16 @@ const render = ({ reply, cards = [card()], subs = [sub()], panel = side(), go = 
   </SideDetailContext.Provider>);
 };
 /** 画出来的会话名（带下划线的那几个字）：key 和字。 */
-const named = (html: string) => [...html.matchAll(/<button type="button" data-thread="([^"]+)"[^>]*>([\s\S]*?)<\/button>/g)].map((match) => [match[1], match[2]!.replace(/<[^>]+>/g, "")]);
+const named = (html: string) => [...html.matchAll(/<span role="button" tabindex="0" data-thread="([^"]+)"[^>]*>([^<]*)<\/span>/g)].map((match) => [match[1], match[2]]);
 /** 在时间线上点一个会话名：点到的是那几个字里面（closest 找到带 data-thread 的那个）。 */
-const clickName = (key: string) => (tap.props.get("thread-names")?.onClick as (event: unknown) => void)({
-  target: { closest: (selector: string) => (selector === "[data-thread]" ? { getAttribute: (name: string) => (name === "data-thread" ? key : null) } : null) },
-});
+const onName = (key: string | null) => ({ closest: (selector: string) => (selector === "[data-thread]" && key ? { getAttribute: (name: string) => (name === "data-thread" ? key : null) } : null) });
+const clickName = (key: string) => (tap.props.get("thread-names")?.onClick as (event: unknown) => void)({ target: onName(key) });
+/** 在时间线上按一个键：焦点在 key 那个会话名上（null 是别处）。 */
+const press = (keyName: string, key: string | null) => {
+  const event = { key: keyName, target: onName(key), preventDefault: vi.fn() };
+  (tap.props.get("thread-names")?.onKeyDown as (event: unknown) => void)(event);
+  return event;
+};
 const clickChip = () => (tap.props.get("thread-chip")?.onClick as () => void)();
 
 describe("伙伴话里的会话名（本人 11/18）", () => {
@@ -93,7 +99,7 @@ describe("伙伴话里的会话名（本人 11/18）", () => {
   it("代码块、行内代码、已有链接里的名字不加", () => {
     const html = render({ reply: "先看 `首页深色方案` 和 [首页深色方案](https://example.com/a)。\n\n```\n首页深色方案\n```\n\n最后：首页深色方案在跑。" });
     expect(named(html)).toEqual([[`topic:${TOPIC}`, "首页深色方案"]]);
-    expect(html).toMatch(/最后：<button type="button" data-thread=/);
+    expect(html).toMatch(/最后：<span role="button" tabindex="0" data-thread=/);
     expect(html).toMatch(/<code[^>]*>首页深色方案<\/code>/);
     expect(html).toMatch(/<a [^>]*>首页深色方案<\/a>/);
   });
@@ -102,7 +108,7 @@ describe("伙伴话里的会话名（本人 11/18）", () => {
     const short = card({ dispatchId: "00000000-0000-4000-8000-0000000000d2", sub: { kind: "topic", id: SHORT, title: "改首页" } });
     const html = render({ reply: "改首页先放着，首页深色方案在跑，首页深色方案做完再说。", cards: [card(), short], subs: [sub(), sub({ id: SHORT, title: "改首页" })] });
     expect(named(html)).toEqual([[`topic:${TOPIC}`, "首页深色方案"]]);
-    expect(html).toContain("首页深色方案</button>在跑，首页深色方案做完再说。");
+    expect(html).toContain("首页深色方案</span>在跑，首页深色方案做完再说。");
   });
 
   it("会话归档或删了以后不加", () => {
@@ -111,5 +117,34 @@ describe("伙伴话里的会话名（本人 11/18）", () => {
     expect(named(render({ reply, cards: [card({ state: "gone", sub: { kind: "topic", id: null, title: "首页深色方案" } })] }))).toEqual([]);
     // 首页数据里已经没有这个会话了（删了）：也不加。
     expect(named(render({ reply, subs: [] }))).toEqual([]);
+  });
+
+  it("会话名放不下时在中间折行，不整块挪到下一行", () => {
+    // 是一段普通的行内文字（span），不是按钮：按钮在浏览器里是 inline-block，放不下就整块挪到下一行。
+    const html = render({ reply: "我开了首页深色方案去做，做完告诉你。" });
+    expect(html).toMatch(/<span role="button" tabindex="0" data-thread="topic:[^"]+" class="[^"]*">首页深色方案<\/span>/);
+    expect(html).not.toMatch(/<button[^>]*data-thread/);
+    // 样式不改 display（行内，跟着字折行）。
+    const css = readFileSync(new URL("../styles/home.module.css", import.meta.url), "utf8");
+    const rule = /\.threadLink\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
+    expect(rule).toMatch(/text-decoration:\s*underline/);
+    expect(rule).not.toMatch(/display/);
+  });
+
+  it("会话名用键盘 Enter 和空格也能打开", () => {
+    const panel = side();
+    render({ reply: "我开了首页深色方案去做，做完告诉你。", panel });
+    const enter = press("Enter", `topic:${TOPIC}`);
+    expect(panel.openThread).toHaveBeenLastCalledWith({ kind: "topic", id: TOPIC }, "品牌建设");
+    expect(enter.preventDefault).not.toHaveBeenCalled();
+    // 空格：打开，不让页面往下滚。
+    const space = press(" ", `topic:${TOPIC}`);
+    expect(panel.openThread).toHaveBeenCalledTimes(2);
+    expect(space.preventDefault).toHaveBeenCalled();
+    // 别的键、焦点不在会话名上：不管（别处的空格照常滚动、别的按钮照常按）。
+    press("a", `topic:${TOPIC}`);
+    const elsewhere = press(" ", null);
+    expect(panel.openThread).toHaveBeenCalledTimes(2);
+    expect(elsewhere.preventDefault).not.toHaveBeenCalled();
   });
 });

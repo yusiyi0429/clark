@@ -18,7 +18,7 @@ import { SideContent, useSideDetail } from "@/components/home/SideDetail";
 import { ICON } from "@/components/home/StateIcon";
 import { calendarDate, clock, monthDayTime } from "@/lib/companyTime";
 import { splitReply } from "./replySegments";
-import { MarkdownBody, TURN_PARTS, type MarkdownParts } from "./Transcript";
+import { ARRIVAL_SETTLE_MS, MarkdownBody, TURN_PARTS, type MarkdownParts } from "./Transcript";
 import { ThreadNamesContext, rehypeThreadNames, type ThreadName } from "./threadNames";
 import b from "@/styles/conversation-bubbles.module.css";
 import ts from "@/styles/conversation-transcript.module.css";
@@ -189,18 +189,27 @@ function threadParts(names: readonly ThreadName[]): MarkdownParts {
   if (!parts) withNames.set(names, (parts = { ...TURN_PARTS, rehypePlugins: [rehypeThreadNames(names), ...TURN_PARTS.rehypePlugins] }));
   return parts;
 }
-/** 伙伴主线上（有 ThreadNamesContext）写完的正文用带会话名的部件；还在写的照旧。 */
-const useThreadParts = (open: boolean) => {
+/**
+ * 气泡的正文部件：伙伴主线上（有 ThreadNamesContext）写完的气泡认会话名。在这里写过的，写完再等 ARRIVAL_SETTLE_MS，
+ * 到达淡入的那几段合并成普通文字以后再换（换的时候不重挂已经出过的字、不重新淡入）；读历史来的一挂上就认。
+ */
+function useSettledThreadParts(open: boolean): MarkdownParts {
   const names = useContext(ThreadNamesContext);
-  return open ? TURN_PARTS : threadParts(names);
-};
+  const [settled, setSettled] = useState(!open);
+  useEffect(() => {
+    if (open || settled) return;
+    const timer = setTimeout(() => setSettled(true), ARRIVAL_SETTLE_MS);
+    return () => clearTimeout(timer);
+  }, [open, settled]);
+  return open || !settled ? TURN_PARTS : threadParts(names);
+}
 
 /** 本人能按块点表情时块上的标记（第几块、按块悬停）。 */
 type PartMark = { "data-reaction-part": number; "data-reactable": string } | undefined;
 
 /** 一个气泡：整段显示（本人 11/18 去掉了收起和「展开」）。open：还在写（还在写时不认会话名）。 */
 function TextBubble({ markdown, open, delay, edge, part }: { markdown: string; open: boolean; delay: number | null; edge?: ReactNode; part: PartMark }) {
-  const parts = useThreadParts(open);
+  const parts = useSettledThreadParts(open);
   return (
     <BuddyBubble {...part} {...enter(delay)}>
       <div className={ts.prose}>
@@ -243,7 +252,8 @@ function overflows(element: HTMLElement): boolean {
 function ReplyCard({ markdown, title, summary, open, at, delay, edge, part }: { markdown: string; title: string; summary: string; open: boolean; at?: string; delay: number | null; edge?: ReactNode; part: PartMark }) {
   const side = useSideDetail();
   const id = useId();
-  const parts = useThreadParts(open);
+  // 卡片写完才挂全文（还在写时是壳子），全文没有到达淡入：直接认会话名。
+  const parts = threadParts(useContext(ThreadNamesContext));
   const [inPlace, setInPlace] = useState(false);
   const full = useRef<HTMLDivElement>(null);
   const [fold, setFold] = useState(false);

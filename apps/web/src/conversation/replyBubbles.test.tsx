@@ -98,9 +98,7 @@ import { Presence } from "@/components/home/Presence";
 import { TransferHistory } from "@/components/home/Transfer";
 import { WorkTimeline } from "@/components/work/WorkTimeline";
 import { BubbleContext, CARD_FULL_LINES, HOLD_MS, ReplyBubbles, RevealContext, TypingBubble, resetReplyBubbles } from "./ReplyBubbles";
-import ReactMarkdown from "react-markdown";
-import { ConversationTurn, ConversationTurns, MarkdownBody, TURN_PARTS, type MarkdownParts } from "./Transcript";
-import { createArrivalLog, rehypeArrival } from "./arrival";
+import { ARRIVAL_SETTLE_MS, ConversationTurn, ConversationTurns, MarkdownBody, TURN_PARTS, type MarkdownParts } from "./Transcript";
 import { ThreadNamesContext, type ThreadName } from "./threadNames";
 import { AnswerOptions, QuickReplyContext } from "./AnswerOptionRow";
 
@@ -617,24 +615,12 @@ describe("伙伴话里的会话名（本人 11/18）", () => {
   const NAMES: ThreadName[] = [{ key: "topic:00000000-0000-4000-8000-0000000000a1", title: "首页深色方案" }];
   const REPLY = "我开了首页深色方案去做，做完告诉你。";
   const bodyOf = (tree: ReactNode) => elements(tree).find((element) => element.type === MarkdownBody)!;
-  /** 一棵 Markdown 元素树里到达淡入的那些 span：从根到它的一串 key（同一串 key 的 React 复用、不重新挂），在不在会话名里面或后面。 */
-  type Arrived = { path: string; nearName: boolean };
-  const arrived = (node: ReactNode, path = "", nearName = false): Arrived[] => {
-    let afterName = false;
-    return [node].flat(Infinity as 1).flatMap((child) => {
-      if (!isValidElement(child)) return [];
-      const element = child as Element;
-      const here = `${path}/${String(element.key)}`;
-      if ("data-thread" in element.props) { afterName = true; return arrived(element.props.children as ReactNode, here, true); }
-      if ("data-arrival" in element.props) return [{ path: here, nearName: nearName || afterName }];
-      return arrived(element.props.children as ReactNode, here, nearName);
-    });
-  };
 
   it("出字过程中不加下划线；这一轮结束时已经出过的字不重新淡入", () => {
     vi.useFakeTimers();
     hooks.provide(ThreadNamesContext, NAMES);
     const bubbles = (markdown: string, streaming: boolean) => call("bubbles", () => ReplyBubbles({ markdown, streaming }));
+    const html = (body: Element) => renderToStaticMarkup(<MarkdownBody text={REPLY} streaming={false} parts={body.props.parts as MarkdownParts} />);
     bubbles("我开了首页", true);
     vi.advanceTimersByTime(HOLD_MS);
     // 还在写的气泡：用的还是对话本来那套部件，画出来没有会话名。
@@ -643,24 +629,24 @@ describe("伙伴话里的会话名（本人 11/18）", () => {
     const during = bodyOf(expand("bubble", open));
     expect(during.props.streaming).toBe(true);
     expect(during.props.parts).toBe(TURN_PARTS);
-    expect(renderToStaticMarkup(<MarkdownBody text={REPLY} streaming parts={during.props.parts as MarkdownParts} />)).not.toContain("data-thread");
-    // 这一轮结束：同一个气泡换成带会话名的部件，同一份名字是同一个引用（不重新解析）。
+    // 写完：到达淡入的那几段合并（ARRIVAL_SETTLE_MS）之前不换部件，已经出过的字不重挂、不重新淡入。
+    expect(ARRIVAL_SETTLE_MS).toBe(400);
     const closed = named(bubbles(REPLY, false), "TextBubble")[0]!;
+    expect(closed.props.open).toBe(false);
+    expect(bodyOf(expand("bubble", closed)).props.parts).toBe(TURN_PARTS);
+    vi.advanceTimersByTime(ARRIVAL_SETTLE_MS - 1);
+    expect(html(bodyOf(expand("bubble", closed)))).not.toContain("data-thread");
+    // 稳下来以后：带会话名的部件，同一份名字是同一个引用（不重新解析）。
+    vi.advanceTimersByTime(1);
     const after = bodyOf(expand("bubble", closed));
     expect(after.props.parts).not.toBe(TURN_PARTS);
+    expect(html(after)).toContain('data-thread="topic:00000000-0000-4000-8000-0000000000a1"');
     expect(bodyOf(expand("bubble", closed)).props.parts).toBe(after.props.parts);
-    // 已经出过的字：边写边出时按到达切好的段，这一轮结束换部件时照旧那一份到达记录。
-    // 会话名插进来以后，新挂上的段只在那几个字里面或紧跟在后面，样式让它们不再淡入。
-    const log = createArrivalLog();
-    const tree = (parts: MarkdownParts, text: string) => ReactMarkdown({ children: text, remarkPlugins: parts.remarkPlugins, rehypePlugins: [...parts.rehypePlugins, rehypeArrival(log, text)], components: parts.components });
-    tree(TURN_PARTS, "我开了首页");
-    const before = new Set(arrived(tree(TURN_PARTS, REPLY)).map((span) => span.path));
-    const ended = arrived(tree(after.props.parts as MarkdownParts, REPLY));
-    const mounted = ended.filter((span) => !before.has(span.path));
-    expect(mounted.length).toBeGreaterThan(0);
-    expect(mounted.every((span) => span.nearName)).toBe(true);
-    const home = readFileSync(new URL("../styles/home.module.css", import.meta.url), "utf8");
-    expect(home).toMatch(/\.threadLink span\[data-arrival\],\s*\.threadLink ~ span\[data-arrival\]\s*\{\s*animation:\s*none;?\s*\}/);
+    // 读历史来的气泡没有在这里写过：一挂上就有。
+    hooks.reset();
+    hooks.provide(ThreadNamesContext, NAMES);
+    const history = named(call("history", () => ReplyBubbles({ markdown: REPLY, streaming: false })), "TextBubble")[0]!;
+    expect(html(bodyOf(expand("history-bubble", history)))).toContain("data-thread");
   });
 
   it("项目对话、别的对话页不加", () => {
