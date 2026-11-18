@@ -188,3 +188,12 @@
 
 /* 新首页不出省略号（本人 11/18）：放不下就换行，长预览限高往下渐隐；只在新首页的外壳里生效，旧界面照旧。 */
 :global(:root:has([data-type-scale="one"])) .progressDetail, :global(:root:has([data-type-scale="one"])) .elapsed { overflow: visible; white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+/*
+ * 新首页里对话正文的加粗、链接、代码块、表格线读颜色变量（本人 11/18）：上面的基础规则写死了深色主题的颜色，浅色修正只挂在 [data-tone=light] 上，
+ * 右边那一格（SideDetail 经 portal 挂出去）和子会话里没有这个祖先，浅色下加粗字发白、代码块黑底黑字。前缀挂在根上，portal 出去的也吃得到；旧界面不变。
+ */
+:global(:root:has([data-type-scale="one"])) .prose strong { color: var(--ink); }
+:global(:root:has([data-type-scale="one"])) .prose a { color: var(--link); }
+:global(:root:has([data-type-scale="one"])) .prose pre { background: var(--neutral-wash); color: var(--ink); }
+:global(:root:has([data-type-scale="one"])) .prose code { color: var(--ink); }
+:global(:root:has([data-type-scale="one"])) .prose td, :global(:root:has([data-type-scale="one"])) .prose th { border-bottom-color: var(--hairline); }

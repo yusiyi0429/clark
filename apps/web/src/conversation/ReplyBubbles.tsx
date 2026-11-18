@@ -3,7 +3,8 @@
 /**
  * 伙伴的回复成气泡和卡片（设计 6.1–6.3）：只在新首页的伙伴主线、项目对话里（WorkTimeline 给 BubbleContext = true）；
  * CEO 管理模式、对象页对话、子会话正文、转交、历史抽屉照旧。
- * 一条回复按 splitReply 拆成块：普通的话是气泡，标题开头的一节、表格、代码、长清单是卡片（「打开」在右边看全文，手机上就地展开）。
+ * 一条回复按 splitReply 拆成块：普通的话是气泡，标题开头的一节、表格、代码、长清单是卡片。气泡整段显示；
+ * 卡片写完后放得下（不超过 12 行、没有横向溢出）就原地是全文，放不下才是摘要加「打开」（在右边看全文，手机上就地展开；本人 11/18）。
  * 怎么出现（本人 11/17 定：短段整段出，等久了先出）：
  * - 写完的块马上出，只错开 60ms 的入场；不藏已经到了的内容。
  * - 还没写完的那一段（tail）从它开始写起 2 秒内不出，期间露「•••」；过了 2 秒还没写完，就以气泡（卡片是壳子：标题 +「…」）出现，在里面边写边长。
@@ -30,6 +31,8 @@ export const RevealContext = createContext<(() => void) | null>(null);
 
 /** 没写完的那一段等多久先出。 */
 export const HOLD_MS = 2000;
+/** 卡片正文在卡里直接显示全文的上限：画出来不超过这么多行（再多，或横向放不下，就收成摘要加「打开」）。 */
+export const CARD_FULL_LINES = 12;
 /** 一起到的几块入场错开多少；最多错开几步（再多的和第 3 步一起出）。 */
 const STAGGER_MS = 60;
 const STAGGER_STEPS = 3;
@@ -113,8 +116,6 @@ export function ReplyBubbles({ markdown, streaming, at, edge, actions }: {
   const hold = useRef<{ index: number; since: number; shown: boolean; seen: number } | null>(null);
   /** 每块第一次出现时定下的入场延迟（null 不动）。 */
   const delays = useRef<(number | null)[]>([]);
-  /** 以气泡边写边长过的块：人看着它长出来，写完不收起。 */
-  const grown = useRef(new Set<number>());
   const reveal = useContext(RevealContext);
 
   // 写到一半挂上的（刷新后接上、换了 key 重挂）：挂上时已经在的内容算露过，不再等、不再淡入。
@@ -156,10 +157,7 @@ export function ReplyBubbles({ markdown, streaming, at, edge, actions }: {
   const pieces: Piece[] = segments.map((segment) => (segment.kind === "card"
     ? { kind: "card", markdown: segment.markdown, title: segment.title, summary: segment.summary, open: false }
     : { kind: "bubble", markdown: segment.markdown, title: "", summary: "", open: false }));
-  if (tail && shown) {
-    pieces.push({ kind: tail.kind, markdown: tail.markdown, title: tail.title, summary: "", open: true });
-    if (tail.kind === "bubble") grown.current.add(segments.length);
-  }
+  if (tail && shown) pieces.push({ kind: tail.kind, markdown: tail.markdown, title: tail.title, summary: "", open: true });
   const first = delays.current.length;
   for (let index = first; index < pieces.length; index += 1) delays.current[index] = live.current ? Math.min(index - first, STAGGER_STEPS) * STAGGER_MS : null;
 
@@ -175,7 +173,7 @@ export function ReplyBubbles({ markdown, streaming, at, edge, actions }: {
         const part = edge ? { "data-reaction-part": index, "data-reactable": "" } : undefined;
         return piece.kind === "card"
           ? <ReplyCard key={index} markdown={piece.markdown} title={piece.title} summary={piece.summary} open={piece.open} at={streaming ? undefined : at} delay={delays.current[index] ?? null} edge={onEdge} part={part} />
-          : <TextBubble key={index} markdown={piece.markdown} open={piece.open} collapsible={!grown.current.has(index)} delay={delays.current[index] ?? null} edge={onEdge} part={part} />;
+          : <TextBubble key={index} markdown={piece.markdown} open={piece.open} delay={delays.current[index] ?? null} edge={onEdge} part={part} />;
       })}
       {streaming && tail && !shown ? <TypingBubble /> : null}
     </div>
@@ -185,28 +183,13 @@ export function ReplyBubbles({ markdown, streaming, at, edge, actions }: {
 /** 本人能按块点表情时块上的标记（第几块、按块悬停）。 */
 type PartMark = { "data-reaction-part": number; "data-reactable": string } | undefined;
 
-/** 一个气泡：超过 6 行收起（边写边长过的不收），下面淡色「展开」就地展开。open：还在写。 */
-function TextBubble({ markdown, open, collapsible, delay, edge, part }: { markdown: string; open: boolean; collapsible: boolean; delay: number | null; edge?: ReactNode; part: PartMark }) {
-  const box = useRef<HTMLDivElement>(null);
-  const [over, setOver] = useState(false);
-  const [expanded, setExpanded] = useState(false);
-  const clamp = collapsible && !expanded;
-  useLayoutEffect(() => {
-    const element = box.current;
-    if (!clamp || !element) return;
-    const measure = () => setOver(element.scrollHeight > element.clientHeight + 1);
-    measure();
-    if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(measure);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [clamp, markdown]);
+/** 一个气泡：整段显示（本人 11/18 去掉了收起和「展开」）。open：还在写。 */
+function TextBubble({ markdown, open, delay, edge, part }: { markdown: string; open: boolean; delay: number | null; edge?: ReactNode; part: PartMark }) {
   return (
     <BuddyBubble {...part} {...enter(delay)}>
-      <div ref={box} className={`${ts.prose} ${b.text}`} data-clamp={clamp ? "" : undefined} data-over={clamp && over ? "" : undefined}>
+      <div className={ts.prose}>
         <MarkdownBody text={markdown} streaming={open} />
       </div>
-      {clamp && over ? <button type="button" className={b.more} onClick={() => setExpanded(true)}>展开</button> : null}
       {edge}
     </BuddyBubble>
   );
@@ -218,21 +201,44 @@ function cardTime(iso: string | undefined): string {
   return calendarDate(iso) === calendarDate(new Date().toISOString()) ? clock(new Date(iso)) : monthDayTime(iso);
 }
 
-/** 全文去掉开头那个和标题一样的标题行：标题已经在卡片、右边那一格的页头上，不再写一遍。 */
+/** 全文去掉开头那个和标题一样的标题行（# 标题，或单独一行的加粗小标题，行尾可带冒号）：标题已经在卡片、右边那一格的页头上，不再写一遍。 */
 function withoutTitle(markdown: string, title: string): string {
   const [first = "", ...rest] = markdown.split("\n");
   const heading = /^ {0,3}#{1,6}[ \t]+/;
-  return heading.test(first) && first.replace(heading, "").replace(/\*\*|`/g, "").trim() === title ? rest.join("\n").trimStart() : markdown;
+  const bold = /^\s*\*\*(?:(?!\*\*).)+\*\*[：:]?\s*$/;
+  const same = heading.test(first) ? first.replace(heading, "").replace(/\*\*|`/g, "").trim() === title
+    : bold.test(first) && first.replace(/\*\*|`/g, "").trim().replace(/[：:]$/, "") === title;
+  return same ? rest.join("\n").trimStart() : markdown;
+}
+
+/** 卡片全文放不下：比 CARD_FULL_LINES 行高，或里面的表格、代码、公式横向溢出。 */
+function overflows(element: HTMLElement): boolean {
+  if (element.scrollHeight > element.clientHeight + 1) return true;
+  return [element, ...Array.from(element.querySelectorAll<HTMLElement>("pre, table, .katex-display"))].some((box) => box.scrollWidth > box.clientWidth + 1);
 }
 
 /**
- * 一张卡：标题、摘要（淡色）、时间（淡色）、「打开」。电脑上「打开」在右边文件预览那一格看全文；手机上（没有那一格）就地展开。
- * open：还在写，只出壳子（标题 + 正在输入的「•••」，同气泡）。
+ * 一张卡：标题、时间（淡色）、正文。写完后全文放得下就原地显示全文；放不下才是摘要（淡色）加「打开」：
+ * 电脑上「打开」在右边文件预览那一格看全文；手机上（没有那一格）就地展开。
+ * 放不放得下在绘制前量（读历史不闪）；放不下时全文还留着、不占位置也看不见，窗口变了照样重新量。
+ * open：还在写，只出壳子（标题 + 正在输入的「•••」，同气泡），写完那一刻再定。
  */
 function ReplyCard({ markdown, title, summary, open, at, delay, edge, part }: { markdown: string; title: string; summary: string; open: boolean; at?: string; delay: number | null; edge?: ReactNode; part: PartMark }) {
   const side = useSideDetail();
   const id = useId();
   const [inPlace, setInPlace] = useState(false);
+  const full = useRef<HTMLDivElement>(null);
+  const [fold, setFold] = useState(false);
+  useLayoutEffect(() => {
+    const element = full.current;
+    if (open || !element) return;
+    const measure = () => setFold(overflows(element));
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [open, markdown]);
   const sideRef = useRef(side);
   sideRef.current = side;
   // 右边开着的是这张、它卸载了（换会话、重读历史重挂）：右边那一格跟着关，不留个空面板。
@@ -258,9 +264,14 @@ function ReplyCard({ markdown, title, summary, open, at, delay, edge, part }: { 
         <span className={b.cardTitle}>{title}</span>
         {time ? <span className={b.faint}>{time}</span> : null}
       </div>
-      {open ? <div className={`${b.typing} ${b.cardTyping}`} data-testid="card-typing" aria-hidden><i /><i /><i /></div> : summary && !inPlace ? <FadeText as="div" className={b.summary}>{summary}</FadeText> : null}
+      {open ? <div className={`${b.typing} ${b.cardTyping}`} data-testid="card-typing" aria-hidden><i /><i /><i /></div> : fold && summary && !inPlace ? <FadeText as="div" className={b.summary}>{summary}</FadeText> : null}
+      {open || inPlace ? null : (
+        <div ref={full} className={`${ts.prose} ${b.cardFull}`} data-fold={fold ? "" : undefined} style={{ maxHeight: `${CARD_FULL_LINES}lh` }}>
+          <MarkdownBody text={withoutTitle(markdown, title)} streaming={false} />
+        </div>
+      )}
       {inPlace ? <div className={`${ts.prose} ${b.cardBody}`}><MarkdownBody text={withoutTitle(markdown, title)} streaming={false} /></div> : null}
-      {open || inPlace ? null : <div className={b.acts}><button type="button" className={b.open} onClick={show}>打开</button></div>}
+      {open || inPlace || !fold ? null : <div className={b.acts}><button type="button" className={b.open} onClick={show}>打开</button></div>}
       {side && panel ? <SideContent side={side} kind="file"><CardPreview title={title} markdown={markdown} onClose={close} /></SideContent> : null}
       {edge}
     </section>

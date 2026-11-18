@@ -46,17 +46,9 @@
 .pills button:hover { background: var(--default-soft); }
 .pills button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
-/* 超过 6 行收起：下沿淡出，下面一个淡色「展开」。 */
-.text[data-clamp] { max-height: calc(6 * var(--type-lh, 26px)); overflow: hidden; }
-.text[data-over] {
-  -webkit-mask-image: linear-gradient(to bottom, black calc(100% - var(--type-lh, 26px)), transparent);
-  mask-image: linear-gradient(to bottom, black calc(100% - var(--type-lh, 26px)), transparent);
-}
-.more { display: block; margin: 2px 0 0; padding: 0; border: 0; background: none; color: var(--ink-faint); font: inherit; cursor: pointer; }
-.more:hover { color: var(--ink-muted); }
-.more:focus-visible, .open:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+.open:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
 
-/* 卡片：白底细边，宽度占满对话栏（不超过 560）；标题、摘要（淡）、时间（更淡）、「打开」。 */
+/* 卡片：白底细边，宽度占满对话栏（不超过 560）；标题、时间（更淡）、正文：放得下是全文，放不下是摘要（淡）和「打开」。 */
 .card {
   width: 100%;
   background: var(--surface);
@@ -76,6 +68,12 @@
 .open { height: 34px; padding: 0 14px; border: 0; border-radius: var(--r-control); background: var(--ink); color: var(--surface); font: inherit; cursor: pointer; transition: background-color var(--dur-fast) linear; }
 .open:hover { background: var(--ink-muted); }
 .cardBody { margin-top: 10px; }
+/*
+ * 卡里的全文：限高 12 行（ReplyBubbles 的 CARD_FULL_LINES，写在行内样式上）量放不放得下；放不下时不占位置、看不见，只留着跟着卡片宽度重新量。
+ * 收起时贴着卡片底边往上放：比卡片高的那一截伸到上面，不把对话的滚动区往下撑长。
+ */
+.cardFull { margin-top: 10px; overflow: hidden; }
+.cardFull[data-fold] { position: absolute; bottom: 0; left: 16px; right: 16px; visibility: hidden; pointer-events: none; }
 
 /* 「•••」：三个点轮流变深。 */
 .typing { display: flex; gap: 5px; width: fit-content; padding: 14px 16px; }

@@ -10,9 +10,9 @@ import { describe, expect, it } from "vitest";
  * - SHARED：新旧界面共用、新首页里看得到。旧界面不动，原规则留着；新首页在文件末尾用
  *   `:global(:root:has([data-type-scale="one"]))` 盖掉。这里查每条会出省略号的规则都被盖到了。
  * - 不在名单里的：只在旧界面出现（CEO 管理模式、对象页、V2 旧骨架、老工作台），或在新首页里不渲染
- *   （account-menu、radar-feed、v2-month 只被引了函数或类型；composer-pill、conversation-dock、conversation-attachments、
+ *   （radar-feed、v2-month 只被引了函数或类型；composer-pill、conversation-dock、conversation-attachments、
  *   conversation-column 是旧对话栏的输入框和页头，新首页用自己的 InputBar）；
- *   header-capsule（DetailFrame 页头）、material-tabs、materials、material-annotations（会议材料预览）另一个人在改，交主会话处理。
+ *   material-tabs、materials、material-annotations（会议材料预览）另一个人在改，交主会话处理。
  */
 const OWN = [
   "styles/home.module.css",
@@ -39,6 +39,9 @@ const SHARED = [
   "styles/card-references.module.css",
   "styles/task-deliverable.module.css",
   "styles/meeting-workspace.module.css",
+  "styles/header-capsule.module.css",
+  // 手机上「我」（连接页 PluginsPage）页头的账号名。
+  "styles/account-menu.module.css",
   "components/steps/step-list.module.css",
   "components/requests/requests.module.css",
   "components/requests/impact.module.css",
@@ -208,6 +211,24 @@ describe("新首页不出省略号（本人 11/18）", () => {
     const stage = presence.filter((rule) => rule.selectors.some((selector) => selector.includes("[data-stage]") && !selector.includes(":not("))).map((rule) => rule.body).join(";");
     expect(stage).not.toMatch(/position:\s*absolute;\s*top:\s*calc\(100% - 44px\)/);
     expect(presence.find((rule) => rule.selectors.includes(".presence[data-stage] > .hang"))?.body).toMatch(/top:\s*calc\(100% - 6px\)/);
+  });
+
+  it("会议页手机上长标题换行，不出省略号", () => {
+    // 会议页（DetailFrame 的 .ts-detail-header > h1）：旧界面照旧（≤1250 计划时段和标题两行、标题一行省略；≤1000 最多两行），
+    // 新首页里盖掉：标题整段换行，页头只有最小高度、跟着长高，不压正文。
+    const all = rules("styles/header-capsule.module.css");
+    const base = (selector: string) => all.filter((rule) => rule.selectors.includes(selector)).map((rule) => rule.body).join(";");
+    const home = (selector: string) => all.filter((rule) => rule.selectors.includes(`${NEW_HOME} ${selector}`)).map((rule) => rule.body).join(";");
+    const lead = ".scope :global(.ts-detail-header:has(> .ts-row > [data-header-lead]) > h1)";
+    expect(base(lead)).toMatch(/text-overflow:\s*ellipsis/);
+    expect(base(".scope :global(.ts-detail-header)")).toMatch(/(^|[;\s])height:\s*var\(--detail-header-height\)/);
+    for (const selector of [".scope :global(.ts-detail-header > h1)", lead]) {
+      expect(home(selector)).toMatch(/white-space:\s*normal/);
+      expect(home(selector)).toMatch(/text-overflow:\s*clip/);
+      expect(home(selector)).toMatch(/-webkit-line-clamp:\s*none/);
+    }
+    expect(home(".scope :global(.ts-detail-header)")).toMatch(/(^|[;\s])height:\s*auto/);
+    expect(home(".scope :global(.ts-detail-header)")).toMatch(/min-height:\s*var\(--detail-header-height\)/);
   });
 
   it("下沿左边是没绑文件夹的「此电脑」时也算有字，右边最多一半", () => {

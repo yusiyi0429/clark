@@ -323,3 +323,18 @@
   .scope :global(.ts-detail-header) { box-shadow: inset 0 -1px 0 #5b6b85; }
   .scope :global(.ts-detail-header)::before { -webkit-mask-image: none; mask-image: none; inset: 0; }
 }
+
+/*
+ * 新首页不出省略号（本人 11/18）：会议页等 DetailFrame 页头的标题整段换行，页头只有最小高度、跟着标题长高，不压正文。
+ * 旧界面（CEO 管理模式等同一个 DetailFrame）照旧，只在新首页的外壳里生效。
+ */
+:global(:root:has([data-type-scale="one"])) .scope :global(.ts-detail-header) { height: auto; min-height: var(--detail-header-height); }
+:global(:root:has([data-type-scale="one"])) .scope :global(.ts-detail-header > h1),
+:global(:root:has([data-type-scale="one"])) .scope :global(.ts-detail-header:has(> .ts-row > [data-header-lead]) > h1) {
+  display: block;
+  -webkit-line-clamp: none;
+  white-space: normal;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+}
+:global(:root:has([data-type-scale="one"])) .scope :global(.ts-detail-header > .ts-eyebrow) { white-space: normal; text-overflow: clip; overflow-wrap: anywhere; }

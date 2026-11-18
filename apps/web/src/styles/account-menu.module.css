@@ -187,3 +187,6 @@
 @media (pointer: coarse) {
   .chip.chip { height: 44px; min-height: 44px; border-radius: 22px; }
 }
+
+/* 新首页不出省略号（本人 11/18）：手机上「我」页头的账号名放不下就换行；旧界面照旧。 */
+:global(:root:has([data-type-scale="one"])) .name { white-space: normal; text-overflow: clip; overflow-wrap: anywhere; }
