@@ -611,6 +611,11 @@ export async function buildApp({
       const plan = await collapsePlan(pool.query.bind(pool), runId);
       if (plan) chat?.inject(runId, { type: "plan", plan });
     },
+    // 一轮答完或出错停下：清单收起（条目不改），当场推给还开着的网页。
+    onTurnEnd: async (_viewer, runId) => {
+      const plan = await collapsePlan(pool.query.bind(pool), runId);
+      if (plan) chat?.inject(runId, { type: "plan", plan });
+    },
     // 选项框（18 节第 9 条）：本人发出新消息，这个对话里还 open 的收掉，回答的那张标 answered。
     onMessage: async (viewer, scope, answered, queuedId) => {
       if (!queuedId) return void await closeQuestions(pool.query.bind(pool), viewer.personId, scope, answered, now());

@@ -8,7 +8,7 @@ import {
   type TLocalProjectTurnFinishRequest, type TLocalProjectTurnFinishResponse, type TLocalProjectTurnStartRequest, type TLocalProjectTurnStartResponse,
   type TProjectDetailResponse, type TProjectMcpToolResult, type TProjectTurnRecord, type TReadEarlierConversationResult, type TSubSession, type TWorkHomeResponse,
 } from "@warmap/contracts";
-import { BuddyError, actionList, callAsPerson, closeQuestions, readAuthority, runAction, type BuddyDeps } from "./buddyActions.js";
+import { BuddyError, actionList, callAsPerson, closeQuestions, collapsePlan, readAuthority, runAction, type BuddyDeps } from "./buddyActions.js";
 import { BUDDY_FORWARD_PREFIX, ChatServiceError, type ChatService } from "./chatService.js";
 import { resetAutoRelay } from "./autoRelay.js";
 import type { Query } from "./meetingStore.js";
@@ -253,6 +253,8 @@ export async function finishLocalTurn(deps: LocalTurnDeps, ownerId: string, devi
     [turnId, body.status, body.status === "released" ? null : body.answer ?? "", body.errorCode ?? null, body.reason ?? null, deps.now()])).rows[0] as TurnRow | undefined;
   if (!finished) return { turnId, recorded: false };
   if (body.status === "released") return { turnId, recorded: false };
+  // 这一轮的计划清单收起（同云端一轮结束），网页读回历史时拿到。
+  await collapsePlan(deps.q, turnId);
   if (await recordOnce(deps, finished, requestId)) return { turnId, recorded: true };
   recordLater(deps, finished, requestId);
   return { turnId, recorded: false };

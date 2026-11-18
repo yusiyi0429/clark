@@ -176,6 +176,8 @@ export function createChatService(options: {
   onFallback?: (viewer: ChatViewer, runId: string, reason: TLocalFallbackReason) => Promise<void>;
   /** 本人在伙伴回答到一半时发来新消息、上一轮要停掉之前（17.4）：收起那一轮的计划清单。失败只记日志。 */
   onInterrupt?: (viewer: ChatViewer, runId: string) => Promise<void>;
+  /** 一轮结束（Chat 回了 done 或 error：答完、出错停下、本人停的）、结尾那一帧给界面之前：收起这一轮的计划清单。失败只记日志。 */
+  onTurnEnd?: (viewer: ChatViewer, runId: string) => Promise<void>;
   /** 本人发出新消息时收掉旧选项框。排队的消息须等 Chat 确认已开始这一轮。 */
   onMessage?: (viewer: ChatViewer, scope: string, answered: string | undefined, queuedId?: string) => Promise<void>;
   /** 读取或首次登记队列项的首页对话段。 */
@@ -621,6 +623,8 @@ export function createChatService(options: {
               const raw = JSON.parse(data.slice(5).trimStart()) as ChatEvent;
               if (body.queuedInputId && raw.type === "turn_started") await onMessage();
               const event = translate(raw);
+              if ((raw.type === "done" || raw.type === "error") && runId) await options.onTurnEnd?.(viewer, runId)
+                .catch((error) => logEvent({ event: "chat_service.turn_end_hook_failed", requestId, error: (error as Error)?.message }));
               if (event) write(event);
             }
           }

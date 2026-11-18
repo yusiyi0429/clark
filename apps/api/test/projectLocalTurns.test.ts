@@ -149,7 +149,7 @@ describe("项目对话在本人电脑上跑（17.2 第 38 条）", () => {
       expect(after.localTurn).toBeUndefined();
       const answers = after.messages.filter((message: { role: string }) => message.role === "assistant");
       expect(answers.map((message: { ranOn: string }) => message.ranOn)).toEqual(["cloud", "local"]);
-      expect(answers[1]).toMatchObject({ runId: turn.turnId, model: { provider: "Claude Code", model: "Opus 5.5" }, plan: { entries: [{ content: "读项目" }, { content: "改名" }] } });
+      expect(answers[1]).toMatchObject({ runId: turn.turnId, model: { provider: "Claude Code", model: "Opus 5.5" }, plan: { entries: [{ content: "读项目" }, { content: "改名" }], collapsed: true } });
       expect((await s.tool(issued.token, "read_earlier_conversation", {})).value).toMatchObject({ earlier: 0,
         turns: [{ ranOn: "cloud" }, { ranOn: "local", source: "本机 · Claude Code · Opus 5.5", actions: ["把项目「对话质量」改名为「对话质量 2」"] }] });
       expect((await s.tool(issued.token, "read_earlier_conversation", { beforeRunId: turn.turnId, turns: 5 })).value.turns).toHaveLength(1);

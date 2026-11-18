@@ -95,7 +95,7 @@ const DESCRIPTION: Record<BuddyActionName, string> = {
   message_project: "把本人关于某个项目的话转给这个项目的对话，由项目对话去派活、问子会话（伙伴不直接和子会话对话；凡是要改子会话手上的活的都用它）。"
     + "立即返回，不等项目对话回完；项目对话做完、出问题、要本人拿主意时再在总管线里回报本人。",
   send_message: "给同事转达一句话（toPersonIds 是人员目录里的 id）。不会直接发：先出一张卡给本人看，本人点「发出」才由天枢机器人发，开头是「本人名字请我转达：」。",
-  update_plan: "计划清单：要做两步以上的事时，先列出步骤（每次交整张清单，status 为 pending / in_progress / completed），做的过程中更新。少于两步不用列。",
+  update_plan: "计划清单：要做两步以上的事时，先列出步骤（每次交整张清单，status 为 pending / in_progress / completed），做的过程中更新。少于两步不用列。最后一步做完、回答收尾前，把清单全部标好状态再交一次。",
   ask_user: "出一个选项框问本人。开工前要本人拍板、或者有几种做法可选时用它，不要把问题写成一段话让本人自己组织回答。"
     + "建项目、拆卡之前一定先用它把现实问清楚（文件夹、目录、是否迁移、GitHub、做成什么样）；该问就问，不怕得罪本人。"
     + "每个问题：header 是两到六个字的短标题（如「部署方式」），question 是题干，给 2–4 个选项，每个选项一个短标签加一行说明（代价、含义）；"
@@ -697,7 +697,7 @@ async function tickPlan(deps: BuddyDeps, runId: string) {
   deps.stream?.(runId, { type: "plan", plan: { entries, collapsed: false } });
 }
 
-/** 本人在伙伴回答到一半时发来新消息：那一轮的清单收起。返回收起后的清单（没有清单为 null）。 */
+/** 这一轮结束（答完、出错停下，或本人在回答到一半时发来新消息）：那一轮的清单收起，条目不改。返回收起后的清单（没有清单为 null）。 */
 export async function collapsePlan(q: Query, runId: string): Promise<TBuddyPlan | null> {
   const row = (await q("UPDATE buddy_plans SET collapsed=true WHERE run_id=$1 RETURNING entries", [runId])).rows[0] as { entries: TBuddyPlan["entries"] } | undefined;
   return row ? { entries: row.entries, collapsed: true } : null;
