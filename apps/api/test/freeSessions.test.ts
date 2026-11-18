@@ -6,7 +6,7 @@ describe("自由子会话", { timeout: 60_000 }, () => {
   const status = (value: string, title: string, extra: Record<string, unknown> = {}) =>
     ["status", { status: value, title, agent: "claude-code", modelLabel: "Opus 5.5", ...extra }] as [string, unknown];
 
-  it("建：标题取第一句话第一行截 12 字加「…」，登记开工；交代是项目名加第一句话；首页带 free 和字母；参数不对 400", async () => {
+  it("建：标题取第一句话第一行全文，登记开工；交代是项目名加第一句话；首页带 free 和字母；参数不对 400", async () => {
     const f = await boardFixture({}, { boardCloudAgents: false });
     try {
       const projectId = (await f.call("POST", "/api/me/projects", { name: "品牌建设" })).json().projectId as string;
@@ -14,8 +14,8 @@ describe("自由子会话", { timeout: 60_000 }, () => {
       const created = await f.call("POST", "/api/me/topics", { free: true, projectId, firstMessage: first });
       expect(created.statusCode).toBe(201);
       const topic = created.json();
-      expect(topic).toMatchObject({ title: "把首页的配色改成深色系，…", free: true, planTaskId: null, role: null });
-      expect((await f.call("GET", `/api/me/topics/${topic.id}/brief`)).json()).toEqual({ markdown: first, title: "把首页的配色改成深色系，…",
+      expect(topic).toMatchObject({ title: "把首页的配色改成深色系，按钮也一起改", free: true, planTaskId: null, role: null });
+      expect((await f.call("GET", `/api/me/topics/${topic.id}/brief`)).json()).toEqual({ markdown: first, title: "把首页的配色改成深色系，按钮也一起改",
         latestVersion: null, role: null, critics: [] });
       const home = (await f.call("GET", "/api/me/work-home")).json();
       const sub = home.projects.find((entry: { projectId: string }) => entry.projectId === projectId).subSessions[0];
@@ -29,6 +29,34 @@ describe("自由子会话", { timeout: 60_000 }, () => {
       expect((await f.call("POST", "/api/me/topics", { free: true, projectId: "00000000-0000-4000-8000-000000000000", firstMessage: "x" })).statusCode).toBe(404);
       expect((await f.call("POST", "/api/me/topics", {})).json()).toMatchObject({ code: "TITLE_REQUIRED" });
       expect((await f.call("POST", "/api/me/topics", { title: "普通专题" })).statusCode).toBe(201);
+    } finally { await f.close(); }
+  });
+
+  it("自由会话的标题用第一行全文，不加省略号", async () => {
+    const f = await boardFixture({}, { boardCloudAgents: false });
+    try {
+      const projectId = (await f.call("POST", "/api/me/projects", { name: "品牌建设" })).json().projectId as string;
+      const make = async (firstMessage: string) => {
+        const res = await f.call("POST", "/api/me/topics", { free: true, projectId, firstMessage });
+        expect(res.statusCode).toBe(201);
+        return res.json().title as string;
+      };
+      // 超过 12 个字照样全文，后面的行不要
+      expect(await make("请帮我把月度复盘页里所有的按钮颜色统一成主色调\n第二行不要")).toBe("请帮我把月度复盘页里所有的按钮颜色统一成主色调");
+      // 再长也不加「…」；标题字段最多 60 个字（表上的约束、契约同），超出的照样建得出来，只留前 60 个字
+      const long = "这是一句非常长的第一句话".repeat(8);
+      const title = await make(long);
+      expect(title).toBe([...long].slice(0, 60).join(""));
+      expect(title).not.toMatch(/…|\.\.\./);
+      // 带表情的：不切坏半个字，契约按 UTF-16 算的长度也不超
+      const emoji = await make("🎨".repeat(70));
+      expect(emoji.length).toBeLessThanOrEqual(60);
+      expect(emoji).toBe("🎨".repeat(30));
+      // 首页、交代里也是这个全文
+      const home = (await f.call("GET", "/api/me/work-home")).json();
+      const titles = home.projects.find((entry: { projectId: string }) => entry.projectId === projectId).subSessions.map((sub: { title: string }) => sub.title);
+      expect(titles).toContain("请帮我把月度复盘页里所有的按钮颜色统一成主色调");
+      expect(titles.join("")).not.toContain("…");
     } finally { await f.close(); }
   });
 
