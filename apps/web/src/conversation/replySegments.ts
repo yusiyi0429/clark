@@ -144,16 +144,17 @@ function describeCard(markdown: string): { title: string; summary: string } {
   return { title: texts[0] ?? "", summary: head(texts[1] ?? "", SUMMARY_CHARS) };
 }
 
-/** 长清单：超过 5 项，或有嵌套，或各项去掉记号后加起来超过 150 个字。 */
+/** 长清单：超过 5 项，或有嵌套，或各项（连同续行）去掉记号后加起来超过 150 个字。 */
 function isLongList(part: Part): boolean {
   const base = LIST_ITEM.exec(part.lines[0])?.[1].length ?? 0;
   let items = 0;
   let chars = 0;
   for (const line of part.lines) {
     const indent = LIST_ITEM.exec(line)?.[1].length;
-    if (indent === undefined) continue;
-    if (indent > base) return true;
-    items += 1;
+    if (indent !== undefined) {
+      if (indent > base) return true;
+      items += 1;
+    }
     chars += [...plain(line)].length;
     if (items > SHORT_LIST_ITEMS || chars > SHORT_LIST_CHARS) return true;
   }

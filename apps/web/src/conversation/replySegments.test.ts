@@ -134,7 +134,8 @@ describe("splitReply", () => {
   });
   it("流式逐字到达时已经出过的块不变", () => {
     // 第二条：「**结论**」写完一整行时像小标题，接着写出「：」就成了普通段落，前一节要等它定下来才出。
-    const longItem = `- ${"很长的一项".repeat(6)}`;
+    // longItem 一项就超过 150 个字，是卡片料。
+    const longItem = `- ${"很长的一项".repeat(31)}`;
     for (const reply of [ANT_ANSWER, `**甲**\n\n${longItem}\n\n**结论**：今天先不买\n\n**乙**\n\n说明。`]) {
       const chars = [...reply];
       let previous: ReturnType<typeof splitReply>["segments"] = [];
@@ -152,13 +153,14 @@ describe("splitReply", () => {
     expect(splitReply(head, true).tail).toMatchObject({ kind: "card", title: "先确认 ANT 指的是哪家" });
   });
   it("流式时加粗小标题一节的尾巴是卡片壳子，写长了不会从气泡变成卡", () => {
-    const reply = `**要做的事**\n\n先说一句。\n\n- ${"很长的一项".repeat(6)}\n- 第二项\n\n**风险**\n\n没有。`;
+    const six = Array.from({ length: 6 }, (_, i) => `- 第${i + 1}项`).join("\n");
+    const reply = `**要做的事**\n\n先说一句。\n\n${six}\n\n**风险**\n\n没有。`;
     // 清单还没写到：尾巴已经是卡片壳子，标题是小标题。
     expect(splitReply("**要做的事**\n\n先说一句。", true)).toEqual({ segments: [], tail: { kind: "card", markdown: "**要做的事**\n\n先说一句。", title: "要做的事" } });
     expect(splitReply("**要做的事：**\n\n先", true).tail).toMatchObject({ kind: "card", title: "要做的事" });
     expectNoBubbleTurnsCard(reply);
-    // 写完：照规则定，两项的清单是短清单，两节都成气泡（壳子展开成全文；本人 11/19）。
-    expect(splitReply(reply).segments.map((s) => s.kind)).toEqual(["bubble", "bubble"]);
+    // 写完：照规则定，有长清单的一节成卡，只有一句话的一节成气泡（壳子展开成全文）。
+    expect(splitReply(reply).segments.map((s) => s.kind)).toEqual(["card", "bubble"]);
   });
   it("加粗小标题后先有一段铺垫再接表格：流式全程不出现气泡变卡", () => {
     const reply = "开头一句。\n\n**数据**\n\n先看一下这张表，再说结论。\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n**下一步**\n\n说明。";
@@ -166,14 +168,34 @@ describe("splitReply", () => {
     expect(splitReply(reply).segments).toMatchObject([{ kind: "bubble" }, { kind: "card", title: "数据", summary: "先看一下这张表，再说结论。" }, { kind: "bubble" }]);
   });
   it("两行加粗只隔空行时并成一节，不出单独的粗体小气泡", () => {
-    const longItem = `- ${"很长的一项".repeat(6)}`;
-    expect(splitReply(`**甲**\n\n**乙**\n\n${longItem}\n\n**丙**\n\n说明。`).segments).toEqual([
-      // 一项的清单是短清单，整节一个气泡（本人 11/19）。
-      { kind: "bubble", markdown: `**甲**\n\n**乙**\n\n${longItem}` },
+    const six = Array.from({ length: 6 }, (_, i) => `- 第${i + 1}项`).join("\n");
+    expect(splitReply(`**甲**\n\n**乙**\n\n${six}\n\n**丙**\n\n说明。`).segments).toEqual([
+      { kind: "card", markdown: `**甲**\n\n**乙**\n\n${six}`, title: "甲", summary: "乙" },
       { kind: "bubble", markdown: "**丙**\n\n说明。" },
     ]);
     expect(splitReply("**甲**\n\n**乙**\n\n说明。").segments).toEqual([{ kind: "bubble", markdown: "**甲**\n\n**乙**\n\n说明。" }]);
-    expectNoBubbleTurnsCard(`**甲**\n\n**乙**\n\n${longItem}\n\n**丙**\n\n说明。`);
+    expectNoBubbleTurnsCard(`**甲**\n\n**乙**\n\n${six}\n\n**丙**\n\n说明。`);
+  });
+  it("加粗小标题一节里只有一项的短清单：整节一个气泡", () => {
+    const item = `- ${"很长的一项".repeat(6)}`;
+    expect(splitReply(`**甲**\n\n**乙**\n\n${item}\n\n**丙**\n\n说明。`).segments).toEqual([
+      { kind: "bubble", markdown: `**甲**\n\n**乙**\n\n${item}` },
+      { kind: "bubble", markdown: "**丙**\n\n说明。" },
+    ]);
+    expectNoBubbleTurnsCard(`**甲**\n\n**乙**\n\n${item}\n\n**丙**\n\n说明。`);
+  });
+  it("清单项的续行也算进这一项的字数", () => {
+    const note = "这一行是改首页这一项的说明，写在清单项下面的续行里，字数要算进这一项。".repeat(5);
+    expect([...note].length).toBeGreaterThan(150);
+    // 缩进续行。
+    const indented = `- **改首页**\n  ${note}\n- **补测试**`;
+    expect(splitReply(indented).segments).toMatchObject([{ kind: "card", title: "改首页" }]);
+    // 不隔空行、不缩进接着写的续行。
+    const lazy = `- **改首页**\n${note}\n- **补测试**`;
+    expect(splitReply(lazy).segments).toMatchObject([{ kind: "card", title: "改首页" }]);
+    // 续行短，合计不到 150：照旧是气泡。
+    const short = "- **改首页**\n  今天先做完\n- **补测试**";
+    expect(splitReply(short).segments).toEqual([{ kind: "bubble", markdown: short }]);
   });
   it("卡片标题完整显示，摘要不拼省略号", () => {
     const title = "这是一个很长很长的标题，用来确认卡片标题放不下时完整显示交给样式去换行，而不是在后面截断再拼省略号";
