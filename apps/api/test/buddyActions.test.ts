@@ -444,7 +444,12 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
     // 本人 11/16（少开子会话）：能自己办的不拆、能接着用的先接着用、一件 Task 默认一张卡；同一项目同时在跑不超过 2 个（只写进规矩）。
     for (const word of ["先想总管线自己能不能办完", "能接着用的子会话", "一件 Task 默认拆一张卡"]) expect(description("split_cards")).toContain(word);
     for (const name of ["split_cards", "start_sub_session", "sub_session_restart"])
-      expect(description(name)).toContain("同一个项目同时在跑的子会话不超过 2 个");
+      expect(description(name)).toContain("这条只管你自己开新会话、拆新卡，已经有 2 个在跑就等一个停下再开");
+    // 本人 11/19：本人点名要跑、要续上的会话照做，上限不管这个；超了回话里说一句有几个在跑，不先问本人。
+    for (const name of ["start_sub_session", "sub_session_restart", "tell_session"]) {
+      expect(description(name)).toContain("本人点名要跑、要续上的会话照做，不受同项目在跑的上限，超了就在回话里顺带说一句这个项目现在有几个在跑。");
+      expect(description(name)).not.toContain("急的先问本人");
+    }
     for (const personality of ["steady", "direct", "warm", "coach"] as const)
       expect(buddyPersona({ name: "团团", personality }, "测试乙")).toContain("# 先从现实出发（哪种性格都一样）");
   });
