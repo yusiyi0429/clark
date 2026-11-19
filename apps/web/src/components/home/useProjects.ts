@@ -76,7 +76,7 @@ export function useProjects(data: Pick<WorkHomeData, "projects" | "month" | "per
   const rename = useCallback(async (id: string, name: string) => { await updateProject(id, { name }); await refresh(); }, [refresh]);
   const archive = useCallback(async (id: string, value: boolean) => { await updateProject(id, { archived: value }); await refresh(); }, [refresh]);
   const attach = useCallback(async (taskId: string, projectId: string) => { await attachGoal(projectId, taskId); await refresh(); }, [refresh]);
-  /** 改一件目标的验收截止日，null 清掉（退回 Mission 的节点）。 */
+  /** 改一件目标的验收截止日，null 清掉（退回记下的原验收时间点）。 */
   const setDue = useCallback(async (projectId: string, taskId: string, dueDate: string | null) => { await setGoalDueDate(projectId, taskId, dueDate); await refresh(); }, [refresh]);
   /** 绑到这台电脑上一个允许的文件夹（folderId），null 解绑。 */
   const setFolder = useCallback(async (id: string, folderId: string | null, name?: string) => {
