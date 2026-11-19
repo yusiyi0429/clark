@@ -163,6 +163,13 @@ describe("左栏能收起（设计 4.1）", () => {
     expect(leftUnseen({ collapsed: true, projects: project(true), seen: new Map([["project:p1", "2026-11-17T01:00:00.000Z"]]), waitingCount: 0, since: quiet })).toBe(false);
   });
 
+  it("「随手」项目对话的未读不算（本人 11/19 收到幕后）", () => {
+    const scratch = (unseen: boolean) => project(unseen).map((entry) => ({ ...entry, scratch: true }));
+    const quiet = leftSnapshot(scratch(false), undefined, 0);
+    expect(leftUnseen({ collapsed: true, projects: scratch(true), waitingCount: 0, since: quiet })).toBe(false);
+    expect(leftSnapshot(scratch(true), undefined, 0).unseen.size).toBe(0);
+  });
+
   it("等你件数变多，亮", () => {
     const since = leftSnapshot(project(false), undefined, 2);
     expect(leftUnseen({ collapsed: true, projects: project(false), waitingCount: 3, since })).toBe(true);

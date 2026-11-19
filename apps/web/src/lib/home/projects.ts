@@ -7,7 +7,7 @@
  */
 import type { THomeItem, TProject } from "@warmap/contracts";
 import { transferLine, type Person, type Transfer } from "./transfer";
-import type { HomeProject, SubSession, WaitingItem, WorkHomeData } from "./types";
+import type { HomeProject, SubSession, WorkHomeData } from "./types";
 import type { Worker } from "@/lib/work/workers";
 
 export { newSubHref, projectHref, projectInfoHref } from "./derive";
@@ -95,12 +95,10 @@ export function fromListed(project: TProject, folders: Folders): Project {
   };
 }
 
-/** 等你里随手会话的来源（本人 11/19 收到幕后）：云端写的是项目名，换成那个会话的名字（按 sessionId 找），找不到不写。别的照旧。 */
-export function scratchWaiting(waiting: WaitingItem[], projects: readonly Pick<HomeProject, "projectId" | "name" | "scratch" | "subSessions">[]): WaitingItem[] {
-  const scratch = projects.find((project) => project.scratch);
-  if (!scratch) return waiting;
-  return waiting.map((item) => (item.projectId !== scratch.projectId || item.source !== scratch.name ? item
-    : { ...item, source: scratch.subSessions.find((sub) => !!item.sessionId && sub.sessionId === item.sessionId)?.title ?? null }));
+/** 子会话页头的上一级：它所在的项目；「随手」的会话不画上一级（本人 11/19 收到幕后），找不到也是 null。 */
+export function crumbProject(projects: readonly Project[], subId: string | null): Project | null {
+  const owner = subId ? projects.find((project) => project.subSessions.some((sub) => sub.id === subId)) : undefined;
+  return owner && !owner.scratch ? owner : null;
 }
 
 /** 「2 小时前」「3 天前」。 */

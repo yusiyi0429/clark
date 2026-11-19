@@ -34,6 +34,21 @@ const node = (projectId: string, kind: TMeetingWorkTarget["kind"], id: string) =
 const decide = (row: string, body: object) => f.call("POST", `/api/me/nexus-confirmations/${row}/decision`, body);
 
 describe("本人确认后递送至原工作", { timeout: 60000 }, () => {
+  it("去向不列「随手」项目和它的会话（本人 11/19 收到幕后）", async () => {
+    f = await boardFixture({}, { boardCloudAgents: false });
+    const kept = await makeProject("原品牌项目");
+    const scratch = randomUUID();
+    await f.t.sql("INSERT INTO projects(id,owner_id,name,scratch,created_at,updated_at) VALUES($1,$2,'随手',true,$3,$3)", [scratch, TEST_MEMBER.personId, BOARD_NOW]);
+    const topic = randomUUID();
+    await f.t.sql("INSERT INTO research_topics(id,owner_id,title,project_id,free,first_message) VALUES($1,$2,'比对合同',$3,true,'比对')", [topic, TEST_MEMBER.personId, scratch]);
+    const res = await f.call("GET", "/api/me/meeting-work-handoff-targets");
+    expect(res.statusCode, res.body).toBe(200);
+    const options = res.json().targets as TMeetingWorkTarget[];
+    expect(options.map((o) => o.id)).toContain(kept);
+    expect(options.map((o) => o.projectId)).not.toContain(scratch);
+    expect(options.map((o) => o.id)).not.toContain(topic);
+  });
+
   it("分目标递送、并发重放、部分失败重试、原卡交代与权限变化", async () => {
     f = await boardFixture({}, { boardCloudAgents: false });
     const req = await addRequest();

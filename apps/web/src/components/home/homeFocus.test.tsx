@@ -36,10 +36,10 @@ const local = { runner: createMockRunner(), phase: "ready", version: null, statu
   refresh: vi.fn(), pair: vi.fn(), unpair: vi.fn(), pickFolder: vi.fn(), setIncludePersonal: vi.fn() } as unknown as LocalRunnerState;
 const api = { deviceId: "d1", known: true, work: { workers: [], boards: {} }, refresh: vi.fn(), planFailed: true, retryPlan: vi.fn() } as unknown as WorkHomeApi;
 const meeting = { account: { personId: "sun", displayName: "孙铭泽", role: "member" }, start: vi.fn(async () => null) } as unknown as HomeMeeting;
-const data = (waiting: WaitingItem[], projects: unknown[] = []) => ({ waiting, projects, month: { missions: [] }, period: "2026-11", other: { subSessions: [] } }) as unknown as WorkHomeData;
-const render = (waiting: WaitingItem[], { offline = false, known = true, projects = [] as unknown[] } = {}) => renderToStaticMarkup(
+const data = (waiting: WaitingItem[]) => ({ waiting, month: { missions: [] }, period: "2026-11", other: { subSessions: [] } }) as unknown as WorkHomeData;
+const render = (waiting: WaitingItem[], { offline = false, known = true } = {}) => renderToStaticMarkup(
   <LocalContext.Provider value={local}>
-    <HomeWaiting data={data(waiting, projects)} api={{ ...api, known }} go={() => undefined} offline={offline} recordingMeetingId={null} meeting={meeting} />
+    <HomeWaiting data={data(waiting)} api={{ ...api, known }} go={() => undefined} offline={offline} recordingMeetingId={null} meeting={meeting} />
   </LocalContext.Provider>);
 const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 const rows = (html: string) => (html.match(/<li /g) ?? []).length;
@@ -83,20 +83,6 @@ describe("首页「等你」空和加载", () => {
     feed.error = "没有读到会议";
     const html = render([wait("w1")]);
     expect(text(html)).toMatch(/事情 w1 .*没有读到会议 重试/);
-  });
-});
-
-describe("首页「等你」里的随手会话", () => {
-  it("来源不写「随手」，写那个会话的名字；找不到会话不写来源；别的项目照旧", () => {
-    const scratch = { projectId: "s1", name: "随手", scratch: true, subSessions: [{ id: "t8", kind: "topic", title: "比对合同", sessionId: "sess-8" }] };
-    const html = render([
-      wait("w1", { kind: "approval", title: "要运行命令", source: "随手", projectId: "s1", sessionId: "sess-8" }),
-      wait("w2", { kind: "question", title: "先比哪两份？", source: "随手", projectId: "s1", sessionId: "sess-9" }),
-      wait("w3", { kind: "question", title: "用哪个字体？", source: "新版天枢应用", projectId: "p1" }),
-    ], { projects: [scratch, { projectId: "p1", name: "新版天枢应用", subSessions: [] }] });
-    expect(html).not.toContain("随手");
-    expect(text(html)).toContain("要运行命令 比对合同");
-    expect(text(html)).toContain("用哪个字体？ 新版天枢应用");
   });
 });
 

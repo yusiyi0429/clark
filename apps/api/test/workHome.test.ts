@@ -363,6 +363,9 @@ describe("新首页", { timeout: 30_000 }, () => {
       expect((await f.call("POST", "/api/me/route", { text: "上月聊过的那件怎么样了" })).json()).toEqual({ target: { projectId: october.projectId } });
       expect((await f.call("POST", "/api/me/route", { text: "内部版上线这边怎么样" })).json()).toEqual({ target: { projectId: projectOf(body).projectId } });
       expect((await f.call("POST", "/api/me/route", { text: "今天天气" })).json()).toEqual({ target: "main" });
+      // 「随手」项目不当去向（本人 11/19 收到幕后）：提到它的名字也交给伙伴。
+      await f.t.sql("INSERT INTO projects(id,owner_id,name,scratch,created_at,updated_at) VALUES($1,$2,'随手',true,now(),now())", [randomUUID(), TEST_MEMBER.personId]);
+      expect((await f.call("POST", "/api/me/route", { text: "随手比对一下合同" })).json()).toEqual({ target: "main" });
 
       // 交付以后在这件 Task 下开了返工卡：回到没完成。
       await f.t.sql("UPDATE tasks SET rework_of_card_id=$2,created_at='2026-11-05T05:00:00Z' WHERE id=$1", [ids["本月的卡"], ids["上月的卡"]]);

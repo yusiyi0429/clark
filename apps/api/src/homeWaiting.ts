@@ -39,6 +39,8 @@ export type WaitingInput = {
   subs: HomeSub[]; cards: TCardTaskView[]; taskById: Map<string, TreeTask>;
   /** 一件 Task 挂在哪个项目（没挂为 null）；本人项目的名字（含归档的）。 */
   taskProject: (taskId: string | null) => string | null; projectNames: Map<string, string>;
+  /** 本人的「随手」项目（收在幕后，本人 11/19）：它的会话来源写会话名、点了直接开那个会话；没有为 null。 */
+  scratchId: string | null;
   /** 本人没吊销的电脑（在不在线照 workers.ts）；没关的拆卡登记几条（等本机开规划员）。 */
   devices: TWorkerResources["devices"]; openSplits: number;
 };
@@ -106,7 +108,7 @@ function byUrgency(a: TWaitingItem, b: TWaitingItem): number {
 
 /** 等你：一件一行，id 稳定。taskId 只填树上的 Task；projectId 是在哪个项目（项目行的「N 件等你」按它数），没写的按 taskId 挂的项目补。 */
 export async function assembleWaiting(input: WaitingInput): Promise<TWaitingItem[]> {
-  const { q, person, deps, subs, cards, taskById, taskProject, projectNames } = input;
+  const { q, person, deps, subs, cards, taskById, taskProject, projectNames, scratchId } = input;
   const ownerId = person.personId;
   const deviceNames = new Map(((await q("SELECT id::text,name FROM local_devices WHERE owner_id=$1", [ownerId])).rows as { id: string; name: string }[])
     .map((row) => [row.id, row.name]));
@@ -122,10 +124,11 @@ export async function assembleWaiting(input: WaitingInput): Promise<TWaitingItem
   for (const sub of subs) {
     const taskId = treeTask(sub.planTaskId);
     const source = [sub.title, taskName(taskId)].filter(Boolean).join(" · ");
-    // 提问和批准由项目对话转达（14.3）：点进去落在项目对话里那个框上，来源只写项目名；不在项目里的照旧打开子会话。
+    // 提问和批准由项目对话转达（14.3）：点进去落在项目对话里那个框上，来源只写项目名；不在项目里的、「随手」里的照旧打开子会话，来源写会话名。
+    const relayed = !!sub.projectId && sub.projectId !== scratchId;
     if (sub.waiting === "approval" || sub.waiting === "question")
-      add({ id: `${sub.waiting}:${sub.kind}:${sub.id}`, kind: sub.waiting, ...askFields(sub.waiting, sub.ask), source: projectName(sub.projectId) ?? sub.title, at: sub.runUpdatedAt,
-        open: sub.projectId && sub.sessionId ? { kind: "project", id: sub.projectId, focus: { sessionId: sub.sessionId, requestId: askRequestId(sub.ask) } }
+      add({ id: `${sub.waiting}:${sub.kind}:${sub.id}`, kind: sub.waiting, ...askFields(sub.waiting, sub.ask), source: (relayed ? projectName(sub.projectId) : null) ?? sub.title, at: sub.runUpdatedAt,
+        open: relayed && sub.sessionId ? { kind: "project", id: sub.projectId!, focus: { sessionId: sub.sessionId, requestId: askRequestId(sub.ask) } }
           : { kind: sub.kind, id: sub.id },
         taskId, projectId: sub.projectId, sessionId: sub.sessionId, deviceId: sub.deviceId, letter: sub.letter, answer: "inline_local" });
     // 验收过了、没能自动合回：在交回那次执行的那台电脑上合。

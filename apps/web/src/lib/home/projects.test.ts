@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { sortHomeProjects } from "./derive";
-import { ago, fromHome, fromListed, mainGoal, projectLine, type Project } from "./projects";
+import { ago, crumbProject, fromHome, fromListed, mainGoal, projectLine, type Project } from "./projects";
 import type { HomeProject, WorkHomeData } from "./types";
 
 const SUMMARY = { running: 0, waiting: 0, queued: 0, done: 0, doneToday: 0, needsYou: 0 };
@@ -14,6 +14,18 @@ const home = (projectId: string, extra: Partial<HomeProject> = {}): HomeProject 
   pipeline: { conversationId: null, scope: `project:${projectId}` }, planning: false, unseen: false, subSessions: [], items: [], transfer: null, ...extra,
 });
 const data = { period: "2026-11", month: { missions: [{ missionId: "m1", title: "新首页", period: "2026-11", tasks: [] }] } } as unknown as Pick<WorkHomeData, "month" | "period">;
+
+describe("子会话页头的上一级", () => {
+  it("是它所在的项目；「随手」的会话不画上一级（本人 11/19 收到幕后）", () => {
+    const sub = { id: "t1" } as HomeProject["subSessions"][number];
+    const kept = fromHome(home("p1", { subSessions: [sub] }), data, new Map());
+    const scratch = fromHome(home("s1", { name: "随手", scratch: true, subSessions: [{ ...sub, id: "t2" }] }), data, new Map());
+    expect(crumbProject([kept, scratch], "t1")?.id).toBe("p1");
+    expect(crumbProject([kept, scratch], "t2")).toBeNull();
+    expect(crumbProject([kept, scratch], "t9")).toBeNull();
+    expect(crumbProject([kept, scratch], null)).toBeNull();
+  });
+});
 
 describe("项目从首页 v2 来（16.2、16.3）", () => {
   it("目标的截止写成「11/30」，Mission 名从「本月」里找；本月的进 current，之前月份没了结的留在 goals；scope 是项目对话", () => {

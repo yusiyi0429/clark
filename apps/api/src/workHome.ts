@@ -286,7 +286,8 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
   const loose = await getTaskViews(q, ((await q(`SELECT id::text FROM tasks WHERE owner_id=$1 AND mission_id IS NULL AND project_id IS NULL AND status NOT IN ('done','returned')
       AND role_id IS NULL AND executor IS DISTINCT FROM 'claude_code' ORDER BY created_at DESC,id`, [ownerId])).rows as { id: string }[]).map((row) => row.id), deps.names);
 
-  const waiting = await assembleWaiting({ q, person, deps, period, subs, cards, taskById, taskProject, projectNames, devices, openSplits: splits.length });
+  const waiting = await assembleWaiting({ q, person, deps, period, subs, cards, taskById, taskProject, projectNames, devices, openSplits: splits.length,
+    scratchId: projectRows.find((row) => row.scratch)?.id ?? null });
   const today = shanghaiDate(now);
 
   // 目标：树上挂在没归档的项目上的 Task；标准几条达到、预算到没到 80%。

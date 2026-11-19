@@ -30,7 +30,7 @@ import { decideProposal } from "@/lib/team/roles";
 import { canCommandHere, decide } from "@/lib/work/actions";
 import { mergeCard } from "@/lib/work/merge";
 import { waitingHref } from "@/lib/home/derive";
-import { scratchWaiting, type Project } from "@/lib/home/projects";
+import type { Project } from "@/lib/home/projects";
 import type { ProjectsApi } from "./useProjects";
 import { clock, monthDayTime, relativeDayTime } from "@/lib/companyTime";
 import type { RouteTarget, WaitingItem, WorkHomeData } from "@/lib/home/types";
@@ -98,7 +98,7 @@ export function HomeWaiting({ data, api, go, offline = false, phone = false, rec
     const timer = window.setTimeout(() => setWaited(true), MEETINGS_WAIT_MS);
     return () => window.clearTimeout(timer);
   }, [loaded]);
-  const rows = focusList({ waiting: scratchWaiting(data.waiting, data.projects), meetings: items, offline, recordingMeetingId, now: Date.now(), ignoredMeetings: data.ignoredMeetings });
+  const rows = focusList({ waiting: data.waiting, meetings: items, offline, recordingMeetingId, now: Date.now(), ignoredMeetings: data.ignoredMeetings });
   const className = phone ? h.phoneWaiting : h.section;
   if (!loaded && !waited) return <section aria-label="等你" aria-busy="true" className={className} />;
   return <section aria-label="等你" aria-busy={!api.known || undefined} className={className}>

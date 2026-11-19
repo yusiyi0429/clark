@@ -29,6 +29,19 @@ const status = (state: string, title: string, hold?: { reason: string; until: st
   ["status", { status: state, title, agent: "claude-code", modelLabel: "订阅 · Sonnet", ...(hold ? { hold } : {}) }] as [string, unknown];
 
 describe("首页等你：扩的几种", { timeout: 30_000 }, () => {
+  it("「随手」会话的批准、提问：来源写会话名，点了直接开那个会话，不去随手项目页（本人 11/19 收到幕后）", async () => {
+    const f = await boardFixture({}, { boardCloudAgents: false });
+    try {
+      const scratch = randomUUID();
+      await f.t.sql("INSERT INTO projects(id,owner_id,name,scratch,created_at,updated_at) VALUES($1,$2,'随手',true,$3,$3)", [scratch, TEST_MEMBER.personId, BOARD_NOW]);
+      const topic = (await f.call("POST", "/api/me/topics", { free: true, projectId: scratch, firstMessage: "比对合同" })).json() as { id: string; title: string };
+      const machine = await f.local();
+      const session = await machine.send({ kind: "topic", topicId: topic.id }, [status("waiting_permission", topic.title)]);
+      expect((await waiting(f)).find((item) => item.id === `approval:topic:${topic.id}`)).toMatchObject({ kind: "approval", source: topic.title,
+        open: { kind: "topic", id: topic.id }, projectId: scratch, sessionId: session, answer: "inline_local" });
+    } finally { await f.close(); }
+  });
+
   it("计划等你开工：树上的 Task 本人所有还开着的草稿（同看板，不只看最近一次拆卡），时间取那些草稿所属计划里最新的；打开 Task 挂的项目，算进这个项目的「N 件等你」；不在树上的 Task 不出", async () => {
     const f = await boardFixture({}, { boardCloudAgents: false });
     try {
