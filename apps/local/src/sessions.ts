@@ -345,6 +345,8 @@ export class SessionManager {
   private closing = false;
   /** 正在清验收员留下的改动的（验收员 id → 这一次清理）：同一个验收员的清理排着一个个跑。 */
   private readonly dropping = new Map<string, Promise<void>>();
+  /** 同一个仓库里的提交、合回排着做（inRepo）：键是主文件夹所在仓库的根，值是排在最后的那一件。 */
+  private readonly repoQueue = new Map<string, Promise<unknown>>();
   /** 在等本人回答的提问（会话 id → 提问），会话这时是 idle（等你回复）。 */
   private readonly questions = new Map<string, TLocalQuestionRequestView>();
   /** 前面的卡都做完、正在开工作树的卡（开好以前不能开始）。 */
@@ -1906,6 +1908,27 @@ export class SessionManager {
   async merge(id: string, auto = false): Promise<TLocalMergeResponse> {
     const rec = this.must(id);
     const ws = rec.workspace;
+    if (ws?.kind !== "worktree") throw new SessionError("conflict", `${rec.free ? "这个子会话" : "这张卡"}不在工作树里做，没有分支可合`);
+    return this.inRepo(ws.folder, () => this.mergeNow(id, auto));
+  }
+
+  /**
+   * 同一个仓库里的提交、合回一件做完再做下一件：两件同时在主文件夹里合，后来的会撞上 index.lock、MERGE_HEAD，
+   * 它的 merge --abort 还会把先来那件退回去。卡的自动合回、自由子会话的合回、本人点合并都经过这里。
+   */
+  private async inRepo<T>(folder: string, fn: () => Promise<T>): Promise<T> {
+    const key = resolve(await git(folder, ["rev-parse", "--show-toplevel"]).then((o) => o.trim(), () => folder));
+    const run = (this.repoQueue.get(key) ?? Promise.resolve()).then(fn);
+    const tail = run.catch(() => undefined);
+    this.repoQueue.set(key, tail);
+    void tail.then(() => { if (this.repoQueue.get(key) === tail) this.repoQueue.delete(key); });
+    return run;
+  }
+
+  /** merge 的正文，在 inRepo 里跑：排到了再查一遍前提。 */
+  private async mergeNow(id: string, auto: boolean): Promise<TLocalMergeResponse> {
+    const rec = this.must(id);
+    const ws = rec.workspace;
     const who = rec.free ? "这个子会话" : "这张卡";
     if (ws?.kind !== "worktree") throw new SessionError("conflict", `${who}不在工作树里做，没有分支可合`);
     if (ws.mergedCommit) throw new SessionError("conflict", "这张卡已经合回过了");
@@ -1917,7 +1940,9 @@ export class SessionManager {
     if (!this.d.folders.isAllowed(ws.folder)) throw new SessionError("folder_not_allowed", "主文件夹已不在允许的文件夹里");
     if (!existsSync(ws.path)) throw new SessionError("conflict", `${who}的工作树已经不在了`);
     const head = rec.free ? await this.commitRound(rec) : null;
-    if ((await changedFiles(ws.path)).length) throw new SessionError("conflict", "卡的工作树里还有没提交的改动（交回以后又改过），让它再交回一次再合");
+    if ((await changedFiles(ws.path)).length) {
+      throw new SessionError("conflict", rec.free ? "这个子会话的工作树里还有没提交的改动" : "卡的工作树里还有没提交的改动（交回以后又改过），让它再交回一次再合");
+    }
     const out = await mergeBranch(ws.folder, ws.branch, ws.baseBranch, `合回天枢${rec.free ? "子会话" : "卡"}「${rec.title}」（${ws.branch}）`);
     if (!out.merged) {
       // 验收过了自动合没合成：记下原因等本人合（本人点了没合成的，原因在回执和同步条目里）
@@ -1997,24 +2022,26 @@ export class SessionManager {
       this.d.onChange?.();
     };
     try {
-      const head = await this.commitRound(rec);
-      if (head === (rec.roundHead ?? ws.baseCommit) || this.cardBusy(rec)) return; // 这一轮没改动；提交时本人又让它做了，那一轮做完再合
-      rec.roundHead = head;
-      this.save(rec);
-      if (this.d.autoMerge?.() === false) return hold("auto_merge_off", "没开「验收后自动合并」，等你合");
-      const out = await this.merge(rec.id, true); // 合不了时 merge 自己记下 needsMerge
-      if (!out.merged) notice(out.message);
+      await this.inRepo(ws.folder, async () => {
+        const head = await this.commitRound(rec);
+        if (head === (rec.roundHead ?? ws.baseCommit) || this.cardBusy(rec)) return; // 这一轮没改动；提交时本人又让它做了，那一轮做完再合
+        // 先不存：合完或记下等你合时一起存，中途退出的下一轮再试
+        rec.roundHead = head;
+        if (this.d.autoMerge?.() === false) return hold("auto_merge_off", "没开「验收后自动合并」，等你合");
+        const out = await this.mergeNow(rec.id, true); // 合不了时 mergeNow 自己记下 needsMerge
+        if (!out.merged) notice(out.message);
+      });
     } catch (e) {
       hold("not_ready", e instanceof SessionError ? e.message : `合回出错：${e instanceof Error ? e.message : String(e)}`);
     }
   }
 
-  /** 自由子会话这一轮没提交的改动提交到它的分支（提交信息照卡交回时的写法），返回分支上最新的提交。 */
+  /** 自由子会话这一轮没提交的改动提交到它的分支，返回分支上最新的提交。在 inRepo 里调。 */
   private async commitRound(rec: SessionRecord): Promise<string> {
     const ws = rec.workspace;
     if (ws?.kind !== "worktree") throw new SessionError("conflict", "这个子会话不在工作树里做");
     try {
-      return await commitAll(ws.path, `交回：${rec.title}\n\n天枢专题 ${rec.subject.topicId}`);
+      return await commitAll(ws.path, `天枢子会话：${rec.title}（一轮）\n\n天枢专题 ${rec.subject.topicId}`);
     } catch (e) {
       throw new SessionError("conflict", `提交改动没成：${e instanceof Error ? e.message : String(e)}`);
     }

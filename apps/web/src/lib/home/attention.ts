@@ -39,6 +39,7 @@ export function attentionOf(cloud: Attention | null, local: LocalAsk | null): At
   if (here) return here;
   // 受阻、等你补（主循环第 61 条）都只有云端知道，执行方又在跑了（补了一句、按改法在改）时不算在等本人。
   if ((cloud === "verdict" || cloud === "needs_person") && !(local.status && ALIVE.has(local.status))) return cloud;
+  if (local.status && ALIVE.has(local.status)) return null; // 又在跑了：等这一轮做完再说合回
   if (local.merge === "needs" || (cloud === "merge" && local.merge === null)) return "merge";
   return null;
 }

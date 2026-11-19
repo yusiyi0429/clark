@@ -996,7 +996,7 @@ describe("自由会话在 git 项目里开工作树", { timeout: 60_000 }, () =>
       expect(git(main, "status", "--porcelain")).toBe("");
       expect(git(main, "rev-list", "--merges", "--count", "HEAD")).toBe("1");
       expect(git(main, "log", "-1", "--format=%s")).toContain(ws.branch);
-      expect(git(ws.path, "log", "-1", "--format=%B")).toBe(`交回：Free-A\n\n天枢专题 Free-A`); // 照卡交回时的写法
+      expect(git(ws.path, "log", "-1", "--format=%B")).toBe(`天枢子会话：Free-A（一轮）\n\n天枢专题 Free-A`);
       // 合回以后工作树留着，会话接着做
       const s = await until(async () => { const x = (await h.session(f.id)).session; return h.events(f.id).some((e) => e.type === "notice" && e.code === "merged") ? x : null; });
       expect(s.workspace).toEqual(ws);
@@ -1036,7 +1036,7 @@ describe("自由会话在 git 项目里开工作树", { timeout: 60_000 }, () =>
       expect(readFileSync(join(main, "readme.md"), "utf8")).toBe("主文件夹里没提交的改动\n");
       // 这一轮的改动已经提交到会话的分支
       expect(git(s.workspace.path, "status", "--porcelain")).toBe("");
-      expect(git(main, "log", "-1", "--format=%s", s.workspace.branch)).toBe("交回：Free-D");
+      expect(git(main, "log", "-1", "--format=%s", s.workspace.branch)).toBe("天枢子会话：Free-D（一轮）");
       expect(h.events(f.id).some((e) => e.type === "notice" && e.code === "merge_needed")).toBe(true);
       // 本人收拾好主文件夹、点合并：合回，工作树留着
       git(main, "checkout", "--", "readme.md");
@@ -1046,6 +1046,27 @@ describe("自由会话在 git 项目里开工作树", { timeout: 60_000 }, () =>
       const after = (await h.session(f.id)).session;
       expect(after.workspace.needsMerge).toBeUndefined();
       expect(existsSync(after.workspace.path)).toBe(true);
+    } finally {
+      await h.t.cleanup();
+    }
+  });
+
+  it("同一个主文件夹的两次合回同时发起：排着做，都合成，主文件夹干净、没有半合并", async () => {
+    const main = repo();
+    const h = await setup(main); // 自动合回关着：两个都先记等你合，再同时点合并
+    try {
+      const f1 = await h.openFree("Free-X");
+      const f2 = await h.openFree("Free-Y");
+      writeFileSync(join(f1.workspace.path, "x.txt"), "x\n");
+      writeFileSync(join(f2.workspace.path, "y.txt"), "y\n");
+      await Promise.all([h.allow(f1.id), h.allow(f2.id)]);
+      for (const f of [f1, f2]) await until(async () => (await h.session(f.id)).session.workspace.needsMerge?.reason === "auto_merge_off");
+      const [r1, r2] = await Promise.all([h.merge(f1.id), h.merge(f2.id)]);
+      expect([r1.body.merged, r2.body.merged]).toEqual([true, true]);
+      expect(git(main, "status", "--porcelain")).toBe("");
+      expect(existsSync(join(main, ".git", "MERGE_HEAD"))).toBe(false);
+      expect(git(main, "rev-list", "--merges", "--count", "HEAD")).toBe("2");
+      for (const name of ["x.txt", "y.txt", "hello.txt"]) expect(existsSync(join(main, name))).toBe(true);
     } finally {
       await h.t.cleanup();
     }
