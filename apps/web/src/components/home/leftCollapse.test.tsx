@@ -19,6 +19,8 @@ const h = vi.hoisted(() => ({
   thread: undefined as { kind: "card" | "topic"; id: string; from?: string } | null | undefined,
   /** 首页数据；undefined 照真的（空的）。 */
   data: undefined as WorkHomeData | undefined,
+  /** 计划（本体）先到了、云端首页知没知道；undefined 照真的。 */
+  plan: undefined as { today: string; known: boolean } | undefined,
 }));
 vi.mock("react", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react")>();
@@ -48,7 +50,11 @@ vi.mock("react", async (importOriginal) => {
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }), usePathname: () => h.path, useSearchParams: () => new URLSearchParams() }));
 vi.mock("@/lib/home/useWorkHome", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/home/useWorkHome")>();
-  return { ...actual, useWorkHome: () => { const real = actual.useWorkHome(); return h.data ? { ...real, data: h.data } : real; } };
+  return { ...actual, useWorkHome: () => {
+    const real = actual.useWorkHome();
+    const api = h.data ? { ...real, data: h.data } : real;
+    return h.plan ? { ...api, known: h.plan.known, work: { ...api.work, plan: { today: h.plan.today, period: h.plan.today.slice(0, 7), missions: [], tasks: [], gates: [] } } } as unknown as typeof real : api;
+  } };
 });
 vi.mock("./usePhone", async (importOriginal) => ({ ...(await importOriginal<typeof import("./usePhone")>()), usePhone: () => h.phone }));
 vi.mock("./LeftResize", async (importOriginal) => {
@@ -73,7 +79,7 @@ const flush = () => h.effects.splice(0).forEach((effect) => effect());
 const open = () => { h.states = []; h.effects = []; run(); flush(); return run(); };
 const shell = () => { h.frameIndex = 0; return renderToStaticMarkup(<HomeShell account={{ displayName: "孙铭泽", role: "member", personId: "p" }} />); };
 
-afterEach(() => { vi.unstubAllGlobals(); h.path = "/me/work"; h.phone = false; h.collapsed = null; h.shown = undefined; h.thread = undefined; h.data = undefined; });
+afterEach(() => { vi.unstubAllGlobals(); h.path = "/me/work"; h.phone = false; h.collapsed = null; h.shown = undefined; h.thread = undefined; h.data = undefined; h.plan = undefined; });
 
 describe("左栏能收起（设计 4.1）", () => {
   it("收起记在这台电脑上", () => {
@@ -280,5 +286,17 @@ describe("伙伴主线看不到子会话（本人 11/18）", () => {
     const html = shell();
     expect(html).toMatch(/<div class="[^"]*"[^>]*data-panel="file"/);
     expect(html).toMatch(/<aside[^>]*aria-label="文件"[^>]*data-testid="side-panel"/);
+  });
+});
+
+describe("左栏「本月」行的待敲定 chip", () => {
+  it("云端首页还没回、计划先到：不出「11 月待敲定」", () => {
+    h.plan = { today: "2026-11-19", known: false };
+    expect(shell()).not.toContain('data-testid="month-chip"');
+  });
+
+  it("云端首页回来了、本月没有 Mission：出「11 月待敲定」", () => {
+    h.plan = { today: "2026-11-19", known: true };
+    expect(shell()).toMatch(/data-testid="month-chip"[^>]*>11 月待敲定</);
   });
 });

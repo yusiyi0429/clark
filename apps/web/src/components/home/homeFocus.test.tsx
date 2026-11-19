@@ -34,12 +34,12 @@ const meet = (extra: Partial<PartnerMeeting>): PartnerMeeting => ({
 } as PartnerMeeting);
 const local = { runner: createMockRunner(), phase: "ready", version: null, status: null, models: [], folders: [], sessions: [], pairing: null, error: null,
   refresh: vi.fn(), pair: vi.fn(), unpair: vi.fn(), pickFolder: vi.fn(), setIncludePersonal: vi.fn() } as unknown as LocalRunnerState;
-const api = { deviceId: "d1", work: { workers: [], boards: {} }, refresh: vi.fn(), planFailed: true, retryPlan: vi.fn() } as unknown as WorkHomeApi;
+const api = { deviceId: "d1", known: true, work: { workers: [], boards: {} }, refresh: vi.fn(), planFailed: true, retryPlan: vi.fn() } as unknown as WorkHomeApi;
 const meeting = { account: { personId: "sun", displayName: "孙铭泽", role: "member" }, start: vi.fn(async () => null) } as unknown as HomeMeeting;
 const data = (waiting: WaitingItem[]) => ({ waiting, month: { missions: [] }, period: "2026-11", other: { subSessions: [] } }) as unknown as WorkHomeData;
-const render = (waiting: WaitingItem[], { offline = false } = {}) => renderToStaticMarkup(
+const render = (waiting: WaitingItem[], { offline = false, known = true } = {}) => renderToStaticMarkup(
   <LocalContext.Provider value={local}>
-    <HomeWaiting data={data(waiting)} api={api} go={() => undefined} offline={offline} recordingMeetingId={null} meeting={meeting} />
+    <HomeWaiting data={data(waiting)} api={{ ...api, known }} go={() => undefined} offline={offline} recordingMeetingId={null} meeting={meeting} />
   </LocalContext.Provider>);
 const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 const rows = (html: string) => (html.match(/<li /g) ?? []).length;
@@ -69,6 +69,12 @@ describe("首页「等你」空和加载", () => {
   it("会议还没读到：空着等，不闪「没有等你的事」", () => {
     feed.loaded = false;
     const html = render([]);
+    expect(html).toContain('aria-busy="true"');
+    expect(text(html)).not.toContain("没有等你的事");
+  });
+
+  it("云端首页还没回：不写「没有等你的事」", () => {
+    const html = render([], { known: false });
     expect(html).toContain('aria-busy="true"');
     expect(text(html)).not.toContain("没有等你的事");
   });
