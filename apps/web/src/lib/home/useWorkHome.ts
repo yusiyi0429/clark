@@ -10,6 +10,7 @@ import type { TWorkHomeResponse } from "@warmap/contracts";
 import { useHomePlan } from "@/components/member/home/useHomePlan";
 import { useMemberHome } from "@/components/member/useMemberHome";
 import { readWorkHome } from "@/lib/board/cloud";
+import { companyMonth } from "@/lib/companyTime";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { useMergeIssues } from "@/lib/work/merge";
 import { useWork } from "@/lib/work/useWork";
@@ -20,6 +21,11 @@ import type { WorkHomeData } from "./types";
 const POLL_MS = 5000;
 /** 接口还没有（404）时隔一会再问一次：B 的实现上线以后，开着的页面不用刷新也能切过去。 */
 const RECHECK_MS = 60_000;
+
+/** 云端首页还没问到（第一次还没回、或一直出错）时的首页：项目、等你、本月都空，不拿 Mission 拼。 */
+function emptyWorkHome(): WorkHomeData {
+  return { period: companyMonth(new Date()), projects: [], archivedCount: 0, month: { missions: [] }, other: { subSessions: [], items: [] }, waiting: [] };
+}
 
 export function useWorkHome() {
   const planHook = useHomePlan();
@@ -53,7 +59,8 @@ export function useWorkHome() {
     [work.plan, work.workers, work.boards, work.proposals, merges, notices, deviceId, local.sessions]);
   // 云端的等你照契约（设计 9.6：群消息、会后分给你不进）。批准、提问以这台电脑上的会话为准（第 54 条，attention.ts）。
   const here = local.phase === "ready" ? local.sessions : null;
-  const data = useMemo<WorkHomeData>(() => withLocalAttention(remote ?? derived, here ?? []), [remote, derived, here]);
+  // 拼出来的只给确认 404 的时候用（live === false）；还没问到时用空的，不先画一份按 Mission 拼的再换。
+  const data = useMemo<WorkHomeData>(() => withLocalAttention(remote ?? (live === false ? derived : emptyWorkHome()), here ?? []), [remote, live, derived, here]);
 
   const refresh = useCallback(async () => { await Promise.all([work.refresh(), member.refresh(), loadRemote()]); }, [work, member, loadRemote]);
   // 计划（Mission / Task，来自本体）读不到：树和首页写「本体读取失败」加「重试」，不画成空树（5.4.2、5.4.4）。

@@ -84,6 +84,7 @@ const MEETINGS_WAIT_MS = 800;
 /**
  * 首页「等你」（设计第 4 节）：focusList 合成、排好的一份清单，露 5 件，其余收进「还有 N 件」；
  * 空的时候一行「没有等你的事」。首次打开等会议数据到了（最多 800ms）再画，等的时候空着（aria-busy），不闪空态。
+ * 云端首页还没问到（api.known 为 false）时也不写「没有等你的事」。
  */
 export function HomeWaiting({ data, api, go, offline = false, phone = false, recordingMeetingId, meeting }: {
   data: WorkHomeData; api: WorkHomeApi; go: (href: string) => void; offline?: boolean; phone?: boolean;
@@ -107,7 +108,7 @@ export function HomeWaiting({ data, api, go, offline = false, phone = false, rec
       <HeroButton variant="ghost" size="sm" aria-label="收起确认回执" onPress={() => setConfirmed(null)}>收起</HeroButton>
     </p> : null}
     {rows.length ? <WaitingList items={[]} rows={rows} fold meeting={meeting} api={api} go={go} onConfirmed={setConfirmed} />
-      : !error ? <p className={h.waitEmpty} data-testid="wait-empty">没有等你的事</p> : null}
+      : !error && api.known ? <p className={h.waitEmpty} data-testid="wait-empty">没有等你的事</p> : null}
     {error ? <ReadError message={error} retry={reload} /> : null}
   </section>;
 }
