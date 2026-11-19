@@ -1,5 +1,5 @@
-// Excel 大表裁剪：只留表名、表头、改过的行和它们上下各两行，中间没变的数据行收成一行省略。
-// 改前、改后两份按同一张行对照表裁，没变的那几段在两边一模一样，所以省略行在两边对得上。
+// Excel 大表裁剪：只留表名、表头、改过的行和它们上下各两行，中间没变的数据行收成一行「| 中间 N 行没改 |」。
+// 改前、改后两份按同一张行对照表裁，没变的那几段在两边一模一样，所以折起来的行在两边对得上。
 import { lineRegions, splitLines } from "./diff.js";
 
 export const TRIM_LIMITS = {
@@ -9,7 +9,8 @@ export const TRIM_LIMITS = {
   contextRows: 2,
 };
 
-export const ELLIPSIS_LINE = "| … |";
+/** 折起来的那一行：N 是这一处实际折掉的行数（本人 11/19 定，不用省略号）。 */
+export const foldedLine = (n: number) => `| 中间 ${n} 行没改 |`;
 
 /**
  * @param beforeRows 改前那份里每个数据行的行首下标（来自转文字的结构化结果）
@@ -60,15 +61,21 @@ function dataFlags(lines: string[], rowStarts: ReadonlySet<number>): Uint8Array 
 
 function build(lines: string[], keep: Uint8Array): string {
   let out = "";
-  let skipping = false;
+  let folded = 0;
+  let end = "";
+  const flush = () => {
+    if (folded) out += foldedLine(folded) + end;
+    folded = 0;
+  };
   lines.forEach((l, i) => {
     if (keep[i]) {
+      flush();
       out += l;
-      skipping = false;
-    } else if (!skipping) {
-      out += ELLIPSIS_LINE + (l.endsWith("\n") ? "\n" : "");
-      skipping = true;
+    } else {
+      if (!folded) end = l.endsWith("\n") ? "\n" : "";
+      folded += 1;
     }
   });
+  flush();
   return out;
 }

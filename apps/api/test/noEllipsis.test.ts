@@ -41,7 +41,6 @@ const ALLOWED: { file: string; owner: string; texts: string[]; reason: string }[
   { file: "api/src/worldReader.ts", owner: "clip", texts: ["…"], reason: "read_ontology 等工具结果里的本体组件正文，只给模型看。" },
   { file: "local/src/handoff.ts", owner: "clip", texts: ["…（共 "], reason: "换执行方时补给新执行方的上下文（只拼进送出去的那句，不记进事件）和 read_earlier_turns 的结果，只给模型看。" },
   { file: "local/src/planCheck.ts", owner: "planFactsSection", texts: ["…"], reason: "写进规划员系统提示词的那一节。" },
-  { file: "local/src/textChanges/trim.ts", owner: "ELLIPSIS_LINE", texts: ["| … |"], reason: "拿不准、先留着：Excel 大表改动视图里把没改的行收成一行的折叠行，网页上看得到，但不是截字；换成什么要本人定。" },
 ];
 
 const APPS = fileURLToPath(new URL("../../", import.meta.url));
