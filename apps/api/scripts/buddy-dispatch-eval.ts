@@ -1,8 +1,11 @@
 /**
- * 伙伴主线的端到端离线评测：`pnpm --filter @warmap/api exec tsx --env-file=<env 文件> scripts/buddy-dispatch-eval.ts [--runs N] [--out 结果.json] [--baseline 上次的结果.json] [--model 模型名|fake]`
+ * 伙伴主线的端到端离线评测：`pnpm --filter @warmap/api exec tsx --env-file=<env 文件> scripts/buddy-dispatch-eval.ts [--runs N] [--out 结果.json] [--baseline 上次的结果.json] [--model 模型名|fake] [--regrade 已存的结果.json]`
  *
- * - 真模型读 PI_BASE_URL / PI_API_KEY / HEAVY_MODEL（--model 可另指模型名），**不打印、不写出任何密钥值和地址**。不开会话、不写库、不碰 3700 的数据：工具全是脚本里的假实现。
+ * - 真模型读 PI_BASE_URL / PI_API_KEY / HEAVY_MODEL（--model 可另指模型名），**不打印、不写出任何密钥值和地址**（调模型出错只记固定文案和 HTTP 状态）。
+ *   不开会话、不写库、不碰 3700 的数据：工具全是脚本里的假实现。
  *   `--model fake` 不连模型：按每条用例预设的工具调用和回话走一遍，用来证明流程和判定是通的。
+ *   `--regrade <结果.json>` 不调模型：读那份结果里每条每遍的工具轨迹和回话，用现在的判定重判，写出同样格式的 JSON（遍数、模型名照原结果，
+ *   commit 是现在判定代码的提交，另带 regradedFrom）；--out、--baseline 照常用，--runs、--model 不看。
  * - 工具 = actionList（完全授权、伙伴主线）的名字、说明、参数原样，加一个假的 web_search。
  * - 系统提示 = driSystemPrompt（同 scripts/buddy-persona-eval.ts 的取法）+ Chat 那段「# 代本人在天枢里做事」（下面 BUDDY_ACTION_RULES，照抄的）。
  * - 13 句本人的话（用例和判定在 scripts/buddy-dispatch-judge.ts，测试 test/buddyDispatchJudge.test.ts），每句跑 --runs 遍（缺省 2），每遍单独判：
@@ -206,15 +209,26 @@ const env = (key: string) => {
   if (!value) throw new Error(`缺少 ${key}`);
   return value;
 };
-const realModel = (model: string, instructions: string): Respond => async (input) => {
-  const response = await fetch(env("PI_BASE_URL"), {
-    method: "POST",
-    headers: { "content-type": "application/json", authorization: `Bearer ${env("PI_API_KEY")}` },
-    body: JSON.stringify({ model, instructions, input, tools: TOOLS, stream: false }),
-    signal: AbortSignal.timeout(180_000),
-  });
-  if (!response.ok) throw new Error(`模型请求失败 HTTP ${response.status}`);
-  return ((await response.json()) as { output?: Item[] }).output ?? [];
+/** 调模型出错：只留固定文案和 HTTP 状态，不带原始报错（里面可能有地址）。 */
+class ModelFailure extends Error {}
+const realModel = (model: string, instructions: string): Respond => {
+  const url = env("PI_BASE_URL");
+  const key = env("PI_API_KEY");
+  return async (input) => {
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
+        body: JSON.stringify({ model, instructions, input, tools: TOOLS, stream: false }),
+        signal: AbortSignal.timeout(180_000),
+      });
+    } catch (error) {
+      throw new ModelFailure(error instanceof Error && error.name === "TimeoutError" ? "模型请求超时" : "模型请求没连上");
+    }
+    if (!response.ok) throw new ModelFailure(`模型请求失败 HTTP ${response.status}`);
+    try { return ((await response.json()) as { output?: Item[] }).output ?? []; } catch { throw new ModelFailure("模型的回复没读完整"); }
+  };
 };
 
 /** --model fake：每条预设的几步（一步是同一轮里的几个工具调用，或最后回话），按次序吐出，回话照假工具的 summary 写。 */
@@ -264,7 +278,7 @@ async function run(respond: Respond, message: string): Promise<Attempt & { error
   for (let round = 0; ; round++) {
     let output: Item[];
     try { output = await respond(input); } catch (error) {
-      return { calls, reply: reply(), stop: "error", error: error instanceof Error ? error.message : String(error) };
+      return { calls, reply: reply(), stop: "error", error: error instanceof ModelFailure ? error.message : "模型请求失败" };
     }
     texts.push(textOf(output));
     const pending = output.filter((item) => item.type === "function_call");
@@ -300,24 +314,37 @@ function readBaseline(path: string): CaseTally[] {
   return data.cases.map((entry) => ({ id: entry.id, passed: entry.passed, runs: entry.runs.length }));
 }
 
+type Graded = Attempt & { error?: string };
+/** --regrade：读已存的结果，取每条每遍的工具轨迹、回话和结束方式，不调模型。 */
+function readSaved(path: string): { model: string; runs: number; attempt: (id: number, index: number) => Graded } {
+  const data = JSON.parse(readFileSync(path, "utf8")) as { model?: string; runs?: number; cases?: { id: number; runs: Graded[] }[] };
+  if (typeof data.model !== "string" || !Number.isInteger(data.runs) || !Array.isArray(data.cases)) throw new Error("--regrade 不是这个脚本写出来的结果");
+  return { model: data.model, runs: data.runs!, attempt: (id, index) => {
+    const saved = data.cases!.find((entry) => entry.id === id)?.runs[index - 1];
+    if (!saved) throw new Error(`--regrade 的结果里没有第 ${id} 条第 ${index} 遍`);
+    return { calls: saved.calls, reply: saved.reply, stop: saved.stop, ...(saved.error ? { error: saved.error } : {}) };
+  } };
+}
+
 async function main() {
-  const runs = Number(option("--runs") ?? 2);
+  const regradePath = option("--regrade");
+  const saved = regradePath ? readSaved(resolve(regradePath)) : null;
+  const runs = saved?.runs ?? Number(option("--runs") ?? 2);
   if (!Number.isInteger(runs) || runs < 1) throw new Error("--runs 要是正整数");
   const outArg = option("--out");
   const out = outArg ? resolve(outArg) : join(tmpdir(), `buddy-dispatch-eval-${Date.now()}.json`);
   const baselinePath = option("--baseline");
   const baseline = baselinePath ? readBaseline(resolve(baselinePath)) : null;
-  const model = option("--model") ?? env("HEAVY_MODEL");
+  const model = saved?.model ?? option("--model") ?? env("HEAVY_MODEL");
   checkFakes();
-  const instructions = `${driSystemPrompt(OWNER)}\n\n${BUDDY_ACTION_RULES}`;
+  const real = saved || model === "fake" ? null : realModel(model, `${driSystemPrompt(OWNER)}\n\n${BUDDY_ACTION_RULES}`);
   const short = (args: Args) => ["kind", "id", "projectId", "scratch", "taskId", "dueDate"].filter((key) => key in args).map((key) => `${key}=${String(args[key])}`).join(" ");
 
   const cases = [];
   for (const item of CASES) {
     const attempts = [];
     for (let index = 1; index <= runs; index++) {
-      const respond = model === "fake" ? fakeModel(item.id) : realModel(model, instructions);
-      const attempt = await run(respond, item.message);
+      const attempt = saved ? saved.attempt(item.id, index) : await run(real ?? fakeModel(item.id), item.message);
       const verdict = judge(item, attempt);
       console.log(`\n${item.id}「${item.message.split("\n")[0]}」第 ${index} 遍 ${verdict.pass ? "过" : "没过"}${verdict.reasons.length ? `：${verdict.reasons.join("；")}` : ""}`);
       console.log(`  调过：${attempt.calls.map((call) => `${call.name}${call.ok ? "" : `（${call.code}）`}${short(call.args) ? ` ${short(call.args)}` : ""}`).join(" → ") || "无"}`);
@@ -332,7 +359,7 @@ async function main() {
   const tallies = cases.map((entry) => ({ id: entry.id, passed: entry.passed, runs }));
   const flipped = baseline ? flips(baseline, tallies) : null;
   const failed = cases.some((entry) => entry.passed < runs);
-  writeFileSync(out, JSON.stringify({ at: new Date().toISOString(), model, commit: commit(), runs, maxToolRounds: MAX_TOOL_ROUNDS,
+  writeFileSync(out, JSON.stringify({ at: new Date().toISOString(), model, commit: commit(), ...(regradePath ? { regradedFrom: regradePath } : {}), runs, maxToolRounds: MAX_TOOL_ROUNDS,
     passedCases: cases.filter((entry) => entry.passed === runs).length, total: cases.length, cases, ...(flipped ? { baseline: baselinePath, flips: flipped } : {}) }, null, 2));
 
   console.log(`\n每遍都过：${cases.filter((entry) => entry.passed === runs).length}/${cases.length} 条；各条通过遍数：${cases.map((entry) => `${entry.id}:${entry.passed}/${runs}`).join(" ")}`);

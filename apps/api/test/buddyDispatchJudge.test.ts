@@ -109,7 +109,8 @@ describe("每条回话都查", () => {
     expect(selfDone("我看了一下。").pass).toBe(true);
   });
   it("许诺以后自己回报", () => {
-    for (const reply of ["交给它了，做完我再来告诉你。", "稍后汇报。", "有结果了我会通知你。", "我会再来告诉你进展。"]) {
+    for (const reply of ["交给它了，做完我再来告诉你。", "稍后汇报。", "有结果了我会通知你。", "我会再来告诉你进展。",
+      "做完后会通知你。", "有进展会告诉你。", "完成后会同步给你。", "之后会告诉你。"]) {
       expect(verdict(7, attempt([home, tell(IDS.topicA)], reply)).pass, reply).toBe(false);
     }
     expect(verdict(7, attempt([home, tell(IDS.topicA)], "把话转给了「首页改版」。它做完一轮主线里会自动出一行。")).pass).toBe(true);
@@ -118,6 +119,14 @@ describe("每条回话都查", () => {
     expect(selfDone("我已经把话转给了「首页改版」。").pass).toBe(false);
     expect(selfDone("已转给项目对话。").pass).toBe(false);
     expect(verdict(7, attempt([home, tell(IDS.topicA)], "已经把话转给了「首页改版」。")).pass).toBe(true);
+    for (const reply of ["已经把「首页改版」的验收挪到 11/25。", "已在项目「天枢新版」里开了「做登录页设计稿」。", "已经开了一个会话。", "已经让它们再跑一次了。"]) {
+      expect(selfDone(reply).pass, reply).toBe(false);
+    }
+  });
+  it("描述会话进度的「已经」不算说自己做了", () => {
+    for (const reply of ["「首页改版」已经开工了，还在跑。", "它上一轮已经把按钮挪到右边了。", "A 已提交了一版。", "上一轮已经把字号定成一种。"]) {
+      expect(selfDone(reply).pass, reply).toBe(true);
+    }
   });
   it("没给最后回话", () => {
     expect(selfDone("", "rounds").pass).toBe(false);
