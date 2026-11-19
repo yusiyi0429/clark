@@ -79,8 +79,14 @@ describe("本月页就地改名字和完成标准", () => {
 
   it("改过的行上淡色「未进本体」；展开里改过的标准一种底色、下面淡色「原 〈原文〉」；「恢复」把原文存回去", async () => {
     const acts = actions();
+    // 收着时行上写「未进本体」；展开后行上只留「原 MM/DD」「延续自」，「未进本体 · 恢复」在展开里那一行。
+    hooks.position = 0;
+    hooks.values = [];
+    const closed = MonthTaskRow({ task: edited, period: "2026-11", go, actions: acts }) as ReactNode;
+    expect(textOf(nodes(closed).find((node) => node.props["data-testid"] === "month-task-line")!.props.children as ReactNode)).toContain("未进本体");
     const tree = open(edited, acts);
-    expect(textOf(nodes(tree).find((node) => node.props["data-testid"] === "month-task-line")!.props.children as ReactNode)).toContain("未进本体");
+    expect(textOf(nodes(tree).find((node) => node.props["data-testid"] === "month-task-line")!.props.children as ReactNode)).not.toContain("未进本体");
+    expect(textOf(nodes(tree).find((node) => node.props["data-testid"] === "month-detail")!.props.children as ReactNode)).toContain("未进本体 · 恢复");
     const lines = criteria(tree);
     expect(lines.map((line) => line.props["data-changed"] !== undefined)).toEqual([false, true, true]);
     expect(lines.map((line) => textOf(line.props.children as ReactNode))).toEqual(["", "原 有新人上手录屏", ""]);
@@ -115,6 +121,18 @@ describe("本月页就地改名字和完成标准", () => {
 
 describe("本月页添一件", () => {
   const actions = () => ({ setDueDate: vi.fn(async () => {}), setDisposition: vi.fn(async () => {}), setGoal: vi.fn(async () => {}), addTask: vi.fn(async () => {}) });
+
+  it("当月的 Mission 标题点了进 Mission 详情（只读）", () => {
+    hooks.position = 0;
+    const tree = MissionBlock({ tasks: [task], period: "2026-11", go, extraOf: () => undefined, today: "2026-11-19", linkMission: true }) as ReactNode;
+    const title = nodes(tree).find((node) => node.type === "button" && textOf(node.props.children as ReactNode) === "天枢 11 月")!;
+    (title.props.onClick as () => void)();
+    expect(go).toHaveBeenCalledWith("/me/work/missions/m1");
+    // 别的月份（没有首页数据，Mission 详情找不到它）只写字。
+    hooks.position = 0;
+    const other = MissionBlock({ tasks: [task], period: "2026-11", go, extraOf: () => undefined, today: "2026-11-19" }) as ReactNode;
+    expect(nodes(other).some((node) => node.type === "button" && textOf(node.props.children as ReactNode) === "天枢 11 月")).toBe(false);
+  });
 
   it("Mission 末尾「+ 添一件」写个名字回车就加在这个 Mission 下", async () => {
     const acts = actions();

@@ -126,6 +126,10 @@ label.row:hover { background: var(--default-soft); }
 .monthMission + .monthMission { margin-top: var(--space-4); }
 .monthMissionHead { display: flex; align-items: baseline; gap: var(--space-3); padding: 0 var(--space-2); }
 .monthMissionName { flex: 1; min-width: 0; margin: 0; color: var(--ink); font-size: var(--text-base); font-weight: 600; --type-weight: 600; line-height: var(--lh-row); white-space: normal; overflow-wrap: anywhere; }
+/* 当月的 Mission 标题点了进 Mission 详情：样子不变，悬停变深。 */
+.monthMissionLink { padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; white-space: normal; overflow-wrap: anywhere; cursor: pointer; }
+.monthMissionLink:hover { text-decoration: underline; text-underline-offset: 3px; }
+.monthMissionLink:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-control); }
 .monthFaint { color: var(--ink-faint); font-variant-numeric: tabular-nums; white-space: normal; overflow-wrap: anywhere; }
 .monthMissionHead > .monthFaint { flex: none; }
 .monthOutcome { margin: 0; padding: 0 var(--space-2); color: var(--ink-faint); white-space: normal; overflow-wrap: anywhere; }

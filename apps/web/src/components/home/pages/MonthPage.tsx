@@ -23,7 +23,7 @@ import { DatePicker } from "@/components/ui/DatePicker";
 import { Check, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { HeroButton } from "@/components/HeroButton";
 import { FailedLine } from "@/components/work/DecisionBox";
-import { BUDDY_HREF, monthLabel, projectHref, taskHref } from "@/lib/home/derive";
+import { BUDDY_HREF, missionHref, monthLabel, projectHref, taskHref } from "@/lib/home/derive";
 import { monthHref } from "../pageKeys";
 import type { MonthExtras } from "./monthLive";
 import type { MonthPageProps } from "./index";
@@ -145,7 +145,7 @@ export function MonthView({ data, go, extras, today = null, actions }: { data: M
   return (
     <>
       {data.tasks.length ? byMission(data.tasks, (task) => task.missionId).map((tasks) => (
-        <MissionBlock key={tasks[0]!.missionId} tasks={tasks} period={data.period} go={go} extraOf={extraOf} today={today} actions={actions} />
+        <MissionBlock key={tasks[0]!.missionId} tasks={tasks} period={data.period} go={go} extraOf={extraOf} today={today} actions={actions} linkMission={!!extras} />
       )) : <p className={h.waitEmpty} data-testid="month-empty">{monthLabel(data.period)}还没有 Mission</p>}
       {aside.length ? (
         <section className={p.monthMission} aria-label="延期和取消" data-testid="month-set-aside">
@@ -184,14 +184,17 @@ export function MonthView({ data, go, extras, today = null, actions }: { data: M
   );
 }
 
-export function MissionBlock({ tasks, period, go, extraOf, today, actions }: { tasks: MonthTask[]; period: string; go: (href: string) => void; extraOf: (task: MonthTask) => MonthExtras | undefined;
-  today: string | null; actions?: MonthActions }) {
+/** linkMission：当月（有首页数据）时 Mission 标题点了进 Mission 详情（只读，设计稿第 1 节）；别的月份详情页找不到它，只写字。 */
+export function MissionBlock({ tasks, period, go, extraOf, today, actions, linkMission = false }: { tasks: MonthTask[]; period: string; go: (href: string) => void;
+  extraOf: (task: MonthTask) => MonthExtras | undefined; today: string | null; actions?: MonthActions; linkMission?: boolean }) {
   const { missionTitle: title, missionOutcome: outcome } = tasks[0]!;
   const waitingOf = (task: MonthTask) => extraOf(task)?.waiting ?? 0;
   return (
     <section className={p.monthMission} aria-label={title} data-testid="month-mission">
       <div className={p.monthMissionHead}>
-        <h2 className={p.monthMissionName}>{title}</h2>
+        <h2 className={p.monthMissionName}>
+          {linkMission ? <button type="button" className={p.monthMissionLink} onClick={() => go(missionHref(tasks[0]!.missionId))}>{title}</button> : title}
+        </h2>
         <span className={p.monthFaint}>{missionCount(tasks)}</span>
       </div>
       {outcome && outcome !== title ? <p className={p.monthOutcome}>{outcome}</p> : null}
@@ -232,7 +235,8 @@ export function MonthTaskRow({ task, period, go, extra, actions }: { task: Month
   const marks = (
     <>
       {task.dueDate && task.missionDueDate && task.dueDate !== task.missionDueDate ? <span className={p.monthFaint}>原 {shortDate(task.missionDueDate)}</span> : null}
-      {task.edited || task.added ? <span className={p.monthFaint}>未进本体</span> : null}
+      {/* 「未进本体」收着时写在行上；展开后在展开里那一行写（「未进本体 · 恢复」），行上不重复。 */}
+      {!open && (task.edited || task.added) ? <span className={p.monthFaint}>未进本体</span> : null}
       {from ? <span className={p.monthFaint}>延续自{from.period ? ` ${monthLabel(from.period)}` : ""}的{from.name}</span> : null}
     </>
   );
