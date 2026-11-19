@@ -381,6 +381,22 @@ describe("动作说明里的判断规矩", () => {
     expect(described("message_project")).toContain("（伙伴主线）别的要动手的活用 open_session 直接开会话。");
   });
 
+  it("改约定交给项目、不改约定用 tell_session：主线规矩和动作说明口径一致", () => {
+    const rules = described("open_session"), project = described("message_project"), tell = described("tell_session");
+    for (const text of [rules, project, tell]) {
+      expect(text).not.toContain("凡是要改子会话手上的活");
+      expect(text).not.toContain("已有会话手上的活");
+      expect(text).not.toContain("伙伴不直接和子会话对话");
+      expect(text).not.toContain("某个会话正在做的事");
+    }
+    expect(rules).toContain("要改它某个会话的约定（做成什么样算完）——交给那个项目");
+    expect(rules).toContain("要改已有会话的约定（做成什么样算完），或者是对着项目本月 Task 验收标准的正式交付，不用它，用 message_project 转给项目对话。");
+    expect(rules).toContain("已有的会话不改约定的——接着做、重跑、在约定里改一点——用 tell_session；起新活照旧走 open_session / message_project。");
+    expect(project).toContain("要改某个项目里已有会话的约定（做成什么样算完）");
+    expect(project).toContain("改约定的都用它；不改约定的，比如接着做、重跑、在约定里改一点，用 tell_session 直接对那个会话说");
+    expect(tell).toContain("这句话要是改了约定（做成什么样算完），不用它，转给项目对话（message_project）。");
+  });
+
   it("规矩写明短版后用一句话问、不用 ask_user", () => {
     const text = described("open_session");
     expect(text).toContain("拿不准够不够大：先自己答个短版，末尾用一句话问要不要开会话做完整的；这句不用 ask_user。开会话这件事上，ask_user 只用来问放进哪个项目（对得上多个或一个都对不上时）。");

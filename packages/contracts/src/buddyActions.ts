@@ -79,7 +79,7 @@ export const BuddyAskQuestion = Type.Object({
  * - set_budget（write）：改一件 Task 的预算或本人的缺省预算（taskId 不带是缺省）。可撤。
  * - set_task_due_date（write）：给挂在项目上的一件 Task 存验收截止日（同 PUT /api/me/projects/:projectId/goals/:taskId/due-date，null 不存了）。可撤（改回原来的）。
  * - message_project（write）：把本人在伙伴台说的、关于某个项目的话转给这个项目的对话（设计 18 节第 8 条：伙伴台 → 项目对话 → 子会话，一层管一层，
- *   伙伴不直接和子会话对话；凡是要改子会话手上的活的都走它）。天枢把话写进那个项目的对话（标成伙伴转来的，ConversationMessage.via = buddy），
+ *   要改子会话的约定（做成什么样算完）的都走它；不改约定的，接着做、重跑、在约定里改一点，用 tell_session）。天枢把话写进那个项目的对话（标成伙伴转来的，ConversationMessage.via = buddy），
  *   触发项目对话这一轮，由它去派活、问子会话；立即回 summary，不等项目对话回完（项目对话正在回上一轮时排在后面，不打断它）。
  *   项目对话的结果照原来的方式由伙伴在总管线里回报（18 节第 4 条）。不可撤。从项目对话里调（conversationId 是项目对话）回 409 ALREADY_IN_PROJECT。
  * - open_session（write，只在伙伴主线用，MAIN_ONLY_ACTIONS；本人 11/18）：在一个项目里开一个会话做一件项目级的活。projectId 是哪个项目；一次性的活带 scratch: true，
