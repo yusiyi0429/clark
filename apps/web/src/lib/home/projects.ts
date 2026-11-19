@@ -20,11 +20,11 @@ export type ProjectGoal = {
   /** 这个目标是哪个月的（YYYY-MM）。 */
   period: string;
   name: string;
-  /** 验收截止「11/30」（契约 dueDate：天枢里存的，没存退回 Mission 的节点）。 */
+  /** 验收截止「11/30」（契约 dueDate：天枢里存的，没存退回记下的原验收时间点）。 */
   due: string;
   /** 同一个截止日的 YYYY-MM-DD（改日期用）。 */
   dueDate: string;
-  /** 是天枢里存的（本人或伙伴改过），不是退回 Mission 的节点：能清掉。 */
+  /** 是天枢里存的（本人或伙伴改过），不是退回记下的原验收时间点：能清掉。 */
   dueSet: boolean;
   criteria: string[];
   completedAt: string | null;

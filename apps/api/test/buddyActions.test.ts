@@ -445,10 +445,15 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
     for (const word of ["先想总管线自己能不能办完", "能接着用的子会话", "一件 Task 默认拆一张卡"]) expect(description("split_cards")).toContain(word);
     for (const name of ["split_cards", "start_sub_session", "sub_session_restart"])
       expect(description(name)).toContain("这条只管你自己开新会话、拆新卡，已经有 2 个在跑就等一个停下再开");
-    // 本人 11/19：本人点名要跑、要续上的会话照做，上限不管这个；超了回话里说一句有几个在跑，不先问本人。
-    for (const name of ["start_sub_session", "sub_session_restart", "tell_session"]) {
-      expect(description(name)).toContain("本人点名要跑、要续上的会话照做，不受同项目在跑的上限，超了就在回话里顺带说一句这个项目现在有几个在跑。");
+    // 本人 11/19：本人明说要开、要续的那几个会话照做，上限不管这个；超了回话里说一句有几个在跑，不先问本人。只放在续上和开工的动作里，主线和项目对话口径一致。
+    for (const name of ["start_sub_session", "sub_session_restart", "tell_session", "sub_session_tell"]) {
+      expect(description(name)).toContain("本人明说要开、要续的那几个会话照做，不受同项目在跑的上限，超了就在回话里顺带说一句这个项目现在有几个在跑；你自己判断要拆、要开的仍受上限。");
       expect(description(name)).not.toContain("急的先问本人");
+    }
+    // 拆卡、开新会话是伙伴自己判断的，不带这句（免得「做一版登录页」也被当成点名）。
+    for (const name of ["split_cards", "open_session"]) {
+      expect(description(name)).not.toContain("本人明说要开");
+      expect(description(name)).not.toContain("点名");
     }
     for (const personality of ["steady", "direct", "warm", "coach"] as const)
       expect(buddyPersona({ name: "团团", personality }, "测试乙")).toContain("# 先从现实出发（哪种性格都一样）");

@@ -229,7 +229,7 @@ export function gateLabel(plan: Pick<THomePlanResponse, "gates" | "today"> | nul
   return date ? `${date.slice(5).replace("-", "/")} 验收` : null;
 }
 /**
- * 一件 Task 的验收截止日（YYYY-MM-DD）：挂在项目上的照那条目标的 dueDate（B 契约 f3525766：天枢里存的，没存退回 Mission 的节点）；
+ * 一件 Task 的验收截止日（YYYY-MM-DD）：挂在项目上的照那条目标的 dueDate（B 契约 f3525766：天枢里存的，没存退回记下的原验收时间点）；
  * 没挂在项目上的为 null，调用方退回 Mission 下一个验收时间点。
  */
 export function goalDueDate(projects: readonly { goals: readonly { taskId: string; dueDate: string }[] }[], taskId: string): string | null {

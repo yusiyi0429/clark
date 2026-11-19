@@ -363,7 +363,7 @@ describe("动作说明里的判断规矩", () => {
     expect(text).toContain("带 scratch 放进「随手」项目");
     expect(text).toContain("只对得上一个项目就直接开");
     expect(text).toContain("同一个项目同时在跑的子会话不超过 2 个（本机最多同时跑 3 个，留一个给本人）；这条只管你自己开新会话、拆新卡，已经有 2 个在跑就等一个停下再开。");
-    expect(text).toContain("本人点名要跑、要续上的会话照做");
+    expect(text).not.toContain("本人明说要开");
     expect(text).not.toContain("急的先问本人");
   });
 

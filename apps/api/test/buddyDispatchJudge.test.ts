@@ -39,6 +39,8 @@ describe("判定", () => {
     expect(project.pass).toBe(false);
     expect(project.reasons.join()).toContain("open_session");
     expect(verdict(12, attempt([call("message_project", { projectId: IDS.tianshu, text: "查" })], "转给了项目对话。")).pass).toBe(false);
+    // 带 scratch 的也要做成，同第 4、5 条。
+    expect(verdict(12, attempt([call("open_session", { scratch: true, title: "查首发路线", brief: "查" }, { ok: false, code: "INVALID_ARGS" })], "没开成。")).pass).toBe(false);
   });
 
   it("4、5：开会话要放对地方，而且要做成", () => {

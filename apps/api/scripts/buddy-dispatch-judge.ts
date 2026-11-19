@@ -72,7 +72,7 @@ export const CASES: EvalCase[] = [
       "做成的 open_session 带「天枢新版」、ask_user、或让「登录页」卡开工") },
   // 本人 11/19：自己查完回话、或放进「随手」会话都算对。
   { id: 12, message: "把大陆首发玩 GTA 6 的路线查清楚，出一份方案", expect: "不调写动作，或 ask_user，或 open_session 带「随手」（scratch）", forbid: "",
-    check: (calls) => noWrite(calls.filter((call) => !(call.name === "open_session" && call.args.scratch === true && !call.args.projectId))) },
+    check: (calls) => noWrite(calls.filter((call) => !(call.name === "open_session" && call.ok && call.args.scratch === true && !call.args.projectId))) },
   { id: 13, message: "让登录页那张卡接着做",
     expect: "先 tell_session 回 409 NOT_STARTED，之后改用 start_sub_session；或者直接 start_sub_session",
     forbid: "回话说已经让它接着做了却没有一次成功的写动作",

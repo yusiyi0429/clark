@@ -36,7 +36,7 @@ describe("本月页就地改", () => {
     expect((await g.call("PUT", "/api/me/tasks/task-open/due-date", { dueDate: "2026-11-25" }, g.third)).statusCode).toBe(404);
     expect((await g.call("PUT", "/api/me/tasks/task-other/due-date", { dueDate: "2026-11-25" })).statusCode).toBe(404);
 
-    // 清掉：退回 Mission 的节点。
+    // 清掉：退回记下的原验收时间点。
     expect((await g.call("PUT", "/api/me/tasks/task-open/due-date", { dueDate: null })).json()).toEqual({ taskId: "task-open", name: "对话质量达标", dueDate: null });
     expect(await open()).toMatchObject({ dueDate: "2026-11-18", missionDueDate: "2026-11-18" });
   }, 120_000);
