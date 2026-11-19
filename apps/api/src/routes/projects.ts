@@ -148,7 +148,7 @@ export function registerProjectRoutes(app: AppInstance, ctx: RouteContext): void
   // 天枢里给一件目标存的验收截止日（null 不存了）。
   app.put("/api/me/projects/:projectId/goals/:taskId/due-date", { preHandler: requireMember, schema: { params: goalParams, body: SetGoalDueDateRequest,
     response: { 200: ProjectGoalResponse } } }, async (req, reply) =>
-    handle(reply, () => setGoalDueDate(q, req.person!.personId, req.params.projectId, req.params.taskId, req.body.dueDate)));
+    handle(reply, () => setGoalDueDate(q, req.person!.personId, req.params.projectId, req.params.taskId, req.body.dueDate, ctx.now())));
 
   // 自动接力停住了，「等你」里答继续还是停下（18 节第 12 条）。
   app.post("/api/me/projects/:projectId/auto-relay", { preHandler: requireMember, schema: { params: projectParams, body: AutoRelayDecisionRequest } }, async (req, reply) =>

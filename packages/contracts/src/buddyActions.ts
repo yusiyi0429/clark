@@ -77,7 +77,7 @@ export const BuddyAskQuestion = Type.Object({
  * - split_cards（write）：登记拆卡（Task 或没挂 Task 的项目，带本人原话）。可撤（去掉登记）。
  *   本人对用什么来源、模型、思考有要求时，把那一截原话放进 modelWords（第 69 条），原样带，不要自己翻译成型号；派活单上照它预选。
  * - set_budget（write）：改一件 Task 的预算或本人的缺省预算（taskId 不带是缺省）。可撤。
- * - set_task_due_date（write）：给一件 Task 存验收截止日，不用挂项目（同 PUT /api/me/tasks/:taskId/due-date，按 Task 存的那一份；null 不存了，退回记下的 Mission 节点）。
+ * - set_task_due_date（write）：给一件 Task 存验收截止日，不用挂项目（同 PUT /api/me/tasks/:taskId/due-date，按 Task 存的那一份；null 不存了，退回记下的原验收时间点）。
  *   projectId 可选，带了只用来刷新那个项目。可撤（改回原来的）。
  * - message_project（write）：把本人在伙伴台说的、关于某个项目的话转给这个项目的对话（设计 18 节第 8 条：伙伴台 → 项目对话 → 子会话，一层管一层，
  *   伙伴不直接和子会话对话；凡是要改子会话手上的活的都走它）。天枢把话写进那个项目的对话（标成伙伴转来的，ConversationMessage.via = buddy），

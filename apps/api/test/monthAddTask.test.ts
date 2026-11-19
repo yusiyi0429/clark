@@ -112,7 +112,10 @@ describe("本月页添一件", () => {
   it("已经过去的月份不能改日期、名字、标准，也不能添一件（409）；复盘的去向照旧能定", async () => {
     const g = f = await fixture();
     const taskId = (await g.add({ missionId: "mine", name: "新人上手手册" })).json().taskId as string;
+    const project = (await g.call("POST", "/api/me/projects", { name: "对话质量", taskId: "task-open" })).json().projectId as string;
     g.clock.now = new Date("2026-12-03T02:00:00.000Z");
+    // 老的项目目标接口写的是同一份，一样拦。
+    expect((await g.call("PUT", `/api/me/projects/${project}/goals/task-open/due-date`, { dueDate: "2026-11-25" })).statusCode).toBe(409);
     for (const id of ["task-open", taskId]) {
       expect((await g.call("PUT", `/api/me/tasks/${encodeURIComponent(id)}/due-date`, { dueDate: "2026-11-25" })).statusCode).toBe(409);
       expect((await g.call("PUT", `/api/me/tasks/${encodeURIComponent(id)}/goal`, { name: "改个名字" })).statusCode).toBe(409);

@@ -157,4 +157,27 @@ describe("本月页改名字和完成标准", () => {
     expect(await g.month()).toMatchObject({ name: "对话质量达标（V2）", edited: null,
       criteria: [{ text: "有题库打分结果", changed: false, original: null }, { text: "有三个新人上手录屏", changed: false, original: null }] });
   }, 180_000);
+
+  it("改了标准以后，开着的拆卡草稿不再对着原来的序号：删掉第 1 条后接受对第 2 条的草稿，卡不挂在任何标准上", async () => {
+    const g = f = await fixture();
+    expect((await g.goal("task-open", { criteria: ["有题库打分结果", "有新人上手录屏", "过 75 分"] })).statusCode).toBe(200);
+    const plan = randomUUID(), draft = randomUUID();
+    await g.t.sql(`INSERT INTO card_plans(id,plan_task_id,mission_id,owner_id,status) VALUES($1,'task-open','mine',$2,'done')`, [plan, MEMBER]);
+    await g.t.sql(`INSERT INTO card_drafts(id,plan_id,plan_task_id,owner_id,position,title,done_definition,criterion_index,executor,model_tier)
+      VALUES($1,$2,'task-open',$3,0,'录两个新人上手','有录屏',2,'self','normal')`, [draft, plan, MEMBER]);
+    expect((await g.goal("task-open", { criteria: ["有新人上手录屏", "过 75 分"] })).statusCode).toBe(200);
+    const accepted = await g.call("POST", "/api/plan-tasks/task-open/card-drafts/accept", { drafts: [{ id: draft }] });
+    expect(accepted.statusCode, accepted.body).toBe(200);
+    expect(await g.t.sql("SELECT criterion_index,criterion_text FROM tasks WHERE title='录两个新人上手'")).toEqual([{ criterion_index: null, criterion_text: null }]);
+  }, 180_000);
+
+  it("本人改的名字、标准都和本体一样了，这行改动顺手删掉：本体以后再改，旧的改动不会复活", async () => {
+    const g = f = await fixture();
+    expect((await g.goal("task-open", { name: "对话质量达标（V2）" })).statusCode).toBe(200);
+    g.tasks[0]!.name = "对话质量达标（V2）";
+    expect((await g.month()).edited).toBeNull();
+    expect(await g.t.sql("SELECT task_id FROM task_goal_edits")).toEqual([]);
+    g.tasks[0]!.name = "对话质量达标（V3）";
+    expect(await g.month()).toMatchObject({ name: "对话质量达标（V3）", edited: null });
+  }, 180_000);
 });

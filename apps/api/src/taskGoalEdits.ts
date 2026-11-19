@@ -2,8 +2,10 @@ import { randomUUID } from "node:crypto";
 import type { Query } from "./meetingStore.js";
 import { taskBasis } from "./planTaskAccess.js";
 import type { PlanTask, PlanTaskSource } from "./planTasks.js";
-import { companyPeriod } from "./monthlyPlans.js";
 import { CardError } from "./taskCards.js";
+import { assertOpenPeriod } from "./taskDueDates.js";
+
+export { assertOpenPeriod };
 
 /**
  * 本人就地改的 Task 名字和完成标准（迁移 291，11/19 DRI 根据地，设计稿路 A）：天枢里先生效，天枢不写本体。
@@ -11,8 +13,9 @@ import { CardError } from "./taskCards.js";
  * 已有的「目标改了」（goalChanges.ts）、约定补充按原文对（taskAgreements.ts align）、复盘预评按原文作废（monthReview.ts）都接得上。
  * 本体里带的约定（proof / acceptor）和标准按序号一一对应：标准一增删就按原文重新对上，新加的那条没有约定。
  * 「+ 添一件」（迁移 292）：本人在自己的 Mission 下新建的 Task 也从这一层出来（天枢自己的 id，added），所以能挂项目、拆卡、进复盘；它没有本体原文，改它就直接改它。
- * 本体后来改得和本人改的一样了，那一样就不算改过（「未进本体」自己消失）。
- * 标准一改，这件 Task 下的卡对的是第几条跟着原文重排（tasks.criterion_index，找不到的置空）：项目、首页、月份页都按序号读这一份，口径只有一种。
+ * 本体后来改得和本人改的一样了，那一样就不算改过（「未进本体」自己消失），表里那一样顺手清掉，免得本体以后再改时旧改动复活。
+ * 标准一改，这件 Task 下的卡对的是第几条跟着原文重排（tasks.criterion_index，找不到的置空）：项目、首页、月份页都按序号读这一份，口径只有一种；
+ * 还开着的拆卡草稿只记了序号，标准一变就置空，免得接受成卡时挂到别的标准上。
  */
 
 type EditRow = { task_id: string; name: string | null; criteria: string[] | null };
@@ -48,9 +51,27 @@ function apply<T extends Omit<PlanTask, "missionId">>(task: T, edit: EditRow | u
     edit: { worldName: task.name, worldCriteria, name: nameEdited, criteria: criteriaEdited } };
 }
 
-/** 标准改了以后，这件 Task 下的卡对的是第几条按卡上记的原文重排；找不到的置空（不再算达到哪一条）。 */
-async function realignCards(q: Query, taskId: string, criteria: string[]): Promise<void> {
+/** 和本体现在的值已经一样的那一样（名字或标准）清掉；两样都一样整行删。 */
+async function dropStale(q: Query, tasks: Omit<PlanTask, "missionId">[], edits: Map<string, EditRow>): Promise<void> {
+  for (const task of tasks) {
+    const edit = edits.get(task.taskId);
+    if (!edit) continue;
+    const nameStale = edit.name !== null && edit.name === task.name;
+    const criteriaStale = edit.criteria !== null && same(edit.criteria, taskBasis({ ...task, missionId: "" }).criteria);
+    if (!nameStale && !criteriaStale) continue;
+    if ((nameStale || edit.name === null) && (criteriaStale || edit.criteria === null)) await q("DELETE FROM task_goal_edits WHERE task_id=$1", [task.taskId]);
+    else await q(`UPDATE task_goal_edits SET name=CASE WHEN $2 THEN NULL ELSE name END,criteria=CASE WHEN $3 THEN NULL ELSE criteria END WHERE task_id=$1`,
+      [task.taskId, nameStale, criteriaStale]);
+  }
+}
+
+/**
+ * 标准改了以后：这件 Task 下的卡对的是第几条按卡上记的原文重排，找不到的置空（不再算达到哪一条）；
+ * 标准真的变了（不只是改名字）时，还开着的拆卡草稿序号置空。
+ */
+async function realignCards(q: Query, taskId: string, before: string[], criteria: string[]): Promise<void> {
   await q("UPDATE tasks SET criterion_index=array_position($2::text[],criterion_text) WHERE plan_task_id=$1 AND criterion_text IS NOT NULL", [taskId, criteria]);
+  if (!same(before, criteria)) await q("UPDATE card_drafts SET criterion_index=NULL WHERE plan_task_id=$1 AND status='open' AND criterion_index IS NOT NULL", [taskId]);
 }
 
 /** 读 Task 的来源外面包一层：套上本人的改动（按 id 读一件也套），补上这几个 Mission 下天枢里新加的。 */
@@ -59,6 +80,7 @@ export function withTaskGoalEdits(q: Query, source: PlanTaskSource): PlanTaskSou
     const [tasks, added] = await Promise.all([source(missions), missions.length
       ? q(`${ADDED} WHERE a.mission_id=ANY($1::text[]) ORDER BY a.created_at,a.task_id`, [missions.map((mission) => mission.id)]) : Promise.resolve({ rows: [] })]);
     const edits = await editsOf(q, tasks.map((task) => task.taskId));
+    await dropStale(q, tasks, edits);
     return [...tasks.map((task) => apply(task, edits.get(task.taskId))), ...(added.rows as AddedRow[]).map(addedTask)];
   };
   // 按 id 读一件（跨月找 Task）：天枢里新加的从这里读，用它存着的 Mission（不靠本体对象找「最新月份」的那个）；其余问本体再套上改动。
@@ -66,14 +88,12 @@ export function withTaskGoalEdits(q: Query, source: PlanTaskSource): PlanTaskSou
     const row = (await q(`${ADDED} WHERE a.task_id=$1`, [taskId])).rows[0] as AddedRow | undefined;
     if (row) { const { missionId, ...task } = addedTask(row); return { parents: [], missionId, task }; }
     const found = source.byId ? await source.byId(taskId) : null;
-    return found ? { ...found, task: apply(found.task, (await editsOf(q, [taskId])).get(taskId)) } : null;
+    if (!found) return null;
+    const edits = await editsOf(q, [taskId]);
+    await dropStale(q, [found.task], edits);
+    return { ...found, task: apply(found.task, edits.get(taskId)) };
   };
   return wrapped;
-}
-
-/** 已经过去的月份（Mission 的月份早于公司时区的本月）不能再改目标：日期、名字、标准、添一件都 409（复盘的去向不在此列）。 */
-export function assertOpenPeriod(period: string, now: Date): void {
-  if (period < companyPeriod(now)) throw new CardError(409, "PERIOD_CLOSED", "这个月已经过去了，不能再改");
 }
 
 /** 这件 Task 所在 Mission 的月份。 */
@@ -119,7 +139,7 @@ export async function setTaskGoal(q: Query, task: EditedPlanTask, body: { name?:
     ON CONFLICT (task_id) DO UPDATE SET name=EXCLUDED.name,criteria=EXCLUDED.criteria,world_name=EXCLUDED.world_name,world_criteria=EXCLUDED.world_criteria,
       edited_by=EXCLUDED.edited_by,edited_at=EXCLUDED.edited_at`,
   [task.taskId, nextName, nextCriteria && JSON.stringify(nextCriteria), worldName, JSON.stringify(worldCriteria), by, now]);
-  await realignCards(q, task.taskId, nextCriteria ?? worldCriteria);
+  await realignCards(q, task.taskId, taskBasis(task).criteria, nextCriteria ?? worldCriteria);
   return { taskId: task.taskId, name: nextName ?? worldName, criteria: nextCriteria ?? worldCriteria };
 }
 
@@ -131,6 +151,6 @@ async function setAddedTask(q: Query, task: EditedPlanTask, body: { name?: strin
   if (criteria.some((text) => !text)) throw new CardError(400, "INVALID_INPUT", "完成标准不能有空的");
   if (body.criteria !== undefined && !criteria.length) throw new CardError(400, "INVALID_INPUT", "至少留一条完成标准");
   await q("UPDATE added_tasks SET name=$2,criteria=$3::jsonb WHERE task_id=$1", [task.taskId, name, JSON.stringify(criteria)]);
-  await realignCards(q, task.taskId, criteria);
+  await realignCards(q, task.taskId, task.criteria, criteria);
   return { taskId: task.taskId, name, criteria };
 }

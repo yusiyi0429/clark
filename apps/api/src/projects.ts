@@ -5,7 +5,7 @@ import { UUID_PATTERN, type Query } from "./meetingStore.js";
 import { companyPeriod } from "./monthlyPlans.js";
 import { CardError } from "./taskCards.js";
 import { settlementsOf } from "./taskContinuity.js";
-import { realDate, setTaskDueDate } from "./taskDueDates.js";
+import { assertOpenPeriod, realDate, setTaskDueDate } from "./taskDueDates.js";
 
 /**
  * 项目和每月目标（契约 projects.ts，设计《新首页》第 16 节）：项目常驻，本体的 Task 每月挂到一个项目上（project_goals，迁移 245）。
@@ -156,13 +156,16 @@ export const goalView = (row: GoalRow, verdict: TProjectGoalVerdict): TProjectGo
 
 /**
  * 给挂在这个项目上的一件 Task 存验收截止日（null 不存了）：存的是按 Task 的那一份（taskDueDates.ts），和本月页、伙伴改的同一个地方。
- * 项目要是本人的、Task 要挂在这个项目上，否则 404；日期不对 400。
+ * 项目要是本人的、Task 要挂在这个项目上，否则 404；日期不对 400；已经过去的月份 409。
  */
-export async function setGoalDueDate(q: Query, ownerId: string, projectId: string, taskId: string, dueDate: string | null): Promise<TProjectGoal> {
+export async function setGoalDueDate(q: Query, ownerId: string, projectId: string, taskId: string, dueDate: string | null, now: Date): Promise<TProjectGoal> {
   await ownProject(q, ownerId, projectId);
   if (dueDate !== null && !realDate(dueDate)) throw new CardError(400, "INVALID_INPUT", "截止日不是一个真的日期");
-  if (!(await q("SELECT 1 FROM project_goals WHERE project_id=$1 AND owner_id=$2 AND task_id=$3", [projectId, ownerId, taskId])).rowCount)
-    throw new CardError(404, "NOT_FOUND", "这件 Task 没挂在这个项目上");
+  const goal = (await q(`SELECT m.period FROM project_goals g LEFT JOIN missions m ON m.id=g.mission_id WHERE g.project_id=$1 AND g.owner_id=$2 AND g.task_id=$3`,
+    [projectId, ownerId, taskId])).rows[0] as { period: string | null } | undefined;
+  if (!goal) throw new CardError(404, "NOT_FOUND", "这件 Task 没挂在这个项目上");
+  // 和按 Task 存的接口一样：已经过去的月份不能再改。
+  if (goal.period) assertOpenPeriod(goal.period, now);
   await setTaskDueDate(q, taskId, dueDate);
   const row = (await q(`${GOALS} WHERE g.task_id=$1`, [taskId])).rows[0] as GoalRow;
   return goalView(row, (await verdicts(q, [taskId])).get(taskId)!);

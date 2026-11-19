@@ -114,8 +114,9 @@ export const ProjectGoal = Type.Object({
 }, strict);
 
 /**
- * PUT /api/me/projects/:projectId/goals/:taskId/due-date（项目负责人）：给挂在这个项目上的一件 Task 存验收截止日，null 是不存了（退回本体或 Mission 的节点）。
- * 回这条挂接（ProjectGoal）。这件 Task 没挂在这个项目上 404；日期不合法 400。伙伴的 set_task_due_date 走同一个接口。
+ * PUT /api/me/projects/:projectId/goals/:taskId/due-date（项目负责人）：给挂在这个项目上的一件 Task 存验收截止日，存的是按 Task 存的那一份
+ * （和 PUT /api/me/tasks/:taskId/due-date、伙伴的 set_task_due_date 同一个地方）；null 是不存了，退回记下的原验收时间点。
+ * 回这条挂接（ProjectGoal）。这件 Task 没挂在这个项目上 404；日期不合法 400；已经过去的月份 409。
  */
 export const SetGoalDueDateRequest = Type.Object({ dueDate: Nullable(Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" })) }, strict);
 

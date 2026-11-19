@@ -53,4 +53,16 @@ describe("「原」验收时间点", () => {
     expect(await g.task("task-late")).toMatchObject({ dueDate: "2026-11-30", missionDueDate: "2026-11-30" });
     expect(await g.task("task-open")).toMatchObject({ dueDate: "2026-11-18", missionDueDate: "2026-11-18" });
   }, 180_000);
+
+  it("Mission 原地滚到下个月（Task id 不变）：10 月记下的「原」不再用，按 11 月的节点重新记", async () => {
+    const g = f = await fixture(new Date("2026-10-06T02:00:00.000Z"));
+    await g.t.sql(`UPDATE missions SET period='2026-10',milestones='["10/20 V0 上线","10/30 复核"]',created_at='2026-10-01T02:00:00Z' WHERE id='mine'`);
+    const october = ((await g.call("GET", "/api/me/months/2026-10")).json().tasks as { taskId: string; missionDueDate: string | null }[])
+      .find((entry) => entry.taskId === "task-open")!;
+    expect(october.missionDueDate).toBe("2026-10-20");
+    // 本体每天载入时把这个 Mission 改到 11 月（worldMissionLoad 原地改 period 和节点）。
+    await g.t.sql(`UPDATE missions SET period='2026-11',milestones='["11/18 V1 上线","11/30 V2 上线"]' WHERE id='mine'`);
+    g.clock.now = new Date("2026-11-02T02:00:00.000Z");
+    expect(await g.task("task-open")).toMatchObject({ dueDate: "2026-11-18", missionDueDate: "2026-11-18" });
+  }, 180_000);
 });
