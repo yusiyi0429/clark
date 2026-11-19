@@ -240,9 +240,13 @@ export function goalDueDate(projects: readonly { goals: readonly { taskId: strin
   return null;
 }
 
-/** 「本月」、Mission 详情里 Task 一行的行尾：「11/18 验收」，先看挂着的项目目标，取不到退回 Mission 下一个验收时间点。 */
-export function taskGateLabel(projects: Parameters<typeof goalDueDate>[0], plan: Parameters<typeof gateLabel>[0], task: { taskId: string; missionId: string }): string | null {
-  const due = goalDueDate(projects, task.taskId);
+/**
+ * 「本月」、Mission 详情里 Task 一行的行尾：「11/18 验收」。先看按 Task 存的那一份（首页计划里这件 Task 的 dueDate，没挂项目也有），
+ * 再看挂着的项目目标（服务端已经按同一份算好），取不到退回 Mission 下一个验收时间点。
+ */
+export function taskGateLabel(projects: Parameters<typeof goalDueDate>[0], plan: (Parameters<typeof gateLabel>[0] & { tasks?: readonly { taskId: string; dueDate?: string | null }[] }) | null,
+  task: { taskId: string; missionId: string }): string | null {
+  const due = plan?.tasks?.find((entry) => entry.taskId === task.taskId)?.dueDate ?? goalDueDate(projects, task.taskId);
   return due ? `${due.slice(5).replace("-", "/")} 验收` : gateLabel(plan, task.missionId);
 }
 export function statusLine(task: StatusSource): string {
@@ -258,27 +262,6 @@ export function monthTaskSubs(taskId: string, subs: readonly SubSession[], worke
   for (const worker of workers) if (worker.taskId === taskId) for (const id of [worker.cardId, worker.topicId]) if (id) ids.add(id);
   const seen = new Set<string>();
   return subs.filter((sub) => ids.has(sub.id) && !seen.has(sub.id) && !!seen.add(sub.id));
-}
-
-/**
- * 「本月」一行行尾的现状（主循环第 66 条）：「1 件等你 · 1 个有新结果 · 2 个在跑」，是 0 的不写；
- * 等你按「等你」里归这件 Task 的条数（和子会话自己在等的取大的），有新结果是停了、本人还没看过的（同左栏蓝点），在跑含第一次没过在改的。
- * 三样都没有时：没开过子会话写「未开始」（规划员在拆写「拆卡中」），都完成了写「N 件都做完了」，别的写排着、停着几个。
- * rank 是排序用的：有等你 0，有新结果 1，在跑 2，其余 3。
- */
-export function monthStatus(subs: readonly Pick<SubSession, "state" | "waiting" | "unseen">[], waiting: number, planning: boolean): { text: string; waiting: number; rank: number } {
-  const asks = Math.max(waiting, subs.filter((sub) => sub.state === "waiting" && !!sub.waiting).length);
-  const fresh = subs.filter((sub) => sub.unseen && (sub.state === "done" || (sub.state === "waiting" && !sub.waiting))).length;
-  const running = subs.filter((sub) => sub.state === "running" || sub.state === "failed").length;
-  const rank = asks ? 0 : fresh ? 1 : running ? 2 : 3;
-  const parts = [asks ? `${asks} 件等你` : null, fresh ? `${fresh} 个有新结果` : null, running ? `${running} 个在跑` : null].filter(Boolean);
-  if (parts.length) return { text: parts.join(" · "), waiting: asks, rank };
-  if (!subs.length) return { text: planning ? "拆卡中" : "未开始", waiting: 0, rank };
-  const done = subs.filter((sub) => sub.state === "done").length;
-  if (done === subs.length) return { text: `${done} 件都做完了`, waiting: 0, rank };
-  const queued = subs.filter((sub) => sub.state === "queued").length;
-  const stopped = subs.length - done - queued;
-  return { text: [planning ? "拆卡中" : null, queued ? `${queued} 个排着` : null, stopped ? `${stopped} 个停着` : null].filter(Boolean).join(" · "), waiting: 0, rank };
 }
 
 /** 「今天」行和首页页头的日期（5.6）：「11 月 7 日 周六」。today 是公司时区的 YYYY-MM-DD，没有就按这台电脑的钟。 */

@@ -26,6 +26,7 @@ import { logEvent } from "./observability.js";
 import { dispatchCards, findDispatch, recordDispatch, type DispatchCard } from "./buddyDispatches.js";
 import { ensureScratchProject } from "./projects.js";
 import { projectPaused } from "./projectTransfers.js";
+import { taskDueDates } from "./taskDueDates.js";
 
 /**
  * 伙伴代本人做事（新首页 17.4，契约 buddyActions.ts）。Chat 每轮读动作清单（actionList），模型调哪个就按名字执行（runAction）。
@@ -104,7 +105,7 @@ const DESCRIPTION: Record<BuddyActionName, string> = {
     + "这几件没问清，不拆、不开工，拆了只会更糟。"
     + "拆之前还要先想总管线自己能不能办完：回答问题、看进度、改约定、给子会话转话、整理计划都自己做，不拆。这件 Task 已经有能接着用的子会话，就接着用它（项目对话里用 sub_session_tell 或 sub_session_restart），不另拆。"
     + "要动文件的新活才拆，一件 Task 默认拆一张卡，大的活由执行方在会话里并行。" + RUNNING_LIMIT,
-  set_task_due_date: "给挂在项目上的一件 Task 存验收截止日（YYYY-MM-DD；null 不存了，退回 Mission 的节点）。本人说了哪天交、或者 Task 的截止和 Mission 节点对不上时用。",
+  set_task_due_date: "给一件 Task 存验收截止日，不用挂项目（YYYY-MM-DD；null 不存了，退回记下的原验收时间点）。本人说了哪天交、或者 Task 的截止和 Mission 节点对不上时用。",
   set_budget: "改预算：带 taskId 改这件 Task 的，不带改本人新 Task 的缺省预算。",
   message_project: "用在两种时候：要改某个项目里已有会话的约定（做成什么样算完）；对着这个项目本月 Task 验收标准的正式交付（由项目对话去拆卡）。（伙伴主线）别的新活用 open_session 直接开会话。"
     + "把本人关于某个项目的话转给这个项目的对话，由项目对话去派活、问子会话（改约定的都用它；不改约定的，比如接着做、重跑、在约定里改一点，用 tell_session 直接对那个会话说）。"
@@ -208,7 +209,7 @@ type Undo =
   | { kind: "transfer"; transferId: string }
   | { kind: "split"; requestId: string }
   | { kind: "budget"; taskId: string | null; previous: TBudget | null }
-  | { kind: "due_date"; projectId: string; taskId: string; previous: string | null };
+  | { kind: "due_date"; projectId?: string; taskId: string; previous: string | null };
 
 /** 本人身份的会话（进程内用，几分钟有效，不出这台机器）。 */
 async function sessionCookie(deps: BuddyDeps, personId: string): Promise<string> {
@@ -496,12 +497,12 @@ const handlers: Handlers = {
     return { summary: "改了新 Task 的缺省预算", undo: { kind: "budget", taskId: null, previous: before }, ui: [{ kind: "refresh", what: ["settings"] }] };
   },
   set_task_due_date: async (deps, call, args) => {
-    const previous = ((await deps.q("SELECT due_date FROM project_goals WHERE owner_id=$1 AND project_id=$2 AND task_id=$3", [call.personId, args.projectId, args.taskId]))
-      .rows[0]?.due_date ?? null) as string | null;
-    const goal = await web<{ taskName: string }>(deps, call.personId, "PUT",
-      `/api/me/projects/${encodeURIComponent(args.projectId)}/goals/${encodeURIComponent(args.taskId)}/due-date`, { dueDate: args.dueDate });
-    return { summary: args.dueDate ? `把「${goal.taskName}」的验收截止日定成 ${args.dueDate}` : `「${goal.taskName}」不再单独存截止日，按 Mission 的节点算`,
-      undo: previous === args.dueDate ? null : { kind: "due_date", projectId: args.projectId, taskId: args.taskId, previous }, ui: [projectRefresh(args.projectId)] };
+    const previous = (await taskDueDates(deps.q, [args.taskId])).get(args.taskId) ?? null;
+    // 按 Task 存的那一份（PUT /api/me/tasks/:taskId/due-date），不要求挂项目；projectId 带了只用来刷新那个项目。
+    const saved = await web<{ name: string }>(deps, call.personId, "PUT", `/api/me/tasks/${encodeURIComponent(args.taskId)}/due-date`, { dueDate: args.dueDate });
+    return { summary: args.dueDate ? `把「${saved.name}」的验收截止日定成 ${args.dueDate}` : `「${saved.name}」不再单独存截止日，按 Mission 的节点算`,
+      undo: previous === args.dueDate ? null : { kind: "due_date", ...(args.projectId ? { projectId: args.projectId } : {}), taskId: args.taskId, previous },
+      ui: [args.projectId ? projectRefresh(args.projectId) : { kind: "refresh", what: ["work_home"] }] };
   },
   message_project: async (deps, call, args) => {
     // 只从伙伴台往项目对话转（18 节第 8 条）。项目对话自己也拿到这张动作清单，它再转一次会把同一句转回自己、一轮接一轮转下去。
@@ -899,7 +900,8 @@ export async function undoAction(deps: BuddyDeps, ownerId: string, id: string): 
       await web(deps, ownerId, "DELETE", `/api/me/card-splits/${undo.requestId}`);
       break;
     case "due_date":
-      await web(deps, ownerId, "PUT", `/api/me/projects/${encodeURIComponent(undo.projectId)}/goals/${encodeURIComponent(undo.taskId)}/due-date`, { dueDate: undo.previous });
+      // 老的撤销记录带着 projectId，一样走按 Task 存的接口（同一份）。
+      await web(deps, ownerId, "PUT", `/api/me/tasks/${encodeURIComponent(undo.taskId)}/due-date`, { dueDate: undo.previous });
       break;
     case "budget":
       if (!undo.taskId) await web(deps, ownerId, "PUT", "/api/me/budget-default", undo.previous);

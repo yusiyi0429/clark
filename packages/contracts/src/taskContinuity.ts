@@ -16,6 +16,7 @@ const Instant = Type.String({ format: "date-time" });
 const Nullable = <T extends TSchema>(schema: T) => Type.Union([schema, Type.Null()]);
 export const MonthPeriod = Type.String({ pattern: "^\\d{4}-(0[1-9]|1[0-2])$" });
 const Note = Type.String({ minLength: 1, maxLength: 200 });
+const Day = Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" });
 
 /** 另一件 Task：id、名字（写入延续那一刻的快照）、在哪个 Mission、那个 Mission 是哪个月（Mission 不在了为 null）。 */
 export const TaskRef = Type.Object({
@@ -66,7 +67,15 @@ export const TaskSettlementResponse = Type.Object({ taskId: Type.String({ minLen
 
 /**
  * 月份页上这个月本人的一件 Task（本人这个月的 Mission 下、本人负责的；本体没登记负责人的算本人的）。
- * agreement：约定达到了几条 / 共几条（一条算达到 = 本人对它的卡里有一张最近一次有结论的验收算通过）；没有标准为 null。
+ * missionOutcome：所在 Mission 的成果（没写为 null）。
+ * criteria：完成标准（本体验收标准，没有就按完成定义算一条；本人在天枢里改过的按改后的），met 是这一条达到了（本人对它的卡里有一张最近一次有结论的验收算通过）；
+ *   changed 是这一条和本体里的不一样（改过或新加的），original 是它替换掉的那条本体原文（同一位置的本体原文已不在改后的标准里时才有）。
+ * added：天枢里「+ 添一件」新加的（没有本体原文，也写「未进本体」，不出「恢复」）。
+ * edited：本人在天枢里改过名字或标准、还没进本体时，本体里的原文（name / criteria，没改的那一样为 null）；没改过为 null。网页写「未进本体」「原 〈原文〉」「恢复」。
+ * dueDate：验收时间点（YYYY-MM-DD）：本人改过的（按 Task 存的那一份），没改过用 missionDueDate；两样都没有为 null。
+ * missionDueDate：「原」验收时间点：天枢第一次读到这件 Task 时记下的当时最近的 Mission 节点，之后不往后滚（Mission 没写节点为 null）；
+ *   和 dueDate 不同时网页写「原 11/18」。
+ * disposition / deferredTo：去向（同复盘页：本期验收 / 延期到某月 / 已取消；没定过的按了结推：延续出去的算延期，到此为止的算取消）。
  * version：交付物到第几版，没交过为 null。running：还在跑的子会话（本机会话还开着的卡和专题）。blocked：受阻的子会话（卡连续两次验收没过）。
  * done：本人确认完成了（最新一版交付了，之后没返工），不问怎么办。
  * settlement：了结了的怎么了结的（completed / stopped / continued，延续去了哪在 settlement.to），没了结为 null。
@@ -76,8 +85,15 @@ export const MonthTask = Type.Object({
   taskId: Type.String({ minLength: 1 }),
   missionId: Type.String({ minLength: 1 }),
   missionTitle: Type.String(),
+  missionOutcome: Nullable(Type.String()),
   name: Type.String(),
-  agreement: Nullable(Type.Object({ met: Type.Integer({ minimum: 0 }), total: Type.Integer({ minimum: 1 }) }, strict)),
+  criteria: Type.Array(Type.Object({ text: Type.String(), met: Type.Boolean(), changed: Type.Boolean(), original: Nullable(Type.String()) }, strict)),
+  edited: Nullable(Type.Object({ name: Nullable(Type.String()), criteria: Nullable(Type.Array(Type.String())) }, strict)),
+  added: Type.Boolean(),
+  dueDate: Nullable(Day),
+  missionDueDate: Nullable(Day),
+  disposition: Type.Union([Type.Literal("current"), Type.Literal("deferred"), Type.Literal("cancelled")]),
+  deferredTo: Nullable(MonthPeriod),
   version: NullableInteger({ minimum: 1 }),
   running: Type.Integer({ minimum: 0 }),
   blocked: Type.Integer({ minimum: 0 }),
@@ -112,6 +128,24 @@ export const MonthPageResponse = Type.Object({
   draft: Nullable(MonthDraft),
 }, strict);
 
+/** PUT /api/me/tasks/:taskId/due-date：存这件 Task 的验收时间点（按 Task 存，不要求挂项目；只有 Task 负责人能改）；null 不存了，退回 Mission 的节点。 */
+export const SetTaskDueDateRequest = Type.Object({ dueDate: Nullable(Day) }, strict);
+export const TaskDueDateResponse = Type.Object({ taskId: Type.String({ minLength: 1 }), name: Type.String(), dueDate: Nullable(Day) }, strict);
+
+/**
+ * PUT /api/me/tasks/:taskId/goal：就地改名字和完成标准（天枢里先生效、标未进本体，天枢不写本体；只有 Task 负责人能改）。
+ * 没带的那一样照旧；和本体一样就撤掉那一样（「恢复」就是把原文存回去）。criteria 是整份，清空一条再存就是删。
+ */
+export const PutTaskGoalRequest = Type.Object({
+  name: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+  criteria: Type.Optional(Type.Array(Type.String({ maxLength: 500 }), { maxItems: 30 })),
+}, { ...strict, minProperties: 1 });
+export const TaskGoalResponse = Type.Object({ taskId: Type.String({ minLength: 1 }), name: Type.String(), criteria: Type.Array(Type.String()) }, strict);
+
+/** POST /api/me/months/:period/tasks：「+ 添一件」，在本人这个月的 Mission 下新建一件天枢里的 Task（不写本体）。 */
+export const AddMonthTaskRequest = Type.Object({ missionId: Type.String({ minLength: 1 }), name: Type.String({ minLength: 1, maxLength: 200 }) }, strict);
+export const AddMonthTaskResponse = Type.Object({ taskId: Type.String({ minLength: 1 }) }, strict);
+
 export type TTaskRef = Static<typeof TaskRef>;
 export type TTaskSettlement = Static<typeof TaskSettlement>;
 export type TContinueTaskRequest = Static<typeof ContinueTaskRequest>;
@@ -121,3 +155,9 @@ export type TTaskSettlementResponse = Static<typeof TaskSettlementResponse>;
 export type TMonthTask = Static<typeof MonthTask>;
 export type TMonthDraft = Static<typeof MonthDraft>;
 export type TMonthPageResponse = Static<typeof MonthPageResponse>;
+export type TSetTaskDueDateRequest = Static<typeof SetTaskDueDateRequest>;
+export type TTaskDueDateResponse = Static<typeof TaskDueDateResponse>;
+export type TPutTaskGoalRequest = Static<typeof PutTaskGoalRequest>;
+export type TTaskGoalResponse = Static<typeof TaskGoalResponse>;
+export type TAddMonthTaskRequest = Static<typeof AddMonthTaskRequest>;
+export type TAddMonthTaskResponse = Static<typeof AddMonthTaskResponse>;

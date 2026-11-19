@@ -211,8 +211,8 @@ describe("首页计划",()=>{
       expect(november.days).toHaveLength(30);
       expect(november.days[0]).toEqual({date:"2026-11-01",workday:false});
       expect((await call(f,f.member,"GET","/api/me/plan-calendar?month=2026-13")).statusCode).toBe(400);
-      // 首页计划一定带负责人和交付物状态：本体没登记负责人是 null，还没传过版本是 none。
-      expect(plan.tasks).toEqual([{...task,responsibleId:null,deliverable:{status:"none",score:null,version:null}}]);
+      // 首页计划一定带负责人、交付物状态和验收时间点：本体没登记负责人是 null，还没传过版本是 none；没单独定日子的是第一次读到时记下的 Mission 节点（「原」，11/19 定）。
+      expect(plan.tasks).toEqual([{...task,responsibleId:null,deliverable:{status:"none",score:null,version:null},dueDate:"2026-10-27"}]);
       expect(calls).toEqual([[{id:"execution-one",code:"execution-one",world:null},{id:"execution-two",code:"execution-two",world:null}]]);
     } finally { await f.t.close(); }
   });
@@ -277,7 +277,7 @@ describe("首页计划",()=>{
     const runtime={ async run(){ return { assistantMessage:"test", runtimeEntries:[] }; } };
     const world={worldApiUrl:"https://world.test",worldAgentToken:"fake-world-token-for-tests"};
     try {
-      for (const [worldInstance,expected] of [["demo",[{taskId:"task-a",missionId:"execution-one",name:"回流方案定稿",doneDefinition:"会议结论写进本体",criteria:["纪要能读回"],responsibleId:null,deliverable:{status:"none",score:null,version:null}}]],["mvp",[]]] as const) {
+      for (const [worldInstance,expected] of [["demo",[{taskId:"task-a",missionId:"execution-one",name:"回流方案定稿",doneDefinition:"会议结论写进本体",criteria:["纪要能读回"],responsibleId:null,deliverable:{status:"none",score:null,version:null},dueDate:"2026-10-20"}]],["mvp",[]]] as const) {
         clearWorldReadCache();
         const app=await buildApp({pool:f.t.pool,env:{...f.t.env,...world,worldInstance},conversationRuntime:runtime,now:()=>OCT_22});
         try {

@@ -24306,10 +24306,274 @@
         }
       }
     },
+    "/api/me/tasks/{taskId}/due-date": {
+      "put": {
+        "operationId": "setTaskDueDate",
+        "summary": "改验收时间点（这件 Task 的负责人）：按 Task 存的唯一一份，不要求挂项目；null 不存了，退回记下的 Mission 节点。已经过去的月份 409",
+        "parameters": [
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetTaskDueDateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "存好了",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskDueDateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/tasks/{taskId}/goal": {
+      "put": {
+        "operationId": "setTaskGoal",
+        "summary": "就地改名字和完成标准（这件 Task 的负责人）：天枢里先生效、标未进本体，不写本体；和本体一样就撤掉（恢复）。标准全删光、有空的 400，已经过去的月份 409",
+        "parameters": [
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutTaskGoalRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "改后的名字和标准",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskGoalResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/months/{period}/tasks": {
+      "post": {
+        "operationId": "addMonthTask",
+        "summary": "添一件：在本人这个月的 Mission 下新建一件天枢里的 Task（不写本体，能挂项目、拆卡、进复盘）。不是本人的 Mission 403，已经过去的月份 409",
+        "parameters": [
+          {
+            "name": "period",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddMonthTaskRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "建好了",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AddMonthTaskResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/months/{period}": {
       "get": {
         "operationId": "getMonthPage",
-        "summary": "月份页：这个月本人的 Task（约定几条达到、交付第几版、还在跑和受阻的子会话、确认完成没有、了结和延续去了哪），和下个月 Co-Agent 的草稿（现在为 null）",
+        "summary": "月份页：这个月本人的 Task（Mission 的成果、完成标准原文和哪几条达到、改过的本体原文、是不是天枢里新加的、验收时间点和「原」、去向、交付第几版、还在跑和受阻的子会话、确认完成没有、了结和延续去了哪），和下个月 Co-Agent 的草稿（现在为 null）",
         "parameters": [
           {
             "name": "period",
@@ -75516,6 +75780,17 @@
                 ]
               }
             }
+          },
+          "dueDate": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -79680,6 +79955,17 @@
                       ]
                     }
                   }
+                },
+                "dueDate": {
+                  "anyOf": [
+                    {
+                      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               }
             }
@@ -137802,8 +138088,15 @@
           "taskId",
           "missionId",
           "missionTitle",
+          "missionOutcome",
           "name",
-          "agreement",
+          "criteria",
+          "edited",
+          "added",
+          "dueDate",
+          "missionDueDate",
+          "disposition",
+          "deferredTo",
           "version",
           "running",
           "blocked",
@@ -137823,28 +138116,139 @@
           "missionTitle": {
             "type": "string"
           },
+          "missionOutcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "name": {
             "type": "string"
           },
-          "agreement": {
+          "criteria": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "text",
+                "met",
+                "changed",
+                "original"
+              ],
+              "properties": {
+                "text": {
+                  "type": "string"
+                },
+                "met": {
+                  "type": "boolean"
+                },
+                "changed": {
+                  "type": "boolean"
+                },
+                "original": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "edited": {
             "anyOf": [
               {
                 "additionalProperties": false,
                 "type": "object",
                 "required": [
-                  "met",
-                  "total"
+                  "name",
+                  "criteria"
                 ],
                 "properties": {
-                  "met": {
-                    "minimum": 0,
-                    "type": "integer"
+                  "name": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
-                  "total": {
-                    "minimum": 1,
-                    "type": "integer"
+                  "criteria": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "added": {
+            "type": "boolean"
+          },
+          "dueDate": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "missionDueDate": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "disposition": {
+            "anyOf": [
+              {
+                "const": "current",
+                "type": "string"
+              },
+              {
+                "const": "deferred",
+                "type": "string"
+              },
+              {
+                "const": "cancelled",
+                "type": "string"
+              }
+            ]
+          },
+          "deferredTo": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                "type": "string"
               },
               {
                 "type": "null"
@@ -138125,8 +138529,15 @@
                 "taskId",
                 "missionId",
                 "missionTitle",
+                "missionOutcome",
                 "name",
-                "agreement",
+                "criteria",
+                "edited",
+                "added",
+                "dueDate",
+                "missionDueDate",
+                "disposition",
+                "deferredTo",
                 "version",
                 "running",
                 "blocked",
@@ -138146,28 +138557,139 @@
                 "missionTitle": {
                   "type": "string"
                 },
+                "missionOutcome": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
                 "name": {
                   "type": "string"
                 },
-                "agreement": {
+                "criteria": {
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "text",
+                      "met",
+                      "changed",
+                      "original"
+                    ],
+                    "properties": {
+                      "text": {
+                        "type": "string"
+                      },
+                      "met": {
+                        "type": "boolean"
+                      },
+                      "changed": {
+                        "type": "boolean"
+                      },
+                      "original": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                "edited": {
                   "anyOf": [
                     {
                       "additionalProperties": false,
                       "type": "object",
                       "required": [
-                        "met",
-                        "total"
+                        "name",
+                        "criteria"
                       ],
                       "properties": {
-                        "met": {
-                          "minimum": 0,
-                          "type": "integer"
+                        "name": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         },
-                        "total": {
-                          "minimum": 1,
-                          "type": "integer"
+                        "criteria": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         }
                       }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "added": {
+                  "type": "boolean"
+                },
+                "dueDate": {
+                  "anyOf": [
+                    {
+                      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "missionDueDate": {
+                  "anyOf": [
+                    {
+                      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "disposition": {
+                  "anyOf": [
+                    {
+                      "const": "current",
+                      "type": "string"
+                    },
+                    {
+                      "const": "deferred",
+                      "type": "string"
+                    },
+                    {
+                      "const": "cancelled",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "deferredTo": {
+                  "anyOf": [
+                    {
+                      "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                      "type": "string"
                     },
                     {
                       "type": "null"
@@ -138433,6 +138955,131 @@
                 "type": "null"
               }
             ]
+          }
+        }
+      },
+      "SetTaskDueDateRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "dueDate"
+        ],
+        "properties": {
+          "dueDate": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "TaskDueDateResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "taskId",
+          "name",
+          "dueDate"
+        ],
+        "properties": {
+          "taskId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "dueDate": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "PutTaskGoalRequest": {
+        "additionalProperties": false,
+        "minProperties": 1,
+        "type": "object",
+        "properties": {
+          "name": {
+            "minLength": 1,
+            "maxLength": 200,
+            "type": "string"
+          },
+          "criteria": {
+            "maxItems": 30,
+            "type": "array",
+            "items": {
+              "maxLength": 500,
+              "type": "string"
+            }
+          }
+        }
+      },
+      "TaskGoalResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "taskId",
+          "name",
+          "criteria"
+        ],
+        "properties": {
+          "taskId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "criteria": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "AddMonthTaskRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "missionId",
+          "name"
+        ],
+        "properties": {
+          "missionId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "name": {
+            "minLength": 1,
+            "maxLength": 200,
+            "type": "string"
+          }
+        }
+      },
+      "AddMonthTaskResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "taskId"
+        ],
+        "properties": {
+          "taskId": {
+            "minLength": 1,
+            "type": "string"
           }
         }
       },

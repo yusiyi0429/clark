@@ -5805,6 +5805,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/tasks/{taskId}/due-date": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 改验收时间点（这件 Task 的负责人）：按 Task 存的唯一一份，不要求挂项目；null 不存了，退回记下的 Mission 节点。已经过去的月份 409 */
+        put: operations["setTaskDueDate"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/tasks/{taskId}/goal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 就地改名字和完成标准（这件 Task 的负责人）：天枢里先生效、标未进本体，不写本体；和本体一样就撤掉（恢复）。标准全删光、有空的 400，已经过去的月份 409 */
+        put: operations["setTaskGoal"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/months/{period}/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 添一件：在本人这个月的 Mission 下新建一件天枢里的 Task（不写本体，能挂项目、拆卡、进复盘）。不是本人的 Mission 403，已经过去的月份 409 */
+        post: operations["addMonthTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/months/{period}": {
         parameters: {
             query?: never;
@@ -5812,7 +5863,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 月份页：这个月本人的 Task（约定几条达到、交付第几版、还在跑和受阻的子会话、确认完成没有、了结和延续去了哪），和下个月 Co-Agent 的草稿（现在为 null） */
+        /** 月份页：这个月本人的 Task（Mission 的成果、完成标准原文和哪几条达到、改过的本体原文、是不是天枢里新加的、验收时间点和「原」、去向、交付第几版、还在跑和受阻的子会话、确认完成没有、了结和延续去了哪），和下个月 Co-Agent 的草稿（现在为 null） */
         get: operations["getMonthPage"];
         put?: never;
         post?: never;
@@ -13645,6 +13696,7 @@ export interface components {
                 score: number | null;
                 version: number | null;
             };
+            dueDate?: string | null;
         };
         TaskDeliverableStatus: {
             status: "none" | "reviewing" | "iterating" | "ready" | "delivered";
@@ -14193,6 +14245,7 @@ export interface components {
                     score: number | null;
                     version: number | null;
                 };
+                dueDate?: string | null;
             }[];
             activities: {
                 item: {
@@ -22540,11 +22593,23 @@ export interface components {
             taskId: string;
             missionId: string;
             missionTitle: string;
+            missionOutcome: string | null;
             name: string;
-            agreement: {
-                met: number;
-                total: number;
+            criteria: {
+                text: string;
+                met: boolean;
+                changed: boolean;
+                original: string | null;
+            }[];
+            edited: {
+                name: string | null;
+                criteria: string[] | null;
             } | null;
+            added: boolean;
+            dueDate: string | null;
+            missionDueDate: string | null;
+            disposition: "current" | "deferred" | "cancelled";
+            deferredTo: string | null;
             version: number | null;
             running: number;
             blocked: number;
@@ -22592,11 +22657,23 @@ export interface components {
                 taskId: string;
                 missionId: string;
                 missionTitle: string;
+                missionOutcome: string | null;
                 name: string;
-                agreement: {
-                    met: number;
-                    total: number;
+                criteria: {
+                    text: string;
+                    met: boolean;
+                    changed: boolean;
+                    original: string | null;
+                }[];
+                edited: {
+                    name: string | null;
+                    criteria: string[] | null;
                 } | null;
+                added: boolean;
+                dueDate: string | null;
+                missionDueDate: string | null;
+                disposition: "current" | "deferred" | "cancelled";
+                deferredTo: string | null;
                 version: number | null;
                 running: number;
                 blocked: number;
@@ -22638,6 +22715,30 @@ export interface components {
                     }[];
                 }[];
             } | null;
+        };
+        SetTaskDueDateRequest: {
+            dueDate: string | null;
+        };
+        TaskDueDateResponse: {
+            taskId: string;
+            name: string;
+            dueDate: string | null;
+        };
+        PutTaskGoalRequest: {
+            name?: string;
+            criteria?: string[];
+        };
+        TaskGoalResponse: {
+            taskId: string;
+            name: string;
+            criteria: string[];
+        };
+        AddMonthTaskRequest: {
+            missionId: string;
+            name: string;
+        };
+        AddMonthTaskResponse: {
+            taskId: string;
         };
         ReviewDisposition: "current" | "deferred" | "cancelled";
         ReviewRating: "met" | "partial" | "unmet";
@@ -43652,6 +43753,219 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    setTaskDueDate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetTaskDueDateRequest"];
+            };
+        };
+        responses: {
+            /** @description 存好了 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskDueDateResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    setTaskGoal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PutTaskGoalRequest"];
+            };
+        };
+        responses: {
+            /** @description 改后的名字和标准 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskGoalResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    addMonthTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                period: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddMonthTaskRequest"];
+            };
+        };
+        responses: {
+            /** @description 建好了 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AddMonthTaskResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

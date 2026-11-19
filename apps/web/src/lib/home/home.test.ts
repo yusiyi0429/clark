@@ -4,7 +4,7 @@ import type { TLocalSessionSummary } from "@/lib/local/runner";
 import { toWorker, type Worker } from "@/lib/work/workers";
 import type { MemberNotification } from "@/components/member/useMemberHome";
 import {
-  backgroundModel, monthStatus, monthTaskSubs, deriveFeed, deriveWorkHome, duration, gateLabel, taskGateLabel, toSubSession, groupBackground, inScope, localBackground, mergeBackground, emptyMonth, queueText, routeText, sortWaiting, statusLine, waitingHref, workerBackground,
+  backgroundModel, monthTaskSubs, deriveFeed, deriveWorkHome, duration, gateLabel, taskGateLabel, toSubSession, groupBackground, inScope, localBackground, mergeBackground, emptyMonth, queueText, routeText, sortWaiting, statusLine, waitingHref, workerBackground,
 } from "./derive";
 import type { BackgroundItem, SubSession, WaitingItem } from "./types";
 import type { CardItem } from "@/lib/board/cards";
@@ -84,6 +84,9 @@ describe("新首页的数据（B 的 work-home 没上时照契约的形状拼）
     const set = [{ goals: [{ taskId: "t9", dueDate: "2026-11-18" }] }];
     expect(taskGateLabel(set, plan, { taskId: "t9", missionId: "m1" })).toBe("11/18 验收");
     expect(taskGateLabel(set, plan, { taskId: "t8", missionId: "m1" })).toBe("11/20 验收");
+    // 按 Task 存的（没挂项目也有）是唯一一份，先看它（11/19 本月页就地改）。
+    const withDue = { ...plan, tasks: [{ taskId: "t8", missionId: "m1", name: "t8", doneDefinition: null, criteria: [], dueDate: "2026-11-25" }] };
+    expect(taskGateLabel([], withDue, { taskId: "t8", missionId: "m1" })).toBe("11/25 验收");
     expect(project.goals[1]!.completedAt).not.toBeNull();
     expect(data.month.missions[0]!.tasks[1]!.completedAt).not.toBeNull();
     expect(data.other.subSessions).toEqual([expect.objectContaining({ id: "tp1", kind: "topic" })]);
@@ -364,25 +367,9 @@ describe("专题没有「完成」（契约修正 b5c2e100）", () => {
   });
 });
 
-describe("首页「本月」每行的现状（主循环第 66 条）", () => {
+describe("首页「本月」一件 Task 的子会话（主循环第 66 条）", () => {
   const sub = (id: string, extra: Partial<SubSession> = {}): SubSession => ({ id, kind: "card", letter: null, title: id, state: "running", unseen: false, waiting: null, queueReason: null,
     role: null, sessionId: null, deviceId: null, autoStart: false, updatedAt: "2026-11-07T00:00:00.000Z", merge: null, holdUntil: null, ...extra });
-  it("几样都有用「 · 」连起来：等你在前，再新结果、在跑；排序 rank 按这个先后", () => {
-    const subs = [sub("a"), sub("b", { state: "failed" }), sub("c", { state: "done", unseen: true }), sub("d", { state: "waiting", waiting: "approval" })];
-    expect(monthStatus(subs, 1, false)).toEqual({ text: "1 件等你 · 1 个有新结果 · 2 个在跑", waiting: 1, rank: 0 });
-    expect(monthStatus([sub("c", { state: "waiting", unseen: true }), sub("a")], 0, false)).toEqual({ text: "1 个有新结果 · 1 个在跑", waiting: 0, rank: 1 });
-    expect(monthStatus([sub("a"), sub("e", { state: "done" })], 0, false)).toEqual({ text: "1 个在跑", waiting: 0, rank: 2 });
-    // 子会话自己在等（等你里没算到这件 Task 上）也算等你。
-    expect(monthStatus([sub("d", { state: "waiting", waiting: "needs_person" })], 0, false).text).toBe("1 件等你");
-    // 等你里归这件 Task 的（如派活单等你开工）不一定有子会话。
-    expect(monthStatus([], 1, true).text).toBe("1 件等你");
-  });
-  it("都没有：没开过子会话写「未开始」，在拆写「拆卡中」，都完成了写「N 件都做完了」，别的写排着、停着几个", () => {
-    expect(monthStatus([], 0, false)).toEqual({ text: "未开始", waiting: 0, rank: 3 });
-    expect(monthStatus([], 0, true).text).toBe("拆卡中");
-    expect(monthStatus([sub("a", { state: "done" }), sub("b", { state: "done" })], 0, false).text).toBe("2 件都做完了");
-    expect(monthStatus([sub("a", { state: "done" }), sub("b", { state: "queued" }), sub("c", { state: "waiting" })], 0, false).text).toBe("1 个排着 · 1 个停着");
-  });
   it("这件 Task 的子会话：看板上的卡、worker 里挂着它的卡和专题；别的 Task 的不算，同一个只算一次", () => {
     const all = [sub("c1"), sub("c2"), sub("t1", { kind: "topic" }), sub("c9")];
     const workers = [{ taskId: "T", cardId: "c2", topicId: null }, { taskId: "T", cardId: null, topicId: "t1" }, { taskId: "U", cardId: "c9", topicId: null }];

@@ -66,6 +66,7 @@ import { registerMeetingFollowThroughRoutes } from "./routes/meetingFollowThroug
 import { registerInternalMeetingRoutes } from "./routes/internalMeetings.js";
 import { createNexusDri, type NexusDri, type NexusDriEnv } from "./nexusDri.js";
 import { monthReviewJobs, type TaskEventReader } from "./monthReview.js";
+import { plannedDueDateJobs } from "./taskDueDates.js";
 import { createMonthReviewAgent, type MonthReviewAgent } from "./monthReviewAgent.js";
 import { registerMonthReviewRoutes } from "./routes/monthReview.js";
 import { canUseMemberView } from "./memberAccess.js";
@@ -140,6 +141,7 @@ import { realDictationPolishDeps, type DictationPolishDeps } from "./dictationPo
 import { createThreadIntroAgent, type ThreadIntroAgent } from "./threadIntro.js";
 import { createTaskAcceptanceAgent, type TaskAcceptanceAgent } from "./taskAcceptanceDraft.js";
 import { createWorldPlanTaskSource, emptyPlanTaskSource, type PlanTaskSource } from "./planTasks.js";
+import { withTaskGoalEdits } from "./taskGoalEdits.js";
 import { registerDeliverableRoutes } from "./routes/deliverables.js";
 import { registerLocalRoutes } from "./routes/local.js";
 import { registerProjectLocalTurnRoutes } from "./routes/projectLocalTurns.js";
@@ -363,6 +365,8 @@ declare module "fastify" {
     nexusDri: NexusDri;
     /** 月底复盘第三版的预评（窗口里按人排、按人跑）；server.ts 注册给 jobs worker。 */
     monthReviewJobs: { handlers: Record<string, JobHandler>; recurring: RecurringJob[] };
+    /** 「原」验收时间点上线后的补记（taskDueDates.ts）；server.ts 注册给 jobs worker。 */
+    plannedDueDateJobs: { handlers: Record<string, JobHandler>; recurring: RecurringJob[] };
     feishuChat: FeishuChat | undefined;
     /** 微信 ClawBot；server.ts 启动后调 start() 开始收消息和推送。没接飞书（借用它的令牌密钥）时为空。 */
     wechat: WechatService | undefined;
@@ -558,7 +562,8 @@ export async function buildApp({
   // 读取时间用真实时钟（演示场次的业务时钟是资料截至时间，不能用来标「读自本体」的时刻）。
   const world = createWorldReader({ q: pool.query.bind(pool), env });
   // 首页 Task 行：本体配了、实例也开了读（和其他读本体的地方同一个开关），或配了 TK 只读实例，才从本体读（只读），否则没有 Task。
-  const planTaskSource = planTasks ?? worldPlanTaskSource(pool.query.bind(pool), env, world.enabled);
+  // 外面包一层本人在本月页就地改的名字和标准（天枢里先生效，不写本体，taskGoalEdits.ts）：下游读到的都是改后的。
+  const planTaskSource = withTaskGoalEdits(pool.query.bind(pool), planTasks ?? worldPlanTaskSource(pool.query.bind(pool), env, world.enabled));
   // Task 页带进对话时按看的人打开这个 Task（谁能看照约定 V1 的规则）。
   const openPlanTaskForPage = planTaskOpener(pool.query.bind(pool), planTaskSource, peopleDirectory, now);
   // 第二个只读实例（TK scope，写死只读）：默认关闭；开了也只做健康探测和快照缓存，还没接进战场卡与 read_ontology。
@@ -986,6 +991,7 @@ export async function buildApp({
       modelId: env.review?.model ?? env.heavyModel, thinking: env.review?.thinking }),
     events: monthReviewEvents ?? worldTaskEvents(q, env, world.enabled) }));
   registerMonthReviewRoutes(app, ctx);
+  app.decorate("plannedDueDateJobs", plannedDueDateJobs({ q, planTasks: planTaskSource, now }));
   // 文档变更：找候选用快模型；按作者身份读飞书文档元数据（不读正文）；后台任务与群消息事件由 server.ts 按 app.docChanges.jobs() 注册。
   const isCeo = (personId: string) => peopleDirectory.searchPeople(undefined).find((person) => person.personId === personId)?.roles.includes("ceo") ?? false;
   const docChanges = createDocChangeService({

@@ -5,6 +5,7 @@ import { UUID_PATTERN, type Query } from "./meetingStore.js";
 import { companyPeriod } from "./monthlyPlans.js";
 import { CardError } from "./taskCards.js";
 import { settlementsOf } from "./taskContinuity.js";
+import { assertOpenPeriod, realDate, setTaskDueDate } from "./taskDueDates.js";
 
 /**
  * 项目和每月目标（契约 projects.ts，设计《新首页》第 16 节）：项目常驻，本体的 Task 每月挂到一个项目上（project_goals，迁移 245）。
@@ -22,6 +23,8 @@ type ProjectRow = { id: string; owner_id: string; name: string; origin_mission_i
   last_activity_at?: Date | null; permission_mode: TProject["permissionMode"]; auto_relay_limit: number | null; auto_relay_paused_at: Date | null; scratch: boolean };
 type GoalRow = { task_id: string; project_id: string | null; owner_id: string; period: string; mission_id: string; mission_title: string | null; task_name: string;
   source: TProjectGoal["source"]; linked_at: Date; due_date: string | null };
+/** 挂接连同这件 Task 的验收时间点（按 Task 存的那一份，迁移 290）。 */
+const GOALS = "SELECT g.*,d.due_date FROM project_goals g LEFT JOIN task_due_dates d ON d.task_id=g.task_id";
 
 const iso = (time: Date | null | undefined) => time ? new Date(time).toISOString() : null;
 /** transfer：正在转交的那一份，或本人交出去了的那一份（这时本人这边算归档，archivedAt 是接手的时间）。 */
@@ -121,12 +124,12 @@ export async function linkGoal(q: Query, input: { projectId: string; ownerId: st
     ON CONFLICT (task_id) DO UPDATE SET project_id=EXCLUDED.project_id,owner_id=EXCLUDED.owner_id,period=EXCLUDED.period,mission_id=EXCLUDED.mission_id,
       mission_title=EXCLUDED.mission_title,task_name=EXCLUDED.task_name,source=EXCLUDED.source,
       linked_at=CASE WHEN project_goals.project_id IS NOT DISTINCT FROM EXCLUDED.project_id THEN project_goals.linked_at ELSE EXCLUDED.linked_at END
-    RETURNING *`, [task.taskId, input.projectId, input.ownerId, mission?.period ?? companyPeriod(input.now), task.missionId, mission?.title ?? null, task.name,
-    input.source, input.linkedAt ?? input.now])).rows[0] as GoalRow;
+    RETURNING task_id`, [task.taskId, input.projectId, input.ownerId, mission?.period ?? companyPeriod(input.now), task.missionId, mission?.title ?? null, task.name,
+    input.source, input.linkedAt ?? input.now])).rows[0] as { task_id: string };
   await q("UPDATE tasks SET project_id=$2 WHERE plan_task_id=$1 AND owner_id=$3", [task.taskId, input.projectId, input.ownerId]);
   await q("UPDATE research_topics SET project_id=$2 WHERE plan_task_id=$1 AND owner_id=$3", [task.taskId, input.projectId, input.ownerId]);
   await q("UPDATE deliverable_versions SET project_id=$2 WHERE task_id=$1 AND author_id=$3", [task.taskId, input.projectId, input.ownerId]);
-  return row;
+  return (await q(`${GOALS} WHERE g.task_id=$1`, [row.task_id])).rows[0] as GoalRow;
 }
 
 /** 取下来：留一条 project_id 为空的记录，这件不再自动挂，回到「本月」里等本人选。挂的不是这个项目 404。 */
@@ -138,7 +141,7 @@ export async function unlinkGoal(q: Query, ownerId: string, projectId: string, t
 
 /** 本人的挂接（含取下来的，project_id 为空）。 */
 export async function goalsOf(q: Query, ownerId: string): Promise<Map<string, GoalRow>> {
-  const rows = (await q("SELECT * FROM project_goals WHERE owner_id=$1", [ownerId])).rows as GoalRow[];
+  const rows = (await q(`${GOALS} WHERE g.owner_id=$1`, [ownerId])).rows as GoalRow[];
   return new Map(rows.map((row) => [row.task_id, row]));
 }
 
@@ -151,16 +154,20 @@ export async function verdicts(q: Query, taskIds: string[]): Promise<Map<string,
 export const goalView = (row: GoalRow, verdict: TProjectGoalVerdict): TProjectGoal => ({ taskId: row.task_id, taskName: row.task_name, missionId: row.mission_id,
   missionTitle: row.mission_title, period: row.period, verdict, source: row.source, linkedAt: row.linked_at.toISOString(), dueDate: row.due_date });
 
-/** 是不是一个真的日期（YYYY-MM-DD，2 月 30 日这类不算）。 */
-const realDate = (date: string) => /^\d{4}-\d{2}-\d{2}$/.test(date) && new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) === date;
-
-/** 给挂在这个项目上的一件 Task 存验收截止日（null 不存了）。项目要是本人的、Task 要挂在这个项目上，否则 404；日期不对 400。 */
-export async function setGoalDueDate(q: Query, ownerId: string, projectId: string, taskId: string, dueDate: string | null): Promise<TProjectGoal> {
+/**
+ * 给挂在这个项目上的一件 Task 存验收截止日（null 不存了）：存的是按 Task 的那一份（taskDueDates.ts），和本月页、伙伴改的同一个地方。
+ * 项目要是本人的、Task 要挂在这个项目上，否则 404；日期不对 400；已经过去的月份 409。
+ */
+export async function setGoalDueDate(q: Query, ownerId: string, projectId: string, taskId: string, dueDate: string | null, now: Date): Promise<TProjectGoal> {
   await ownProject(q, ownerId, projectId);
   if (dueDate !== null && !realDate(dueDate)) throw new CardError(400, "INVALID_INPUT", "截止日不是一个真的日期");
-  const row = (await q("UPDATE project_goals SET due_date=$4 WHERE project_id=$1 AND owner_id=$2 AND task_id=$3 RETURNING *", [projectId, ownerId, taskId, dueDate])).rows[0] as
-    GoalRow | undefined;
-  if (!row) throw new CardError(404, "NOT_FOUND", "这件 Task 没挂在这个项目上");
+  const goal = (await q(`SELECT m.period FROM project_goals g LEFT JOIN missions m ON m.id=g.mission_id WHERE g.project_id=$1 AND g.owner_id=$2 AND g.task_id=$3`,
+    [projectId, ownerId, taskId])).rows[0] as { period: string | null } | undefined;
+  if (!goal) throw new CardError(404, "NOT_FOUND", "这件 Task 没挂在这个项目上");
+  // 和按 Task 存的接口一样：已经过去的月份不能再改。
+  if (goal.period) assertOpenPeriod(goal.period, now);
+  await setTaskDueDate(q, taskId, dueDate);
+  const row = (await q(`${GOALS} WHERE g.task_id=$1`, [taskId])).rows[0] as GoalRow;
   return goalView(row, (await verdicts(q, [taskId])).get(taskId)!);
 }
 
@@ -168,14 +175,14 @@ export async function setGoalDueDate(q: Query, ownerId: string, projectId: strin
 export async function projectDetail(q: Query, personId: string, projectId: string, now: Date, transfer: (projectId: string) => Promise<TProjectTransfer | null>):
   Promise<TProjectDetailResponse> {
   const { row: project } = await projectReader(q, personId, projectId);
-  const rows = (await q("SELECT * FROM project_goals WHERE project_id=$1 ORDER BY period DESC,linked_at,task_id", [project.id])).rows as GoalRow[];
+  const rows = (await q(`${GOALS} WHERE g.project_id=$1 ORDER BY g.period DESC,g.linked_at,g.task_id`, [project.id])).rows as GoalRow[];
   const verdict = await verdicts(q, rows.map((row) => row.task_id));
   return { project: projectView(project, await transfer(project.id)), period: companyPeriod(now), goals: rows.map((row) => goalView(row, verdict.get(row.task_id)!)) };
 }
 
 /** 一个项目挂过的 Task（全部月份）。 */
 export async function projectGoalRows(q: Query, projectId: string): Promise<GoalRow[]> {
-  return (await q("SELECT * FROM project_goals WHERE project_id=$1 ORDER BY linked_at,task_id", [projectId])).rows as GoalRow[];
+  return (await q(`${GOALS} WHERE g.project_id=$1 ORDER BY g.linked_at,g.task_id`, [projectId])).rows as GoalRow[];
 }
 
 /** Chat 的页面上下文（pageGuides.ts）：本人的项目名和挂着、没了结的 Task 名；不是本人的为 null。 */
@@ -189,4 +196,5 @@ export async function projectPageFacts(q: Query, ownerId: string, projectId: str
 }
 
 export type { GoalRow, ProjectRow };
+export { GOALS as GOALS_WITH_DUE_DATE };
 export type ProjectTx = Pool | PoolClient;

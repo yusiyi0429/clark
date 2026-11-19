@@ -1,8 +1,10 @@
 import { Type } from "@sinclair/typebox";
 import type { FastifyReply } from "fastify";
-import { ContinueTaskRequest, ContinueTaskResponse, MonthPageResponse, MonthPeriod, StopTaskRequest, TaskSettlementResponse } from "@warmap/contracts";
+import { AddMonthTaskRequest, AddMonthTaskResponse, ContinueTaskRequest, ContinueTaskResponse, MonthPageResponse, MonthPeriod, PutTaskGoalRequest, SetTaskDueDateRequest, StopTaskRequest, TaskDueDateResponse, TaskGoalResponse, TaskSettlementResponse } from "@warmap/contracts";
 import { readMonthPage } from "../monthPage.js";
 import { continueTask, stopTask, unstopTask } from "../taskContinuity.js";
+import { setTaskDueDate } from "../taskDueDates.js";
+import { addTask, assertOpenPeriod, setTaskGoal, taskPeriod } from "../taskGoalEdits.js";
 import { boardTask, CardError, planTaskOpener } from "../taskCards.js";
 import type { AppInstance, Guard, RouteContext } from "./shared.js";
 
@@ -48,6 +50,30 @@ export function registerTaskContinuityRoutes(app: AppInstance, ctx: RouteContext
     return reply.status(204).send();
   }));
 
+  // 验收时间点（本月页就地改）：按 Task 存，不要求挂项目；只有这件 Task 的负责人能改（同到此为止）。
+  app.put("/api/me/tasks/:taskId/due-date", { preHandler: requireMember, schema: { params: taskParams, body: SetTaskDueDateRequest,
+    response: { 200: TaskDueDateResponse } } }, async (req, reply) => handle(reply, async () => {
+    const own = await boardTask(open, req.person!.personId, req.params.taskId);
+    const period = await taskPeriod(q, own.task.missionId);
+    if (period) assertOpenPeriod(period, ctx.now());
+    await setTaskDueDate(q, own.task.taskId, req.body.dueDate);
+    return { taskId: own.task.taskId, name: own.task.name, dueDate: req.body.dueDate };
+  }));
+
+  // 名字和完成标准（本月页就地改）：天枢里先生效、标未进本体，不写本体；只有这件 Task 的负责人能改。
+  app.put("/api/me/tasks/:taskId/goal", { preHandler: requireMember, schema: { params: taskParams, body: PutTaskGoalRequest,
+    response: { 200: TaskGoalResponse } } }, async (req, reply) => handle(reply, async () => {
+    const own = await boardTask(open, req.person!.personId, req.params.taskId);
+    const period = await taskPeriod(q, own.task.missionId);
+    if (period) assertOpenPeriod(period, ctx.now());
+    return setTaskGoal(q, own.task, req.body, req.person!.personId, ctx.now());
+  }));
+
+  // 「+ 添一件」：在本人这个月的 Mission 下新建一件天枢里的 Task（不写本体）。
+  app.post("/api/me/months/:period/tasks", { preHandler: requireMember, schema: { params: monthParams, body: AddMonthTaskRequest,
+    response: { 201: AddMonthTaskResponse } } }, async (req, reply) => handle(reply, async () =>
+    reply.status(201).send(await addTask(q, req.person!.personId, req.params.period, req.body, ctx.now()))));
+
   app.get("/api/me/months/:period", { preHandler: requireMember, schema: { params: monthParams, response: { 200: MonthPageResponse } } }, async (req) =>
-    readMonthPage(q, ctx.planTasks, req.person!.personId, req.params.period));
+    readMonthPage(q, ctx.planTasks, req.person!.personId, req.params.period, ctx.now()));
 }

@@ -15,7 +15,7 @@ import { CardError } from "./taskCards.js";
 type ChangeRow = { id: string; project_id: string; owner_id: string; task_id: string; task_name: string; change: "changed" | "cancelled";
   sessions: TProjectGoalChangedItem["sessions"]; detected_at: Date; answer: "stop" | "keep" | null; answered_at: Date | null };
 type GoalRow = { task_id: string; project_id: string; mission_id: string; task_name: string; criteria: string[] | null };
-export type ChangeTask = { taskId: string; missionId: string; name: string; criteria?: string[] };
+export type ChangeTask = { taskId: string; missionId: string; name: string; criteria?: string[]; added?: boolean };
 
 export const changeView = (row: ChangeRow): TProjectGoalChangedItem => ({ kind: "goal_changed", id: row.id, at: row.detected_at.toISOString(), taskId: row.task_id,
   taskName: row.task_name, change: row.change, sessions: row.sessions, answer: row.answer, answeredAt: row.answered_at?.toISOString() ?? null });
@@ -30,14 +30,14 @@ async function openSessions(q: Query, ownerId: string, taskId: string): Promise<
 /**
  * 对照本体这次读到的 Task（tasks，本人负责的）查本月挂在项目上的：
  * - 改了：名字或验收标准和快照不一样（快照还没记过的先记下，不算改动），快照换成新的；
- * - 取消了：这次没读到它，而同一个 Mission 别的 Task 读到了（整个 Mission 都没读到时可能是本体没读出来，不算）。取消只记一次。
+ * - 取消了：这次没读到它，而同一个 Mission 别的 Task 读到了（整个 Mission 都没读到时可能是本体没读出来，不算；天枢里新加的不算「读到」）。取消只记一次。
  * 有还没做完的子会话才记选项框。
  */
 export async function detectGoalChanges(q: Query, ownerId: string, tasks: ChangeTask[], now: Date): Promise<void> {
   const goals = (await q("SELECT task_id,project_id::text,mission_id,task_name,criteria FROM project_goals WHERE owner_id=$1 AND period=$2 AND project_id IS NOT NULL",
     [ownerId, companyPeriod(now)])).rows as GoalRow[];
   const byId = new Map(tasks.map((task) => [task.taskId, task]));
-  const missions = new Set(tasks.map((task) => task.missionId));
+  const missions = new Set(tasks.filter((task) => !task.added).map((task) => task.missionId));
   const raise = async (goal: GoalRow, change: "changed" | "cancelled", name: string) => {
     const sessions = await openSessions(q, ownerId, goal.task_id);
     if (!sessions.length) return;

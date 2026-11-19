@@ -21,6 +21,11 @@ export function milestoneDate(text:string,period:string):string|null {
   const parsed = new Date(`${value}T00:00:00Z`);
   return !Number.isNaN(parsed.valueOf()) && parsed.toISOString().slice(0,10) === value ? value : null;
 }
+/** 一个 Mission 的验收节点里今天以后最近的一个（都过了取最后一个），没写节点为 null：首页项目目标的截止、月份页的验收时间点同一个口径。 */
+export function missionGate(milestones:string[],period:string,today:string):string|null {
+  const dates = milestones.flatMap((text)=>milestoneDate(text,period) ?? []).sort();
+  return dates.find((date)=>date>=today) ?? dates.at(-1) ?? null;
+}
 export type PlanItem = { item:TTaskView; missionId:string|null };
 /**
  * 计划里的执行事项：本人挂在这些 Mission 下的；独立事项要没写日期且没完成，或日期和 firstDay–lastDay 对得上。

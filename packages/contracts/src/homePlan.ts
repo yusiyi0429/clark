@@ -27,7 +27,7 @@ export const HomePlanMark = Type.Object(
 /**
  * 本体里挂在 Mission 下的 Task：name 是对象标题，doneDefinition 和 criteria 取自 definition 块；
  * responsibleId 是本体登记的负责人（对不上天枢的人或没登记时为 null）；deliverable 是交付物走到哪了。
- * 这两项首页计划一定带；其他用到 Task 的地方（MCP、周复盘）不带。
+ * 这几项（含 dueDate）首页计划一定带；其他用到 Task 的地方（MCP、周复盘）不带。
  */
 export const HomePlanTask = Type.Object(
   {
@@ -38,6 +38,8 @@ export const HomePlanTask = Type.Object(
     criteria: Type.Array(Type.String()),
     responsibleId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
     deliverable: Type.Optional(TaskDeliverableStatus),
+    /** 验收时间点：本人改过的（按 Task 存的那一份），没改过用第一次读到时记下的 Mission 节点（「原」）；都没有为 null。 */
+    dueDate: Type.Optional(Type.Union([DateOnly, Type.Null()])),
   },
   { additionalProperties: false },
 );

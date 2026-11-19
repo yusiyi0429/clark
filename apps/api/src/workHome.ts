@@ -16,11 +16,11 @@ import { CardError, cardTaskViews, effectiveOutcome } from "./taskCards.js";
 import { getTaskViews } from "./tasks.js";
 import { ACTIVE, awaitsQuota, heldRuns, workerResources } from "./workers.js";
 import { shanghaiDate } from "./workdays.js";
-import { milestoneDate } from "./monthPlan.js";
 import { settlementsOf } from "./taskContinuity.js";
+import { plannedDueDates } from "./taskDueDates.js";
 import { visibleMissions } from "./visibleMissions.js";
 import { taskBasis } from "./planTaskAccess.js";
-import { CARD_PROJECT, goalsOf, ownProject, PROJECT_SCOPE_PREFIX, projectScope, type GoalRow } from "./projects.js";
+import { CARD_PROJECT, GOALS_WITH_DUE_DATE, goalsOf, ownProject, PROJECT_SCOPE_PREFIX, projectScope, type GoalRow } from "./projects.js";
 import { handedAway, openTransfers, transferView } from "./projectTransfers.js";
 import { syncProjects } from "./projectSync.js";
 import { criteriaMetCounts, type StoredMerge } from "./taskFeed.js";
@@ -303,26 +303,20 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
     [ownerId, goalTasks.map((task) => `task:${task.taskId}`)])).rows as { view: TLocalTaskBudgetView }[] : [];
   // 交接过来的项目（16.7）：挂着的 Task 跟着项目走、负责人还是原来的人，不在本人的树上。按挂上时的快照列（标准读不到，记 0 条），
   // 没了结的，加这个月确认完成了的；目标条上画负责人（responsible）。
-  const othersGoals = active.length ? (await q("SELECT * FROM project_goals WHERE project_id=ANY($1::uuid[]) AND owner_id<>$2 ORDER BY linked_at",
+  const othersGoals = active.length ? (await q(`${GOALS_WITH_DUE_DATE} WHERE g.project_id=ANY($1::uuid[]) AND g.owner_id<>$2 ORDER BY g.linked_at`,
     [[...activeIds], ownerId])).rows as GoalRow[] : [];
   const othersSettled = await settlementsOf(q, othersGoals.map((goal) => goal.task_id));
   const transfers = await openTransfers(q, [...activeIds]);
-  // 目标的截止：所在 Mission 的验收时间点（同首页「本月」的 gateLabel：今天以后最近的，都过了取最后一个），没写取月底。
-  const goalMissions = [...new Set([...goalTasks.map((task) => task.missionId), ...othersGoals.map((goal) => goal.mission_id)])];
-  const gateDates = new Map(goalMissions.length ? ((await q("SELECT id,period,milestones FROM missions WHERE id=ANY($1::text[])", [goalMissions])).rows as
-    { id: string; period: string; milestones: string[] }[]).map((mission) => [mission.id,
-    mission.milestones.flatMap((text) => milestoneDate(text, mission.period) ?? []).sort()]) : []);
-  const dueDate = (missionId: string, period: string) => {
-    const dates = gateDates.get(missionId) ?? [];
-    return dates.find((date) => date >= today) ?? dates.at(-1) ?? monthEnd(period);
-  };
-  /** 截止日的先后：本体 Task 自己的（0.3 还没有，跳过）→ 天枢里给这件目标存的 → Mission 今天以后最近的节点。 */
-  const due = (set: string | null, missionId: string, period: string) =>
-    set ? { dueDate: set, dueDateSource: "set" as const } : { dueDate: dueDate(missionId, period), dueDateSource: "mission" as const };
+  // 目标的截止没单独定时：第一次读到时记下的「原」（当时最近的 Mission 节点，之后不往后滚，同月份页），没节点取月底。
+  const planned = await plannedDueDates(q, [...goalTasks.map((task) => ({ taskId: task.taskId, missionId: task.missionId })),
+    ...othersGoals.map((goal) => ({ taskId: goal.task_id, missionId: goal.mission_id }))], now);
+  /** 截止日的先后：本体 Task 自己的（0.3 还没有，跳过）→ 天枢里给这件 Task 存的（唯一一份）→ 记下的「原」→ 月底。 */
+  const due = (set: string | null, taskId: string, period: string) =>
+    set ? { dueDate: set, dueDateSource: "set" as const } : { dueDate: planned.get(taskId) ?? monthEnd(period), dueDateSource: "mission" as const };
   const goalOfOthers = (goal: GoalRow): THomeProjectGoal | null => {
     const settled = othersSettled.get(goal.task_id);
     if (settled && !(settled.kind === "completed" && goal.period === period)) return null;
-    return { taskId: goal.task_id, missionId: goal.mission_id, name: goal.task_name, period: goal.period, ...due(goal.due_date, goal.mission_id, goal.period), criteria: [], criteriaMet: 0,
+    return { taskId: goal.task_id, missionId: goal.mission_id, name: goal.task_name, period: goal.period, ...due(goal.due_date, goal.task_id, goal.period), criteria: [], criteriaMet: 0,
       criteriaTotal: 0, completedAt: settled ? new Date(settled.at).toISOString() : null,
       responsible: { personId: goal.owner_id, name: deps.names.get(goal.owner_id) ?? goal.owner_id } };
   };
@@ -330,7 +324,7 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
   const news = await projectNewsAt(q, ownerId, active.map((row) => row.id));
   const homeProjects = active.map((row): THomeProject => {
     const projectGoals: THomeProjectGoal[] = goalTasks.filter((task) => taskProject(task.taskId) === row.id).map((task): THomeProjectGoal => ({ taskId: task.taskId,
-      missionId: task.missionId, name: task.name, period: task.period, ...due(goals.get(task.taskId)?.due_date ?? null, task.missionId, task.period),
+      missionId: task.missionId, name: task.name, period: task.period, ...due(goals.get(task.taskId)?.due_date ?? null, task.taskId, task.period),
       criteria: criteriaOf.get(task.taskId)!,
       criteriaMet: met.get(task.taskId) ?? 0, criteriaTotal: criteriaOf.get(task.taskId)!.length, completedAt: task.completedAt, responsible: null }))
       .concat(othersGoals.filter((goal) => goal.project_id === row.id).flatMap((goal) => goalOfOthers(goal) ?? []))

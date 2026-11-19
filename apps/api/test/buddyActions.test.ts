@@ -538,6 +538,43 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
       expect((await f.call("GET", `/api/me/projects/${project}`)).json().goals[0].dueDate).toBeNull();
     } finally { await f.close(); }
   });
+  it("伙伴给没挂项目的 Task 定验收时间点，能撤销", async () => {
+    const f = await fixture();
+    try {
+      await f.grant();
+      const done = await f.ok("set_task_due_date", { taskId: "task-open", dueDate: "2026-11-25" });
+      expect(done).toMatchObject({ summary: "把「对话质量达标」的验收截止日定成 2026-11-25", undoable: true });
+      expect(await f.t.sql("SELECT project_id FROM project_goals WHERE task_id='task-open'")).toEqual([]);
+      expect((await f.call("GET", "/api/me/months/2026-11")).json().tasks[0].dueDate).toBe("2026-11-25");
+      expect((await f.undo(done.auditId!)).statusCode).toBe(200);
+      expect(await f.t.sql("SELECT task_id FROM task_due_dates")).toEqual([]);
+    } finally { await f.close(); }
+  });
+  it("验收时间点只有一份：老的项目目标接口和伙伴动作改的是同一个地方", async () => {
+    const f = await fixture();
+    try {
+      await f.grant();
+      const project = (await f.call("POST", "/api/me/projects", { name: "天枢", taskId: "task-open" })).json().projectId as string;
+      const stored = async () => (await f.t.sql("SELECT task_id,due_date FROM task_due_dates")) as { task_id: string; due_date: string }[];
+      const monthDue = async () => (await f.call("GET", "/api/me/months/2026-11")).json().tasks[0].dueDate as string | null;
+      const goalDue = async () => (await f.call("GET", `/api/me/projects/${project}`)).json().goals[0].dueDate as string | null;
+      // 老的项目目标接口写的，新接口、月份页、项目页读到的是同一个。
+      expect((await f.call("PUT", `/api/me/projects/${project}/goals/task-open/due-date`, { dueDate: "2026-11-20" })).statusCode).toBe(200);
+      expect(await stored()).toEqual([{ task_id: "task-open", due_date: "2026-11-20" }]);
+      expect([await monthDue(), await goalDue()]).toEqual(["2026-11-20", "2026-11-20"]);
+      // 新接口写的，老的项目页读到。
+      expect((await f.call("PUT", "/api/me/tasks/task-open/due-date", { dueDate: "2026-11-22" })).statusCode).toBe(200);
+      expect([await monthDue(), await goalDue()]).toEqual(["2026-11-22", "2026-11-22"]);
+      // 伙伴动作改的也是这一份，撤回回到它改之前的。
+      const done = await f.ok("set_task_due_date", { projectId: project, taskId: "task-open", dueDate: "2026-11-30" });
+      expect(await stored()).toEqual([{ task_id: "task-open", due_date: "2026-11-30" }]);
+      expect([await monthDue(), await goalDue()]).toEqual(["2026-11-30", "2026-11-30"]);
+      await f.undo(done.auditId!);
+      expect(await stored()).toEqual([{ task_id: "task-open", due_date: "2026-11-22" }]);
+      // project_goals 上不再有自己的一份。
+      expect(await f.t.sql("SELECT column_name FROM information_schema.columns WHERE table_name='project_goals' AND column_name='due_date'")).toEqual([]);
+    } finally { await f.close(); }
+  });
   it("17.2 第 25 条：蓝点只在本人没看过的新情况时出——子会话停下晚于打开、项目对话有新的回复或汇报晚于打开；打开记在云端", async () => {
     const f = await fixture();
     try {
@@ -642,16 +679,17 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
       const headers = { authorization: `Bearer ${TOKEN}`, "x-owner-id": TEST_MEMBER.personId };
       const act = (args: unknown) => f.t.app.inject({ method: "POST", url: "/internal/me/buddy-actions/sub_session_link", headers,
         payload: { args, conversationId: conversation, runId: randomUUID() } });
-      const agreement = async () => ((await f.call("GET", "/api/me/months/2026-11")).json().tasks as { taskId: string; agreement: unknown }[])
-        .find((task) => task.taskId === "task-open")!.agreement;
-      expect(await agreement()).toEqual({ met: 0, total: 2 });
+      // 本月页每条标准达到没有（11/19 起按条给，原来的「约定 1/2」）。
+      const agreement = async () => ((await f.call("GET", "/api/me/months/2026-11")).json().tasks as { taskId: string; criteria: { met: boolean }[] }[])
+        .find((task) => task.taskId === "task-open")!.criteria.map((criterion) => criterion.met);
+      expect(await agreement()).toEqual([false, false]);
 
       expect((await act({ letter: "A", taskId: "task-other", criterion: 1 })).json().code).toBe("TASK_NOT_IN_PROJECT");
       expect((await act({ letter: "A", taskId: "task-open", criterion: 3 })).json().code).toBe("CRITERION_NOT_FOUND");
       const linked = await act({ letter: "A", taskId: "task-open", criterion: 1 });
       expect(linked.statusCode, linked.body).toBe(200);
       expect(linked.json()).toMatchObject({ summary: "把「跑题库打分」挂到「对话质量达标」第 1 条", undoable: true });
-      expect(await agreement()).toEqual({ met: 1, total: 2 });
+      expect(await agreement()).toEqual([true, false]);
       // 还在这个项目里，字母不变。
       const home = (await f.call("GET", "/api/me/work-home")).json() as { projects: { name: string; subSessions: { id: string; letter: string | null }[] }[] };
       expect(home.projects.find((entry) => entry.subSessions.some((sub) => sub.id === card))).toMatchObject({ name: "新版天枢应用" });
@@ -659,7 +697,7 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
       expect((await act({ letter: "B", taskId: "task-open", criterion: 1 })).json().code).toBe("NOT_A_CARD");
 
       expect((await f.undo(linked.json().auditId)).statusCode).toBe(200);
-      expect(await agreement()).toEqual({ met: 0, total: 2 });
+      expect(await agreement()).toEqual([false, false]);
       expect((await f.t.sql("SELECT plan_task_id,criterion_index,mission_id FROM tasks WHERE id=$1", [card]))[0]).toEqual({ plan_task_id: null, criterion_index: null, mission_id: null });
     } finally { await f.close(); }
   });
