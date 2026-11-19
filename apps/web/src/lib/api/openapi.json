@@ -137828,6 +137828,7 @@
           "name",
           "criteria",
           "edited",
+          "added",
           "dueDate",
           "missionDueDate",
           "disposition",
@@ -137937,6 +137938,9 @@
                 "type": "null"
               }
             ]
+          },
+          "added": {
+            "type": "boolean"
           },
           "dueDate": {
             "anyOf": [
@@ -138265,6 +138269,7 @@
                 "name",
                 "criteria",
                 "edited",
+                "added",
                 "dueDate",
                 "missionDueDate",
                 "disposition",
@@ -138374,6 +138379,9 @@
                       "type": "null"
                     }
                   ]
+                },
+                "added": {
+                  "type": "boolean"
                 },
                 "dueDate": {
                   "anyOf": [

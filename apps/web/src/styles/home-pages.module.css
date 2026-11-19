@@ -164,6 +164,8 @@ label.row:hover { background: var(--default-soft); }
 .monthAdd { display: inline-flex; align-items: center; gap: 2px; height: var(--row-28); margin-left: calc(-1 * var(--space-1)); padding: 0 var(--space-1); border: 0; border-radius: var(--r-capsule); background: none; color: var(--ink-faint); font: inherit; cursor: pointer; }
 .monthAdd:hover { background: var(--default-soft); color: var(--ink-muted); }
 .monthAdd:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+/* Mission 末尾「+ 添一件」：和 Task 名的字对齐。 */
+.monthAddTask { padding: 2px var(--space-2) 0 calc(var(--space-2) * 2 + 16px); }
 .monthDue { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-width: 0; }
 /* 最下面「延期和取消」：一件一行，名字和去向下拉，名字和上面 Task 名的字对齐。 */
 .monthAside { display: flex; align-items: center; gap: var(--space-2); min-height: var(--row-48); padding: 6px var(--space-2) 6px calc(var(--space-2) * 2 + 16px); }

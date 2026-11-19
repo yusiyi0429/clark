@@ -22554,6 +22554,7 @@ export interface components {
                 name: string | null;
                 criteria: string[] | null;
             } | null;
+            added: boolean;
             dueDate: string | null;
             missionDueDate: string | null;
             disposition: "current" | "deferred" | "cancelled";
@@ -22617,6 +22618,7 @@ export interface components {
                     name: string | null;
                     criteria: string[] | null;
                 } | null;
+                added: boolean;
                 dueDate: string | null;
                 missionDueDate: string | null;
                 disposition: "current" | "deferred" | "cancelled";

@@ -12,7 +12,7 @@ const hooks = vi.hoisted(() => ({
 }));
 vi.mock("react", async (original) => ({ ...(await original<typeof import("react")>()), useState: hooks.useState }));
 
-import { MonthTaskRow } from "./MonthPage";
+import { MissionBlock, MonthTaskRow } from "./MonthPage";
 import type { MonthTask } from "./useMonthPage";
 
 type Element = ReactElement<Record<string, unknown>>;
@@ -23,7 +23,7 @@ const textOf = (node: ReactNode): string => Children.toArray(node).map((child) =
 
 const task: MonthTask = { taskId: "t1", missionId: "m1", missionTitle: "天枢 11 月", missionOutcome: null, name: "甲",
   criteria: [{ text: "有题库打分结果", met: true, changed: false, original: null }, { text: "有新人上手录屏", met: false, changed: false, original: null },
-    { text: "过 75 分", met: false, changed: false, original: null }], edited: null,
+    { text: "过 75 分", met: false, changed: false, original: null }], edited: null, added: false,
   dueDate: "2026-11-18", missionDueDate: "2026-11-18", disposition: "current", deferredTo: null, version: null, running: 0, blocked: 0, done: false, settlement: null, continuedFrom: null };
 const go = vi.fn();
 const row = () => { hooks.position = 0; return MonthTaskRow({ task, period: "2026-11", go }) as ReactNode; };
@@ -65,7 +65,7 @@ describe("本月页就地改名字和完成标准", () => {
     criteria: [{ text: "有题库打分结果", met: true, changed: false, original: null }, { text: "有三个新人上手录屏", met: false, changed: true, original: "有新人上手录屏" },
       { text: "过 80 分", met: false, changed: true, original: null }],
     edited: { name: "甲", criteria: ["有题库打分结果", "有新人上手录屏", "过 75 分"] } };
-  const actions = () => ({ setDueDate: vi.fn(async () => {}), setDisposition: vi.fn(async () => {}), setGoal: vi.fn(async () => {}) });
+  const actions = () => ({ setDueDate: vi.fn(async () => {}), setDisposition: vi.fn(async () => {}), setGoal: vi.fn(async () => {}), addTask: vi.fn(async () => {}) });
   const open = (item: MonthTask, acts: ReturnType<typeof actions>) => {
     hooks.position = 0;
     hooks.values = [];
@@ -110,5 +110,34 @@ describe("本月页就地改名字和完成标准", () => {
     acts.setGoal.mockClear();
     await save("Task 名", " ");
     expect(acts.setGoal).not.toHaveBeenCalled();
+  });
+});
+
+describe("本月页添一件", () => {
+  const actions = () => ({ setDueDate: vi.fn(async () => {}), setDisposition: vi.fn(async () => {}), setGoal: vi.fn(async () => {}), addTask: vi.fn(async () => {}) });
+
+  it("Mission 末尾「+ 添一件」写个名字回车就加在这个 Mission 下", async () => {
+    const acts = actions();
+    hooks.position = 0;
+    const tree = MissionBlock({ tasks: [task], period: "2026-11", go, extraOf: () => undefined, today: "2026-11-19", actions: acts }) as ReactNode;
+    const add = nodes(tree).find((node) => node.props.label === "添一件")!;
+    expect(add.props.placeholder).toBe("Task 名");
+    expect(add.props.text).toBe("添一件");
+    await (add.props.onSave as (text: string) => Promise<void>)("  新人上手手册 ");
+    expect(acts.addTask).toHaveBeenCalledWith("m1", "新人上手手册");
+  });
+
+  it("天枢里新加的行上淡色「未进本体」，展开里不出「恢复」", () => {
+    const acts = actions();
+    const added: MonthTask = { ...task, taskId: "ts-1", name: "新人上手手册", criteria: [], added: true };
+    hooks.position = 0;
+    hooks.values = [];
+    const closed = MonthTaskRow({ task: added, period: "2026-11", go, actions: acts }) as ReactNode;
+    expect(textOf(nodes(closed).find((node) => node.props["data-testid"] === "month-task-line")!.props.children as ReactNode)).toContain("未进本体");
+    (toggle(closed).props.onClick as () => void)();
+    hooks.position = 0;
+    const open = MonthTaskRow({ task: added, period: "2026-11", go, actions: acts }) as ReactNode;
+    expect(textOf(nodes(open).find((node) => node.props["data-testid"] === "month-detail")!.props.children as ReactNode)).toContain("未进本体");
+    expect(nodes(open).some((node) => node.type === "button" && textOf(node.props.children as ReactNode) === "恢复")).toBe(false);
   });
 });

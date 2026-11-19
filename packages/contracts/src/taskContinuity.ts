@@ -70,6 +70,7 @@ export const TaskSettlementResponse = Type.Object({ taskId: Type.String({ minLen
  * missionOutcome：所在 Mission 的成果（没写为 null）。
  * criteria：完成标准（本体验收标准，没有就按完成定义算一条；本人在天枢里改过的按改后的），met 是这一条达到了（本人对它的卡里有一张最近一次有结论的验收算通过）；
  *   changed 是这一条和本体里的不一样（改过或新加的），original 是它替换掉的那条本体原文（同一位置的本体原文已不在改后的标准里时才有）。
+ * added：天枢里「+ 添一件」新加的（没有本体原文，也写「未进本体」，不出「恢复」）。
  * edited：本人在天枢里改过名字或标准、还没进本体时，本体里的原文（name / criteria，没改的那一样为 null）；没改过为 null。网页写「未进本体」「原 〈原文〉」「恢复」。
  * dueDate：验收时间点（YYYY-MM-DD）：天枢里按 Task 存的那一份，没存按 Mission 今天以后最近的节点（都过了取最后一个），Mission 没写节点为 null。
  * missionDueDate：按 Mission 节点算的那个（原值）；和 dueDate 不同时网页写「原 11/18」。
@@ -87,6 +88,7 @@ export const MonthTask = Type.Object({
   name: Type.String(),
   criteria: Type.Array(Type.Object({ text: Type.String(), met: Type.Boolean(), changed: Type.Boolean(), original: Nullable(Type.String()) }, strict)),
   edited: Nullable(Type.Object({ name: Nullable(Type.String()), criteria: Nullable(Type.Array(Type.String())) }, strict)),
+  added: Type.Boolean(),
   dueDate: Nullable(Day),
   missionDueDate: Nullable(Day),
   disposition: Type.Union([Type.Literal("current"), Type.Literal("deferred"), Type.Literal("cancelled")]),
@@ -139,6 +141,10 @@ export const PutTaskGoalRequest = Type.Object({
 }, { ...strict, minProperties: 1 });
 export const TaskGoalResponse = Type.Object({ taskId: Type.String({ minLength: 1 }), name: Type.String(), criteria: Type.Array(Type.String()) }, strict);
 
+/** POST /api/me/months/:period/tasks：「+ 添一件」，在本人这个月的 Mission 下新建一件天枢里的 Task（不写本体）。 */
+export const AddMonthTaskRequest = Type.Object({ missionId: Type.String({ minLength: 1 }), name: Type.String({ minLength: 1, maxLength: 200 }) }, strict);
+export const AddMonthTaskResponse = Type.Object({ taskId: Type.String({ minLength: 1 }) }, strict);
+
 export type TTaskRef = Static<typeof TaskRef>;
 export type TTaskSettlement = Static<typeof TaskSettlement>;
 export type TContinueTaskRequest = Static<typeof ContinueTaskRequest>;
@@ -152,3 +158,5 @@ export type TSetTaskDueDateRequest = Static<typeof SetTaskDueDateRequest>;
 export type TTaskDueDateResponse = Static<typeof TaskDueDateResponse>;
 export type TPutTaskGoalRequest = Static<typeof PutTaskGoalRequest>;
 export type TTaskGoalResponse = Static<typeof TaskGoalResponse>;
+export type TAddMonthTaskRequest = Static<typeof AddMonthTaskRequest>;
+export type TAddMonthTaskResponse = Static<typeof AddMonthTaskResponse>;

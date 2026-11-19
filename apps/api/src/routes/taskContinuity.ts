@@ -1,10 +1,10 @@
 import { Type } from "@sinclair/typebox";
 import type { FastifyReply } from "fastify";
-import { ContinueTaskRequest, ContinueTaskResponse, MonthPageResponse, MonthPeriod, PutTaskGoalRequest, SetTaskDueDateRequest, StopTaskRequest, TaskDueDateResponse, TaskGoalResponse, TaskSettlementResponse } from "@warmap/contracts";
+import { AddMonthTaskRequest, AddMonthTaskResponse, ContinueTaskRequest, ContinueTaskResponse, MonthPageResponse, MonthPeriod, PutTaskGoalRequest, SetTaskDueDateRequest, StopTaskRequest, TaskDueDateResponse, TaskGoalResponse, TaskSettlementResponse } from "@warmap/contracts";
 import { readMonthPage } from "../monthPage.js";
 import { continueTask, stopTask, unstopTask } from "../taskContinuity.js";
 import { setTaskDueDate } from "../taskDueDates.js";
-import { setTaskGoal } from "../taskGoalEdits.js";
+import { addTask, setTaskGoal } from "../taskGoalEdits.js";
 import { boardTask, CardError, planTaskOpener } from "../taskCards.js";
 import type { AppInstance, Guard, RouteContext } from "./shared.js";
 
@@ -64,6 +64,11 @@ export function registerTaskContinuityRoutes(app: AppInstance, ctx: RouteContext
     const own = await boardTask(open, req.person!.personId, req.params.taskId);
     return setTaskGoal(q, own.task, req.body, req.person!.personId, ctx.now());
   }));
+
+  // 「+ 添一件」：在本人这个月的 Mission 下新建一件天枢里的 Task（不写本体）。
+  app.post("/api/me/months/:period/tasks", { preHandler: requireMember, schema: { params: monthParams, body: AddMonthTaskRequest,
+    response: { 201: AddMonthTaskResponse } } }, async (req, reply) => handle(reply, async () =>
+    reply.status(201).send(await addTask(q, req.person!.personId, req.params.period, req.body, ctx.now()))));
 
   app.get("/api/me/months/:period", { preHandler: requireMember, schema: { params: monthParams, response: { 200: MonthPageResponse } } }, async (req) =>
     readMonthPage(q, ctx.planTasks, req.person!.personId, req.params.period, ctx.now()));

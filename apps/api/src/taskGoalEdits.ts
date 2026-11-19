@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { Query } from "./meetingStore.js";
 import { taskBasis } from "./planTaskAccess.js";
 import type { PlanTask, PlanTaskSource } from "./planTasks.js";
@@ -8,12 +9,19 @@ import { CardError } from "./taskCards.js";
  * 在读 Task 的那一个来源（app.ts 建来源只有一处）外面包一层：本体读回来的 Task 套上本人的改动，首页、项目、拆卡、验收员、对表、复盘读到的都是改后的，
  * 已有的「目标改了」（goalChanges.ts）、约定补充按原文对（taskAgreements.ts align）、复盘预评按原文作废（monthReview.ts）都接得上。
  * 本体里带的约定（proof / acceptor）和标准按序号一一对应：标准一增删就按原文重新对上，新加的那条没有约定。
+ * 「+ 添一件」（迁移 292）：本人在自己的 Mission 下新建的 Task 也从这一层出来（天枢自己的 id，added），所以能挂项目、拆卡、进复盘；它没有本体原文，改它就直接改它。
  */
 
 type EditRow = { task_id: string; name: string | null; criteria: string[] | null };
 /** 套上改动的 Task 带着这一样：本体里的原名字、原标准（按 taskBasis 算的那份），和哪一样改过。 */
 export type TaskGoalEdit = { worldName: string; worldCriteria: string[]; name: boolean; criteria: boolean };
-export type EditedPlanTask = PlanTask & { edit?: TaskGoalEdit };
+export type EditedPlanTask = PlanTask & { edit?: TaskGoalEdit; added?: boolean };
+type AddedRow = { task_id: string; mission_id: string; owner_id: string; name: string; criteria: string[]; world_object_id: string | null };
+
+/** 天枢里新加的 Task：负责人是加它的人，没有完成定义。 */
+const addedTask = (row: AddedRow): EditedPlanTask => ({ taskId: row.task_id, missionId: row.mission_id, name: row.name, doneDefinition: null, criteria: row.criteria,
+  responsibleId: row.owner_id, added: true });
+const ADDED = "SELECT a.task_id,a.mission_id,a.owner_id,a.name,a.criteria,m.world_object_id FROM added_tasks a JOIN missions m ON m.id=a.mission_id";
 
 async function editsOf(q: Query, taskIds: string[]): Promise<Map<string, EditRow>> {
   if (!taskIds.length) return new Map();
@@ -32,21 +40,37 @@ function apply<T extends Omit<PlanTask, "missionId">>(task: T, edit: EditRow | u
     edit: { worldName: task.name, worldCriteria, name: edit.name !== null, criteria: edit.criteria !== null } };
 }
 
-/** 读 Task 的来源外面包一层：套上本人的改动（按 id 读一件也套）。 */
+/** 读 Task 的来源外面包一层：套上本人的改动（按 id 读一件也套），补上这几个 Mission 下天枢里新加的。 */
 export function withTaskGoalEdits(q: Query, source: PlanTaskSource): PlanTaskSource {
   const wrapped: PlanTaskSource = async (missions) => {
-    const tasks = await source(missions);
+    const [tasks, added] = await Promise.all([source(missions), missions.length
+      ? q(`${ADDED} WHERE a.mission_id=ANY($1::text[]) ORDER BY a.created_at,a.task_id`, [missions.map((mission) => mission.id)]) : Promise.resolve({ rows: [] })]);
     const edits = await editsOf(q, tasks.map((task) => task.taskId));
-    return tasks.map((task) => apply(task, edits.get(task.taskId)));
+    return [...tasks.map((task) => apply(task, edits.get(task.taskId))), ...(added.rows as AddedRow[]).map(addedTask)];
   };
-  if (source.byId) {
-    const byId = source.byId;
-    wrapped.byId = async (taskId) => {
-      const found = await byId(taskId);
-      return found ? { ...found, task: apply(found.task, (await editsOf(q, [taskId])).get(taskId)) } : null;
-    };
-  }
+  // 按 id 读一件（跨月找 Task）：天枢里新加的从这里读（父引用是它所在 Mission 的本体对象），其余问本体再套上改动。
+  wrapped.byId = async (taskId) => {
+    const row = (await q(`${ADDED} WHERE a.task_id=$1`, [taskId])).rows[0] as AddedRow | undefined;
+    if (row) { const { missionId: _missionId, ...task } = addedTask(row); return { parents: row.world_object_id ? [row.world_object_id] : [], task }; }
+    const found = source.byId ? await source.byId(taskId) : null;
+    return found ? { ...found, task: apply(found.task, (await editsOf(q, [taskId])).get(taskId)) } : null;
+  };
   return wrapped;
+}
+
+/**
+ * POST /api/me/months/:period/tasks：本人在自己这个月的 Mission 下添一件（天枢里的 Task，不写本体）。
+ * 没有这个 Mission（或不是这个月的）404，不是本人的 Mission 403，名字空 400。
+ */
+export async function addTask(q: Query, personId: string, period: string, body: { missionId: string; name: string }, now: Date): Promise<{ taskId: string }> {
+  const mission = (await q("SELECT owner_id FROM missions WHERE id=$1 AND period=$2 AND NOT placeholder", [body.missionId, period])).rows[0] as { owner_id: string } | undefined;
+  if (!mission) throw new CardError(404, "NOT_FOUND", "这个月没有这个 Mission");
+  if (mission.owner_id !== personId) throw new CardError(403, "FORBIDDEN", "只能在自己的 Mission 下添");
+  const name = body.name.trim();
+  if (!name) throw new CardError(400, "INVALID_INPUT", "名字不能空");
+  const taskId = `ts-${randomUUID()}`;
+  await q("INSERT INTO added_tasks(task_id,mission_id,owner_id,name,created_at) VALUES($1,$2,$3,$4,$5)", [taskId, body.missionId, personId, name, now]);
+  return { taskId };
 }
 
 const same = (a: string[], b: string[]) => a.length === b.length && a.every((text, index) => text === b[index]);
@@ -57,6 +81,7 @@ const same = (a: string[], b: string[]) => a.length === b.length && a.every((tex
  */
 export async function setTaskGoal(q: Query, task: EditedPlanTask, body: { name?: string; criteria?: string[] }, by: string, now: Date):
   Promise<{ taskId: string; name: string; criteria: string[] }> {
+  if (task.added) return setAddedTask(q, task, body);
   const worldName = task.edit?.worldName ?? task.name;
   const worldCriteria = task.edit?.worldCriteria ?? taskBasis(task).criteria;
   const name = body.name === undefined ? (task.edit?.name ? task.name : null) : body.name.trim();
@@ -71,4 +96,14 @@ export async function setTaskGoal(q: Query, task: EditedPlanTask, body: { name?:
       edited_by=EXCLUDED.edited_by,edited_at=EXCLUDED.edited_at`,
   [task.taskId, nextName, nextCriteria && JSON.stringify(nextCriteria), worldName, JSON.stringify(worldCriteria), by, now]);
   return { taskId: task.taskId, name: nextName ?? worldName, criteria: nextCriteria ?? worldCriteria };
+}
+
+/** 天枢里新加的那件：没有本体原文，名字、标准直接改它自己。 */
+async function setAddedTask(q: Query, task: EditedPlanTask, body: { name?: string; criteria?: string[] }): Promise<{ taskId: string; name: string; criteria: string[] }> {
+  const name = body.name === undefined ? task.name : body.name.trim();
+  if (!name) throw new CardError(400, "INVALID_INPUT", "名字不能空");
+  const criteria = body.criteria === undefined ? task.criteria : body.criteria.map((text) => text.trim());
+  if (criteria.some((text) => !text)) throw new CardError(400, "INVALID_INPUT", "完成标准不能有空的");
+  await q("UPDATE added_tasks SET name=$2,criteria=$3::jsonb WHERE task_id=$1", [task.taskId, name, JSON.stringify(criteria)]);
+  return { taskId: task.taskId, name, criteria };
 }

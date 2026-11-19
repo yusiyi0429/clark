@@ -97,7 +97,7 @@ export async function readMonthPage(q: Query, planTasks: PlanTaskSource, personI
   const rows: TMonthTask[] = tasks.map((task) => {
     const met = cards.met.get(task.taskId) ?? new Set<number>();
     const metTexts = cards.metTexts.get(task.taskId) ?? new Set<string>();
-    const { edit } = task as EditedPlanTask;
+    const { edit, added } = task as EditedPlanTask;
     const criteria = taskBasis(task).criteria;
     const settlement = settlements.get(task.taskId) ?? null;
     const mission = missions.get(task.missionId);
@@ -110,6 +110,7 @@ export async function readMonthPage(q: Query, planTasks: PlanTaskSource, personI
           original: !edit.worldCriteria.includes(text) && replaced !== undefined && !criteria.includes(replaced) ? replaced : null };
       }),
       edited: edit ? { name: edit.name ? edit.worldName : null, criteria: edit.criteria ? edit.worldCriteria : null } : null,
+      added: added === true,
       dueDate: stored.get(task.taskId) ?? missionDueDate, missionDueDate,
       ...chosen.get(task.taskId) ?? defaultDisposition(settlement ?? undefined, period),
       version: deliverables.get(task.taskId)?.version ?? null, running: running.get(task.taskId) ?? 0, blocked: cards.blocked.get(task.taskId) ?? 0,

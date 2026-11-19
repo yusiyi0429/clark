@@ -13,6 +13,7 @@
  * - 定了延期、取消的从上面挪到最下面「延期和取消」：一件一行，名字、去向下拉。
  * - 名字、完成标准就地改（复盘页备注框的样子：平时是字，悬停有底，聚焦出框；回车或离开保存，Esc 取消；清空一条再存就是删；「+ 加一条」）。
  *   天枢里先生效、不写本体：行上淡色「未进本体」，改过的标准一种底色、下面淡色「原 〈原文〉」，展开里「未进本体 · 恢复」。
+ * - Mission 末尾「+ 添一件」：写个名字回车，在这个 Mission 下新建一件天枢里的 Task（也写「未进本体」，没有本体原文，不出「恢复」；不要了选「已取消」）。
  * - 下半：下个月 Co-Agent 的草稿，按 Mission 分组（接口等溪南，现在没有）。
  * 数据见 useMonthPage。
  * 复盘期间（月份已经过去，或本月最后两天，同服务端）月份页就是复盘页（MonthReview，设计第三版，读 GET …/review），上面这些不画。
@@ -183,7 +184,7 @@ export function MonthView({ data, go, extras, today = null, actions }: { data: M
   );
 }
 
-function MissionBlock({ tasks, period, go, extraOf, today, actions }: { tasks: MonthTask[]; period: string; go: (href: string) => void; extraOf: (task: MonthTask) => MonthExtras | undefined;
+export function MissionBlock({ tasks, period, go, extraOf, today, actions }: { tasks: MonthTask[]; period: string; go: (href: string) => void; extraOf: (task: MonthTask) => MonthExtras | undefined;
   today: string | null; actions?: MonthActions }) {
   const { missionTitle: title, missionOutcome: outcome } = tasks[0]!;
   const waitingOf = (task: MonthTask) => extraOf(task)?.waiting ?? 0;
@@ -204,6 +205,11 @@ function MissionBlock({ tasks, period, go, extraOf, today, actions }: { tasks: M
           </div>
         );
       })}
+      {actions ? (
+        <div className={p.monthAddTask}>
+          <AddLine text="添一件" label="添一件" placeholder="Task 名" onSave={async (name) => { if (name.trim()) await actions.addTask(tasks[0]!.missionId, name.trim()); }} />
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -226,7 +232,7 @@ export function MonthTaskRow({ task, period, go, extra, actions }: { task: Month
   const marks = (
     <>
       {task.dueDate && task.missionDueDate && task.dueDate !== task.missionDueDate ? <span className={p.monthFaint}>原 {shortDate(task.missionDueDate)}</span> : null}
-      {task.edited ? <span className={p.monthFaint}>未进本体</span> : null}
+      {task.edited || task.added ? <span className={p.monthFaint}>未进本体</span> : null}
       {from ? <span className={p.monthFaint}>延续自{from.period ? ` ${monthLabel(from.period)}` : ""}的{from.name}</span> : null}
     </>
   );
@@ -271,7 +277,7 @@ export function MonthTaskRow({ task, period, go, extra, actions }: { task: Month
               {actions ? (
                 <li className={p.monthCriterion}>
                   <span className={h.slotState} />
-                  <AddLine label="加一条完成标准" placeholder="完成标准" onSave={(text) => saveCriteria([...texts, text])} />
+                  <AddLine text="加一条" label="加一条完成标准" placeholder="完成标准" onSave={(text) => saveCriteria([...texts, text])} />
                 </li>
               ) : null}
             </ul>
@@ -285,8 +291,8 @@ export function MonthTaskRow({ task, period, go, extra, actions }: { task: Month
                 <button type="button" className={p.monthLink} onClick={() => go(taskHref(task.taskId))}>详情</button>
               </>
             )}
-            {task.edited ? (
-              <span>未进本体{actions ? <> · <button type="button" className={p.monthLink} onClick={() => void restore()}>恢复</button></> : null}</span>
+            {task.edited || task.added ? (
+              <span>未进本体{actions && task.edited ? <> · <button type="button" className={p.monthLink} onClick={() => void restore()}>恢复</button></> : null}</span>
             ) : null}
           </div>
         </div>
@@ -330,10 +336,10 @@ function InlineText({ value, label, placeholder, required = false, changed = fal
   );
 }
 
-/** 「+ 加一条」（复盘页「+ 添加」的样子）：点了变成空的输入框，回车加上；空着离开就收回去。 */
-function AddLine({ label, placeholder, onSave }: { label: string; placeholder: string; onSave: (text: string) => Promise<void> }) {
+/** 「+ 加一条」「+ 添一件」（复盘页「+ 添加」的样子）：点了变成空的输入框，回车加上；空着离开就收回去。 */
+function AddLine({ text, label, placeholder, onSave }: { text: string; label: string; placeholder: string; onSave: (text: string) => Promise<void> }) {
   const [adding, setAdding] = useState(false);
-  if (!adding) return <button type="button" className={p.monthAdd} onClick={() => setAdding(true)}><Plus size={14} strokeWidth={1.8} aria-hidden />加一条</button>;
+  if (!adding) return <button type="button" className={p.monthAdd} onClick={() => setAdding(true)}><Plus size={14} strokeWidth={1.8} aria-hidden />{text}</button>;
   return <InlineText value="" label={label} placeholder={placeholder} required autoFocus onSave={onSave} onDone={() => setAdding(false)} />;
 }
 
