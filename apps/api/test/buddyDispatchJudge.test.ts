@@ -119,9 +119,15 @@ describe("每条回话都查", () => {
     expect(selfDone("我已经把话转给了「首页改版」。").pass).toBe(false);
     expect(selfDone("已转给项目对话。").pass).toBe(false);
     expect(verdict(7, attempt([home, tell(IDS.topicA)], "已经把话转给了「首页改版」。")).pass).toBe(true);
-    for (const reply of ["已经把「首页改版」的验收挪到 11/25。", "已在项目「天枢新版」里开了「做登录页设计稿」。", "已经开了一个会话。", "已经让它们再跑一次了。"]) {
+    for (const reply of ["已经把「首页改版」的验收挪到 11/25。", "已在项目「天枢新版」里开了「做登录页设计稿」。", "已经开了一个会话。", "已经让它们再跑一次了。",
+      "已经让它们再跑了。", "已经让 A 再跑了。", "已经交给项目对话了。", "已经派给「首页改版」了。", "已经新开了一个会话。", "已经开了会话。",
+      "已经把验收挪到下周三。", "已经把截止定成周五。", "已经登记了开工。"]) {
       expect(selfDone(reply).pass, reply).toBe(false);
     }
+  });
+  it("已知取舍：描述现状的「已经续上」「已经接着做」照样算说已经做了；带「过」「上一轮」的历史句不算", () => {
+    for (const reply of ["会话已经续上了，正在跑。", "C 已经接着做了。"]) expect(selfDone(reply).pass, reply).toBe(false);
+    for (const reply of ["B 已经重跑过一次但又出错了。", "上一轮已经重跑了两次。"]) expect(selfDone(reply).pass, reply).toBe(true);
   });
   it("描述会话进度的「已经」不算说自己做了", () => {
     for (const reply of ["「首页改版」已经开工了，还在跑。", "它上一轮已经把按钮挪到右边了。", "A 已提交了一版。", "上一轮已经把字号定成一种。"]) {

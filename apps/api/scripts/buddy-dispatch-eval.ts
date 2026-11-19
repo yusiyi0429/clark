@@ -315,6 +315,9 @@ function readBaseline(path: string): CaseTally[] {
 }
 
 type Graded = Attempt & { error?: string };
+const FIXED_ERRORS = new Set(["模型请求没连上", "模型请求超时", "模型的回复没读完整", "模型请求失败"]);
+/** 旧结果里的 error 按现在的口径清成固定文案：HTTP 状态照留，超时写超时，别的（可能带地址的原始报错）一律「模型请求失败」。 */
+const cleanError = (raw: string) => FIXED_ERRORS.has(raw) || /^模型请求失败 HTTP \d{3}$/.test(raw) ? raw : /timeout|timed out|超时/i.test(raw) ? "模型请求超时" : "模型请求失败";
 /** --regrade：读已存的结果，取每条每遍的工具轨迹、回话和结束方式，不调模型。 */
 function readSaved(path: string): { model: string; runs: number; attempt: (id: number, index: number) => Graded } {
   const data = JSON.parse(readFileSync(path, "utf8")) as { model?: string; runs?: number; cases?: { id: number; runs: Graded[] }[] };
@@ -322,7 +325,7 @@ function readSaved(path: string): { model: string; runs: number; attempt: (id: n
   return { model: data.model, runs: data.runs!, attempt: (id, index) => {
     const saved = data.cases!.find((entry) => entry.id === id)?.runs[index - 1];
     if (!saved) throw new Error(`--regrade 的结果里没有第 ${id} 条第 ${index} 遍`);
-    return { calls: saved.calls, reply: saved.reply, stop: saved.stop, ...(saved.error ? { error: saved.error } : {}) };
+    return { calls: saved.calls, reply: saved.reply, stop: saved.stop, ...(saved.error ? { error: cleanError(saved.error) } : {}) };
   } };
 }
 

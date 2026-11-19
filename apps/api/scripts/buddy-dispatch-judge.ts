@@ -86,15 +86,20 @@ const PROMISES = [
   /(做完|完成|结束|好了|之后|以后|后|有进展|有结果|有消息)[^。！？，,\n]{0,4}会[^。！？\n]{0,4}(汇报|回报|告诉你|通知你|同步给你|报告)/,
 ];
 /**
- * 说「已经」做了本人这一句要的动作：已经（帮你）把 / 让 / 在……转给、排进、续上、接着做、重跑、再跑一次、定成或挪到某天、开了会话；或「已转给」「已开了一个会话」这类。
- * 不认开工、提交、改到这类也用来描述会话进度的词，「定成」「挪到」只认后面跟日子的；不跨逗号。
+ * 说「已经」做了本人这一句要的动作：已经（帮你）把 / 让 / 在……转给、交给、派给、排进、登记了、续上、接着做、重跑、再跑、定成或挪到某天（日期、周几）、
+ * 开了会话；或「已转给」「已新开了一个会话」这类。不认开工、提交、改到这类也用来描述会话进度的词，「定成」「挪到」只认后面跟日子的。按分句判，不跨标点。
  * 「首页改版已经开工了」「它上一轮已经把按钮挪到右边了」「A 已提交了一版」都不算。
+ * 历史句不算：分句里有「上一轮」「上次」、动词后跟「过」（「已经重跑过一次」）、或「又出错 / 又失败」这类。
+ * 已知取舍（测试里写着）：「会话已经续上了，正在跑」「C 已经接着做了」这种描述现状的话照样算说已经做了。
  */
-const DID = "转给|转达|转过去|排进|续上|接着做|重跑|再跑一次|(定成|定到|挪到)\\s*\\d|开好?了?(一个|个)?(新的?)?会话|里开了「";
+const DID = "转给|转达|转过去|交给|派给|排进|登记了|续上|接着做|重跑|再跑|(定成|定到|挪到)\\s*(\\d|下?周[一二三四五六日天]|星期[一二三四五六日天])"
+  + "|新?开好?了?(一个|个)?(新的?)?会话|里开了「";
 const CLAIMS = [
-  new RegExp(`(已经?|都已)[^。！？，,；;\n]{0,6}?(把|让|叫|帮你|替你|给你|在)[^。！？，,；;\n]{0,14}?(${DID})`),
+  new RegExp(`(已经?|都已).{0,6}?(把|让|叫|帮你|替你|给你|在).{0,14}?(${DID})`),
   new RegExp(`已经?(${DID})`),
 ];
+const HISTORY = new RegExp(`上一轮|上次|(${DID})过|又(出错|失败|停|卡|挂)`);
+const claimsDone = (reply: string) => reply.split(/[。！？!?，,；;\n]/).some((clause) => !HISTORY.test(clause) && CLAIMS.some((pattern) => pattern.test(clause)));
 
 /** 每条都查的回话规矩。 */
 function replyProblems(attempt: Attempt): string[] {
@@ -105,7 +110,7 @@ function replyProblems(attempt: Attempt): string[] {
   if (stop === "reply" && !reply.trim() && !done(calls, "ask_user")) problems.push("没有回话");
   if (/…|\.\.\./.test(reply)) problems.push("回话里有省略号");
   if (PROMISES.some((pattern) => pattern.test(reply))) problems.push("回话许诺以后自己回报");
-  if (!calls.some((call) => call.write && call.ok) && CLAIMS.some((pattern) => pattern.test(reply))) problems.push("没有做成的写动作，回话却说已经做了");
+  if (!calls.some((call) => call.write && call.ok) && claimsDone(reply)) problems.push("没有做成的写动作，回话却说已经做了");
   return problems;
 }
 
