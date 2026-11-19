@@ -378,7 +378,7 @@ describe("动作说明里的判断规矩", () => {
   it("open_session 说明写明主线不直接拆卡、不直接开子会话", () => {
     expect(described("open_session")).toContain("伙伴主线里起新活只走两条路：用 open_session 放进项目（一次性的放「随手」），或用 message_project 交给项目对话去拆卡；主线里起新活不直接用 split_cards、start_sub_session。已经拆好的卡或专题要开工，照旧用 start_sub_session。");
     expect(described("split_cards").startsWith("（项目对话里用）")).toBe(true);
-    expect(described("message_project")).toContain("（伙伴主线）别的要动手的活用 open_session 直接开会话。");
+    expect(described("message_project")).toContain("（伙伴主线）别的新活用 open_session 直接开会话。");
   });
 
   it("改约定交给项目、不改约定用 tell_session：主线规矩和动作说明口径一致", () => {
@@ -631,8 +631,8 @@ describe("伙伴主线直接对会话说话（tell_session，本人 11/19）", {
       expect(told.summary).toContain("「首页换深色」");
       expect((await f.call("POST", "/api/me/session-commands/claim", { deviceId: machine.device })).json().commands).toEqual([{ id: told.result.commandId,
         kind: "topic", subSessionId: topic, sessionId: machine.session, deviceId: machine.device, requestedAt: expect.any(String), command: { type: "message", text: "再试一次" } }]);
-      // 代本人转话算一步自动接力，同项目对话里的转话。
-      expect(await f.t.sql("SELECT auto_relay_count FROM projects WHERE id=$1", [projectId])).toEqual([{ auto_relay_count: 1 }]);
+      // 主线的转话是本人当轮让转的，不算自动接力。
+      expect(await f.t.sql("SELECT auto_relay_count FROM projects WHERE id=$1", [projectId])).toEqual([{ auto_relay_count: 0 }]);
 
       // 没有这个会话、会话归档了：404。
       const missing = await f.act("tell_session", { kind: "topic", id: randomUUID(), text: "再试一次" }, { turn: turn() });
@@ -668,16 +668,21 @@ describe("伙伴主线直接对会话说话（tell_session，本人 11/19）", {
     const f = await fixture();
     try {
       await f.grant();
-      const topic = await opened(f, await f.project("品牌建设"));
+      const projectId = await f.project("品牌建设");
+      const topic = await opened(f, projectId);
       const machine = await machineFor(f, topic);
-      const start = async () => {
-        const res = await f.act("start_sub_session", { kind: "topic", id: topic }, { turn: turn() });
+      const start = async (conversationId = randomUUID()) => {
+        const res = await f.act("start_sub_session", { kind: "topic", id: topic }, { turn: { runId: randomUUID(), conversationId } });
         return [res.statusCode, res.json().message];
       };
       await machine.status("running");
       expect(await start()).toEqual([409, "「首页换深色」已经在跑了"]);
       await machine.status("idle");
       expect(await start()).toEqual([409, "「首页换深色」停着等下一句，用 tell_session 对它说一句就能续上。"]);
+      // 项目对话（本机项目会话也按项目对话算）里没有 tell_session：照字母说法提示 sub_session_tell。
+      const conversationId = randomUUID();
+      await f.t.sql("INSERT INTO project_pipelines(project_id,owner_id,conversation_id) VALUES($1,$2,$3)", [projectId, TEST_MEMBER.personId, conversationId]);
+      expect(await start(conversationId)).toEqual([409, "「首页换深色」停着等下一句，用 sub_session_tell 按字母对它说一句就能续上。"]);
     } finally { await f.close(); }
   });
 
@@ -692,6 +697,61 @@ describe("伙伴主线直接对会话说话（tell_session，本人 11/19）", {
       expect(res.json().message).toContain("start_sub_session");
       expect(await commands(f)).toEqual([]);
       expect(await f.t.sql("SELECT auto_relay_count FROM projects WHERE id=$1", [projectId])).toEqual([{ auto_relay_count: 0 }]);
+    } finally { await f.close(); }
+  });
+
+  it("主线 tell_session 做成后在本人那句话上点 👍", async () => {
+    const f = await fixture();
+    try {
+      await f.grant();
+      const topic = await opened(f, await f.project("品牌建设"));
+      await (await machineFor(f, topic)).status("idle");
+      const runId = await f.ask("global", "让首页换深色那个会话再试一次");
+      const streamed: { runId: string; event: Record<string, unknown> }[] = [];
+      await runAction(f.deps(streamed), { personId: TEST_MEMBER.personId, conversationId: randomUUID(), runId }, "tell_session",
+        { kind: "topic", id: topic, text: "再试一次" });
+      expect((await f.said("global", runId)).buddyReactions).toEqual(["👍"]);
+      expect(streamed.filter(({ event }) => event.type === "buddy_reaction")).toEqual([{ runId, event: { type: "buddy_reaction", role: "user", emojis: ["👍"] } }]);
+    } finally { await f.close(); }
+  });
+
+  it("主线连续多次 tell_session 不算自动接力，到了上限也不停", async () => {
+    const f = await fixture();
+    try {
+      await f.grant();
+      const projectId = await f.project("品牌建设");
+      const topic = await opened(f, projectId);
+      await (await machineFor(f, topic)).status("idle");
+      await f.t.sql("UPDATE projects SET auto_relay_limit=2 WHERE id=$1", [projectId]);
+      for (let n = 0; n < 4; n++) {
+        const res = await f.act("tell_session", { kind: "topic", id: topic, text: `再试一次（第 ${n + 1} 次）` }, { turn: turn() });
+        expect(res.statusCode, res.body).toBe(200);
+      }
+      expect(await commands(f)).toHaveLength(4);
+      expect(await f.t.sql("SELECT auto_relay_count,auto_relay_paused_at FROM projects WHERE id=$1", [projectId]))
+        .toEqual([{ auto_relay_count: 0, auto_relay_paused_at: null }]);
+    } finally { await f.close(); }
+  });
+
+  it("tell_session 找不到会话回 404：卡归档了、删进回收站、别人的", async () => {
+    const f = await fixture();
+    try {
+      await f.grant();
+      const tell = async (kind: "card" | "topic", id: string) => {
+        const res = await f.act("tell_session", { kind, id, text: "再试一次" }, { turn: turn() });
+        return [res.statusCode, res.json().code];
+      };
+      const card = await f.card("规划员岗位初版");
+      await f.t.sql("UPDATE tasks SET executor='claude_code',archived_at=now() WHERE id=$1", [card]);
+      expect(await tell("card", card)).toEqual([404, "NOT_FOUND"]);
+      const projectId = await f.project("品牌建设");
+      const trashed = await opened(f, projectId);
+      await f.t.sql("UPDATE research_topics SET trashed_at=now() WHERE id=$1", [trashed]);
+      expect(await tell("topic", trashed)).toEqual([404, "NOT_FOUND"]);
+      const theirs = await opened(f, projectId);
+      await f.t.sql("UPDATE research_topics SET owner_id=$2 WHERE id=$1", [theirs, THIRD.personId]);
+      expect(await tell("topic", theirs)).toEqual([404, "NOT_FOUND"]);
+      expect(await commands(f)).toEqual([]);
     } finally { await f.close(); }
   });
 });

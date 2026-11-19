@@ -89,7 +89,7 @@ export const BuddyAskQuestion = Type.Object({
  *   message_project 做成后也出一张派活卡（sub 为 null）。
  * - tell_session（write，只在伙伴主线用，MAIN_ONLY_ACTIONS；本人 11/19）：对一个已有的卡或专题（kind、id 同 start_sub_session）说一句话（text），同 sub_session_tell：
  *   它在跑就在下一步前送到，停着就续上。没开过工 409 NOT_STARTED（先 start_sub_session）；归档了、删进回收站、没有 404 NOT_FOUND；项目对话里调 409 MAIN_ONLY。
- *   算一步自动接力（子会话在项目里时）。回 { kind, id, title, commandId }。不可撤。
+ *   不算自动接力（本人当轮让转的）。做成后在本人那句话上点 👍（同 sub_session_tell）。回 { kind, id, title, commandId }。不可撤。
  * - send_message（write）：给人员目录里的同事发一句话。先出一张卡（ConversationCard 的 buddy_message）给本人看，本人点「发出」才由天枢机器人转达；
  *   每人每天最多 20 条（回 429 DAILY_LIMIT）。不可撤（发出以后）。
  * - update_plan（plan）：计划清单，见 BuddyPlanParams。
