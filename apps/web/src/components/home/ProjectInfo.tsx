@@ -216,13 +216,13 @@ export function ProjectInfo({ project, period, go, actions, folders = [], folder
         <p className={h.sectionTitle}>{Number(goal.period.slice(5))} 月目标 · {goal.name}</p>
         {goal.missionTitle || doneDefinition ? (
           <div className={h.infoLead}>
-            <span>{[goal.missionTitle, `${goal.due} 验收`].filter(Boolean).join(" · ")}</span>
+            <span>{[goal.missionTitle, goal.due ? `${goal.due} 验收` : null].filter(Boolean).join(" · ")}</span>
             {doneDefinition ? <p>{doneDefinition}</p> : null}
           </div>
         ) : null}
         <div className={h.infoRow} data-testid="goal-due">
           <span className={h.line}>验收截止</span>
-          <DatePicker label="验收截止" size="compact" value={goal.dueDate} clearable={goal.dueSet} onChange={(value) => {
+          <DatePicker label="验收截止" size="compact" value={goal.dueDate ?? ""} clearable={goal.dueSet} onChange={(value) => {
             const once = () => { setDueFailed(null); void actions.setDue(project.id, goal.taskId, value || null).catch((error) => setDueFailed(failureOf(error, once))); };
             once();
           }} />

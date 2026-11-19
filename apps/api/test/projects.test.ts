@@ -282,6 +282,17 @@ describe("项目", { timeout: 60_000 }, () => {
     } finally { await f.close(); }
   });
 
+  it("项目转交：「到哪了」里 Mission 没节点又没存日子的目标不写验收时间点（不退回月底）", async () => {
+    const f = await boardFixture({}, { boardCloudAgents: false });
+    try {
+      await skipBootstrap(f);
+      const { projectId } = await create(f, { name: "Chat 服务", taskId: "task-open" });
+      const started = await f.call("POST", `/api/me/projects/${projectId}/transfers`, { toPersonId: THIRD.personId });
+      expect(started.statusCode, started.body).toBe(201);
+      expect((await written(f, started.json().id)).note[0].lines).toEqual(["11 月目标：对话质量达标"]);
+    } finally { await f.close(); }
+  }, 120_000);
+
   it("项目转交（16.7）：模型写不出来时云端拼说明、存本机检查重拼「代码在哪」（别的段留着）、密钥挡住、发出后伙伴不开子会话、接手换负责人、原负责人只读、接手人先开口", async () => {
     const f = await boardFixture({}, { boardCloudAgents: false, internalChatToken: "chat-token" });
     try {
@@ -289,6 +300,8 @@ describe("项目", { timeout: 60_000 }, () => {
       const third = ((await f.t.app.inject({ method: "POST", url: "/api/auth/login", headers: { origin: f.t.publicOrigin },
         payload: { loginId: THIRD.loginId, passcode: THIRD.passcode } })).headers["set-cookie"] as string).split(";")[0];
       const { projectId } = await create(f, { name: "Chat 服务", taskId: "task-open" });
+      // 「到哪了」的验收时间点和本月页、项目页同一个口径（本人存的 → 记下的「原」；都没有不写）。
+      expect((await f.call("PUT", "/api/me/tasks/task-open/due-date", { dueDate: "2026-11-25" })).statusCode).toBe(200);
       const card = await f.card("还没做完的卡");
       await f.t.sql("INSERT INTO session_starts(id,owner_id,kind,card_id,plan_task_id,origin,requested_at) VALUES($1,$2,'card',$3,'task-open','web',$4)",
         [randomUUID(), TEST_MEMBER.personId, card, BOARD_NOW]);
@@ -301,7 +314,7 @@ describe("项目", { timeout: 60_000 }, () => {
       // 测试里没有模型：退回按云端的东西拼。
       const transfer = await written(f, started.json().id);
       expect(transfer.note.map((section: { title: string }) => section.title)).toEqual(["到哪了", "没做完的事", "可以问谁"]);
-      expect(transfer.note[0].lines).toEqual(["11 月目标：对话质量达标 · 11/30 验收"]);
+      expect(transfer.note[0].lines).toEqual(["11 月目标：对话质量达标 · 11/25 验收"]);
       expect(transfer.note[1].lines).toContain("还没做完的卡");
       expect((await f.call("POST", `/api/me/projects/${projectId}/transfers`, { toPersonId: THIRD.personId })).json().code).toBe("TRANSFER_OPEN");
       // 伙伴（/internal，以原负责人的身份）写要读对话的那几段；接手人的身份不行。

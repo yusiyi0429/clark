@@ -69,7 +69,8 @@ export const TaskSettlementResponse = Type.Object({ taskId: Type.String({ minLen
  * 月份页上这个月本人的一件 Task（本人这个月的 Mission 下、本人负责的；本体没登记负责人的算本人的）。
  * missionOutcome：所在 Mission 的成果（没写为 null）。
  * criteria：完成标准（本体验收标准，没有就按完成定义算一条；本人在天枢里改过的按改后的），met 是这一条达到了（本人对它的卡里有一张最近一次有结论的验收算通过）；
- *   changed 是这一条和本体里的不一样（改过或新加的），original 是它替换掉的那条本体原文（同一位置的本体原文已不在改后的标准里时才有）。
+ *   changed 是这一条和本体里的不一样（改过或新加的），original 是它从本体哪条改来的那条原文（按改的时候记下的来处对，不按序号；新加的、原文还在的为 null）；
+ *   removed 是本人删掉的本体标准，留在原位置给网页画删除线（不算达到、不算条数）。
  * added：天枢里「+ 添一件」新加的（没有本体原文，也写「未进本体」，不出「恢复」）。
  * edited：本人在天枢里改过名字或标准、还没进本体时，本体里的原文（name / criteria，没改的那一样为 null）；没改过为 null。网页写「未进本体」「原 〈原文〉」「恢复」。
  * dueDate：验收时间点（YYYY-MM-DD）：本人改过的（按 Task 存的那一份），没改过用 missionDueDate；两样都没有为 null。
@@ -87,7 +88,7 @@ export const MonthTask = Type.Object({
   missionTitle: Type.String(),
   missionOutcome: Nullable(Type.String()),
   name: Type.String(),
-  criteria: Type.Array(Type.Object({ text: Type.String(), met: Type.Boolean(), changed: Type.Boolean(), original: Nullable(Type.String()) }, strict)),
+  criteria: Type.Array(Type.Object({ text: Type.String(), met: Type.Boolean(), changed: Type.Boolean(), original: Nullable(Type.String()), removed: Type.Boolean() }, strict)),
   edited: Nullable(Type.Object({ name: Nullable(Type.String()), criteria: Nullable(Type.Array(Type.String())) }, strict)),
   added: Type.Boolean(),
   dueDate: Nullable(Day),

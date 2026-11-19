@@ -20,10 +20,10 @@ export type ProjectGoal = {
   /** 这个目标是哪个月的（YYYY-MM）。 */
   period: string;
   name: string;
-  /** 验收截止「11/30」（契约 dueDate：天枢里存的，没存退回记下的原验收时间点）。 */
-  due: string;
+  /** 验收截止「11/30」（契约 dueDate：天枢里存的，没存退回记下的原验收时间点；Mission 没节点又没存的为 null，和本月页一样不写）。 */
+  due: string | null;
   /** 同一个截止日的 YYYY-MM-DD（改日期用）。 */
-  dueDate: string;
+  dueDate: string | null;
   /** 是天枢里存的（本人或伙伴改过），不是退回记下的原验收时间点：能清掉。 */
   dueSet: boolean;
   criteria: string[];
@@ -72,7 +72,7 @@ export function fromHome(project: HomeProject, data: Pick<WorkHomeData, "month" 
   const missionTitle = (missionId: string) => data.month.missions.find((mission) => mission.missionId === missionId)?.title ?? null;
   const goals = project.goals.map((goal): ProjectGoal => ({
     taskId: goal.taskId, missionId: goal.missionId, missionTitle: missionTitle(goal.missionId), period: goal.period, name: goal.name,
-    due: goal.dueDate.slice(5).replace("-", "/"), dueDate: goal.dueDate, dueSet: goal.dueDateSource === "set", criteria: goal.criteria, completedAt: goal.completedAt, responsible: goal.responsible,
+    due: goal.dueDate?.slice(5).replace("-", "/") ?? null, dueDate: goal.dueDate, dueSet: goal.dueDateSource === "set", criteria: goal.criteria, completedAt: goal.completedAt, responsible: goal.responsible,
   }));
   return {
     id: project.projectId, name: project.name, folder: folders.get(project.projectId) ?? null, archived: false,

@@ -119086,8 +119086,15 @@
             "type": "string"
           },
           "dueDate": {
-            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-            "type": "string"
+            "anyOf": [
+              {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "dueDateSource": {
             "anyOf": [
@@ -119212,8 +119219,15 @@
                   "type": "string"
                 },
                 "dueDate": {
-                  "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-                  "type": "string"
+                  "anyOf": [
+                    {
+                      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 },
                 "dueDateSource": {
                   "anyOf": [
@@ -121136,8 +121150,15 @@
                         "type": "string"
                       },
                       "dueDate": {
-                        "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-                        "type": "string"
+                        "anyOf": [
+                          {
+                            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
                       },
                       "dueDateSource": {
                         "anyOf": [
@@ -138148,7 +138169,8 @@
                 "text",
                 "met",
                 "changed",
-                "original"
+                "original",
+                "removed"
               ],
               "properties": {
                 "text": {
@@ -138169,6 +138191,9 @@
                       "type": "null"
                     }
                   ]
+                },
+                "removed": {
+                  "type": "boolean"
                 }
               }
             }
@@ -138589,7 +138614,8 @@
                       "text",
                       "met",
                       "changed",
-                      "original"
+                      "original",
+                      "removed"
                     ],
                     "properties": {
                       "text": {
@@ -138610,6 +138636,9 @@
                             "type": "null"
                           }
                         ]
+                      },
+                      "removed": {
+                        "type": "boolean"
                       }
                     }
                   }

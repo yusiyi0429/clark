@@ -76,8 +76,8 @@ describe("新首页的数据（B 的 work-home 没上时照契约的形状拼）
       ["c1", "waiting", "approval", null], ["c4", "running", null, null], ["c2", "queued", null, "slot"], ["c3", "done", null, null],
     ]);
     expect(project.pipeline).toEqual({ conversationId: null, scope: "project:mission:m1" });
-    // 本体的 Task 没有截止日：取所在月份的最后一天；没写标准时是完成定义那一条。「本月」行尾的「11/20 验收」网页按计划另算。
-    expect(project.goals.map((goal) => [goal.dueDate, goal.criteriaTotal])).toEqual([["2026-11-30", 2], ["2026-11-30", 1]]);
+    // 截止照首页计划这件 Task 的 dueDate（和本月页同一个口径），没有就不写（不退回月底）；没写标准时是完成定义那一条。
+    expect(project.goals.map((goal) => [goal.dueDate, goal.criteriaTotal])).toEqual([[null, 2], [null, 1]]);
     expect(gateLabel(plan, "m1")).toBe("11/20 验收");
     expect(gateLabel(plan, "m2")).toBeNull();
     // 「本月」那一行：挂在项目上的照项目目标的截止日（天枢里存的），没挂的退回 Mission 下一个验收时间点。

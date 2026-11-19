@@ -19701,7 +19701,7 @@ export interface components {
             missionId: string;
             name: string;
             period: string;
-            dueDate: string;
+            dueDate: string | null;
             dueDateSource: "set" | "mission";
             criteria: string[];
             criteriaMet: number;
@@ -19721,7 +19721,7 @@ export interface components {
                 missionId: string;
                 name: string;
                 period: string;
-                dueDate: string;
+                dueDate: string | null;
                 dueDateSource: "set" | "mission";
                 criteria: string[];
                 criteriaMet: number;
@@ -19975,7 +19975,7 @@ export interface components {
                     missionId: string;
                     name: string;
                     period: string;
-                    dueDate: string;
+                    dueDate: string | null;
                     dueDateSource: "set" | "mission";
                     criteria: string[];
                     criteriaMet: number;
@@ -22600,6 +22600,7 @@ export interface components {
                 met: boolean;
                 changed: boolean;
                 original: string | null;
+                removed: boolean;
             }[];
             edited: {
                 name: string | null;
@@ -22664,6 +22665,7 @@ export interface components {
                     met: boolean;
                     changed: boolean;
                     original: string | null;
+                    removed: boolean;
                 }[];
                 edited: {
                     name: string | null;

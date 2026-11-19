@@ -95,10 +95,10 @@ describe("新首页", { timeout: 30_000 }, () => {
       expect(body.month.missions).toEqual([{ missionId: "mine", title: "内部版上线", period: "2026-11", tasks: [{ taskId: "task-open", name: "对话质量达标",
         completedAt: null, project: { projectId: task.projectId, name: "内部版上线" } }] }]);
       expect(body.projects.map((project: Proj) => project.name)).toEqual(["内部版上线"]);
-      expect(task).toMatchObject({ goals: [{ taskId: "task-open", missionId: "mine", name: "对话质量达标", period: "2026-11", dueDate: "2026-11-30",
+      expect(task).toMatchObject({ goals: [{ taskId: "task-open", missionId: "mine", name: "对话质量达标", period: "2026-11", dueDate: null,
         criteriaTotal: 2, criteriaMet: 0, completedAt: null }], budget: null,
         pipeline: { conversationId: null, scope: `project:${task.projectId}` }, planning: false });
-      // 截止取 Mission 的验收时间点（同「本月」）：Mission 没写节点时取月底；上线补记过以后（这里 Mission 补记时没节点、不记），
+      // 截止取 Mission 的验收时间点（同「本月」）：Mission 没写节点又没存日子的不写（上面那次）；上线补记过以后（这里 Mission 补记时没节点、不记），
       // 写了节点后第一次读到，记下今天（11/6）以后最近的那个，之后 Mission 节点再变也不往后滚（本人 11/19 定的「原」，plannedDueDates.test.ts）。
       await f.t.app.plannedDueDateJobs.handlers["planned_due_dates.backfill"]({}, { id: randomUUID(), kind: "planned_due_dates.backfill", dedupe_key: "b", attempts: 1, payload: {} });
       const due = async () => projectOf(await home(f)).goals[0].dueDate;
@@ -351,7 +351,7 @@ describe("新首页", { timeout: 30_000 }, () => {
         .toEqual([["十月的 Mission", [["oct-card", "2026-10"], ["oct-talk", "2026-10"]]], ["内部版上线", [["task-open", "2026-11"]]]].sort());
       // 本月交付了的照列、打勾。
       expect(projectOf(body).goals[0].completedAt).toBe("2026-11-05T00:00:00.000Z");
-      expect(october).toMatchObject({ goals: [{ taskId: "oct-card", completedAt: null, dueDate: "2026-10-31" }, { taskId: "oct-talk", completedAt: null }],
+      expect(october).toMatchObject({ goals: [{ taskId: "oct-card", completedAt: null, dueDate: null }, { taskId: "oct-talk", completedAt: null }],
         subSessions: [{ id: ids["上月的卡"], state: "queued" }] });
       // 上个月那件只开过的 Task 管线并进了项目对话；挂接时间是那个月的月初（项目对话里的分隔线落在它前面）。
       expect(await f.t.sql("SELECT scope FROM conversations WHERE id=$1", [talk])).toEqual([{ scope: `project:${october.projectId}` }]);
