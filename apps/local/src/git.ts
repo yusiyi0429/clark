@@ -53,11 +53,14 @@ export async function discardFiles(dir: string, files: DirtyFile[]): Promise<voi
   if (untracked.length) await git(dir, ["--literal-pathspecs", "clean", "-f", "-d", "-q", "--", ...untracked]);
 }
 
-/** 卡的分支名：tianshu/<卡 id 前 8 位>-<标题里的英文和数字>（中文标题就只有 id）。 */
-export function branchName(cardId: string, title: string): string {
+/**
+ * 卡的分支名：tianshu/<卡 id 前 8 位>-<标题里的英文和数字>（中文标题就只有 id）。
+ * 自由会话（本人 11/19）带 free：tianshu/free-<专题 id 前 8 位>-<标题>，和卡的分开（万一撞上，addWorktree 会加 -2）。
+ */
+export function branchName(cardId: string, title: string, free = false): string {
   const id = cardId.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 8) || "card";
   const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 30).replace(/^-+|-+$/g, "");
-  return `tianshu/${id}${slug ? `-${slug}` : ""}`;
+  return `tianshu/${free ? "free-" : ""}${id}${slug ? `-${slug}` : ""}`;
 }
 
 /** 从 base 开一个工作树和新分支（分支名被占了就加 -2、-3）。返回实际用的分支名。 */

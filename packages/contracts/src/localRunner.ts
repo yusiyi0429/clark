@@ -898,6 +898,8 @@ export const LocalFolderHolder = Type.Object({
  * 几张卡同时做互不覆盖，交回时本机把没提交的改动提交到这个分支，验收员看开工以来这个分支上的改动。
  * 验收过了本机自动合回（LocalSettings.autoMerge，条件不满足时等本人点 POST /v1/sessions/:id/merge）。
  * 不是 git 仓库（或不在分支上、还没有提交）时就在这个文件夹里做，同一个文件夹同时只做一张卡，别的排队。
+ * 自由子会话（带 free 的专题，本人 11/19）照卡开工作树（worktrees/free-<专题 id>，分支 tianshu/free-<专题 id 前 8 位>-<标题>）；没有验收，
+ * 每做完一轮有改动就照 autoMerge 的开关和条件合回，合不了记 needsMerge。合回后工作树留着接着做，mergedCommit 一直为 null。
  */
 /**
  * 验收过了却没自动合回的原因（卡的 workspace.needsMerge、同步条目 merge）：

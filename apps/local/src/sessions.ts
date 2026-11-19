@@ -215,8 +215,10 @@ interface SessionRecord {
   agreementRevision?: number;
   /** 卡：开工交代里交给执行方的约定（agreementInBrief 认出来的）。没取到过版本号时，交回拿它和云端的比内容。 */
   startAgreement?: { standards: string[] | null; brief?: string | null };
-  /** 自由子会话（第 68 条，项目下的「+」开的专题）：换一套规矩和工具；在哪个文件夹做都按普通文件夹算（workspace 是 folder）。 */
+  /** 自由子会话（第 68 条，项目下的「+」开的专题）：换一套规矩和工具；git 仓库里照卡开工作树（本人 11/19），别的按普通文件夹算（workspace 是 folder）。 */
   free?: true;
+  /** 在工作树里做的自由子会话：上一轮做完时分支上的提交（mergeRound 比它判断这一轮有没有改动）。还没做完过一轮时没有，按 baseCommit 算。 */
+  roundHead?: string;
   /**
    * 能跑检查命令的验收员第一次拉起时的快照（本人 11/18，dropLeftovers 用）：卡的工作树里已有的没提交的改动、卡的事件记到第几条。
    * 存盘，本机程序重启后续上的验收员照这一份比。验收员退出、兜完最后一次后去掉。
@@ -343,6 +345,8 @@ export class SessionManager {
   private closing = false;
   /** 正在清验收员留下的改动的（验收员 id → 这一次清理）：同一个验收员的清理排着一个个跑。 */
   private readonly dropping = new Map<string, Promise<void>>();
+  /** 同一个仓库里的提交、合回排着做（inRepo）：键是主文件夹所在仓库的根，值是排在最后的那一件。 */
+  private readonly repoQueue = new Map<string, Promise<unknown>>();
   /** 在等本人回答的提问（会话 id → 提问），会话这时是 idle（等你回复）。 */
   private readonly questions = new Map<string, TLocalQuestionRequestView>();
   /** 前面的卡都做完、正在开工作树的卡（开好以前不能开始）。 */
@@ -455,7 +459,7 @@ export class SessionManager {
     const {
       mcpSecret: _s, syncSeq: _q, outputs: _o, versionNumber: _v, lastVersion: _l, role: _r, critics: _c, queuedMessage: _m, queuedSaid: _qs, queueOrder: _n,
       parentId: _p, briefPending: _b, criteria: _cr, failStreak: _f, submitted: _sb, nudged: _nd, workspace, commit: _cm, after: _af, passed: _ps, sourceWords: _sw, unread: _ur,
-      background, hold, holdSince: _hs, modelTier: _mt, budgetKey: _bk, runSince: _rs, seen: _se, handoff: _ho, run, agreementRevision: _ar, startAgreement: _sa, free: _fr, verifyBase: _vb, ...rest
+      background, hold, holdSince: _hs, modelTier: _mt, budgetKey: _bk, runSince: _rs, seen: _se, handoff: _ho, run, agreementRevision: _ar, startAgreement: _sa, free: _fr, roundHead: _rh, verifyBase: _vb, ...rest
     } = rec;
     const question = this.questions.get(rec.id);
     const waitingFor = this.waitingFor(rec);
@@ -818,7 +822,9 @@ export class SessionManager {
     // 要等前面的卡：先排着，等它们都做完再开工作树（从那时基线最新的提交开出来）
     const after = [...new Set(req.after ?? [])].filter((id) => id !== subject.cardId);
     const waiting = after.some((id) => !this.cardDone(id));
-    const place = subject.kind === "card" && !waiting ? await this.openWorkspace(subject.cardId!, req.title, cwd) : null;
+    // 自由子会话（本人 11/19）在 git 仓库里也照卡开自己的工作树
+    const place = subject.kind === "card" && !waiting ? await this.openWorkspace(subject.cardId!, req.title, cwd)
+      : req.free ? await this.openWorkspace(subject.topicId!, req.title, cwd, true) : null;
     const now = nowIso();
     const id = randomUUID();
     // 这件的预算（认领回执里带来的，以最新的为准）：先收下，加了预算的话停着等的这时就接着做
@@ -831,8 +837,8 @@ export class SessionManager {
       outputs: [], versionNumber: subject.kind === "topic" ? req.versionBase ?? 0 : 0, lastVersion: null,
       role: req.role ?? null, modelTier: req.modelTier ?? req.role?.modelTier ?? null, critics: req.critics ?? [], queuedMessage: null, queueOrder: 0,
       parentId: null, briefPending: false, criteria: [], failStreak: 0, submitted: 0, nudged: false,
-      // 自由子会话（第 68 条）：在哪个文件夹做都按普通文件夹算（git 仓库的主文件夹也是），同一时间只许一个改，第 71 条照卡一样留一份
-      workspace: place?.workspace ?? (req.free ? { kind: "folder", folder: cwd } : null), commit: null, after: waiting ? after : [], passed: null, background: [], hold: null, holdSince: null,
+      // 自由子会话（第 68 条）不在 git 仓库里时按普通文件夹算，同一时间只许一个改，第 71 条照卡一样留一份
+      workspace: place?.workspace ?? null, commit: null, after: waiting ? after : [], passed: null, background: [], hold: null, holdSince: null,
       budgetKey, runSince: null, run: null, permissionMode, ...(req.effort ? { effort: req.effort } : {}), ...(req.free ? { free: true as const } : {}),
     };
     if (subject.kind === "card") {
@@ -880,14 +886,15 @@ export class SessionManager {
   /**
    * 卡在哪做（ADR 0038）：本人选的文件夹在 git 仓库里（在分支上、有提交）就在本机数据目录的 worktrees/<cardId> 开一个工作树和新分支，
    * 从主文件夹所在分支的最新提交开始；这张卡上一个会话留下的工作树还在就接着用。不是仓库就在文件夹里做（同一个文件夹同时一张）。
+   * 自由子会话（free，本人 11/19）照这个做法，id 是专题 id：工作树在 worktrees/free-<专题 id>，分支见 branchName。
    */
-  private async openWorkspace(cardId: string, title: string, folder: string): Promise<{ workspace: TLocalWorkspace; cwd: string; created: boolean; reused: boolean; dirty: boolean }> {
+  private async openWorkspace(cardId: string, title: string, folder: string, free = false): Promise<{ workspace: TLocalWorkspace; cwd: string; created: boolean; reused: boolean; dirty: boolean }> {
     const head = await repoHead(folder);
     if (!head) return { workspace: { kind: "folder", folder }, cwd: folder, created: false, reused: false, dirty: false };
-    const path = this.d.folders.worktreeDir(cardId);
+    const path = this.d.folders.worktreeDir(free ? `free-${cardId}` : cardId);
     const prior = [...this.records.values()].filter((r) => r.workspace?.kind === "worktree" && r.workspace.path === path)
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-    if (prior.some((r) => r.status === "queued" || LIVE.includes(r.status))) throw new SessionError("conflict", "这张卡已经有一个会话在做，给它说一句就行");
+    if (prior.some((r) => r.status === "queued" || LIVE.includes(r.status))) throw new SessionError("conflict", `${free ? "这个子会话" : "这张卡"}已经有一个会话在做，给它说一句就行`);
     const last = prior.at(-1);
     if (last?.workspace?.kind === "worktree" && !last.workspace.mergedCommit && existsSync(path)) {
       return { workspace: { ...last.workspace }, cwd: last.cwd, created: false, reused: true, dirty: false };
@@ -897,9 +904,9 @@ export class SessionManager {
     const dirty = (await changedFiles(folder)).length > 0;
     let branch: string;
     try {
-      branch = await addWorktree(head.top, path, branchName(cardId, title), head.commit);
+      branch = await addWorktree(head.top, path, branchName(cardId, title, free), head.commit);
     } catch (e) {
-      throw new SessionError("conflict", `给这张卡开工作树没成：${e instanceof Error ? e.message : String(e)}`);
+      throw new SessionError("conflict", `给${free ? "这个子会话" : "这张卡"}开工作树没成：${e instanceof Error ? e.message : String(e)}`);
     }
     // 本人选的是仓库里的子文件夹时，会话在工作树里对应的子文件夹里做
     const sub = relative(resolve(head.top), folder);
@@ -910,12 +917,12 @@ export class SessionManager {
     };
   }
 
-  /** 开工时告诉网页卡在哪做。 */
+  /** 开工时告诉网页卡（自由子会话）在哪做。 */
   private noteWorkspace(rec: SessionRecord, place: { reused: boolean; dirty: boolean } | null) {
     const ws = rec.workspace;
     if (ws?.kind !== "worktree" || !place) return;
     const text = place.reused
-      ? `接着在这张卡的工作树里做：分支 ${ws.branch}`
+      ? `接着在${rec.free ? "这个子会话" : "这张卡"}的工作树里做：分支 ${ws.branch}`
       : `在工作树里做：分支 ${ws.branch}，从 ${ws.baseBranch} 的最新提交 ${ws.baseCommit.slice(0, 7)} 开始${place.dirty ? "；主文件夹里没提交的改动没带进来" : ""}`;
     this.emit(rec, { type: "notice", level: "info", code: "workspace", text });
   }
@@ -1048,9 +1055,9 @@ export class SessionManager {
         ...(this.d.folders.isAllowed(folder) ? [rec.workspace?.kind === "worktree" ? rec.workspace.path : rec.cwd] : []),
         ...this.d.folders.list().map((f) => f.path),
       ],
-      // 卡在自己的工作树里：「自动」「自动接受改文件」只在工作树里自己放行（规则在 pathGuard 的 modeAllows）
+      // 卡（自由子会话）在自己的工作树里：「自动」「自动接受改文件」只在工作树里自己放行（规则在 pathGuard 的 modeAllows）
       // 能跑检查命令的验收员一样：只在卡的工作树里自己放行，主文件夹和本人允许的别的文件夹照问
-      autoAllowRoot: rec.subject.kind === "card" && rec.workspace?.kind === "worktree" ? rec.workspace.path : checks ? checks.path : null,
+      autoAllowRoot: (rec.subject.kind === "card" || rec.free) && rec.workspace?.kind === "worktree" ? rec.workspace.path : checks ? checks.path : null,
       extraDirs: () => this.extraDirs(rec),
       // 「全部放行」的兜底规矩（pathGuard 的 noLossAsks）：本机自己的目录（含卡的工作树）、留了一份的地方改、删不丢本人的东西
       covered: (p) => (undo ? undo.covers(p) : this.d.folders.isOwn(p)),
@@ -1207,6 +1214,7 @@ export class SessionManager {
           ...(rec.hold && (limited || broke || stopped) ? { reason: this.holdReason(rec.hold) } : {}), ...(stops ? { why } : {}),
         });
         if (stops) stop();
+        if (stops && why === "turn_done") void this.mergeRound(rec);
         if (rec.pendingModel) this.swapModel(rec); // 这一轮做完了：换上本人要的模型
         break;
       }
@@ -1586,8 +1594,9 @@ export class SessionManager {
    */
   private async requeue(rec: SessionRecord, shown: string, text: string, messageId: string, saved: TLocalSavedAttachment[]): Promise<TLocalSendMessageResponse> {
     const ws = rec.workspace;
-    if (ws?.kind === "worktree" && !existsSync(ws.path) && rec.subject.cardId) {
-      const place = await this.openWorkspace(rec.subject.cardId, rec.title, ws.folder);
+    const owner = rec.subject.cardId ?? (rec.free ? rec.subject.topicId : undefined);
+    if (ws?.kind === "worktree" && !existsSync(ws.path) && owner) {
+      const place = await this.openWorkspace(owner, rec.title, ws.folder, rec.free);
       Object.assign(rec, { cwd: place.cwd, workspace: place.workspace });
       this.noteWorkspace(rec, place);
     }
@@ -1894,21 +1903,47 @@ export class SessionManager {
   /**
    * 合回（只在本人点了才合，ADR 0038）：卡的分支合进主文件夹的 baseBranch，合成了清理工作树、保留分支。
    * 主文件夹不在 baseBranch 上、有改动、有冲突时不合，主文件夹原样不动；卡这边合不了（不在工作树里、还在跑、工作树里有没提交的改动）回 409。
+   * 自由子会话（本人 11/19）也走这里：没提交的改动先提交再合；合成了工作树留着、不记 mergedCommit，会话接着做，下一轮有改动再合。
    */
   async merge(id: string, auto = false): Promise<TLocalMergeResponse> {
     const rec = this.must(id);
     const ws = rec.workspace;
-    if (ws?.kind !== "worktree") throw new SessionError("conflict", "这张卡不在工作树里做，没有分支可合");
+    if (ws?.kind !== "worktree") throw new SessionError("conflict", `${rec.free ? "这个子会话" : "这张卡"}不在工作树里做，没有分支可合`);
+    return this.inRepo(ws.folder, () => this.mergeNow(id, auto));
+  }
+
+  /**
+   * 同一个仓库里的提交、合回一件做完再做下一件：两件同时在主文件夹里合，后来的会撞上 index.lock、MERGE_HEAD，
+   * 它的 merge --abort 还会把先来那件退回去。卡的自动合回、自由子会话的合回、本人点合并都经过这里。
+   */
+  private async inRepo<T>(folder: string, fn: () => Promise<T>): Promise<T> {
+    const key = resolve(await git(folder, ["rev-parse", "--show-toplevel"]).then((o) => o.trim(), () => folder));
+    const run = (this.repoQueue.get(key) ?? Promise.resolve()).then(fn);
+    const tail = run.catch(() => undefined);
+    this.repoQueue.set(key, tail);
+    void tail.then(() => { if (this.repoQueue.get(key) === tail) this.repoQueue.delete(key); });
+    return run;
+  }
+
+  /** merge 的正文，在 inRepo 里跑：排到了再查一遍前提。 */
+  private async mergeNow(id: string, auto: boolean): Promise<TLocalMergeResponse> {
+    const rec = this.must(id);
+    const ws = rec.workspace;
+    const who = rec.free ? "这个子会话" : "这张卡";
+    if (ws?.kind !== "worktree") throw new SessionError("conflict", `${who}不在工作树里做，没有分支可合`);
     if (ws.mergedCommit) throw new SessionError("conflict", "这张卡已经合回过了");
     const related = [...this.records.values()].filter((r) => r === rec || r.parentId === rec.id);
     if (related.some((r) => r.status === "queued" || OCCUPYING.includes(r.status) || this.starting.has(r.id))) {
-      throw new SessionError("conflict", "卡或它的验收员还在跑，停下再合");
+      throw new SessionError("conflict", rec.free ? "这个子会话还在跑，停下再合" : "卡或它的验收员还在跑，停下再合");
     }
-    if (rec.background.some((b) => b.state === "running")) throw new SessionError("conflict", "卡还有后台任务在跑，等它们结束或停掉再合");
+    if (rec.background.some((b) => b.state === "running")) throw new SessionError("conflict", `${rec.free ? "这个子会话" : "卡"}还有后台任务在跑，等它们结束或停掉再合`);
     if (!this.d.folders.isAllowed(ws.folder)) throw new SessionError("folder_not_allowed", "主文件夹已不在允许的文件夹里");
-    if (!existsSync(ws.path)) throw new SessionError("conflict", "这张卡的工作树已经不在了");
-    if ((await changedFiles(ws.path)).length) throw new SessionError("conflict", "卡的工作树里还有没提交的改动（交回以后又改过），让它再交回一次再合");
-    const out = await mergeBranch(ws.folder, ws.branch, ws.baseBranch, `合回天枢卡「${rec.title}」（${ws.branch}）`);
+    if (!existsSync(ws.path)) throw new SessionError("conflict", `${who}的工作树已经不在了`);
+    const head = rec.free ? await this.commitRound(rec) : null;
+    if ((await changedFiles(ws.path)).length) {
+      throw new SessionError("conflict", rec.free ? "这个子会话的工作树里还有没提交的改动" : "卡的工作树里还有没提交的改动（交回以后又改过），让它再交回一次再合");
+    }
+    const out = await mergeBranch(ws.folder, ws.branch, ws.baseBranch, `合回天枢${rec.free ? "子会话" : "卡"}「${rec.title}」（${ws.branch}）`);
     if (!out.merged) {
       // 验收过了自动合没合成：记下原因等本人合（本人点了没合成的，原因在回执和同步条目里）
       if (auto) ws.needsMerge = { reason: out.reason, message: out.message.slice(0, 500) };
@@ -1916,6 +1951,14 @@ export class SessionManager {
       this.syncMerge(rec, { merged: false, commit: null, reason: out.reason, message: out.message, auto });
       this.d.onChange?.();
       return out;
+    }
+    if (head) {
+      delete ws.needsMerge;
+      rec.roundHead = head;
+      this.save(rec);
+      this.emit(rec, { type: "notice", level: "info", code: "merged", text: `已合回 ${ws.baseBranch}（${out.commit.slice(0, 7)}），工作树留着接着做` });
+      this.d.onChange?.();
+      return { merged: true, commit: out.commit, session: this.summary(rec) };
     }
     ws.mergedCommit = out.commit;
     delete ws.needsMerge;
@@ -1961,6 +2004,46 @@ export class SessionManager {
     } catch (e) {
       // 不能让后台这一步把本机程序带倒：前提不满足（卡还在跑等）和 git 出错都记下来等本人合
       hold("not_ready", e instanceof SessionError ? e.message : `合回出错：${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  /**
+   * 自由子会话在工作树里做（本人 11/19）：每做完一轮，这一轮有提交或改动，就照「验收后自动合并」的开关和条件合回主文件夹的原分支（只合不推）；
+   * 合不了记 needsMerge 等本人合，和卡一样首页看得到。云端的合回结果只收卡的，不报 merge。又在跑了、后台任务还在跑的，等下一轮做完再合。
+   */
+  private async mergeRound(rec: SessionRecord): Promise<void> {
+    const ws = rec.workspace;
+    if (!rec.free || ws?.kind !== "worktree" || this.closing || !existsSync(ws.path) || this.cardBusy(rec)) return;
+    const notice = (message: string) => this.emit(rec, { type: "notice", level: "info", code: "merge_needed", text: `做完一轮，没自动合回：${message}` });
+    const hold = (reason: TLocalMergeHoldReason, message: string) => {
+      ws.needsMerge = { reason, message: message.slice(0, 500) };
+      this.save(rec);
+      notice(message);
+      this.d.onChange?.();
+    };
+    try {
+      await this.inRepo(ws.folder, async () => {
+        const head = await this.commitRound(rec);
+        if (head === (rec.roundHead ?? ws.baseCommit) || this.cardBusy(rec)) return; // 这一轮没改动；提交时本人又让它做了，那一轮做完再合
+        // 先不存：合完或记下等你合时一起存，中途退出的下一轮再试
+        rec.roundHead = head;
+        if (this.d.autoMerge?.() === false) return hold("auto_merge_off", "没开「验收后自动合并」，等你合");
+        const out = await this.mergeNow(rec.id, true); // 合不了时 mergeNow 自己记下 needsMerge
+        if (!out.merged) notice(out.message);
+      });
+    } catch (e) {
+      hold("not_ready", e instanceof SessionError ? e.message : `合回出错：${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  /** 自由子会话这一轮没提交的改动提交到它的分支，返回分支上最新的提交。在 inRepo 里调。 */
+  private async commitRound(rec: SessionRecord): Promise<string> {
+    const ws = rec.workspace;
+    if (ws?.kind !== "worktree") throw new SessionError("conflict", "这个子会话不在工作树里做");
+    try {
+      return await commitAll(ws.path, `天枢子会话：${rec.title}（一轮）\n\n天枢专题 ${rec.subject.topicId}`);
+    } catch (e) {
+      throw new SessionError("conflict", `提交改动没成：${e instanceof Error ? e.message : String(e)}`);
     }
   }
 

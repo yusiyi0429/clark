@@ -54,6 +54,10 @@ describe("并成一个来源", () => {
     expect(attentionOf("merge", ask({ status: "done", merge: "later" }))).toBeNull();
     expect(attentionOf("merge", ask({ status: "done" }))).toBe("merge");
   });
+  it("会话又在跑时不算在等合回", () => {
+    expect(attentionOf(null, ask({ status: "running", merge: "needs" }))).toBeNull();
+    expect(attentionOf("merge", ask({ status: "running" }))).toBeNull();
+  });
   it("先不合记在这台浏览器上，摘要读出来就是 later", () => {
     const ws = { kind: "worktree", needsMerge: { reason: "dirty", message: "主文件夹有没提交的改动" }, mergedCommit: null } as unknown as TLocalSessionSummary["workspace"];
     expect(summaryAsk(session({ status: "done", pendingPermissions: 0, workspace: ws })).merge).toBe("needs");
@@ -77,6 +81,30 @@ describe("左栏和「等你」照同一个来源改", () => {
   it("这台电脑上没有这个会话：照云端原样", () => {
     const data = { projects: [], other: { subSessions: [sub({ waiting: "verdict" })], items: [] }, waiting: [] } as unknown as WorkHomeData;
     expect(withLocalAttention(data, [session({ id: "00000000-0000-4000-8000-0000000000a2", subject: { kind: "card", cardId: "other" } } as Partial<TLocalSessionSummary>)])).toBe(data);
+  });
+  it("自由子会话做完一轮没能合回（本机 needsMerge，云端不知道）：「等你」里加一条合回，项目的等你跟着加；本机没在等的不加", () => {
+    const ws = { kind: "worktree", baseBranch: "main", needsMerge: { reason: "dirty", message: "主文件夹里有没提交的改动，提交或收起来再合" }, mergedCommit: null } as unknown as TLocalSessionSummary["workspace"];
+    const free = sub({ id: "topic-1", kind: "topic", free: true, state: "waiting", waiting: null, letter: "B", title: "给 rules.js 补单元测试" });
+    const data = {
+      projects: [{ projectId: PID, subSessions: [free], summary: { running: 0, waiting: 1, queued: 0, done: 0, doneToday: 0, needsYou: 0 } }],
+      other: { subSessions: [], items: [] },
+      waiting: [],
+    } as unknown as WorkHomeData;
+    const local = session({ subject: { kind: "topic", topicId: "topic-1" }, status: "idle", pendingPermissions: 0, workspace: ws } as Partial<TLocalSessionSummary>);
+    const next = withLocalAttention(data, [local]);
+    expect(next.projects[0]!.subSessions[0]).toMatchObject({ state: "waiting", waiting: "merge" });
+    expect(next.waiting).toEqual([expect.objectContaining({
+      id: "merge:topic:topic-1", kind: "merge", title: "没能自动合回", source: "给 rules.js 补单元测试 · 主文件夹里有没提交的改动，提交或收起来再合",
+      open: { kind: "topic", id: "topic-1" }, projectId: PID, sessionId: SID, letter: "B", answer: "inline_local",
+    })]);
+    expect(next.projects[0]!.summary.needsYou).toBe(1);
+    // 合回了（或点了先不合）：不再加
+    const merged = { ...ws, needsMerge: undefined } as unknown as TLocalSessionSummary["workspace"];
+    expect(withLocalAttention(data, [{ ...local, workspace: merged }]).waiting).toEqual([]);
+    // 又在跑了：不挂等你合回，不加等你数
+    const busy = withLocalAttention(data, [{ ...local, status: "running" }]);
+    expect(busy.waiting).toEqual([]);
+    expect(busy.projects[0]!.summary.needsYou).toBe(0);
   });
   it("批准作废、会话还在跑：左栏回到在跑", () => {
     expect(withAttention(sub(), [session({ status: "running", pendingPermissions: 0 })])).toMatchObject({ state: "running", waiting: null });
