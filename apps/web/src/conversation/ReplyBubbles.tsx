@@ -226,14 +226,23 @@ function cardTime(iso: string | undefined): string {
   return calendarDate(iso) === calendarDate(new Date().toISOString()) ? clock(new Date(iso)) : monthDayTime(iso);
 }
 
-/** 全文去掉开头那个和标题一样的标题行（# 标题，或单独一行的加粗小标题，行尾可带冒号）：标题已经在卡片、右边那一格的页头上，不再写一遍。 */
+/**
+ * 全文去掉开头那个和标题一样的标题行（# 标题，或单独一行的加粗小标题，行尾可带冒号），或清单前面当标题的那段冒号结尾的话：
+ * 标题已经在卡片、右边那一格的页头上，不再写一遍。
+ */
 function withoutTitle(markdown: string, title: string): string {
-  const [first = "", ...rest] = markdown.split("\n");
+  const lines = markdown.split("\n");
+  const [first = ""] = lines;
   const heading = /^ {0,3}#{1,6}[ \t]+/;
   const bold = /^\s*\*\*(?:(?!\*\*).)+\*\*[：:]?\s*$/;
-  const same = heading.test(first) ? first.replace(heading, "").replace(/\*\*|`/g, "").trim() === title
-    : bold.test(first) && first.replace(/\*\*|`/g, "").trim().replace(/[：:]$/, "") === title;
-  return same ? rest.join("\n").trimStart() : markdown;
+  const strip = (line: string) => line.replace(/\*\*|`/g, "").trim();
+  if (heading.test(first)) return strip(first.replace(heading, "")) === title ? lines.slice(1).join("\n").trimStart() : markdown;
+  if (bold.test(first)) return strip(first).replace(/[：:]$/, "") === title ? lines.slice(1).join("\n").trimStart() : markdown;
+  // 冒号结尾的话：到空行或清单第一项为止。
+  let end = lines.findIndex((line) => !line.trim() || /^[ \t]*(?:[-*+]|\d{1,9}[.)])(?:[ \t]|$)/.test(line));
+  if (end === -1) end = lines.length;
+  const intro = lines.slice(0, end).map(strip).join(" ");
+  return /[：:]$/.test(intro) && intro.replace(/[：:]$/, "") === title ? lines.slice(end).join("\n").trimStart() : markdown;
 }
 
 /** 卡片全文放不下：比 CARD_FULL_LINES 行高，或里面的表格、代码、公式横向溢出。 */
@@ -287,11 +296,13 @@ function ReplyCard({ markdown, title, summary, open, at, delay, edge, part }: { 
     side?.show(null);
   };
   return (
-    <section className={b.card} data-card="" aria-label={title} {...part} {...enter(delay)}>
-      <div className={b.cardHead}>
-        <span className={b.cardTitle}>{title}</span>
-        {time ? <span className={b.faint}>{time}</span> : null}
-      </div>
+    <section className={b.card} data-card="" aria-label={title || undefined} {...part} {...enter(delay)}>
+      {title || time ? (
+        <div className={b.cardHead}>
+          <span className={b.cardTitle}>{title}</span>
+          {time ? <span className={b.faint}>{time}</span> : null}
+        </div>
+      ) : null}
       {open ? <div className={`${b.typing} ${b.cardTyping}`} data-testid="card-typing" aria-hidden><i /><i /><i /></div> : fold && summary && !inPlace ? <FadeText as="div" className={b.summary}>{summary}</FadeText> : null}
       {open || inPlace ? null : (
         <div ref={full} className={`${ts.prose} ${b.cardFull}`} data-fold={fold ? "" : undefined} style={{ maxHeight: `${fold ? CARD_FULL_LINES - 1 : CARD_FULL_LINES}lh` }}>
@@ -323,9 +334,9 @@ function CardPreview({ title, markdown, parts, onClose }: { title: string; markd
     return () => window.removeEventListener("keydown", onKey, true);
   }, [onClose]);
   return (
-    <aside ref={root} className={vs.preview} aria-label={title} tabIndex={-1} data-testid="card-preview">
+    <aside ref={root} className={vs.preview} aria-label={title || undefined} tabIndex={-1} data-testid="card-preview">
       <header className={vs.previewHead}>
-        <b title={title}>{title}</b>
+        {title ? <b title={title}>{title}</b> : null}
         <span className={vs.previewGap} />
         <HeroButton variant="ghost" size="sm" isIconOnly aria-label="关闭" title="关闭" onPress={onClose}><X {...ICON} /></HeroButton>
       </header>

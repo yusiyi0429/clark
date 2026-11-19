@@ -60,6 +60,8 @@
   color: var(--ink);
 }
 .cardHead { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+/* 没有标题那一行（清单卡前面没有冒号引子）：第一块不留上边距。 */
+.card > :first-child { margin-top: 0; }
 .cardTitle { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .faint { flex: none; color: var(--ink-faint); white-space: nowrap; }
 /* 摘要最多两行，多了第二行往下渐隐（不出省略号，本人 11/18）。 */
