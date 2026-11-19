@@ -10,6 +10,7 @@ import { createObjectMaterial } from "./objectMaterials.js";
 import { logEvent } from "./observability.js";
 import { issueTitleSimilarity } from "./radarDedupe.js";
 import type { ResearchService } from "./research.js";
+import { cutText } from "./textCut.js";
 
 /**
  * 一号位深聊转议题（已定设计第 2 节，只在 CEO 首页）：
@@ -58,7 +59,7 @@ export type IssueSuggestContext = {
 const issueHref = (id: string) => `/issues/${id}`;
 const sameTopic = (left: string, right: string) => issueTitleSimilarity(left, right) >= SAME_TOPIC;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const clip = (text: string, max: number) => (text.length > max ? text.slice(0, max) : text);
+const clip = (text: string, max: number) => (text.length > max ? cutText(text, max) : text);
 
 /** 建议卡的代码块（服务端写进这一轮回答的末尾，前端 RichPre 画成卡）。 */
 export const issueSuggestBlock = (draftId: string) => `\`\`\`${ISSUE_SUGGEST_FENCE}\n${JSON.stringify({ draftId })}\n\`\`\``;

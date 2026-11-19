@@ -1,6 +1,7 @@
 import type { TPreflightProgress, TPreflightProgressStep } from "@warmap/contracts";
 import type { CandidateAgentEvent } from "./candidateAgentRuntime.js";
 import type { PreflightGroupMaterialInput, PreflightAgentInput } from "./meetingPreflight.js";
+import { cutText } from "./textCut.js";
 
 /**
  * 会前预审的过程可见（v4 起，v5 换成新的结论结构）：每一步由系统按实际发生的事生成——读了哪个挂点、哪份材料、找到了哪场同战场的会、
@@ -25,7 +26,7 @@ export const PROGRESS_WRITE_INTERVAL_MS = 700;
 
 const clip = (text: string, max: number) => {
   const flat = text.replace(/\s+/g, " ").trim();
-  return flat.slice(0, max);
+  return cutText(flat, max);
 };
 
 const SHANGHAI_DAY = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", month: "numeric", day: "numeric" });
@@ -230,7 +231,7 @@ export function cleanThought(text: string): string | undefined {
   const cjk = value.match(/[一-龥]/g)?.length ?? 0;
   const latin = value.match(/[A-Za-z]/g)?.length ?? 0;
   if (cjk < 2 || cjk < latin || FORBIDDEN_IN_THOUGHT.test(value)) return undefined;
-  return value.slice(0, 30);
+  return cutText(value, 30);
 }
 
 /** 推理摘要里最新的一个完整小标题（「**标题**」）。 */

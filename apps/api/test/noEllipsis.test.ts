@@ -13,34 +13,35 @@ import { describe, expect, it } from "vitest";
  * 或者这一段很短（像「| … |」这种占位）。提示词正文里夹在句子中间的「…」「……」是写给模型的内容，不算。
  *
  * ALLOWED：只给模型看（提示词、上下文材料、对话压缩）或写日志的，以及不是拼上去的（原文内容），保留。
- * 键是「文件（相对 apps/）」和字面量所在的具名函数、变量、方法或属性（不按行号，行号会挪），每条写明理由。
+ * 键是「文件（相对 apps/）」和字面量所在的具名函数、变量、方法或属性（不按行号，行号会挪）；texts 是那里放行的每一段字面量原文，
+ * 一处一条（同一个名字下多拼一处、或者原文变了，都对不上、都挂）。每条写明理由。
  */
-const ALLOWED: { file: string; owner: string; reason: string }[] = [
-  { file: "api/src/articleText.ts", owner: "hellip", reason: "不是拼的：HTML 实体 &hellip; 解码回原文里的「…」，是文章内容。" },
-  { file: "api/src/battlefieldSummary.ts", owner: "clip", reason: "战场汇总的输入材料，只给汇总模型看。" },
-  { file: "api/src/companyMap.ts", owner: "clip", reason: "read_scope 沿公司地图读的工具结果，只给对话模型看。" },
-  { file: "api/src/conversationCompaction.ts", owner: "clip", reason: "对话压缩交给压缩模型的文字。" },
-  { file: "api/src/conversationDigests.ts", owner: "clip", reason: "整理会话纪要时交给纪要模型的原话。" },
-  { file: "api/src/conversationHistorySearch.ts", owner: "snippetOf", reason: "检索历史对话的工具结果片段，只给对话模型看。" },
-  { file: "api/src/conversationRecall.ts", owner: "clip", reason: "回看以前对话的工具结果和首页「以前的对话」资料卡（Chat 放进本轮资料），只给模型看。" },
-  { file: "api/src/conversationRecovery.ts", owner: "tail", reason: "点「继续」时交给模型的接续说明（上一轮回答的结尾）。" },
-  { file: "api/src/conversationStream.ts", owner: "clipText", reason: "此前几轮的提问、回答截短后放进模型历史。" },
-  { file: "api/src/mcpCeoReads.ts", owner: "short", reason: "/mcp/me 只读工具的结果，给本机执行方的模型看。" },
-  { file: "api/src/mcpWebSearch.ts", owner: "excerpt", reason: "/mcp/me 的 web_search 结果摘要，给本机执行方的模型看。" },
-  { file: "api/src/meetingCardRead.ts", owner: "snippetOf", reason: "检索会议卡的工具结果片段，只给模型看。" },
-  { file: "api/src/meetingContext.ts", owner: "clip", reason: "会后解读、影响卡追问的模型输入。" },
-  { file: "api/src/meetingEvidence.ts", owner: "paragraphs", reason: "预审和 Chat 读群材料的正文段落，只给模型看。" },
-  { file: "api/src/missionPlanRead.ts", owner: "clip", reason: "/internal/mission-plans 给独立 Chat 的模型读的计划条目。" },
-  { file: "api/src/personalMemoryRecall.ts", owner: "recallDirectory", reason: "个人记忆召回给模型的目录。" },
-  { file: "api/src/piConversationRuntime.ts", owner: "content", reason: "空闲重启时补进模型历史的最近几条消息。" },
-  { file: "api/src/piConversationRuntime.ts", owner: "excerpt", reason: "对话里 web_search 交给模型的结果摘要（进度行只取标题）。" },
-  { file: "api/src/piConversationRuntime.ts", owner: "clip", reason: "read_group_evidence 交给模型的材料正文。" },
-  { file: "api/src/preflightAnchors.ts", owner: "clip", reason: "会前预审按挂点读的内容，只给预审模型看。" },
-  { file: "api/src/tracing.ts", owner: "clip", reason: "上报运行轨迹（日志）的正文截断。" },
-  { file: "api/src/worldReader.ts", owner: "clip", reason: "read_ontology 等工具结果里的本体组件正文，只给模型看。" },
-  { file: "local/src/handoff.ts", owner: "clip", reason: "换执行方时补给新执行方的上下文（只拼进送出去的那句，不记进事件）和 read_earlier_turns 的结果，只给模型看。" },
-  { file: "local/src/planCheck.ts", owner: "planFactsSection", reason: "写进规划员系统提示词的那一节。" },
-  { file: "local/src/textChanges/trim.ts", owner: "ELLIPSIS_LINE", reason: "拿不准、先留着：Excel 大表改动视图里把没改的行收成一行的折叠行，网页上看得到，但不是截字；换成什么要本人定。" },
+const ALLOWED: { file: string; owner: string; texts: string[]; reason: string }[] = [
+  { file: "api/src/articleText.ts", owner: "hellip", texts: ["…"], reason: "不是拼的：HTML 实体 &hellip; 解码回原文里的「…」，是文章内容。" },
+  { file: "api/src/battlefieldSummary.ts", owner: "clip", texts: ["…"], reason: "战场汇总的输入材料，只给汇总模型看。" },
+  { file: "api/src/companyMap.ts", owner: "clip", texts: ["…"], reason: "read_scope 沿公司地图读的工具结果，只给对话模型看。" },
+  { file: "api/src/conversationCompaction.ts", owner: "clip", texts: ["…（已截断）"], reason: "对话压缩交给压缩模型的文字。" },
+  { file: "api/src/conversationDigests.ts", owner: "clip", texts: ["…"], reason: "整理会话纪要时交给纪要模型的原话。" },
+  { file: "api/src/conversationHistorySearch.ts", owner: "snippetOf", texts: ["…", "…"], reason: "检索历史对话的工具结果片段，只给对话模型看。" },
+  { file: "api/src/conversationRecall.ts", owner: "clip", texts: ["…"], reason: "回看以前对话的工具结果和首页「以前的对话」资料卡（Chat 放进本轮资料），只给模型看。" },
+  { file: "api/src/conversationRecovery.ts", owner: "tail", texts: ["…"], reason: "点「继续」时交给模型的接续说明（上一轮回答的结尾）。" },
+  { file: "api/src/conversationStream.ts", owner: "clipText", texts: ["…（较早一轮的内容较长，已截短）"], reason: "此前几轮的提问、回答截短后放进模型历史。" },
+  { file: "api/src/mcpCeoReads.ts", owner: "short", texts: ["…"], reason: "/mcp/me 只读工具的结果，给本机执行方的模型看。" },
+  { file: "api/src/mcpWebSearch.ts", owner: "excerpt", texts: ["…"], reason: "/mcp/me 的 web_search 结果摘要，给本机执行方的模型看。" },
+  { file: "api/src/meetingCardRead.ts", owner: "snippetOf", texts: ["…", "…"], reason: "检索会议卡的工具结果片段，只给模型看。" },
+  { file: "api/src/meetingContext.ts", owner: "clip", texts: ["…"], reason: "会后解读、影响卡追问的模型输入。" },
+  { file: "api/src/meetingEvidence.ts", owner: "paragraphs", texts: ["…"], reason: "预审和 Chat 读群材料的正文段落，只给模型看。" },
+  { file: "api/src/missionPlanRead.ts", owner: "clip", texts: ["…"], reason: "/internal/mission-plans 给独立 Chat 的模型读的计划条目。" },
+  { file: "api/src/personalMemoryRecall.ts", owner: "recallDirectory", texts: ["…"], reason: "个人记忆召回给模型的目录。" },
+  { file: "api/src/piConversationRuntime.ts", owner: "content", texts: ["…"], reason: "空闲重启时补进模型历史的最近几条消息。" },
+  { file: "api/src/piConversationRuntime.ts", owner: "excerpt", texts: ["…"], reason: "对话里 web_search 交给模型的结果摘要（进度行只取标题）。" },
+  { file: "api/src/piConversationRuntime.ts", owner: "clip", texts: ["\n…（已截断，可用 read_material 读全文）"], reason: "read_group_evidence 交给模型的材料正文。" },
+  { file: "api/src/preflightAnchors.ts", owner: "clip", texts: ["…"], reason: "会前预审按挂点读的内容，只给预审模型看。" },
+  { file: "api/src/tracing.ts", owner: "clip", texts: ["…[+"], reason: "上报运行轨迹（日志）的正文截断。" },
+  { file: "api/src/worldReader.ts", owner: "clip", texts: ["…"], reason: "read_ontology 等工具结果里的本体组件正文，只给模型看。" },
+  { file: "local/src/handoff.ts", owner: "clip", texts: ["…（共 "], reason: "换执行方时补给新执行方的上下文（只拼进送出去的那句，不记进事件）和 read_earlier_turns 的结果，只给模型看。" },
+  { file: "local/src/planCheck.ts", owner: "planFactsSection", texts: ["…"], reason: "写进规划员系统提示词的那一节。" },
+  { file: "local/src/textChanges/trim.ts", owner: "ELLIPSIS_LINE", texts: ["| … |"], reason: "拿不准、先留着：Excel 大表改动视图里把没改的行收成一行的折叠行，网页上看得到，但不是截字；换成什么要本人定。" },
 ];
 
 const APPS = fileURLToPath(new URL("../../", import.meta.url));
@@ -103,19 +104,42 @@ function hits(): Hit[] {
   return out;
 }
 
+/** 按白名单逐段对：extra 是放不过的命中，missing 是白名单里写了、源码里已经没有的。 */
+function compare(found: Hit[], allowed: typeof ALLOWED): { extra: Hit[]; missing: string[] } {
+  const left = new Map(allowed.map((item) => [`${item.file} ${item.owner}`, [...item.texts]]));
+  const extra = found.filter((hit) => {
+    const texts = left.get(`${hit.file} ${hit.owner}`);
+    const at = texts?.indexOf(hit.text) ?? -1;
+    if (at < 0) return true;
+    texts!.splice(at, 1);
+    return false;
+  });
+  return { extra, missing: [...left].flatMap(([key, texts]) => texts.map((text) => `${key} ${JSON.stringify(text)}`)) };
+}
+const unallowed = (found: Hit[], allowed: typeof ALLOWED) => compare(found, allowed).extra;
+
 describe("后端和本机程序不拼省略号（本人 11/18）", () => {
   const found = hits();
 
   it("界面上看得到的文字没有拼上去的「…」", () => {
-    const allowed = (hit: Hit) => ALLOWED.some((item) => item.file === hit.file && item.owner === hit.owner);
-    expect(found.filter((hit) => !allowed(hit)).map((hit) => `${hit.file}:${hit.line} ${hit.owner} ${JSON.stringify(hit.text)}`)).toEqual([]);
+    expect(unallowed(found, ALLOWED).map((hit) => `${hit.file}:${hit.line} ${hit.owner} ${JSON.stringify(hit.text)}`)).toEqual([]);
+  });
+
+  it("白名单按原文和处数认：放行的名字下面再多拼一处「…」也挂", () => {
+    const extra = (owner: string, text: string): Hit => ({ file: "api/src/piConversationRuntime.ts", owner, line: 0, text });
+    expect(unallowed([...found, extra("content", "…")], ALLOWED)).toHaveLength(1);
+    expect(unallowed([...found, extra("excerpt", "…（新拼的）")], ALLOWED)).toHaveLength(1);
   });
 
   it("白名单里每一条都还在，并写了理由", () => {
-    for (const item of ALLOWED) {
-      expect(item.reason.trim(), `${item.file} ${item.owner}`).not.toBe("");
-      expect(found.some((hit) => hit.file === item.file && hit.owner === item.owner), `白名单里的 ${item.file} ${item.owner} 已经没有拼「…」了，删掉这一条`).toBe(true);
-    }
+    for (const item of ALLOWED) expect(item.reason.trim(), `${item.file} ${item.owner}`).not.toBe("");
+    // 源码里已经不拼了的，从白名单里删掉。
+    expect(compare(found, ALLOWED).missing).toEqual([]);
+  });
+
+  it("本机程序的开发测试页没有省略号", () => {
+    const page = readFileSync(join(APPS, "local/src/http/devPage.ts"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+    expect(page).not.toContain("…");
   });
 
   it("认得出拼上去的「…」，不误伤提示词正文", () => {

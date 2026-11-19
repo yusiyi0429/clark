@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import JSZip from 'jszip';
+import { cutText } from './textCut.js';
 
 /**
  * 记忆导入（上手第五步、「我的记忆」页的导入，7a-3、D-06）的纯逻辑：读取 → 按规则拆分 → （模型）分四类 → （模型）去重、找冲突 → 定默认勾选和要本人看的。
@@ -186,8 +187,8 @@ function frontmatter(text: string): { fields: Record<string, string>; body: stri
 }
 
 type Draft = Omit<Candidate, 'key' | 'fingerprint' | 'category' | 'kind' | 'dropReason' | 'confidence' | 'alternative' | 'locked' | 'duplicateOf' | 'conflictWith' | 'group' | 'checked'>;
-const clip = (text: string) => (text.length > MAX_ITEM_CHARS ? text.slice(0, MAX_ITEM_CHARS) : text);
-const shortTitle = (text: string) => { const line = text.replace(/\s+/g, ' ').trim(); return line.slice(0, 24); };
+const clip = (text: string) => (text.length > MAX_ITEM_CHARS ? cutText(text, MAX_ITEM_CHARS) : text);
+const shortTitle = (text: string) => { const line = text.replace(/\s+/g, ' ').trim(); return cutText(line, 24); };
 
 function splitDoc(doc: ReadDoc): { drafts: Draft[]; truncated: boolean } {
     const base = { source: doc.source, path: doc.path, mtime: doc.mtime, project: doc.scope === 'project' ? baseName(doc.path) : projectOf(doc.path) };

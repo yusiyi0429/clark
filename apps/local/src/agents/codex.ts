@@ -11,6 +11,7 @@ import { linkLarkSkills } from "./feishuPlugin.js";
 import { CONTEXT_COMPACTED, ContextReporter } from "./contextUsage.js";
 import { modeAllows, outsidePaths, permissionSummary, touchedPaths, type PathScope } from "./pathGuard.js";
 import { AgentStartError, COMPACT_TIMEOUT_MS, compactFailed, type AgentAdapter, type AgentLaunch, type AgentRun, type CompactResult, type PermissionAnswer, type TurnModels } from "./types.js";
+import { cutText } from "../textCut.js";
 
 /** 11/10 实测基于 codex-cli 0.159.2（app-server 的 turn/steer、两种批准、mcpServer/elicitation 都在稳定接口里）。 */
 export const MIN_CODEX_VERSION = "0.159.0";
@@ -22,7 +23,7 @@ const INPUT_CHARS = 2_000;
 /** Windows 上 Codex 把命令包进 PowerShell，按 PowerShell 认路径和危险命令；别的系统按 Bash。 */
 const SHELL = process.platform === "win32" ? "PowerShell" : "Bash";
 
-const clip = (s: string, n: number) => s.slice(0, n);
+const clip = (s: string, n: number) => cutText(s, n);
 
 /** 命令本身：commandActions 里是 Codex 解析好的（不带外面那层 pwsh -Command '…'），没有就用原样。 */
 function commandOf(p: Json): string {

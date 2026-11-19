@@ -7,6 +7,7 @@ import { buildClaudeArgs, childEnv, describeTool, homeDir, personalSettingsSetKe
 import { modeAllows, outsidePaths, permissionSummary, suggestionsReachOutside, touchedPaths, type PathScope } from "./pathGuard.js";
 import { planProgress } from "../plan.js";
 import { CONTEXT_COMPACTED, ContextReporter } from "./contextUsage.js";
+import { cutText } from "../textCut.js";
 
 /** 低于这个版本不保证兼容：11/05 实测基于 2.1.318；权限模式 default 改名 manual 也在 2.1.3xx。 */
 export const MIN_CLAUDE_VERSION = "2.1.300";
@@ -31,7 +32,7 @@ type Json = Record<string, any>;
 function clipInput(input: Json): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(input ?? {})) {
-    if (typeof v === "string") out[k] = v.length > INPUT_CHARS ? `${v.slice(0, INPUT_CHARS)}（共 ${v.length} 字）` : v;
+    if (typeof v === "string") out[k] = v.length > INPUT_CHARS ? `${cutText(v, INPUT_CHARS)}（共 ${v.length} 字）` : v;
     else out[k] = v;
   }
   return out;
@@ -41,7 +42,7 @@ function previewOf(content: unknown): string {
   const text = typeof content === "string"
     ? content
     : Array.isArray(content) ? content.map((c: Json) => (c?.type === "text" ? c.text : `[${c?.type}]`)).join("\n") : JSON.stringify(content ?? "");
-  return text.slice(0, PREVIEW_CHARS);
+  return cutText(text, PREVIEW_CHARS);
 }
 
 /** AskUserQuestion 的问题按契约整理（字段缺了补空，超长截断）。 */
