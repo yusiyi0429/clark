@@ -66,6 +66,7 @@ import { registerMeetingFollowThroughRoutes } from "./routes/meetingFollowThroug
 import { registerInternalMeetingRoutes } from "./routes/internalMeetings.js";
 import { createNexusDri, type NexusDri, type NexusDriEnv } from "./nexusDri.js";
 import { monthReviewJobs, type TaskEventReader } from "./monthReview.js";
+import { plannedDueDateJobs } from "./taskDueDates.js";
 import { createMonthReviewAgent, type MonthReviewAgent } from "./monthReviewAgent.js";
 import { registerMonthReviewRoutes } from "./routes/monthReview.js";
 import { canUseMemberView } from "./memberAccess.js";
@@ -364,6 +365,8 @@ declare module "fastify" {
     nexusDri: NexusDri;
     /** 月底复盘第三版的预评（窗口里按人排、按人跑）；server.ts 注册给 jobs worker。 */
     monthReviewJobs: { handlers: Record<string, JobHandler>; recurring: RecurringJob[] };
+    /** 「原」验收时间点上线后的补记（taskDueDates.ts）；server.ts 注册给 jobs worker。 */
+    plannedDueDateJobs: { handlers: Record<string, JobHandler>; recurring: RecurringJob[] };
     feishuChat: FeishuChat | undefined;
     /** 微信 ClawBot；server.ts 启动后调 start() 开始收消息和推送。没接飞书（借用它的令牌密钥）时为空。 */
     wechat: WechatService | undefined;
@@ -988,6 +991,7 @@ export async function buildApp({
       modelId: env.review?.model ?? env.heavyModel, thinking: env.review?.thinking }),
     events: monthReviewEvents ?? worldTaskEvents(q, env, world.enabled) }));
   registerMonthReviewRoutes(app, ctx);
+  app.decorate("plannedDueDateJobs", plannedDueDateJobs({ q, planTasks: planTaskSource, now }));
   // 文档变更：找候选用快模型；按作者身份读飞书文档元数据（不读正文）；后台任务与群消息事件由 server.ts 按 app.docChanges.jobs() 注册。
   const isCeo = (personId: string) => peopleDirectory.searchPeople(undefined).find((person) => person.personId === personId)?.roles.includes("ceo") ?? false;
   const docChanges = createDocChangeService({

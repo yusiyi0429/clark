@@ -1,6 +1,6 @@
 -- Task 的「原」验收时间点（本人 11/19 定）：没单独定日子的 Task，天枢第一次读到它时把当时最近的 Mission 节点记下来，之后不往后滚，
--- 过了没交就留在那一段显示「已过 N 天」。基准日：这个 Mission 第一次有 Task 被记下时（上线前就有的那批），取 Mission 进天枢的日子（missions.created_at）；
--- 之后才出现的 Task 取第一次读到的那天。本人改的日子在 task_due_dates（唯一一份），这里只是「原」，不算本人改过。
+-- 过了没交就留在那一段显示「已过 N 天」。上线后 api 在后台补记一次（当月、下月 Mission 下的全部本体 Task，基准日取 Mission 进天枢的日子 missions.created_at），
+-- 补记完在 task_planned_due_date_backfill 留一行；补记之前读的地方不写、照今天现算，之后才出现的 Task 取第一次读到的那天。本人改的日子在 task_due_dates（唯一一份），这里只是「原」，不算本人改过。
 -- period 是记的时候 Mission 所在的月份：本体把 Mission 原地滚到下个月（Task id 不变）时，读到月份对不上就按新月份重记。
 CREATE TABLE task_planned_due_dates (
   task_id TEXT PRIMARY KEY,
@@ -10,3 +10,8 @@ CREATE TABLE task_planned_due_dates (
   recorded_at TIMESTAMPTZ NOT NULL
 );
 CREATE INDEX task_planned_due_dates_mission ON task_planned_due_dates (mission_id);
+
+CREATE TABLE task_planned_due_date_backfill (
+  singleton BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (singleton),
+  done_at TIMESTAMPTZ NOT NULL
+);

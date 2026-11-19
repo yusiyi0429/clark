@@ -98,8 +98,9 @@ describe("新首页", { timeout: 30_000 }, () => {
       expect(task).toMatchObject({ goals: [{ taskId: "task-open", missionId: "mine", name: "对话质量达标", period: "2026-11", dueDate: "2026-11-30",
         criteriaTotal: 2, criteriaMet: 0, completedAt: null }], budget: null,
         pipeline: { conversationId: null, scope: `project:${task.projectId}` }, planning: false });
-      // 截止取 Mission 的验收时间点（同「本月」）：Mission 没写节点时取月底（上面那次，不记）；写了节点后第一次读到，记下今天（11/6）以后最近的那个，
-      // 之后 Mission 节点再变也不往后滚（本人 11/19 定的「原」，plannedDueDates.test.ts）。
+      // 截止取 Mission 的验收时间点（同「本月」）：Mission 没写节点时取月底；上线补记过以后（这里 Mission 补记时没节点、不记），
+      // 写了节点后第一次读到，记下今天（11/6）以后最近的那个，之后 Mission 节点再变也不往后滚（本人 11/19 定的「原」，plannedDueDates.test.ts）。
+      await f.t.app.plannedDueDateJobs.handlers["planned_due_dates.backfill"]({}, { id: randomUUID(), kind: "planned_due_dates.backfill", dedupe_key: "b", attempts: 1, payload: {} });
       const due = async () => projectOf(await home(f)).goals[0].dueDate;
       await f.t.sql(`UPDATE missions SET milestones='["11/28 复核","11/12 验收：题库打分"]' WHERE id='mine'`);
       expect(await due()).toBe("2026-11-12");
