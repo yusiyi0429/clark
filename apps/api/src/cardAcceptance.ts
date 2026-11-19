@@ -16,6 +16,7 @@ import { CardError, cardAgreement, effectiveOutcome, failStreak, type CardPlanTa
 import { requestStarts } from "./sessionStarts.js";
 import { createInTransaction } from "./tasks.js";
 import { postCoAgentMessage } from "./threads.js";
+import { cutText } from "./textCut.js";
 
 /**
  * Agent 验收（V2 设计第 7 节）的排队、落库、推翻：本机交回一次，就请验收员（cardAcceptanceAgent.ts 的作业）按卡的完成标准逐条判。
@@ -42,9 +43,9 @@ export function returnText(criteria: string[], result: StoredAcceptance, workerO
 
 /** 通过时写进执行事项的验收记录：by 记推进人，agentHandbackId 表示是 Agent 验收；本人「仍然通过」时 verdict 写推翻的原因。 */
 function acceptanceRecord(ownerId: string, handbackId: string, criteria: string[], result: StoredAcceptance | null, at: Date, verdict: string) {
-  return { by: ownerId, at: at.toISOString(), verdict: verdict.slice(0, 200), deliverableMaterialIds: [], agentHandbackId: handbackId,
-    standards: criteria.map((text, index) => ({ text: text.slice(0, 500), met: true,
-      evidence: result?.criteria.find((item) => item.index === index + 1)?.evidence?.slice(0, 300) || null, materialId: null })) };
+  return { by: ownerId, at: at.toISOString(), verdict: cutText(verdict, 200), deliverableMaterialIds: [], agentHandbackId: handbackId,
+    standards: criteria.map((text, index) => ({ text: cutText(text, 500), met: true,
+      evidence: cutText(result?.criteria.find((item) => item.index === index + 1)?.evidence ?? "", 300) || null, materialId: null })) };
 }
 
 const tellGroup = (client: PoolClient, taskId: string, ownerId: string, text: string) =>
@@ -355,7 +356,7 @@ export async function verifyBrief(q: Query, ownerId: string, handbackKey: string
   const history = (await q("SELECT * FROM card_handbacks WHERE task_id=$1 AND attempt<$2 ORDER BY attempt DESC", [row.task_id, row.attempt])).rows as HandbackRow[];
   const previous = history.find((item) => item.status === "done" && item.result);
   const changes = await agreementChangeLines(q, task.id);
-  const cut = (text: string) => text.length > BRIEF_ITEM_CHARS ? text.slice(0, BRIEF_ITEM_CHARS) : text;
+  const cut = (text: string) => text.length > BRIEF_ITEM_CHARS ? cutText(text, BRIEF_ITEM_CHARS) : text;
   const pointed = task.criterion_index && task.criterion_text ? [`这张卡对的是 Task 第 ${task.criterion_index} 条标准：${task.criterion_text}`] : [];
   const lines = [
     `# 验收：${task.title}`, "",
@@ -423,6 +424,6 @@ export function relayHandback(pool: Pool, ownerId: string, cardId: string, handb
       : [`本人补上了：\n${body.text.trim()}`, ...(row.return_text ? [row.return_text] : []), "接着做，做完再交回。"].join("\n\n");
     await client.query(`INSERT INTO session_commands(id,owner_id,kind,card_id,topic_id,run_id,device_id,command,requested_at,handback_id,relay)
       VALUES($1,$2,'card',$3,NULL,$4,$5,$6::jsonb,$7,$8,$9)`,
-    [randomUUID(), ownerId, cardId, run.id, run.device_id, JSON.stringify({ type: "message", text: text.slice(0, 4000) }), now, handbackId, body.kind]);
+    [randomUUID(), ownerId, cardId, run.id, run.device_id, JSON.stringify({ type: "message", text: cutText(text, 4000) }), now, handbackId, body.kind]);
   });
 }

@@ -4,6 +4,7 @@ import { decisionEffective, type MeetingDecisionRow } from "./meetingDecisionVie
 import type { MeetingRow, Query, StoredWorldAnchor } from "./meetingStore.js";
 import type { WorldClient, WorldHead } from "./worldClient.js";
 import { usableWorldHead, worldDisplayText, worldGoalOf } from "./worldReader.js";
+import { cutText } from "./textCut.js";
 
 /**
  * 会议入本体的挂点与落点（回流设计稿 3.1、3.2）。只在会议页（GET /api/meetings/:id/world）、本体同步、挂点接口里查，
@@ -22,7 +23,7 @@ const BRIEF_MAX = 80;
 const brief = (text: string | null | undefined): string | null => {
   const value = text?.trim();
   if (!value) return null;
-  return value.slice(0, BRIEF_MAX);
+  return cutText(value, BRIEF_MAX);
 };
 /** 对象的生命周期状态（tkos.world 0.3 records.lifecycle.status：draft 草稿、established 已成立、in_progress 进行中……；没有为 null）。 */
 const lifecycleOf = (head: WorldHead): string | null => {

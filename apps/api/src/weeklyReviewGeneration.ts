@@ -5,6 +5,7 @@ import type { MeetingRow, Query } from "./meetingStore.js";
 import { CITATION_SCHEME } from "./sourceCitations.js";
 import { distinctLabels, readCollectorProgress, type Cited } from "./personalReviewGeneration.js";
 import { addDays, weekPeriod, weeklyReviewText, weekWindow, type WeeklyReviewRow } from "./weeklyReviews.js";
+import { cutText } from "./textCut.js";
 
 /**
  * 周复盘生成的输入（D-01）：本人本周的五类记录，每条带 cite（照抄进正文的出处地址）和 label（出处名称），
@@ -41,7 +42,7 @@ export type WeeklyReviewDraftInput = {
 };
 
 const day = (date: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", month: "2-digit", day: "2-digit" }).format(date).replace("-", "/");
-const clip = (text: string, max: number) => text.length > max ? text.slice(0, max) : text;
+const clip = (text: string, max: number) => text.length > max ? cutText(text, max) : text;
 const shortDay = (iso: string) => iso.slice(5).replace("-", "/");
 
 export const CURRENT_HANDLING = ["继续推进", "责任范围内调整", "需要升级处理"] as const;

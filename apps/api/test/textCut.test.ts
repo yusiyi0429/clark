@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { cleanThought, thinkingHeadline } from "../src/conversationRouting.js";
 import { analysisLabel, cleanThought as preflightThought } from "../src/preflightProgress.js";
@@ -21,5 +22,22 @@ describe("上屏文字的截断", () => {
     const label = analysisLabel({ relatedMeetings: [{ title: `${"会".repeat(23)}😀会`, scheduledAt: "2026-11-19T02:00:00.000Z" }] } as never);
     expect(label).toContain(`《${"会".repeat(23)}》`);
     expect(label).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/);
+  });
+
+  it("写库和上屏的截断都用 cutText，不裸 slice", () => {
+    // 这几处截完写进 jsonb（落单的代理对 Postgres 不收）或直接上屏，函数不导出、要库才跑得到，这里按源码查。
+    const bare: [string, RegExp][] = [
+      ["company.ts", /text\.slice\(0, max\)/],
+      ["cardAgreements.ts", /brief\.slice\(0, COMMAND_MAX/],
+      ["cardAcceptance.ts", /verdict\.slice\(0, 200\)|text\.slice\(0, 500\)|evidence\?\.slice\(0, 300\)|text\.slice\(0, BRIEF_ITEM_CHARS\)|text\.slice\(0, 4000\)/],
+      ["meetingWorld.ts", /value\.slice\(0, BRIEF_MAX\)/],
+      ["personalReviewGeneration.ts", /text\.slice\(0, max\)/],
+      ["weeklyReviewGeneration.ts", /text\.slice\(0, max\)/],
+    ];
+    for (const [file, pattern] of bare) {
+      const code = readFileSync(new URL(`../src/${file}`, import.meta.url), "utf8");
+      expect(code, file).not.toMatch(pattern);
+      expect(code, file).toMatch(/cutText\(/);
+    }
   });
 });

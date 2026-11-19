@@ -1,4 +1,5 @@
-// Excel 大表裁剪：只留表名、表头、改过的行和它们上下各两行，中间没变的数据行收成一行「| 中间 N 行没改 |」。
+// Excel 大表裁剪：只留表名、表头、改过的行和它们上下各两行，中间没变的数据行收成一行「| 中间 N 行没改 |」；
+// 批注那一段不是表格，没变的批注收成一行「中间 N 条批注没改」。
 // 改前、改后两份按同一张行对照表裁，没变的那几段在两边一模一样，所以折起来的行在两边对得上。
 import { lineRegions, splitLines } from "./diff.js";
 
@@ -11,6 +12,8 @@ export const TRIM_LIMITS = {
 
 /** 折起来的那一行：N 是这一处实际折掉的行数（本人 11/19 定，不用省略号）。 */
 export const foldedLine = (n: number) => `| 中间 ${n} 行没改 |`;
+/** 批注段折起来的那一行：N 是折掉的批注条数。 */
+export const foldedNotes = (n: number) => `中间 ${n} 条批注没改`;
 
 /**
  * @param beforeRows 改前那份里每个数据行的行首下标（来自转文字的结构化结果）
@@ -62,10 +65,18 @@ function dataFlags(lines: string[], rowStarts: ReadonlySet<number>): Uint8Array 
 function build(lines: string[], keep: Uint8Array): string {
   let out = "";
   let folded = 0;
+  /** 批注段（数据行不以「|」开头）：一条批注是「- 格子：字」起头、后面缩进两格的续行；从续行折起时那一条也算。 */
+  let notes = 0;
   let end = "";
   const flush = () => {
-    if (folded) out += foldedLine(folded) + end;
+    if (!folded) return;
+    if (notes) {
+      // 不是表格：前面空一行，免得 Markdown 把它并进上一条批注
+      if (out && !out.endsWith("\n\n")) out += out.endsWith("\n") ? "\n" : "\n\n";
+      out += foldedNotes(notes) + end;
+    } else out += foldedLine(folded) + end;
     folded = 0;
+    notes = 0;
   };
   lines.forEach((l, i) => {
     if (keep[i]) {
@@ -73,6 +84,7 @@ function build(lines: string[], keep: Uint8Array): string {
       out += l;
     } else {
       if (!folded) end = l.endsWith("\n") ? "\n" : "";
+      if (!l.startsWith("|") && (l.startsWith("- ") || !folded)) notes += 1;
       folded += 1;
     }
   });

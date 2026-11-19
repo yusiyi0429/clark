@@ -237,8 +237,11 @@ describe("Word、Excel：转文字再比（converted，只给看）", () => {
     const r = compareFiles("xlsx", makeXlsx([{ name: "表", data: sheet(base) }]), makeXlsx([{ name: "表", data: sheet(edited) }]));
     if (r.detail === "none") throw new Error("应该能比");
     const lines = (s: string) => s.split("\n");
-    expect(lines(r.before!).filter((l) => /^\| 中间 \d+ 行没改 \|$/.test(l))).toHaveLength(1);
-    expect(lines(r.after!).filter((l) => /^\| 中间 \d+ 行没改 \|$/.test(l))).toHaveLength(1);
+    const folds = (s: string) => lines(s).filter((l) => /^\| 中间 \d+ 行没改 \|$/.test(l));
+    expect(folds(r.before!)).toHaveLength(1);
+    expect(folds(r.after!)).toHaveLength(1);
+    // 改前、改后折起来的那一行完全一样（折掉的行数也一样）。
+    expect(folds(r.before!)).toEqual(folds(r.after!));
     expect(pieces(r.before!, r.after!, r.changes)).toEqual([["", "| 1 | 表头说明 | 0 |\n"], ["| 120 | 项目120 | 1200 |\n", ""]]);
     expect(r.before!.length).toBeLessThan(400);
   });
@@ -264,7 +267,9 @@ describe("Word、Excel：转文字再比（converted，只给看）", () => {
     expect(pieces(cell.before!, cell.after!, cell.changes)).toEqual([["410", "7"]]);
     const note = compareFiles("xlsx", book(base), book(base, 9));
     if (note.detail === "none") throw new Error("应该能比");
-    expect(note.after!.split("\n### 批注\n\n")[1]).toBe(["| 中间 16 行没改 |", "- B9：批注9", "  第二行", "- B10：改过的批注", "- B11：批注11", "  第二行", "| 中间 18 行没改 |", ""].join("\n"));
+    // 批注不是表格：折起来的写「中间 N 条批注没改」，不带竖线，N 数批注条数；前面空一行，不被并进上一条批注。
+    expect(note.after!.split("\n### 批注\n\n")[1]).toBe(["中间 8 条批注没改", "- B9：批注9", "  第二行", "- B10：改过的批注", "- B11：批注11", "  第二行", "", "中间 9 条批注没改", ""].join("\n"));
+    expect(cell.after!.split("\n### 批注\n\n")[1]).toBe("中间 20 条批注没改\n");
     expect(pieces(note.before!, note.after!, note.changes)).toEqual([["批注10\n  第二行", "改过的批注"]]);
   });
 
