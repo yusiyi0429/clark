@@ -74,7 +74,9 @@ describe("首页「等你」空和加载", () => {
   });
 
   it("云端首页还没回：不写「没有等你的事」", () => {
-    expect(text(render([], { known: false }))).not.toContain("没有等你的事");
+    const html = render([], { known: false });
+    expect(html).toContain('aria-busy="true"');
+    expect(text(html)).not.toContain("没有等你的事");
   });
 
   it("会议没读到：清单最后一行「没有读到会议」加重试，其余照常", () => {

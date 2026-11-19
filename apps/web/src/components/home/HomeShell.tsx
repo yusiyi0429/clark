@@ -495,9 +495,9 @@ function HomeFrame({ account }: { account: Account }) {
   }), [go, account.personId]);
 
   // 「今天」行行尾的月份 chip（5.4.2）：云端等你里月份那一条优先——复盘窗口里写「复盘」，新月份的草稿到了写「12 月待敲定」（「延续到哪」只在等你里）；
-  // 没有时，树上没有本月的 Mission 就写「11 月待敲定」（网页按本月比较推出来）。点了进月份页。
+  // 没有时，树上没有本月的 Mission 就写「11 月待敲定」（网页按本月比较推出来）；云端首页还没问到时本月是空的，不算。点了进月份页。
   const monthItem = data.waiting.find((item) => item.kind === "month" && item.month && item.month.step !== "continue")?.month ?? null;
-  const empty = monthItem ? null : emptyMonth(work.plan?.today ?? null, data.month.missions);
+  const empty = monthItem || !api.known ? null : emptyMonth(work.plan?.today ?? null, data.month.missions);
   const month = monthItem ? { href: monthHref(monthItem.period), label: monthItem.step === "review" ? "复盘" : `${monthLabel(monthItem.period)}待敲定` }
     : empty ? { href: monthHref(empty), label: `${monthLabel(empty)}待敲定` } : null;
 

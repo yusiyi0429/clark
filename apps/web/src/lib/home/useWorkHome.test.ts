@@ -17,8 +17,8 @@ vi.mock("react", async (original) => ({
   useEffect: (effect: () => void) => { hooks.effects.push(effect); },
 }));
 
-const cloud = vi.hoisted(() => ({ next: null as null | { resolve: (value: unknown) => void } }));
-vi.mock("@/lib/board/cloud", () => ({ readWorkHome: () => new Promise((resolve) => { cloud.next = { resolve }; }) }));
+const cloud = vi.hoisted(() => ({ next: null as null | { resolve: (value: unknown) => void; reject: (error: unknown) => void } }));
+vi.mock("@/lib/board/cloud", () => ({ readWorkHome: () => new Promise((resolve, reject) => { cloud.next = { resolve, reject }; }) }));
 vi.mock("@/components/member/home/useHomePlan", () => ({ useHomePlan: () => ({ error: null, refresh: vi.fn() }) }));
 vi.mock("@/components/member/useMemberHome", () => ({ useMemberHome: () => ({ notifications: [], rounds: [], unreadThreads: [], unreadMissionGroups: [], refresh: vi.fn() }) }));
 vi.mock("@/lib/local/LocalRunnerProvider", () => ({ useLocalRunner: () => ({ status: null, phase: "offline", sessions: [] }) }));
@@ -63,6 +63,15 @@ describe("useWorkHome：云端首页和按 Mission 拼的回退", () => {
     expect(api.known).toBe(true);
     expect(api.live).toBe(false);
     expect(names(api)).toEqual(["天枢 11 月：V1 11/18 上线，V2 11/30 上线"]);
+  });
+
+  it("云端首页出错（不是 404）：还当没问到，数据仍为空", async () => {
+    render();
+    cloud.next!.reject(new Error("Failed to proxy"));
+    await flush();
+    const api = render();
+    expect(api.known).toBe(false);
+    expect(api.data.projects).toEqual([]);
   });
 
   it("云端首页回来：用云端的项目", async () => {

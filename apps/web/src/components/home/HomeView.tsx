@@ -101,7 +101,7 @@ export function HomeWaiting({ data, api, go, offline = false, phone = false, rec
   const rows = focusList({ waiting: data.waiting, meetings: items, offline, recordingMeetingId, now: Date.now(), ignoredMeetings: data.ignoredMeetings });
   const className = phone ? h.phoneWaiting : h.section;
   if (!loaded && !waited) return <section aria-label="等你" aria-busy="true" className={className} />;
-  return <section aria-label="等你" className={className}>
+  return <section aria-label="等你" aria-busy={!api.known || undefined} className={className}>
     {rows.length ? <p className={h.sectionTitle}>等你 <span>{rows.length}</span></p> : null}
     {confirmed ? <p className={m.receipt} role="status">{confirmed.title} · {confirmed.done}
       <HeroButton variant="ghost" size="sm" onPress={() => go(confirmed.href)}>{confirmed.showReceipts ? "查看递送回执" : "选择工作去向"}</HeroButton>
