@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { boardFixture, THIRD } from "./boardFixture.js";
+import { BOARD_TASKS, boardFixture, THIRD } from "./boardFixture.js";
 
 /**
  * 本月页就地改（11/19 DRI 根据地第 2 步）：验收时间点按 Task 存（不要求挂项目，只有 Task 负责人能改），月中就能定去向。
@@ -54,6 +54,18 @@ describe("本月页就地改", () => {
     expect(await both()).toEqual([null, null]);
     expect((await g.call("PUT", "/api/me/tasks/task-open/due-date", { dueDate: "2026-11-25" })).statusCode).toBe(200);
     expect(await both()).toEqual(["2026-11-25", "2026-11-25"]);
+  }, 120_000);
+
+  it("首页项目排序：都有目标时按最早的验收时间点，没日子的排在有日子的后面", async () => {
+    const g = f = await boardFixture({ planTasks: async (missions) => [...BOARD_TASKS,
+      { taskId: "task-two", missionId: "mine", name: "第二件", doneDefinition: null, criteria: ["有方案"] }].filter((task) => missions.some((mission) => mission.id === task.missionId)) },
+    { boardCloudAgents: false });
+    const dated = (await g.call("POST", "/api/me/projects", { name: "有日子", taskId: "task-two" })).json().projectId as string;
+    expect((await g.call("PUT", "/api/me/tasks/task-two/due-date", { dueDate: "2026-11-25" })).statusCode).toBe(200);
+    const undated = (await g.call("POST", "/api/me/projects", { name: "没日子", taskId: "task-open" })).json().projectId as string;
+    const order = ((await g.call("GET", "/api/me/work-home")).json().projects as { projectId: string; goals: { dueDate: string | null }[] }[])
+      .filter((project) => [dated, undated].includes(project.projectId)).map((project) => [project.projectId, project.goals[0]!.dueDate]);
+    expect(order).toEqual([[dated, "2026-11-25"], [undated, null]]);
   }, 120_000);
 
   it("月中能定去向，定了延期的挪到延期和取消", async () => {

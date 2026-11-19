@@ -18,7 +18,7 @@ export { assertOpenPeriod };
  * 还开着的拆卡草稿只记了序号，标准一变就置空，免得接受成卡时挂到别的标准上。
  */
 
-type EditRow = { task_id: string; name: string | null; criteria: string[] | null; criteria_from: (number | null)[] | null };
+type EditRow = { task_id: string; name: string | null; criteria: string[] | null; criteria_from: (number | null)[] | null; world_criteria: string[] | null };
 /**
  * 套上改动的 Task 带着这一样：本体里的原名字、原标准（按 taskBasis 算的那份），和哪一样改过；
  * criteriaFrom 是改后的每条标准从本体第几条来的（0 起，新加的为 null），月份页按它写「原 〈原文〉」、把删掉的本体标准留在原位置。
@@ -35,7 +35,7 @@ const same = (a: string[], b: string[]) => a.length === b.length && a.every((tex
 
 async function editsOf(q: Query, taskIds: string[]): Promise<Map<string, EditRow>> {
   if (!taskIds.length) return new Map();
-  const rows = (await q("SELECT task_id,name,criteria,criteria_from FROM task_goal_edits WHERE task_id=ANY($1::text[])", [taskIds])).rows as EditRow[];
+  const rows = (await q("SELECT task_id,name,criteria,criteria_from,world_criteria FROM task_goal_edits WHERE task_id=ANY($1::text[])", [taskIds])).rows as EditRow[];
   return new Map(rows.map((row) => [row.task_id, row]));
 }
 
@@ -50,9 +50,10 @@ function apply<T extends Omit<PlanTask, "missionId">>(task: T, edit: EditRow | u
   const realign = <V>(values: V[]) => criteria.map((text) => { const at = worldCriteria.indexOf(text); return at >= 0 ? values[at] ?? null : null; });
   const agreement = task.agreement && criteriaEdited
     ? { ...task.agreement, proofs: realign(task.agreement.proofs), acceptorIds: realign(task.agreement.acceptorIds) } : task.agreement;
+  // 存下的来处是按改的时候那份本体标准数的：本体后来改了（和那份不一样了），就不再用。
   const criteriaFrom = !criteriaEdited ? worldCriteria.map((_, index) => index)
-    : edit.criteria_from?.length === criteria.length ? edit.criteria_from
-    // 迁移 294 之前存的改动没记来处：和本体一字不差的是那一条，长度一样时按位置。
+    : edit.criteria_from?.length === criteria.length && same(edit.world_criteria ?? [], worldCriteria) ? edit.criteria_from
+    // 迁移 294 之前存的改动没记来处、本体后来改了标准：和本体一字不差的是那一条，长度一样时按位置。
     : criteria.map((text, index) => (worldCriteria.includes(text) ? worldCriteria.indexOf(text) : criteria.length === worldCriteria.length ? index : null));
   return { ...task, name: nameEdited ? edit.name! : task.name, criteria, ...(agreement ? { agreement } : {}),
     edit: { worldName: task.name, worldCriteria, name: nameEdited, criteria: criteriaEdited, criteriaFrom } };

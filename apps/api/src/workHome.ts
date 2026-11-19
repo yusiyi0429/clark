@@ -343,9 +343,9 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
       transfer: transfer ? transferView(transfer, deps.names) : null, unseen: unseenSince(news.get(row.id) ?? null, seen.get(`project:${row.id}`)),
       ...(row.scratch ? { scratch: true as const } : {}) };
   });
-  // 16.2：有等你的在前；然后是有目标的、按最早的截止日；最后按最近动静从近到远。
+  // 16.2：有等你的在前；然后是有目标的、按最早的截止日（没日子的排在有日子的后面）；最后按最近动静从近到远。
   const rank = (project: THomeProject) => project.summary.needsYou ? 0 : project.goals.length ? 1 : 2;
-  homeProjects.sort((a, b) => rank(a) - rank(b) || (a.goals[0]?.dueDate ?? "").localeCompare(b.goals[0]?.dueDate ?? "")
+  homeProjects.sort((a, b) => rank(a) - rank(b) || (a.goals[0]?.dueDate ?? "9999").localeCompare(b.goals[0]?.dueDate ?? "9999")
     || b.lastActivityAt.localeCompare(a.lastActivityAt) || a.projectId.localeCompare(b.projectId));
 
   // 本月（16.4）：本人这个月的 Mission，下面本人负责的 Task 和挂在哪个项目。

@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { monthEnd, sortHomeProjects } from "./derive";
+import { sortHomeProjects } from "./derive";
 import { ago, fromHome, fromListed, mainGoal, projectLine, type Project } from "./projects";
 import type { HomeProject, WorkHomeData } from "./types";
 
 const SUMMARY = { running: 0, waiting: 0, queued: 0, done: 0, doneToday: 0, needsYou: 0 };
+/** 样例目标的验收时间点取那个月的最后一天。 */
+const LAST_DAY: Record<string, string> = { "2026-10": "31", "2026-11": "30", "2026-12": "31" };
 const goal = (taskId: string, name: string, period = "2026-11", extra: Partial<HomeProject["goals"][number]> = {}): HomeProject["goals"][number] => ({
-  taskId, missionId: "m1", name, period, dueDate: monthEnd(period), criteria: ["a", "b"], criteriaMet: 1, criteriaTotal: 2, completedAt: null, responsible: null, ...extra, dueDateSource: extra.dueDateSource ?? "mission",
+  taskId, missionId: "m1", name, period, dueDate: `${period}-${LAST_DAY[period]}`, criteria: ["a", "b"], criteriaMet: 1, criteriaTotal: 2, completedAt: null, responsible: null, ...extra, dueDateSource: extra.dueDateSource ?? "mission",
 });
 const home = (projectId: string, extra: Partial<HomeProject> = {}): HomeProject => ({
   projectId, name: projectId, goals: [], budget: null, lastActivityAt: "2026-11-07T01:00:00.000Z", summary: SUMMARY,
@@ -62,6 +64,5 @@ describe("项目行（16.2）", () => {
       home("waiting", { summary: { ...SUMMARY, needsYou: 1 }, lastActivityAt: "2026-10-01T00:00:00.000Z" }),
     ];
     expect(sortHomeProjects(list).map((entry) => entry.projectId)).toEqual(["waiting", "soon", "late", "idle-new", "idle-old"]);
-    expect([monthEnd("2026-11"), monthEnd("2026-02"), monthEnd("2028-02"), monthEnd("2026-12")]).toEqual(["2026-11-30", "2026-02-28", "2028-02-29", "2026-12-31"]);
   });
 });

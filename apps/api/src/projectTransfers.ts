@@ -7,6 +7,7 @@ import { CARD_PROJECT, ownProject, projectGoalRows, verdicts } from "./projects.
 import { shanghaiDate } from "./workdays.js";
 import { CardError } from "./taskCards.js";
 import { settlementsOf } from "./taskContinuity.js";
+import { dueDatesOf } from "./taskDueDates.js";
 
 /**
  * 项目转交（契约 projectTransfers.ts，设计《新首页》16.7，迁移 246）。
@@ -95,15 +96,22 @@ const unfinished = async (q: Query, projectId: string, fromId: string) => ((awai
   AND t.status NOT IN ('done','returned') UNION ALL SELECT title FROM research_topics r WHERE r.owner_id=$1 AND ${CARD_PROJECT("r")}=$2 AND r.status='active'`,
 [fromId, projectId])).rows as { title: string }[]).map((row) => row.title);
 
-/** 按云端的东西拼那几段：挂着没了结的目标、项目里没做完的卡和专题、本机检查、原负责人；和已有的说明合起来（别的段留着）。 */
-async function draftNote(q: Query, row: Pick<TransferRow, "project_id" | "from_id" | "note" | "check_result">, fromName: string): Promise<THandoverNote> {
-  const goals = (await q("SELECT task_id,task_name,period FROM project_goals WHERE project_id=$1 ORDER BY period,linked_at", [row.project_id])).rows as
-    { task_id: string; task_name: string; period: string }[];
+/**
+ * 按云端的东西拼那几段：挂着没了结的目标、项目里没做完的卡和专题、本机检查、原负责人；和已有的说明合起来（别的段留着）。
+ * 目标的验收时间点和本月页、项目页同一个口径（taskDueDates.ts dueDatesOf）：本人存的 → 记下的「原」；都没有不写。
+ */
+async function draftNote(q: Query, row: Pick<TransferRow, "project_id" | "from_id" | "note" | "check_result">, fromName: string, now: Date): Promise<THandoverNote> {
+  const goals = (await q("SELECT task_id,task_name,mission_id,period FROM project_goals WHERE project_id=$1 ORDER BY period,linked_at", [row.project_id])).rows as
+    { task_id: string; task_name: string; mission_id: string; period: string }[];
   const settled = await settlementsOf(q, goals.map((goal) => goal.task_id));
   const open = await unfinished(q, row.project_id, row.from_id);
-  const monthEnd = (period: string) => { const [y, m] = period.split("-").map(Number); return `${m}/${new Date(Date.UTC(y, m, 0)).getUTCDate()}`; };
+  const dues = await dueDatesOf(q, goals.map((goal) => ({ taskId: goal.task_id, missionId: goal.mission_id })), now);
+  const due = (taskId: string) => {
+    const date = dues.get(taskId)?.dueDate;
+    return date ? ` · ${Number(date.slice(5, 7))}/${Number(date.slice(8, 10))} 验收` : "";
+  };
   const auto: Record<string, string[]> = {
-    "到哪了": goals.filter((goal) => !settled.has(goal.task_id)).map((goal) => `${Number(goal.period.slice(5))} 月目标：${goal.task_name} · ${monthEnd(goal.period)} 验收`),
+    "到哪了": goals.filter((goal) => !settled.has(goal.task_id)).map((goal) => `${Number(goal.period.slice(5))} 月目标：${goal.task_name}${due(goal.task_id)}`),
     "没做完的事": open,
     "代码在哪": codeLines(row.check_result),
     "可以问谁": [fromName],
@@ -173,7 +181,7 @@ async function composeNote(deps: TransferDeps, row: Pick<TransferRow, "project_i
       if (note.length && !secretFindings(note).length) return note;
     } catch { /* 退回拼的四段 */ } finally { clearTimeout(timer); }
   }
-  return draftNote(deps.q, row, fromName);
+  return draftNote(deps.q, row, fromName, deps.now);
 }
 
 /**

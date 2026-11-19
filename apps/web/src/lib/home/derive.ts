@@ -272,12 +272,6 @@ export function todayLabel(today: string | null): string {
 }
 
 
-/** 「2026-11」→「2026-11-30」：本体的 Task 没有截止日，验收截止取所在月份的最后一天（契约 HomeProjectGoal.dueDate）。 */
-export function monthEnd(period: string): string {
-  const [year, month] = period.split("-").map(Number) as [number, number];
-  return `${period}-${String(new Date(Date.UTC(year, month, 0)).getUTCDate()).padStart(2, "0")}`;
-}
-
 /** 项目的顺序（16.2）：有等你的在前，然后是有目标的、按最早的截止日，最后按最近动静从近到远。 */
 export function sortHomeProjects(projects: HomeProject[]): HomeProject[] {
   const due = (project: HomeProject) => project.goals.flatMap((goal) => (goal.dueDate ? [goal.dueDate] : [])).sort()[0] ?? null;

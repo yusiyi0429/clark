@@ -171,6 +171,17 @@ describe("本月页改名字和完成标准", () => {
     expect(await shown()).toEqual([line(a), line(`${b}（改）`, true, b), line(c)]);
   }, 180_000);
 
+  it("本体后来改了标准（不再是改的时候那份）：存下的来处不再用，退回按原文推", async () => {
+    const g = f = await fixture();
+    const [a, b, c] = ["有题库打分结果", "有新人上手录屏", "过 75 分"];
+    g.tasks[0]!.criteria = [a, b, c];
+    for (const criteria of [[b, c], [`${b}（改）`, c]]) expect((await g.goal("task-open", { criteria })).statusCode).toBe(200);
+    // 本体那边也删了第 1 条：存的来处 [1,2] 按新本体会指到 c 上。
+    g.tasks[0]!.criteria = [b, c];
+    expect(((await g.month()).criteria as { text: string; original: string | null; removed: boolean }[]).map(({ text, original, removed }) => ({ text, original, removed })))
+      .toEqual([{ text: `${b}（改）`, original: b, removed: false }, { text: c, original: null, removed: false }]);
+  }, 180_000);
+
   it("本体后来改成和本人改的一样，未进本体的标记自己消失", async () => {
     const g = f = await fixture();
     expect((await g.goal("task-open", { name: "对话质量达标（V2）", criteria: ["有题库打分结果", "有三个新人上手录屏"] })).statusCode).toBe(200);
@@ -215,7 +226,7 @@ describe("本月页改名字和完成标准", () => {
     let race: string | null = null;
     const q: Query = async (sql, params) => {
       const result = await pool.query(sql, params);
-      if (race && sql.startsWith("SELECT task_id,name,criteria,criteria_from FROM task_goal_edits")) { await pool.query(race); race = null; }
+      if (race && sql.startsWith("SELECT task_id,name,criteria,criteria_from,world_criteria FROM task_goal_edits")) { await pool.query(race); race = null; }
       return result;
     };
     const read = withTaskGoalEdits(q, async (missions) => g.tasks.filter((task) => missions.some((mission) => mission.id === task.missionId)));
