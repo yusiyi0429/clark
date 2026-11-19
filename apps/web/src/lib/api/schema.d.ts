@@ -22540,11 +22540,15 @@ export interface components {
             taskId: string;
             missionId: string;
             missionTitle: string;
+            missionOutcome: string | null;
             name: string;
-            agreement: {
-                met: number;
-                total: number;
-            } | null;
+            criteria: {
+                text: string;
+                met: boolean;
+            }[];
+            dueDate: string | null;
+            disposition: "current" | "deferred" | "cancelled";
+            deferredTo: string | null;
             version: number | null;
             running: number;
             blocked: number;
@@ -22592,11 +22596,15 @@ export interface components {
                 taskId: string;
                 missionId: string;
                 missionTitle: string;
+                missionOutcome: string | null;
                 name: string;
-                agreement: {
-                    met: number;
-                    total: number;
-                } | null;
+                criteria: {
+                    text: string;
+                    met: boolean;
+                }[];
+                dueDate: string | null;
+                disposition: "current" | "deferred" | "cancelled";
+                deferredTo: string | null;
                 version: number | null;
                 running: number;
                 blocked: number;

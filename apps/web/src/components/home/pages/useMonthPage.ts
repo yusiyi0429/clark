@@ -2,8 +2,8 @@
 
 /**
  * 月份页的数据（设计 10.4、10.5、12.4），形状照 B2 的契约（packages/contracts/src/taskContinuity.ts）：
- * - GET  /api/me/months/:period → MonthPageData：这个月本人的每件 Task 和天枢备好的状态（约定几条达到、交付第几版、还在跑的、受阻的、本人确认完成没有、
- *   了结了没有（完成 / 到此为止 / 已延续，延续去了哪）、从哪件延续来的），以及下个月 Co-Agent 的草稿（暂为 null，等溪南）。
+ * - GET  /api/me/months/:period → MonthPageData：这个月本人的每件 Task 和天枢备好的状态（Mission 的成果、完成标准原文和哪几条达到、验收时间点、去向、
+ *   交付第几版、还在跑的、受阻的、本人确认完成没有、了结了没有（完成 / 到此为止 / 已延续，延续去了哪）、从哪件延续来的），以及下个月 Co-Agent 的草稿（暂为 null，等溪南）。
  *   第一版的复盘答案（PUT …/tasks/:taskId/decision）删了：去向和评定都在复盘页（useMonthReview）。
  * 接口还没有（404）时：开发和测试里用假数据（monthFixture），生产里写「失败 · 重试」，不拿假数据冒充。换来源只换 MonthSource。
  */
@@ -25,26 +25,21 @@ export function nextPeriod(period: string): string {
   return month === 12 ? `${year + 1}-01` : `${year}-${String(month + 1).padStart(2, "0")}`;
 }
 
-/** Task 那一行的小字：「约定 2/3 · 交付第 2 版 · 进行中 1」，是 0 的、没有的不写；受阻的写在最后。 */
-export function monthSummary(task: Pick<MonthTask, "agreement" | "version" | "running" | "blocked">): string {
-  return [
-    task.agreement ? `约定 ${task.agreement.met}/${task.agreement.total}` : null,
-    task.version ? `交付第 ${task.version} 版` : "未交付",
-    task.running ? `进行中 ${task.running}` : null,
-    task.blocked ? `受阻 ${task.blocked}` : null,
-  ].filter(Boolean).join(" · ");
-}
-
 /** 假数据：接口上之前，开发和测试里用（也是给 B2 的样例）。 */
 export function monthFixture(period: string): MonthPageData {
   const next = nextPeriod(period);
   return {
     period,
     tasks: [
-      { taskId: "fixture-home", missionId: "fixture-m1", missionTitle: "首页与派活", name: "新首页改版", agreement: { met: 2, total: 3 }, version: 2, running: 1, blocked: 0, done: false, settlement: null, continuedFrom: null },
-      { taskId: "fixture-meeting", missionId: "fixture-m1", missionTitle: "首页与派活", name: "会后写回本体", agreement: { met: 3, total: 3 }, version: 3, running: 0, blocked: 0, done: true,
+      { taskId: "fixture-home", missionId: "fixture-m1", missionTitle: "首页与派活", missionOutcome: "首页和派活每天有人用", name: "新首页改版",
+        criteria: [{ text: "首页只放等你", met: true }, { text: "派活一步到位", met: true }, { text: "手机上能用", met: false }], dueDate: `${period}-18`,
+        disposition: "current", deferredTo: null, version: 2, running: 1, blocked: 0, done: false, settlement: null, continuedFrom: null },
+      { taskId: "fixture-meeting", missionId: "fixture-m1", missionTitle: "首页与派活", missionOutcome: "首页和派活每天有人用", name: "会后写回本体",
+        criteria: [{ text: "会后自动写回", met: true }], dueDate: `${period}-30`, disposition: "current", deferredTo: null, version: 3, running: 0, blocked: 0, done: true,
         settlement: { kind: "completed", at: `${period}-20T08:00:00.000Z`, by: null, note: null, to: null }, continuedFrom: null },
-      { taskId: "fixture-review", missionId: "fixture-m2", missionTitle: "复盘与拆解", name: "月度复盘入口", agreement: { met: 0, total: 2 }, version: null, running: 0, blocked: 1, done: false,
+      { taskId: "fixture-review", missionId: "fixture-m2", missionTitle: "复盘与拆解", missionOutcome: null, name: "月度复盘入口",
+        criteria: [{ text: "复盘进新首页", met: false }, { text: "逐条对验收", met: false }], dueDate: `${period}-30`, disposition: "deferred", deferredTo: next,
+        version: null, running: 0, blocked: 1, done: false,
         settlement: { kind: "continued", at: `${period}-28T08:00:00.000Z`, by: null, note: null, to: { taskId: "fixture-review-next", name: "复盘入口收尾", missionId: "fixture-m3", period: next } },
         continuedFrom: null },
     ],
@@ -53,7 +48,7 @@ export function monthFixture(period: string): MonthPageData {
       missions: [{
         id: "fixture-mission", title: "首页与派活",
         tasks: [
-          { id: "fixture-draft-1", name: "新首页收尾", continuesFrom: { taskId: "fixture-home", name: "新首页改版", period, summary: "约定 2/3 · 交付第 2 版" } },
+          { id: "fixture-draft-1", name: "新首页收尾", continuesFrom: { taskId: "fixture-home", name: "新首页改版", period, summary: "交付第 2 版" } },
           { id: "fixture-draft-2", name: "CEO 的新首页", continuesFrom: null },
         ],
       }],

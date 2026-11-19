@@ -49,5 +49,5 @@ export function registerTaskContinuityRoutes(app: AppInstance, ctx: RouteContext
   }));
 
   app.get("/api/me/months/:period", { preHandler: requireMember, schema: { params: monthParams, response: { 200: MonthPageResponse } } }, async (req) =>
-    readMonthPage(q, ctx.planTasks, req.person!.personId, req.params.period));
+    readMonthPage(q, ctx.planTasks, req.person!.personId, req.params.period, ctx.now()));
 }

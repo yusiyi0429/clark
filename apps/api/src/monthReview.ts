@@ -84,7 +84,7 @@ async function reviewScope(q: Query, planTasks: PlanTaskSource, personId: string
 }
 
 /** Agent 预填的去向：已经延续出去的算延期到那件所在的月份（不晚于本月时算下个月），到此为止的算已取消，其余本期验收。 */
-function defaultDisposition(settlement: TTaskSettlement | undefined, period: string): { disposition: TReviewDisposition; deferredTo: string | null } {
+export function defaultDisposition(settlement: TTaskSettlement | undefined, period: string): { disposition: TReviewDisposition; deferredTo: string | null } {
   if (settlement?.kind === "continued") {
     const to = settlement.to?.period;
     return { disposition: "deferred", deferredTo: to && to > period ? to : nextPeriod(period) };

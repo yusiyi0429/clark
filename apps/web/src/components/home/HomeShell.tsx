@@ -542,7 +542,7 @@ function HomeFrame({ account }: { account: Account }) {
   // 首页「等你」的件数（11/16 重新设计 4.5）：和首页同一份 focusList，左栏「今天」行、标签页标题写全部件数。
   const recordingMeetingId = meeting.phase.kind === "live" ? meeting.phase.meeting.id : null;
   const { items: meetingItems, loaded: meetingsLoaded } = usePartnerMeetings();
-  const monthExtras = useMonthExtras({ data, api, projects, go });
+  const monthExtras = useMonthExtras({ data, api, projects });
   const focusNow = Date.now();
   const focus = focusList({ waiting: data.waiting, meetings: meetingItems, offline: machine.disconnected, recordingMeetingId, now: focusNow, ignoredMeetings: data.ignoredMeetings });
   const waitingCount = focus.length;

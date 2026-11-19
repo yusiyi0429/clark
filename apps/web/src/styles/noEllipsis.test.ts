@@ -153,29 +153,23 @@ describe("新首页不出省略号（本人 11/18）", () => {
     expect(home(".barFoot .sendTo")).toMatch(/max-width:\s*100%/);
   });
 
-  // 手机上（新首页外壳的 data-phone）月份页那一行：Task 名占一整行，后面跟的胶囊（项目名或「挂到」）折到下面，和 Task 名的字对齐。
-  const phoneLine = () => rules("styles/home-pages.module.css").filter((rule) => rule.selectors.some((selector) => selector.includes("[data-phone]") && selector.includes(".monthTaskLine")));
-  const phoneBody = (part: string) => phoneLine().filter((rule) => rule.selectors.some((selector) => selector.endsWith(part))).map((rule) => rule.body).join(";");
+  // 手机上（新首页外壳的 data-phone）月份页（11/19 DRI 根据地）：项目名收进了展开；行尾挪到名字下一行、和 Task 名的字对齐；展开里那几样一样一行。
+  const phoneBody = (part: string) => rules("styles/home-pages.module.css")
+    .filter((rule) => rule.selectors.some((selector) => selector.includes("[data-phone]") && selector.endsWith(part))).map((rule) => rule.body).join(";");
 
-  it("手机上月份页的项目胶囊单独占一行", () => {
-    expect(phoneBody(".monthTaskLine")).toMatch(/flex-direction:\s*column/);
-    expect(phoneBody(".monthTaskLine > button:first-child")).toMatch(/align-self:\s*stretch/);
-    expect(phoneBody(".monthTaskLine > * + *")).toMatch(/margin-left:\s*calc\(16px \+ var\(--space-2\)\)/);
-    // 电脑上没有用不上的最大宽度。
+  it("手机上月份页的行尾挪到名字下一行，和名字对齐", () => {
+    expect(phoneBody(".monthTaskLine")).toMatch(/flex-wrap:\s*wrap/);
+    expect(phoneBody(".monthTrail")).toMatch(/flex-basis:\s*100%/);
+    expect(phoneBody(".monthTrail")).toMatch(/padding-left:\s*calc\(16px \+ var\(--space-2\)\)/);
+  });
+
+  it("手机上月份页展开里的验收时间点、去向、项目名一样一行，长项目名换行不截断", () => {
+    expect(phoneBody(".monthFacts")).toMatch(/flex-direction:\s*column/);
+    const link = rules("styles/home-pages.module.css").filter((rule) => rule.selectors.includes(".monthLink")).map((rule) => rule.body).join(";");
+    expect(link).toMatch(/overflow-wrap:\s*anywhere/);
+    expect(link).not.toMatch(/text-overflow|nowrap/);
     expect(rules("styles/home.module.css").filter((rule) => rule.selectors.some((selector) => selector.includes(".statusChip:has(")) && /max-width:\s*20em/.test(rule.body))).toEqual([]);
-  });
-
-  it("手机上没挂项目时，挂到也单独占一行", () => {
-    // 跟在 Task 名后面的不管是项目名胶囊还是「挂到」，规则一样：选择器不认 .ellipsis，认位置。
-    expect(phoneLine().flatMap((rule) => rule.selectors).filter((selector) => selector.includes(".ellipsis"))).toEqual([]);
-    expect(phoneBody(".monthTaskLine > * + *")).toMatch(/max-width:\s*calc\(100% - 16px - var\(--space-2\)\)/);
     expect(rules("styles/home.module.css").filter((rule) => rule.selectors.some((selector) => selector.includes("[data-phone]") && selector.includes(".statusChip"))).map((rule) => rule.selectors.join(", "))).toEqual([]);
-  });
-
-  it("手机上短项目名的胶囊按字宽，不拉满", () => {
-    expect(phoneBody(".monthTaskLine")).toMatch(/align-items:\s*flex-start/);
-    expect(phoneBody(".monthTaskLine > * + *")).toMatch(/flex:\s*none/);
-    expect(phoneBody(".monthTaskLine > * + *")).not.toMatch(/flex(-basis)?:[^;]*100%/);
   });
 
   it("手机上页头标题长时换行，页头跟着长高、不压正文", () => {

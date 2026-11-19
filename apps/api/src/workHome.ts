@@ -16,7 +16,7 @@ import { CardError, cardTaskViews, effectiveOutcome } from "./taskCards.js";
 import { getTaskViews } from "./tasks.js";
 import { ACTIVE, awaitsQuota, heldRuns, workerResources } from "./workers.js";
 import { shanghaiDate } from "./workdays.js";
-import { milestoneDate } from "./monthPlan.js";
+import { missionGate } from "./monthPlan.js";
 import { settlementsOf } from "./taskContinuity.js";
 import { visibleMissions } from "./visibleMissions.js";
 import { taskBasis } from "./planTaskAccess.js";
@@ -309,12 +309,11 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
   const transfers = await openTransfers(q, [...activeIds]);
   // 目标的截止：所在 Mission 的验收时间点（同首页「本月」的 gateLabel：今天以后最近的，都过了取最后一个），没写取月底。
   const goalMissions = [...new Set([...goalTasks.map((task) => task.missionId), ...othersGoals.map((goal) => goal.mission_id)])];
-  const gateDates = new Map(goalMissions.length ? ((await q("SELECT id,period,milestones FROM missions WHERE id=ANY($1::text[])", [goalMissions])).rows as
-    { id: string; period: string; milestones: string[] }[]).map((mission) => [mission.id,
-    mission.milestones.flatMap((text) => milestoneDate(text, mission.period) ?? []).sort()]) : []);
+  const gateMissions = new Map(goalMissions.length ? ((await q("SELECT id,period,milestones FROM missions WHERE id=ANY($1::text[])", [goalMissions])).rows as
+    { id: string; period: string; milestones: string[] }[]).map((mission) => [mission.id, mission]) : []);
   const dueDate = (missionId: string, period: string) => {
-    const dates = gateDates.get(missionId) ?? [];
-    return dates.find((date) => date >= today) ?? dates.at(-1) ?? monthEnd(period);
+    const mission = gateMissions.get(missionId);
+    return (mission ? missionGate(mission.milestones, mission.period, today) : null) ?? monthEnd(period);
   };
   /** 截止日的先后：本体 Task 自己的（0.3 还没有，跳过）→ 天枢里给这件目标存的 → Mission 今天以后最近的节点。 */
   const due = (set: string | null, missionId: string, period: string) =>

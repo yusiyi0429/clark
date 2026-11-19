@@ -66,7 +66,10 @@ export const TaskSettlementResponse = Type.Object({ taskId: Type.String({ minLen
 
 /**
  * 月份页上这个月本人的一件 Task（本人这个月的 Mission 下、本人负责的；本体没登记负责人的算本人的）。
- * agreement：约定达到了几条 / 共几条（一条算达到 = 本人对它的卡里有一张最近一次有结论的验收算通过）；没有标准为 null。
+ * missionOutcome：所在 Mission 的成果（没写为 null）。
+ * criteria：完成标准原文（本体验收标准，没有就按完成定义算一条），met 是这一条达到了（本人对它的卡里有一张最近一次有结论的验收算通过）。
+ * dueDate：验收时间点（YYYY-MM-DD）：天枢里单独存的，没存按 Mission 今天以后最近的节点（都过了取最后一个），Mission 没写节点为 null。
+ * disposition / deferredTo：去向（同复盘页：本期验收 / 延期到某月 / 已取消；没定过的按了结推：延续出去的算延期，到此为止的算取消）。
  * version：交付物到第几版，没交过为 null。running：还在跑的子会话（本机会话还开着的卡和专题）。blocked：受阻的子会话（卡连续两次验收没过）。
  * done：本人确认完成了（最新一版交付了，之后没返工），不问怎么办。
  * settlement：了结了的怎么了结的（completed / stopped / continued，延续去了哪在 settlement.to），没了结为 null。
@@ -76,8 +79,12 @@ export const MonthTask = Type.Object({
   taskId: Type.String({ minLength: 1 }),
   missionId: Type.String({ minLength: 1 }),
   missionTitle: Type.String(),
+  missionOutcome: Nullable(Type.String()),
   name: Type.String(),
-  agreement: Nullable(Type.Object({ met: Type.Integer({ minimum: 0 }), total: Type.Integer({ minimum: 1 }) }, strict)),
+  criteria: Type.Array(Type.Object({ text: Type.String(), met: Type.Boolean() }, strict)),
+  dueDate: Nullable(Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" })),
+  disposition: Type.Union([Type.Literal("current"), Type.Literal("deferred"), Type.Literal("cancelled")]),
+  deferredTo: Nullable(MonthPeriod),
   version: NullableInteger({ minimum: 1 }),
   running: Type.Integer({ minimum: 0 }),
   blocked: Type.Integer({ minimum: 0 }),

@@ -642,16 +642,17 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
       const headers = { authorization: `Bearer ${TOKEN}`, "x-owner-id": TEST_MEMBER.personId };
       const act = (args: unknown) => f.t.app.inject({ method: "POST", url: "/internal/me/buddy-actions/sub_session_link", headers,
         payload: { args, conversationId: conversation, runId: randomUUID() } });
-      const agreement = async () => ((await f.call("GET", "/api/me/months/2026-11")).json().tasks as { taskId: string; agreement: unknown }[])
-        .find((task) => task.taskId === "task-open")!.agreement;
-      expect(await agreement()).toEqual({ met: 0, total: 2 });
+      // 本月页每条标准达到没有（11/19 起按条给，原来的「约定 1/2」）。
+      const agreement = async () => ((await f.call("GET", "/api/me/months/2026-11")).json().tasks as { taskId: string; criteria: { met: boolean }[] }[])
+        .find((task) => task.taskId === "task-open")!.criteria.map((criterion) => criterion.met);
+      expect(await agreement()).toEqual([false, false]);
 
       expect((await act({ letter: "A", taskId: "task-other", criterion: 1 })).json().code).toBe("TASK_NOT_IN_PROJECT");
       expect((await act({ letter: "A", taskId: "task-open", criterion: 3 })).json().code).toBe("CRITERION_NOT_FOUND");
       const linked = await act({ letter: "A", taskId: "task-open", criterion: 1 });
       expect(linked.statusCode, linked.body).toBe(200);
       expect(linked.json()).toMatchObject({ summary: "把「跑题库打分」挂到「对话质量达标」第 1 条", undoable: true });
-      expect(await agreement()).toEqual({ met: 1, total: 2 });
+      expect(await agreement()).toEqual([true, false]);
       // 还在这个项目里，字母不变。
       const home = (await f.call("GET", "/api/me/work-home")).json() as { projects: { name: string; subSessions: { id: string; letter: string | null }[] }[] };
       expect(home.projects.find((entry) => entry.subSessions.some((sub) => sub.id === card))).toMatchObject({ name: "新版天枢应用" });
@@ -659,7 +660,7 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
       expect((await act({ letter: "B", taskId: "task-open", criterion: 1 })).json().code).toBe("NOT_A_CARD");
 
       expect((await f.undo(linked.json().auditId)).statusCode).toBe(200);
-      expect(await agreement()).toEqual({ met: 0, total: 2 });
+      expect(await agreement()).toEqual([false, false]);
       expect((await f.t.sql("SELECT plan_task_id,criterion_index,mission_id FROM tasks WHERE id=$1", [card]))[0]).toEqual({ plan_task_id: null, criterion_index: null, mission_id: null });
     } finally { await f.close(); }
   });

@@ -202,10 +202,18 @@ describe("跨月延续与月份", () => {
     await g.t.sql(`INSERT INTO deliverable_versions(id,task_id,mission_id,author_id,number,task_name,basis) VALUES($1,'task-open','mine',$2,1,'对话质量达标','acceptance')`,
       [randomUUID(), MEMBER]);
 
+    await g.t.sql(`UPDATE missions SET outcome='内部 20 人每天用',milestones='["11/18 V1 上线","11/30 V2 上线"]' WHERE id='mine'`);
+
     const month = await g.call("GET", "/api/me/months/2026-11");
     expect(month.statusCode).toBe(200);
-    expect(month.json()).toEqual({ period: "2026-11", draft: null, tasks: [{ taskId: "task-open", missionId: "mine", missionTitle: "内部版上线", name: "对话质量达标",
-      agreement: { met: 1, total: 2 }, version: 1, running: 1, blocked: 1, done: false, settlement: null, continuedFrom: null }] });
+    // 每件带上 Mission 的成果、完成标准原文和哪几条达到、去向、验收时间点（没单独存的按 Mission 今天以后最近的节点）。
+    expect(month.json()).toEqual({ period: "2026-11", draft: null, tasks: [{ taskId: "task-open", missionId: "mine", missionTitle: "内部版上线", missionOutcome: "内部 20 人每天用",
+      name: "对话质量达标", criteria: [{ text: "有题库打分结果", met: true }, { text: "有新人上手录屏", met: false }], dueDate: "2026-11-18",
+      disposition: "current", deferredTo: null, version: 1, running: 1, blocked: 1, done: false, settlement: null, continuedFrom: null }] });
+    // 单独存过的验收时间点照存的写。
+    const project = (await g.call("POST", "/api/me/projects", { name: "对话质量", taskId: "task-open" })).json().projectId as string;
+    expect((await g.call("PUT", `/api/me/projects/${project}/goals/task-open/due-date`, { dueDate: "2026-11-25" })).statusCode).toBe(200);
+    expect((await g.call("GET", "/api/me/months/2026-11")).json().tasks[0].dueDate).toBe("2026-11-25");
     // 第一版复盘答案的接口去掉了（复盘第三版，本人 11/11 定）。
     expect((await g.call("PUT", "/api/me/months/2026-11/tasks/task-open/decision", { choice: "continue", note: null })).statusCode).toBe(404);
     expect((await g.call("GET", "/api/me/months/2026-13")).statusCode).toBe(400);

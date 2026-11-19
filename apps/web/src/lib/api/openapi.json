@@ -137802,8 +137802,12 @@
           "taskId",
           "missionId",
           "missionTitle",
+          "missionOutcome",
           "name",
-          "agreement",
+          "criteria",
+          "dueDate",
+          "disposition",
+          "deferredTo",
           "version",
           "running",
           "blocked",
@@ -137823,28 +137827,70 @@
           "missionTitle": {
             "type": "string"
           },
+          "missionOutcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "name": {
             "type": "string"
           },
-          "agreement": {
+          "criteria": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "text",
+                "met"
+              ],
+              "properties": {
+                "text": {
+                  "type": "string"
+                },
+                "met": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "dueDate": {
             "anyOf": [
               {
-                "additionalProperties": false,
-                "type": "object",
-                "required": [
-                  "met",
-                  "total"
-                ],
-                "properties": {
-                  "met": {
-                    "minimum": 0,
-                    "type": "integer"
-                  },
-                  "total": {
-                    "minimum": 1,
-                    "type": "integer"
-                  }
-                }
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "disposition": {
+            "anyOf": [
+              {
+                "const": "current",
+                "type": "string"
+              },
+              {
+                "const": "deferred",
+                "type": "string"
+              },
+              {
+                "const": "cancelled",
+                "type": "string"
+              }
+            ]
+          },
+          "deferredTo": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                "type": "string"
               },
               {
                 "type": "null"
@@ -138125,8 +138171,12 @@
                 "taskId",
                 "missionId",
                 "missionTitle",
+                "missionOutcome",
                 "name",
-                "agreement",
+                "criteria",
+                "dueDate",
+                "disposition",
+                "deferredTo",
                 "version",
                 "running",
                 "blocked",
@@ -138146,28 +138196,70 @@
                 "missionTitle": {
                   "type": "string"
                 },
+                "missionOutcome": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
                 "name": {
                   "type": "string"
                 },
-                "agreement": {
+                "criteria": {
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "text",
+                      "met"
+                    ],
+                    "properties": {
+                      "text": {
+                        "type": "string"
+                      },
+                      "met": {
+                        "type": "boolean"
+                      }
+                    }
+                  }
+                },
+                "dueDate": {
                   "anyOf": [
                     {
-                      "additionalProperties": false,
-                      "type": "object",
-                      "required": [
-                        "met",
-                        "total"
-                      ],
-                      "properties": {
-                        "met": {
-                          "minimum": 0,
-                          "type": "integer"
-                        },
-                        "total": {
-                          "minimum": 1,
-                          "type": "integer"
-                        }
-                      }
+                      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "disposition": {
+                  "anyOf": [
+                    {
+                      "const": "current",
+                      "type": "string"
+                    },
+                    {
+                      "const": "deferred",
+                      "type": "string"
+                    },
+                    {
+                      "const": "cancelled",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "deferredTo": {
+                  "anyOf": [
+                    {
+                      "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                      "type": "string"
                     },
                     {
                       "type": "null"
