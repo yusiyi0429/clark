@@ -358,9 +358,22 @@ describe("伙伴回复成气泡和卡片（设计 6.1–6.3）", () => {
     measureCard("card", bare, FITS);
     const tree = expand("card", bare);
     expect(elements(tree).filter((element) => element.type === "span")).toEqual([]);
+    expect((tree as Element).props["aria-label"]).toBeUndefined();
     expect(bodyText(tree)).toBe(list);
-    // 第一块不留上边距：没有标题那一行时，正文、摘要贴着卡片的内边距。
-    expect(css).toMatch(/\.card > :first-child \{ margin-top: 0; \}/);
+    // 右边那一格：页头不留空的标题，也不写空名字。
+    hooks.reset();
+    const shown: { value: SideDetail["shown"] } = { value: null };
+    const side = { get shown() { return shown.value; }, node: {} as HTMLElement, open: false, wide: false, toggle: vi.fn(), setWide: vi.fn(),
+      show: vi.fn((kind: SideDetail["shown"]) => { shown.value = kind; }) } as unknown as SideDetail;
+    hooks.provide(SideDetailContext, side);
+    const folded = named(call("bubbles", () => ReplyBubbles({ markdown: list, streaming: false })), "ReplyCard")[0]!;
+    measureCard("card", folded, TALL);
+    (button(expand("card", folded), "打开")!.props.onClick as () => void)();
+    const preview = named(named(expand("card", folded), "SideContent")[0]!.props.children as ReactNode, "CardPreview")[0]!;
+    vi.stubGlobal("window", { addEventListener: vi.fn(), removeEventListener: vi.fn() });
+    const panel = expand("preview", preview) as Element;
+    expect(panel.props["aria-label"]).toBeUndefined();
+    expect(elements(panel).filter((element) => element.type === "b")).toEqual([]);
   });
 
   it("写完的块马上出，没写完的 2 秒内露「•••」，过了 2 秒在气泡里边写边长", () => {

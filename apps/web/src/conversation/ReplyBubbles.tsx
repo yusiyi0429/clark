@@ -296,7 +296,7 @@ function ReplyCard({ markdown, title, summary, open, at, delay, edge, part }: { 
     side?.show(null);
   };
   return (
-    <section className={b.card} data-card="" aria-label={title} {...part} {...enter(delay)}>
+    <section className={b.card} data-card="" aria-label={title || undefined} {...part} {...enter(delay)}>
       {title || time ? (
         <div className={b.cardHead}>
           <span className={b.cardTitle}>{title}</span>
@@ -334,9 +334,9 @@ function CardPreview({ title, markdown, parts, onClose }: { title: string; markd
     return () => window.removeEventListener("keydown", onKey, true);
   }, [onClose]);
   return (
-    <aside ref={root} className={vs.preview} aria-label={title} tabIndex={-1} data-testid="card-preview">
+    <aside ref={root} className={vs.preview} aria-label={title || undefined} tabIndex={-1} data-testid="card-preview">
       <header className={vs.previewHead}>
-        <b title={title}>{title}</b>
+        {title ? <b title={title}>{title}</b> : null}
         <span className={vs.previewGap} />
         <HeroButton variant="ghost" size="sm" isIconOnly aria-label="关闭" title="关闭" onPress={onClose}><X {...ICON} /></HeroButton>
       </header>

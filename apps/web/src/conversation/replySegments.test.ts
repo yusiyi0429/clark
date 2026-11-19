@@ -283,6 +283,36 @@ describe("splitReply", () => {
     // 写完：前三条清单成卡，后两条正好 150 个字，是短清单。
     expect(splitReply(`- ${"字".repeat(149)}\n- **a**`).segments).toMatchObject([{ kind: "bubble" }]);
   });
+  it("冒号引子只取最后一句当标题，前面的句子照旧是气泡", () => {
+    const six = Array.from({ length: 6 }, (_, i) => `- 第${i + 1}项`).join("\n");
+    const before = "我看了一下你这周的安排，整体没什么冲突，只是评审会挪到了三点。溪南那边也在等你回话。";
+    for (const gap of ["\n\n", "\n"]) {
+      expect(splitReply(`${before}下面是要留意的：${gap}${six}`).segments).toEqual([
+        { kind: "bubble", markdown: before },
+        { kind: "card", markdown: `下面是要留意的：${gap}${six}`, title: "下面是要留意的", summary: "第1项" },
+      ]);
+    }
+    // 句号在行尾：前面几行是气泡，最后一行是标题。
+    expect(splitReply(`先说一句。\n下面是要留意的：\n\n${six}`).segments).toEqual([
+      { kind: "bubble", markdown: "先说一句。" },
+      { kind: "card", markdown: `下面是要留意的：\n\n${six}`, title: "下面是要留意的", summary: "第1项" },
+    ]);
+    expectNoCardTurnsBubble(`${before}下面是要留意的：\n\n${six}\n\n就这些。`);
+  });
+  it("单独一行的加粗冒号段落后紧跟清单：照旧不拆，逐字流式不出现卡变回气泡", () => {
+    const short = "**结论**：\n- 改首页\n- 换头像";
+    expectNoCardTurnsBubble(`${short}\n\n就这些。`);
+    expectNoCardTurnsBubble(`**结论**：\n${TWO_ITEMS}\n\n就这些。`);
+    expect(splitReply(short).segments).toEqual([{ kind: "bubble", markdown: short }]);
+    expect(splitReply(`**结论**：\n${TWO_ITEMS}`).segments).toEqual([{ kind: "bubble", markdown: `**结论**：\n${TWO_ITEMS}` }]);
+  });
+  it("引用块开头的冒号段落不当引子", () => {
+    expect(splitReply(`> 下午有两件事可以留意：\n\n${TWO_ITEMS}`).segments).toEqual([
+      { kind: "bubble", markdown: "> 下午有两件事可以留意：" },
+      { kind: "card", markdown: TWO_ITEMS, title: "", summary: expect.stringMatching(/^三点的评审会/) },
+    ]);
+    expect(splitReply(`> 下午有两件事可以留意：\n${TWO_ITEMS}`).segments).toEqual([{ kind: "bubble", markdown: `> 下午有两件事可以留意：\n${TWO_ITEMS}` }]);
+  });
   it("空的回复", () => {
     expect(splitReply("")).toEqual({ segments: [], tail: null });
     expect(splitReply("  \n")).toEqual({ segments: [], tail: null });

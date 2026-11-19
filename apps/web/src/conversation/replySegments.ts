@@ -4,7 +4,8 @@ import { splitStableBlocks } from "./smoothText";
  * 伙伴的一条回复拆成气泡和卡片（设计稿 6.2）。
  * - 卡片：以标题开头的一节（吞到下一个标题或末尾）、表格、代码块 / 富块 / 公式块、长清单；相邻的非标题卡片料并成一张。
  * - 清单项里的加粗（`- **标签**：说明`）不算小标题，照常是清单；短清单一律气泡（本人 11/19）。
- * - 长清单成卡不拿第一项当标题（本人 11/19）：前面紧挨着一段冒号结尾的话（隔不隔空行都算），这段并进卡里当标题；没有就不画标题。
+ * - 长清单成卡不拿第一项当标题（本人 11/19）：前面紧挨着冒号引子（隔不隔空行都算），引子的最后一句并进卡里当标题，前面的句子照旧是气泡；
+ *   没有引子就不画标题。引用块、单独一行的加粗不算引子。
  * - 单独一行的加粗当小标题，吞到下一个小标题：里面有卡片料就整节成卡（标题是小标题），否则整节一个气泡。
  *   小标题紧跟着又是加粗行（中间只隔空行）：并成一节，标题取第一行。
  * - 其余是气泡；以冒号结尾的段落和紧跟着的短清单并成一个气泡。
@@ -55,11 +56,11 @@ function closes(line: string, close: string): boolean {
   return FENCE.exec(line)?.[1].startsWith(close) ?? false;
 }
 
-/** 这一行接在上一段里：清单的缩进续行、松散清单的下一项、没隔空行的续行；标题、围栏、公式块、冒号结尾的话后面的清单总是新起一段。 */
+/** 这一行接在上一段里：清单的缩进续行、松散清单的下一项、没隔空行的续行；标题、围栏、公式块、冒号引子后面的清单总是新起一段。 */
 function continues(last: Part, line: string, kind: PartKind, blank: boolean): boolean {
   if (last.kind === "list" && /^[ \t]/.test(line)) return true;
   if (kind === "heading" || kind === "code") return false;
-  if (kind === "list" && endsWithColon(last)) return false;
+  if (kind === "list" && isIntro(last)) return false;
   if (last.kind === "code" && !last.open) return false;
   if (!blank) return true;
   return last.kind === "list" && kind === "list";
@@ -177,6 +178,31 @@ function endsWithColon(part: Part): boolean {
   return part.kind === "paragraph" && /[：:]$/.test(part.lines.join("\n").trimEnd());
 }
 
+/** 冒号引子：冒号结尾的段落，不是引用块，也不是单独一行的加粗（那是小标题）。后面紧跟长清单时并进清单卡当标题。 */
+function isIntro(part: Part): boolean {
+  return endsWithColon(part) && !/^ {0,3}>/.test(part.lines[0]) && !isBoldHeading(part);
+}
+
+/**
+ * 冒号引子只取最后一句（最后一个「。！？」之后到冒号）当标题：后面紧跟长清单时，前面的句子另成一段，照旧是气泡。
+ * 清单只会由短变长、引子在清单起头后不再变，流式中切开后不会再合回去。
+ */
+function cutIntros(parts: Part[]): Part[] {
+  return parts.flatMap((part, index) => {
+    const next = parts[index + 1];
+    if (!isIntro(part) || next?.kind !== "list" || !isLongList(next)) return [part];
+    for (let line = part.lines.length - 1; line >= 0; line--) {
+      const end = part.lines[line].search(/[。！？][^。！？]*$/);
+      if (end === -1) continue;
+      const rest = part.lines[line].slice(end + 1).trimStart();
+      const before = [...part.lines.slice(0, line), part.lines[line].slice(0, end + 1)];
+      const after = rest ? [rest, ...part.lines.slice(line + 1)] : part.lines.slice(line + 1);
+      return [{ ...part, lines: before }, { ...part, start: part.start + line + (rest ? 0 : 1), lines: after }];
+    }
+    return [part];
+  });
+}
+
 /** 单独一行的加粗（小标题）：整行是一对 `**…**`，行尾可带冒号（在 `**` 里外都算），前后空白不算。 */
 const BOLD_LINE = /^\s*\*\*(?:(?!\*\*).)*\S(?:(?!\*\*).)*\*\*[：:]?\s*$/;
 
@@ -212,9 +238,10 @@ function group(parts: Part[]): Group[] {
     } else if (isCardMaterial(part)) {
       while (to < parts.length && isCardMaterial(parts[to])) to++;
     } else if (endsWithColon(part) && parts[to]?.kind === "list") {
-      // 冒号结尾的话和紧跟的清单：短清单并成一个气泡；长清单成卡，这段话当标题，再并上后面相邻的卡片料。
-      long = isLongList(parts[to]);
-      to++;
+      // 冒号结尾的话和紧跟的清单：短清单并成一个气泡；长清单前面是冒号引子就成卡，引子当标题，再并上后面相邻的卡片料。
+      const longList = isLongList(parts[to]);
+      long = longList && isIntro(part);
+      if (!longList || long) to++;
       if (long) while (to < parts.length && isCardMaterial(parts[to])) to++;
     }
     const card = long || part.kind === "heading" || isCardMaterial(part);
@@ -283,7 +310,7 @@ function markdownOf(parts: Part[]): string {
 
 // 块的序号被按块的表情（reaction 的 part）用到：改拆分规则会让历史上的表情挂到别的块上。
 export function splitReply(markdown: string, streaming = false): { segments: ReplySegment[]; tail: ReplyTail } {
-  const parts = toParts(markdown);
+  const parts = cutIntros(toParts(markdown));
   const groups = group(parts);
   const last = markdown.split("\n").length - 1;
   const done = streaming ? groups.findIndex((group) => !settled(parts, group, last)) : -1;
