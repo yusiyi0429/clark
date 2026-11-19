@@ -11,7 +11,8 @@
 import type { TLocalSessionStatus } from "@warmap/contracts";
 import type { TLocalSessionSummary } from "@/lib/local/runner";
 import type { SessionView } from "@/lib/local/sessionView";
-import type { SubSession, WorkHomeData } from "./types";
+import { sortWaiting } from "./derive";
+import type { SubSession, WaitingItem, WorkHomeData } from "./types";
 
 export type Attention = NonNullable<SubSession["waiting"]>;
 export const ATTENTION_LABEL: Record<Attention, string> = { approval: "等你批准", question: "在问你", verdict: "等你拿主意", needs_person: "等你补", merge: "等你合回" };
@@ -87,8 +88,23 @@ export function withAttention(sub: SubSession, sessions: readonly TLocalSessionS
 }
 
 /**
- * 首页数据整份照这台电脑上的会话改一遍：左栏的子会话点、项目的「等你」、首页「等你」里的批准和提问。
- * 「等你」里这台电脑上的会话已经没在等的批准、提问拿掉（项目上的 needsYou 跟着减）。
+ * 自由子会话（本人 11/19）做完一轮没能合回：只有本机知道（云端的合回结果只收卡的），照卡的样子在「等你」里加一条；没在等合回的为 null。
+ */
+function topicMerge(sub: SubSession, sessions: readonly TLocalSessionSummary[], projectId: string | null): WaitingItem | null {
+  if (sub.kind !== "topic" || sub.waiting !== "merge") return null;
+  const session = localSessionOf(sub, sessions);
+  const ws = session?.workspace;
+  if (!session || ws?.kind !== "worktree" || !ws.needsMerge) return null;
+  return {
+    id: `merge:topic:${sub.id}`, kind: "merge", title: "没能自动合回", source: `${sub.title} · ${ws.needsMerge.message}`, at: session.updatedAt,
+    open: { kind: "topic", id: sub.id }, taskId: null, projectId, sessionId: session.id, deviceId: sub.deviceId, deviceName: null, letter: sub.letter,
+    dueAt: null, answer: "inline_local", person: null, month: null, question: null, permission: null,
+  };
+}
+
+/**
+ * 首页数据整份照这台电脑上的会话改一遍：左栏的子会话点、项目的「等你」、首页「等你」里的批准、提问和自由子会话的合回。
+ * 「等你」里这台电脑上的会话已经没在等的批准、提问拿掉（项目上的 needsYou 跟着减），没能合回的自由子会话加一条（跟着加）。
  */
 export function withLocalAttention(data: WorkHomeData, sessions: readonly TLocalSessionSummary[]): WorkHomeData {
   if (!sessions.length) return data;
@@ -99,17 +115,20 @@ export function withLocalAttention(data: WorkHomeData, sessions: readonly TLocal
     return !!session && localAsk(summaryAsk(session)) !== item.kind;
   };
   const dropped = data.waiting.filter(stale);
-  const fix = (subs: SubSession[]) => {
+  const added: WaitingItem[] = [];
+  const fix = (subs: SubSession[], projectId: string | null) => {
     const next = subs.map((sub) => withAttention(sub, sessions));
+    for (const sub of next) { const item = topicMerge(sub, sessions, projectId); if (item) added.push(item); }
     return next.every((sub, index) => sub === subs[index]) ? subs : next;
   };
   const projects = data.projects.map((project) => {
-    const subSessions = fix(project.subSessions);
-    const less = dropped.filter((item) => item.projectId === project.projectId).length;
-    if (subSessions === project.subSessions && !less) return project;
-    return { ...project, subSessions, summary: { ...project.summary, needsYou: Math.max(0, project.summary.needsYou - less) } };
+    const subSessions = fix(project.subSessions, project.projectId);
+    const more = added.filter((item) => item.projectId === project.projectId).length - dropped.filter((item) => item.projectId === project.projectId).length;
+    if (subSessions === project.subSessions && !more) return project;
+    return { ...project, subSessions, summary: { ...project.summary, needsYou: Math.max(0, project.summary.needsYou + more) } };
   });
-  const otherSubs = fix(data.other.subSessions);
-  if (!dropped.length && projects.every((project, index) => project === data.projects[index]) && otherSubs === data.other.subSessions) return data;
-  return { ...data, projects, other: { ...data.other, subSessions: otherSubs }, waiting: dropped.length ? data.waiting.filter((item) => !stale(item)) : data.waiting };
+  const otherSubs = fix(data.other.subSessions, null);
+  if (!dropped.length && !added.length && projects.every((project, index) => project === data.projects[index]) && otherSubs === data.other.subSessions) return data;
+  const kept = dropped.length ? data.waiting.filter((item) => !stale(item)) : data.waiting;
+  return { ...data, projects, other: { ...data.other, subSessions: otherSubs }, waiting: added.length ? sortWaiting([...kept, ...added]) : kept };
 }

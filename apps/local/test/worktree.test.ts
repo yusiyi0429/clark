@@ -249,29 +249,25 @@ describe("卡在自己的工作树里做", { timeout: 60_000 }, () => {
     }
   });
 
-  it("自由子会话（第 68 条）：git 仓库的主文件夹也按普通文件夹算，两个自由子会话排队、写清等谁；卡照常在工作树里开；规矩和工具另一套", async () => {
-    const main = repo();
+  it("自由子会话（第 68 条）：普通文件夹里两个自由子会话排队、写清等谁；规矩和工具另一套", async () => {
+    const main = tempDir("tl-plain-");
     const h = await setup(main);
     try {
       expect((await h.call("POST", "/v1/sessions", { subject: { kind: "card", cardId: "X" }, title: "X", cwd: main, firstMessage: "x", free: true })).status).toBe(400); // 只给专题
       const f1 = await h.openFree("改周报");
       await h.waitStatus(f1.id, "waiting_permission");
       const s1 = (await h.session(f1.id)).session;
-      expect(s1.workspace).toEqual({ kind: "folder", folder: realpathSync.native(main) }); // 有 .git 也按普通文件夹（第 71 条照卡一样留一份）
+      expect(s1.workspace).toEqual({ kind: "folder", folder: realpathSync.native(main) }); // 普通文件夹（第 71 条照卡一样留一份）；git 仓库里的另测
       expect(s1.free).toBeUndefined(); // 只记在本机，不进摘要
       expect(JSON.parse(readFileSync(join(h.t.dataDir, "sessions", f1.id, "session.json"), "utf8")).free).toBe(true); // 记在会话记录里，重启后还是它
 
-      // 同一个仓库里再开一个自由子会话：排队，写清在等前一个
+      // 同一个文件夹里再开一个自由子会话：排队，写清在等前一个
       const f2 = await h.openFree("整理目录");
       expect(f2.status).toBe("queued");
       expect((await h.session(f2.id)).session.heldBy).toEqual({ kind: "topic", id: "改周报", title: "改周报" });
       expect(h.events(f2.id).find((e) => e.type === "status" && e.status === "queued").reason).toBe("这个文件夹同一时间只让一个会话改，等「改周报」这一轮做完");
       const synced = await until(() => h.cloud.items.find((i) => i.sessionId === f2.id && i.type === "status" && i.data.status === "queued"));
       expect(synced.data.heldBy).toEqual({ kind: "topic", id: "改周报", title: "改周报" });
-      // 同一个仓库里的卡在自己的工作树里，不排队
-      const a = await h.open("A");
-      expect(a.status).toBe("running");
-      expect((await h.session(a.id)).session.workspace.kind).toBe("worktree");
 
       // 规矩：不提纲、不交回；本人要的文件就写在文件夹里，只是不留没要的；只改让改的那一处。工具只有交产出物和翻更早的轮次
       const prompt = readFileSync(join(h.t.dataDir, "sessions", f1.id, "system.md"), "utf8");
@@ -935,6 +931,139 @@ describe("卡在自己的工作树里做", { timeout: 60_000 }, () => {
       }
       // 执行方的卡不禁
       expect(flagList(argvIn(a.workspace.path, a.id), "--disallowedTools").some((t) => t.includes("git commit"))).toBe(false);
+    } finally {
+      await h.t.cleanup();
+    }
+  });
+});
+
+// 本人 11/19：git 项目里的自由会话也开自己的工作树，每做完一轮，有改动就照「验收后自动合并」的开关和条件合回。
+describe("自由会话在 git 项目里开工作树", { timeout: 60_000 }, () => {
+  const idleSummary = (h: Awaited<ReturnType<typeof setup>>, id: string) => until(async () => { const s = (await h.session(id)).session; return s.status === "idle" ? s : null; });
+
+  it("git 项目里的自由会话开自己的工作树", async () => {
+    const main = repo();
+    const base = git(main, "rev-parse", "HEAD");
+    const h = await setup(main);
+    try {
+      const f = await h.openFree("Same-1");
+      const g = await h.openFree("Other-2");
+      const c = await h.open("Same-1"); // 同 id、同标题的卡：分支、工作树都不撞
+      expect([f.status, g.status, c.status]).toEqual(["running", "running", "running"]); // 同一个仓库里的自由会话不再排队
+      expect(f.workspace).toMatchObject({ kind: "worktree", folder: realpathSync.native(main), branch: "tianshu/free-same1-same-1", baseBranch: "main", baseCommit: base, mergedCommit: null });
+      expect(f.workspace.path).toBe(join(h.t.dataDir, "worktrees", "free-Same-1"));
+      expect(f.cwd).toBe(f.workspace.path);
+      expect(c.workspace.branch).toBe("tianshu/same1-same-1");
+      expect(c.workspace.path).not.toBe(f.workspace.path);
+      expect(g.workspace.path).not.toBe(f.workspace.path);
+      expect(h.events(f.id).find((e) => e.type === "notice" && e.code === "workspace").text)
+        .toBe(`在工作树里做：分支 tianshu/free-same1-same-1，从 main 的最新提交 ${base.slice(0, 7)} 开始`);
+      const prompt = readFileSync(join(h.t.dataDir, "sessions", f.id, "system.md"), "utf8");
+      expect(prompt).toContain("tianshu/free-same1-same-1");
+      expect(prompt).toContain(`不要改主文件夹（${realpathSync.native(main)}）`);
+      for (const no of ["hand_back", "这张卡", "验收员"]) expect(prompt.replace("没有提纲、交回和验收", "")).not.toContain(no);
+      // 改在工作树里，主文件夹不动
+      await h.allow(f.id);
+      await idleSummary(h, f.id);
+      expect(existsSync(join(f.workspace.path, "hello.txt"))).toBe(true);
+      expect(existsSync(join(main, "hello.txt"))).toBe(false);
+    } finally {
+      await h.t.cleanup();
+    }
+  });
+
+  it("git 项目里的自由会话按「自动」开：只在自己的工作树里放行，改主文件夹照样问", async () => {
+    const main = repo(true); // 假 claude 要写主文件夹里的文件
+    const h = await setup(main);
+    try {
+      const f = await h.openFree("Free-Auto", { permissionMode: "auto" });
+      await h.waitStatus(f.id, "waiting_permission");
+      expect((await h.session(f.id)).pendingPermissions[0].input.file_path).toBe(join(main, MAIN_FILE));
+    } finally {
+      await h.t.cleanup();
+    }
+  });
+
+  it("自由会话做完一轮，有改动就提交并合回主文件夹的原分支", async () => {
+    const main = repo();
+    const h = await setup(main, 3, undefined, undefined, true);
+    try {
+      const f = await h.openFree("Free-A");
+      const ws = f.workspace;
+      await h.allow(f.id);
+      await until(() => existsSync(join(main, "hello.txt")));
+      expect(git(main, "symbolic-ref", "--short", "HEAD")).toBe("main");
+      expect(git(main, "status", "--porcelain")).toBe("");
+      expect(git(main, "rev-list", "--merges", "--count", "HEAD")).toBe("1");
+      expect(git(main, "log", "-1", "--format=%s")).toContain(ws.branch);
+      expect(git(ws.path, "log", "-1", "--format=%B")).toBe(`交回：Free-A\n\n天枢专题 Free-A`); // 照卡交回时的写法
+      // 合回以后工作树留着，会话接着做
+      const s = await until(async () => { const x = (await h.session(f.id)).session; return h.events(f.id).some((e) => e.type === "notice" && e.code === "merged") ? x : null; });
+      expect(s.workspace).toEqual(ws);
+      expect(existsSync(ws.path)).toBe(true);
+      expect(h.cloud.items.some((i) => i.sessionId === f.id && i.type === "merge")).toBe(false); // 云端的合回结果只收卡的
+
+      // 下一轮没改动：不合
+      await h.call("POST", `/v1/sessions/${f.id}/messages`, { text: "再看一眼" });
+      await h.allow(f.id);
+      await idleSummary(h, f.id);
+      await new Promise((r) => setTimeout(r, 1500)); // 合回在一轮做完后跑：给它时间，确认没合、没记事件
+      expect(h.events(f.id).filter((e) => e.type === "notice" && (e.code === "merged" || e.code === "merge_needed"))).toHaveLength(1);
+      // 再下一轮有改动：再合一次
+      writeFileSync(join(ws.path, "extra.txt"), "第三轮\n");
+      await h.call("POST", `/v1/sessions/${f.id}/messages`, { text: "接着改" });
+      await h.allow(f.id);
+      await until(() => h.events(f.id).filter((e) => e.type === "notice" && e.code === "merged").length === 2);
+      expect(existsSync(join(main, "extra.txt"))).toBe(true);
+      expect(git(main, "rev-list", "--merges", "--count", "HEAD")).toBe("2");
+      expect((await h.session(f.id)).session.workspace.needsMerge).toBeUndefined();
+    } finally {
+      await h.t.cleanup();
+    }
+  });
+
+  it("主文件夹不干净时自由会话不合，记等你合", async () => {
+    const main = repo();
+    writeFileSync(join(main, "readme.md"), "主文件夹里没提交的改动\n");
+    const h = await setup(main, 3, undefined, undefined, true);
+    try {
+      const f = await h.openFree("Free-D");
+      await h.allow(f.id);
+      const s = await until(async () => { const x = (await h.session(f.id)).session; return x.workspace.needsMerge ? x : null; });
+      expect(s.workspace.needsMerge.reason).toBe("dirty");
+      expect(s.workspace.mergedCommit).toBeNull();
+      expect(existsSync(join(main, "hello.txt"))).toBe(false);
+      expect(readFileSync(join(main, "readme.md"), "utf8")).toBe("主文件夹里没提交的改动\n");
+      // 这一轮的改动已经提交到会话的分支
+      expect(git(s.workspace.path, "status", "--porcelain")).toBe("");
+      expect(git(main, "log", "-1", "--format=%s", s.workspace.branch)).toBe("交回：Free-D");
+      expect(h.events(f.id).some((e) => e.type === "notice" && e.code === "merge_needed")).toBe(true);
+      // 本人收拾好主文件夹、点合并：合回，工作树留着
+      git(main, "checkout", "--", "readme.md");
+      const r = await h.merge(f.id);
+      expect(r.body.merged).toBe(true);
+      expect(existsSync(join(main, "hello.txt"))).toBe(true);
+      const after = (await h.session(f.id)).session;
+      expect(after.workspace.needsMerge).toBeUndefined();
+      expect(existsSync(after.workspace.path)).toBe(true);
+    } finally {
+      await h.t.cleanup();
+    }
+  });
+
+  it("不是 git 仓库的项目，自由会话照旧在主文件夹里做", async () => {
+    const plain = tempDir("tl-plain-");
+    const h = await setup(plain, 3, undefined, undefined, true);
+    try {
+      const f = await h.openFree("Free-P");
+      expect(f.workspace).toEqual({ kind: "folder", folder: realpathSync.native(plain) });
+      expect(f.cwd).toBe(realpathSync.native(plain));
+      await h.allow(f.id);
+      await idleSummary(h, f.id);
+      expect(readFileSync(join(plain, "hello.txt"), "utf8")).toBe("你好");
+      expect(existsSync(join(h.t.dataDir, "worktrees")) ? readdirSync(join(h.t.dataDir, "worktrees")) : []).toEqual([]);
+      expect(h.events(f.id).some((e) => e.type === "notice" && ["workspace", "merged", "merge_needed"].includes(e.code))).toBe(false);
+      expect((await h.session(f.id)).session.workspace).toEqual({ kind: "folder", folder: realpathSync.native(plain) });
     } finally {
       await h.t.cleanup();
     }

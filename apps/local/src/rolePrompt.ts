@@ -124,21 +124,23 @@ const FEISHU_NOTE: Record<"plugin" | "personal" | "none", string> = {
   none: "（这台电脑上没找到飞书技能，做不了时直接告诉本人）",
 };
 
-/** 卡在自己的工作树里做时多交代的几句（ADR 0038）。 */
-function worktreeNote(ws: Extract<TLocalWorkspace, { kind: "worktree" }>): string {
+/** 卡（自由子会话，本人 11/19）在自己的工作树里做时多交代的几句（ADR 0038）。 */
+function worktreeNote(ws: Extract<TLocalWorkspace, { kind: "worktree" }>, free: boolean): string {
   return `## 在哪做
-你在本机给这张卡新开的 git 工作树里（分支 ${ws.branch}，从 ${ws.baseBranch} 的提交 ${ws.baseCommit.slice(0, 7)} 开始），不是本人的主文件夹；别的卡在各自的工作树里，互不影响。
+你在本机给${free ? "这个子会话" : "这张卡"}新开的 git 工作树里（分支 ${ws.branch}，从 ${ws.baseBranch} 的提交 ${ws.baseCommit.slice(0, 7)} 开始），不是本人的主文件夹；别的${free ? "子会话" : "卡"}在各自的工作树里，互不影响。
 - 工作树是新的：.env、node_modules 这类没进 git 的文件没有带过来。要装依赖就自己装；缺钥匙、缺配置就问本人。
-- 可以自己提交。交回时本机会把还没提交的改动提交到这个分支，验收员看的是开工以来这个分支上的全部改动。
+${free
+    ? `- 可以自己提交。每做完一轮，本机会把还没提交的改动提交到这个分支，再合回主文件夹的 ${ws.baseBranch}。`
+    : "- 可以自己提交。交回时本机会把还没提交的改动提交到这个分支，验收员看的是开工以来这个分支上的全部改动。"}
 - 不要切换分支，不要改主文件夹（${ws.folder}）。`;
 }
 
 /** 项目另外绑的文件夹（设计 17.2 第 46 条）：两家执行方都靠这几句知道有它们。 */
-function extraDirsNote(dirs: string[], worktree: boolean): string {
+function extraDirsNote(dirs: string[], worktree: boolean, free: boolean): string {
   return `## 项目另外的文件夹
 这个项目除了工作目录，还绑着下面这些文件夹，用到时写绝对路径：
 ${dirs.map((d) => `- ${d}`).join("\n")}
-它们是本人自己的文件夹，没有单独的工作树。${worktree ? "在里面改的东西不在这张卡的分支上，交回时写明改了哪些文件。" : ""}`;
+它们是本人自己的文件夹，没有单独的工作树。${!worktree ? "" : free ? "在里面改的东西不在这个子会话的分支上，不随它合回，做完一轮时写明改了哪些文件。" : "在里面改的东西不在这张卡的分支上，交回时写明改了哪些文件。"}`;
 }
 
 export function systemPrompt(
@@ -149,8 +151,8 @@ export function systemPrompt(
   const rules = free ? FREE_RULES : kind === "verify" ? verifyRules(workspace?.kind === "worktree") : RULES[kind];
   const own = kind === "verify" ? null : workspace;
   const parts = ["# 天枢本机会话", free ? FREE_INTRO : INTRO[kind], rules];
-  if (own?.kind === "worktree") parts.push(worktreeNote(own));
-  if (extraDirs.length) parts.push(extraDirsNote(extraDirs, own?.kind === "worktree"));
+  if (own?.kind === "worktree") parts.push(worktreeNote(own, free));
+  if (extraDirs.length) parts.push(extraDirsNote(extraDirs, own?.kind === "worktree", free));
   if (customTools.length) {
     const list = customTools.map((t) => `- ${t.name}：MCP 服务器 ${t.server} 里的工具`).join("\n");
     parts.push(`## 本人加的工具\n${list}\n查数据的照权限模式用，改数据的每次都要本人批准。`);
