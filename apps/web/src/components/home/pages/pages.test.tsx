@@ -10,7 +10,7 @@ import { createMockRunner } from "@/lib/local/mock";
 import type { LocalPhase } from "@/lib/local/connection";
 import { KINGDEE_PLACEHOLDER, agentRow, feishuRow, localToolRow, mcpRow, programRow, tokenHubRow, toolRow } from "./connectionRows";
 import { ConnectionsPage } from "./ConnectionsPage";
-import { MonthNav, MonthView } from "./MonthPage";
+import { MonthNav, MonthView, rowTrail } from "./MonthPage";
 import type { MonthExtras } from "./monthLive";
 import { PreferencesPage } from "./PreferencesPage";
 import { MONTH_PAGE, SECONDARY_PAGES } from "./index";
@@ -278,9 +278,26 @@ describe("月份页（设计 10.4、10.5；11/19 DRI 根据地）", () => {
       task({ taskId: "d", name: "丁", dueDate: "2026-11-30" }),
       task({ taskId: "e", name: "戊", dueDate: null }),
     ]));
-    expect(segments(html).map((segment) => segment.label)).toEqual(["11/16 验收 · 已过 3 天", "11/18 验收 · 已过 1 天", "11/19 验收 · 今天", "11/30 验收 · 剩 11 天"]);
+    // 没定日子的几件单独一段放在最后。
+    expect(segments(html).map((segment) => segment.label)).toEqual(["11/16 验收 · 已过 3 天", "11/18 验收 · 已过 1 天", "11/19 验收 · 今天", "11/30 验收 · 剩 11 天", "没定验收时间点"]);
     const overdue = segments(html).map((segment) => segment.attrs.includes("data-overdue"));
-    expect(overdue).toEqual([false, true, false, false]);
+    expect(overdue).toEqual([false, true, false, false, false]);
+  });
+
+  it("「交了」是交付过第 1 版：过了的段里每件不是交付过就是完成了，不标橙", () => {
+    const html = render(month([
+      task({ taskId: "a", name: "甲", dueDate: "2026-11-18", version: 1 }),
+      task({ taskId: "b", name: "乙", dueDate: "2026-11-18", done: true }),
+      task({ taskId: "c", name: "丙", dueDate: "2026-11-16", version: 2 }),
+      task({ taskId: "d", name: "丁", dueDate: "2026-11-16" }),
+    ]));
+    expect(segments(html).map((segment) => [segment.label, segment.attrs.includes("data-overdue")]))
+      .toEqual([["11/16 验收 · 已过 3 天", true], ["11/18 验收 · 已过 1 天", false]]);
+  });
+
+  it("行尾的「n/m」不算删掉的本体标准", () => {
+    expect(rowTrail({ criteria: [{ text: "一", met: true, changed: false, original: null, removed: false }, { text: "二", met: false, changed: false, original: null, removed: true },
+      { text: "三", met: false, changed: false, original: null, removed: false }], blocked: 0, running: 0, version: null }, 0)).toBe("1/2");
   });
 
   it("行尾只写有的：1/3 加等你、受阻、进行中、交付第几版里的第一个", () => {

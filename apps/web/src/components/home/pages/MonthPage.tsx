@@ -4,15 +4,18 @@
  * 月份页（「本月」、等你里月份那一行点进来，设计 10.4、10.5；11/19 改成 DRI 的根据地，.scratch/month-page-20261119/design.md）：文档类页面，没有主按钮。
  * 这一页只回答：我这个月答应了什么、哪件该动手了、每件到哪了。一种字号，层级只靠深浅和字重。
  * - 每个 Mission 一块：Mission 名加重，右边「完成数/总数」，有延期、取消时「· 延期 N · 取消 N」；下面淡色一句成果（和标题一样时不写）。
- * - Mission 里按验收时间点分段，段头「11/18 验收 · 已过 1 天」，过了、段里还有没交的标橙。
+ * - Mission 里按验收时间点分段，段头「11/18 验收 · 已过 1 天」，没定日子的几件一段放在最后（「没定验收时间点」）；
+ *   过了、段里还有没交的标橙（「交了」是交付过第 1 版或确认完成）。
  * - 每件 Task 一行，行尾只写有的：达到了几条「1/3」，再加最多一个词（等你 N / 受阻 N / 进行中 N / 交付第 N 版，取第一个有的）。
  *   完成的行首一个勾、整行变淡；延续来的写「延续自 10 月的 X」，已经延续出去的下面一行「已延续到 X」（点了进那件）。
- * - 点行展开、再点收起：每条完成标准一行，达到的打勾；下面一行验收时间点、去向、项目名（点了进这件 Task 的管线；没挂的「挂到」和「详情」）。
+ * - 点行展开、再点这一行（名字以外的地方）收起：每条完成标准一行，达到的打勾；下面一行验收时间点、去向、项目名（点了进这件 Task 的管线；没挂的「挂到」和「详情」）。
+ *   改了验收时间点挪到别的段时还展开着，滚到看得见。
  *   验收时间点就地改（项目详情那个小日期选择，按 Task 存），改了行上淡色「原 11/18」（原值是 Mission 节点算的，改回一样就不写）；
  *   去向就地定（复盘页的去向下拉，同一个接口，月中也能定）。没成写「失败 · 重试」，不弹 toast。
  * - 定了延期、取消的从上面挪到最下面「延期和取消」：一件一行，名字、去向下拉。
- * - 名字、完成标准就地改（复盘页备注框的样子：平时是字，悬停有底，聚焦出框；回车或离开保存，Esc 取消；清空一条再存就是删；「+ 加一条」）。
- *   天枢里先生效、不写本体：行上淡色「未进本体」，改过的标准一种底色、下面淡色「原 〈原文〉」，展开里「未进本体 · 恢复」。
+ * - 名字、完成标准就地改（复盘页备注框的样子：平时是字，悬停有底，点了才出框；回车或离开保存，Esc 取消；清空一条再存就是删，只剩一条时不能删；「+ 加一条」）。
+ *   天枢里先生效、不写本体：行上淡色「未进本体」，改过的名字和标准一种底色、下面淡色「原 〈原文〉」，删掉的本体标准在原位置画删除线（「恢复」放回去），
+ *   展开里「未进本体 · 恢复」。
  * - Mission 末尾「+ 添一件」：写个名字回车，在这个 Mission 下新建一件天枢里的 Task（也写「未进本体」，没有本体原文，不出「恢复」；不要了选「已取消」）。
  * - 下半：下个月 Co-Agent 的草稿，按 Mission 分组（接口等溪南，现在没有）。
  * 数据见 useMonthPage。
@@ -105,9 +108,10 @@ const isDone = (task: MonthTask) => task.done || task.settlement?.kind === "comp
  * waiting 来自首页数据（只有当月有）。
  */
 export function rowTrail(task: Pick<MonthTask, "criteria" | "blocked" | "running" | "version">, waiting: number): string {
-  const met = task.criteria.filter((criterion) => criterion.met).length;
+  const active = task.criteria.filter((criterion) => !criterion.removed);
+  const met = active.filter((criterion) => criterion.met).length;
   const word = waiting ? `等你 ${waiting}` : task.blocked ? `受阻 ${task.blocked}` : task.running ? `进行中 ${task.running}` : task.version ? `交付第 ${task.version} 版` : null;
-  return [met ? `${met}/${task.criteria.length}` : null, word].filter(Boolean).join(" · ");
+  return [met ? `${met}/${active.length}` : null, word].filter(Boolean).join(" · ");
 }
 
 /** 一个 Mission 里按验收时间点分段：日期早的段在前，没有日期的段在最后；段内有等你的在前，其次受阻、进行中，已完成的最后。 */
@@ -198,15 +202,17 @@ export function MissionBlock({ tasks, period, go, extraOf, today, actions, linkM
         <span className={p.monthFaint}>{missionCount(tasks)}</span>
       </div>
       {outcome && outcome !== title ? <p className={p.monthOutcome}>{outcome}</p> : null}
-      {bySegments(tasks.filter((task) => task.disposition === "current"), waitingOf).map((segment) => {
+      {/* 段头和行排在同一层：一行改了验收时间点挪到别的段，还是同一个 key，展开着的照样展开。 */}
+      {bySegments(tasks.filter((task) => task.disposition === "current"), waitingOf).flatMap((segment) => {
         const days = segment.date ? daysTo(segment.date, today) : null;
-        const overdue = days !== null && days < 0 && segment.tasks.some((task) => !isDone(task) && task.disposition === "current");
-        return (
-          <div key={segment.date ?? "none"}>
-            {segment.date ? <p className={p.segmentTitle} data-testid="month-segment" data-overdue={overdue ? "" : undefined}>{segmentLabel(segment.date, today)}</p> : null}
-            {segment.tasks.map((task) => <MonthTaskRow key={task.taskId} task={task} period={period} go={go} extra={extraOf(task)} actions={actions} />)}
-          </div>
-        );
+        // 「交了」= 交付过第 1 版（本人 11/19 定），或确认完成。
+        const overdue = days !== null && days < 0 && segment.tasks.some((task) => !isDone(task) && !task.version);
+        return [
+          <p key={`segment:${segment.date ?? "none"}`} className={p.segmentTitle} data-testid="month-segment" data-overdue={overdue ? "" : undefined}>
+            {segment.date ? segmentLabel(segment.date, today) : "没定验收时间点"}
+          </p>,
+          ...segment.tasks.map((task) => <MonthTaskRow key={task.taskId} task={task} period={period} go={go} extra={extraOf(task)} actions={actions} />),
+        ];
       })}
       {actions ? (
         <div className={p.monthAddTask}>
@@ -218,17 +224,22 @@ export function MissionBlock({ tasks, period, go, extraOf, today, actions, linkM
 }
 
 /**
- * 一件 Task：点行展开看完成标准和验收时间点、去向、项目，再点收起。
- * 有 actions 时展开里就地改：名字（展开后行上的名字变成可改的字）、每条标准、「+ 加一条」、改过的「恢复」。
+ * 一件 Task：点行展开看完成标准和验收时间点、去向、项目，再点这一行收起。
+ * 有 actions 时展开里就地改：名字（展开后点名字的字才变输入框）、每条标准、「+ 加一条」、删掉的本体标准「恢复」、改过的「恢复」。
  */
 export function MonthTaskRow({ task, period, go, extra, actions }: { task: MonthTask; period: string; go: (href: string) => void; extra?: MonthExtras; actions?: MonthActions }) {
   const [open, setOpen] = useState(false);
+  const [naming, setNaming] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  // 展开着改了验收时间点（挪到别的段）：滚到看得见。
+  useEffect(() => { if (open) ref.current?.scrollIntoView?.({ block: "nearest" }); }, [open, task.dueDate]);
   const done = isDone(task);
   const to = task.settlement?.kind === "continued" ? task.settlement.to : null;
   const from = task.continuedFrom;
   const trail = rowTrail(task, extra?.waiting ?? 0);
   const project = extra?.project ?? null;
-  const texts = task.criteria.map((criterion) => criterion.text);
+  // 删掉的本体标准只画出来，存的时候不带。
+  const texts = task.criteria.flatMap((criterion) => (criterion.removed ? [] : [criterion.text]));
   const saveCriteria = (criteria: string[]) => actions!.setGoal(task.taskId, { criteria: criteria.map((text) => text.trim()).filter(Boolean) });
   const saveName = async (text: string) => { if (text.trim()) await actions!.setGoal(task.taskId, { name: text.trim() }); };
   const restore = () => task.edited ? actions?.setGoal(task.taskId, { name: task.edited.name ?? task.name, criteria: task.edited.criteria ?? texts }) : undefined;
@@ -242,15 +253,20 @@ export function MonthTaskRow({ task, period, go, extra, actions }: { task: Month
   );
   const slot = <span className={h.slotState}>{done ? <Check {...ICON} aria-label="已完成" /> : null}</span>;
   const status = trail ? <span className={p.monthTrail} data-testid="task-status">{trail}</span> : null;
+  const nameChanged = task.edited?.name != null ? "" : undefined;
   return (
-    <div className={p.monthTask} data-testid="month-task" data-done={done ? "" : undefined} data-open={open ? "" : undefined}>
+    <div ref={ref} className={p.monthTask} data-testid="month-task" data-done={done ? "" : undefined} data-open={open ? "" : undefined}>
       {open && actions ? (
-        // 展开着、能改：名字变成可改的字；点这一行别的地方（或行首）收起。
-        <div className={p.monthTaskLine} data-testid="month-task-line" onClick={(event) => { if (!(event.target as HTMLElement).closest("textarea, input")) setOpen(false); }}>
-          <button type="button" className={p.monthFold} aria-expanded aria-label="收起" onClick={(event) => { event.stopPropagation(); setOpen(false); }}>{slot}</button>
+        // 展开着、能改：名字平时是字，点了字才变输入框；点这一行别的地方收起（行首的按钮也能收起）。
+        <div className={p.monthTaskLine} data-testid="month-task-line"
+          onClick={(event) => { if (!(event.target as HTMLElement).closest("textarea, input, button")) { setNaming(false); setOpen(false); } }}>
+          <button type="button" className={p.monthFold} aria-expanded aria-label="收起" onClick={(event) => { event.stopPropagation(); setNaming(false); setOpen(false); }}>{slot}</button>
           <span className={p.monthTaskText}>
-            <InlineText value={task.name} label="Task 名" required changed={task.edited?.name != null} onSave={saveName} />
+            {naming ? <InlineText value={task.name} label="Task 名" required changed={nameChanged !== undefined} autoFocus onSave={saveName} onDone={() => setNaming(false)} /> : (
+              <button type="button" className={p.monthName} data-testid="month-name" data-changed={nameChanged} onClick={(event) => { event.stopPropagation(); setNaming(true); }}>{task.name}</button>
+            )}
             {marks}
+            {task.edited?.name ? <span className={p.monthNameOriginal}>原 {task.edited.name}</span> : null}
           </span>
           {status}
         </div>
@@ -258,7 +274,7 @@ export function MonthTaskRow({ task, period, go, extra, actions }: { task: Month
         <button type="button" className={p.monthTaskLine} data-testid="month-task-line" aria-expanded={open} onClick={() => setOpen(!open)}>
           {slot}
           <span className={p.monthTaskText}>
-            <span>{task.name}</span>
+            <span className={p.monthName} data-testid="month-name" data-changed={nameChanged}>{task.name}</span>
             {marks}
           </span>
           {status}
@@ -268,16 +284,30 @@ export function MonthTaskRow({ task, period, go, extra, actions }: { task: Month
         <div className={p.monthDetail} data-testid="month-detail">
           {task.criteria.length || actions ? (
             <ul className={p.monthCriteria}>
-              {task.criteria.map((criterion, index) => (
-                <li key={index} className={p.monthCriterion} data-testid="month-criterion" data-changed={criterion.changed ? "" : undefined}>
-                  <span className={h.slotState}>{criterion.met ? <Check {...ICON} aria-label="达到" /> : null}</span>
-                  <span className={p.monthCriterionText}>
-                    {actions ? <InlineText value={criterion.text} label={`第 ${index + 1} 条完成标准`} changed={criterion.changed}
-                      onSave={(text) => saveCriteria(texts.map((value, at) => (at === index ? text : value)))} /> : <span>{criterion.text}</span>}
-                    {criterion.original ? <span className={p.monthFaint}>原 {criterion.original}</span> : null}
-                  </span>
-                </li>
-              ))}
+              {task.criteria.map((criterion, shown) => {
+                // index：这一条在存的标准里是第几条（删掉的那几条不算）。
+                const index = task.criteria.slice(0, shown).filter((entry) => !entry.removed).length;
+                if (criterion.removed) return (
+                  <li key={shown} className={p.monthCriterion} data-testid="month-criterion-removed">
+                    <span className={h.slotState} />
+                    <span className={p.monthCriterionText}>
+                      <span className={p.monthRemoved}>{criterion.text}</span>
+                      {actions ? <button type="button" className={p.monthLink} onClick={() => void saveCriteria([...texts.slice(0, index), criterion.text, ...texts.slice(index)])}>恢复</button> : null}
+                    </span>
+                  </li>
+                );
+                return (
+                  <li key={shown} className={p.monthCriterion} data-testid="month-criterion" data-changed={criterion.changed ? "" : undefined}>
+                    <span className={h.slotState}>{criterion.met ? <Check {...ICON} aria-label="达到" /> : null}</span>
+                    <span className={p.monthCriterionText}>
+                      {/* 只剩一条时清空了不存（不能删光，服务端也不收）。 */}
+                      {actions ? <InlineText value={criterion.text} label={`第 ${index + 1} 条完成标准`} changed={criterion.changed} required={texts.length === 1}
+                        onSave={(text) => saveCriteria(texts.map((value, at) => (at === index ? text : value)))} /> : <span>{criterion.text}</span>}
+                      {criterion.original ? <span className={p.monthFaint}>原 {criterion.original}</span> : null}
+                    </span>
+                  </li>
+                );
+              })}
               {actions ? (
                 <li className={p.monthCriterion}>
                   <span className={h.slotState} />

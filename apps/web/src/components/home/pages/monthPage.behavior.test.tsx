@@ -2,15 +2,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Children, isValidElement, type ReactElement, type ReactNode } from "react";
 
 // 不起浏览器：把 react 的 useState 换成可重放的假实现，直接调组件函数拿到元素树，再调元素上的处理器。
+// useEffect 当场跑，useRef 给一个能记「滚到可见」的假元素。
 const hooks = vi.hoisted(() => ({
-  position: 0, values: [] as unknown[],
+  position: 0, values: [] as unknown[], scrolled: [] as unknown[],
+  useRef() { return { current: { scrollIntoView: (options: unknown) => { hooks.scrolled.push(options); } } }; },
+  useEffect(run: () => void) { run(); },
   useState(initial: unknown) {
     const key = hooks.position++;
     if (!(key in hooks.values)) hooks.values[key] = typeof initial === "function" ? (initial as () => unknown)() : initial;
     return [hooks.values[key], (next: unknown) => { hooks.values[key] = typeof next === "function" ? (next as (value: unknown) => unknown)(hooks.values[key]) : next; }];
   },
 }));
-vi.mock("react", async (original) => ({ ...(await original<typeof import("react")>()), useState: hooks.useState }));
+vi.mock("react", async (original) => ({ ...(await original<typeof import("react")>()), useState: hooks.useState, useRef: hooks.useRef, useEffect: hooks.useEffect }));
 
 import { MissionBlock, MonthTaskRow } from "./MonthPage";
 import type { MonthTask } from "./useMonthPage";
@@ -30,7 +33,10 @@ const row = () => { hooks.position = 0; return MonthTaskRow({ task, period: "202
 const toggle = (tree: ReactNode) => nodes(tree).find((node) => "aria-expanded" in node.props)!;
 const criteria = (tree: ReactNode) => nodes(tree).filter((node) => node.props["data-testid"] === "month-criterion");
 
-beforeEach(() => { hooks.position = 0; hooks.values = []; go.mockClear(); });
+beforeEach(() => { hooks.position = 0; hooks.values = []; hooks.scrolled = []; go.mockClear(); });
+/** 点一下（带一个点在别处的事件：不在名字、输入框、按钮上）。 */
+const click = (node: Element, target: { closest: (selector: string) => unknown } = { closest: () => null }) =>
+  (node.props.onClick as (event: unknown) => void)({ target, stopPropagation: () => {} });
 
 describe("本月页一行", () => {
   it("点一行展开看完成标准，达到的打勾；再点收起", () => {
@@ -110,12 +116,78 @@ describe("本月页就地改名字和完成标准", () => {
     await save("加一条完成标准", "过 80 分");
     expect(acts.setGoal).toHaveBeenLastCalledWith("t1", { criteria: ["有题库打分结果", "有新人上手录屏", "过 75 分", "过 80 分"] });
     expect(field(tree, "加一条完成标准").props.placeholder).toBe("完成标准");
-    await save("Task 名", "甲（V2）");
+    // 名字平时是字，点了字才变输入框。
+    expect(nodes(tree).some((node) => node.props.label === "Task 名")).toBe(false);
+    click(nodes(tree).find((node) => node.props["data-testid"] === "month-name")!);
+    hooks.position = 0;
+    const naming = MonthTaskRow({ task, period: "2026-11", go, actions: acts }) as ReactNode;
+    const name = (text: string) => (field(naming, "Task 名").props.onSave as (text: string) => Promise<void>)(text);
+    expect(field(naming, "Task 名").props.autoFocus).toBe(true);
+    await name("甲（V2）");
     expect(acts.setGoal).toHaveBeenLastCalledWith("t1", { name: "甲（V2）" });
     // 名字清空不存（服务端也不收空名字）。
     acts.setGoal.mockClear();
-    await save("Task 名", " ");
+    await name(" ");
     expect(acts.setGoal).not.toHaveBeenCalled();
+  });
+
+  it("展开后点这一行名字以外的地方收起，点名字的字才进改名；收起时也是点一下就展开", () => {
+    const acts = actions();
+    const tree = open(task, acts);
+    const line = nodes(tree).find((node) => node.props["data-testid"] === "month-task-line")!;
+    click(line);
+    hooks.position = 0;
+    const closed = MonthTaskRow({ task, period: "2026-11", go, actions: acts }) as ReactNode;
+    expect(toggle(closed).props["aria-expanded"]).toBe(false);
+    expect(criteria(closed)).toHaveLength(0);
+    // 点在输入框、按钮上（改名、收起按钮）不算点这一行。
+    const again = open(task, acts);
+    click(nodes(again).find((node) => node.props["data-testid"] === "month-task-line")!, { closest: () => ({}) });
+    hooks.position = 0;
+    expect(criteria(MonthTaskRow({ task, period: "2026-11", go, actions: acts }) as ReactNode)).toHaveLength(3);
+  });
+
+  it("改过名字：展开时名字下面淡色「原 〈原名〉」，收着时名字也是那一种底色", () => {
+    const acts = actions();
+    hooks.position = 0;
+    hooks.values = [];
+    const closed = MonthTaskRow({ task: edited, period: "2026-11", go, actions: acts }) as ReactNode;
+    expect(nodes(closed).find((node) => node.props["data-testid"] === "month-name")!.props["data-changed"]).toBe("");
+    expect(textOf(closed)).not.toContain("原 甲");
+    const tree = open(edited, acts);
+    expect(nodes(tree).find((node) => node.props["data-testid"] === "month-name")!.props["data-changed"]).toBe("");
+    expect(textOf(nodes(tree).find((node) => node.props["data-testid"] === "month-task-line")!.props.children as ReactNode)).toContain("原 甲");
+    // 没改名字的不写。
+    expect(textOf(open({ ...edited, name: "甲", edited: { name: null, criteria: edited.edited!.criteria } }, acts))).not.toContain("原 甲");
+  });
+
+  it("删掉的本体标准在原位置画一行删除线，点「恢复」放回原位置；改别的条时不带它", async () => {
+    const acts = actions();
+    const removed: MonthTask = { ...task, criteria: [{ text: "有题库打分结果", met: true, changed: false, original: null, removed: false },
+      { text: "有新人上手录屏", met: false, changed: false, original: null, removed: true }, { text: "过 75 分", met: false, changed: false, original: null, removed: false }],
+    edited: { name: null, criteria: ["有题库打分结果", "有新人上手录屏", "过 75 分"] } };
+    const tree = open(removed, acts);
+    expect(criteria(tree)).toHaveLength(2);
+    const gone = nodes(tree).filter((node) => node.props["data-testid"] === "month-criterion-removed");
+    expect(gone.map((line) => textOf(line.props.children as ReactNode))).toEqual(["有新人上手录屏恢复"]);
+    // 改第 2 条（删掉的那条不算）：存的标准里没有删掉的那条。
+    await (field(tree, "第 2 条完成标准").props.onSave as (text: string) => Promise<void>)("过 80 分");
+    expect(acts.setGoal).toHaveBeenLastCalledWith("t1", { criteria: ["有题库打分结果", "过 80 分"] });
+    click(nodes(gone[0]!.props.children as ReactNode).find((node) => node.type === "button")!);
+    expect(acts.setGoal).toHaveBeenLastCalledWith("t1", { criteria: ["有题库打分结果", "有新人上手录屏", "过 75 分"] });
+  });
+
+  it("只剩一条标准时不能删：清空了不存，换回原来的", () => {
+    const acts = actions();
+    const one: MonthTask = { ...task, criteria: [{ text: "有题库打分结果", met: false, changed: false, original: null, removed: false },
+      { text: "有新人上手录屏", met: false, changed: false, original: null, removed: true }] };
+    expect(field(open(one, acts), "第 1 条完成标准").props.required).toBe(true);
+    expect(field(open(task, acts), "第 1 条完成标准").props.required).toBe(false);
+  });
+
+  it("展开着的行改了验收时间点：滚到可见（挪到新段时还是展开的，见 MissionBlock 那条）", () => {
+    open(task, actions());
+    expect(hooks.scrolled).toContainEqual({ block: "nearest" });
   });
 });
 
@@ -132,6 +204,14 @@ describe("本月页添一件", () => {
     hooks.position = 0;
     const other = MissionBlock({ tasks: [task], period: "2026-11", go, extraOf: () => undefined, today: "2026-11-19" }) as ReactNode;
     expect(nodes(other).some((node) => node.type === "button" && textOf(node.props.children as ReactNode) === "天枢 11 月")).toBe(false);
+  });
+
+  it("一行改了验收时间点挪到别的段，还是同一个父元素下的同一个 key：展开着的照样展开", () => {
+    hooks.position = 0;
+    const block = MissionBlock({ tasks: [task, { ...task, taskId: "t2", dueDate: "2026-11-30" }], period: "2026-11", go, extraOf: () => undefined, today: "2026-11-19" }) as Element;
+    const children = Children.toArray(block.props.children as ReactNode).filter(isValidElement) as Element[];
+    expect(children.filter((node) => node.type === MonthTaskRow).map((node) => (node.props.task as MonthTask).taskId)).toEqual(["t1", "t2"]);
+    expect(children.filter((node) => node.props["data-testid"] === "month-segment")).toHaveLength(2);
   });
 
   it("Mission 末尾「+ 添一件」写个名字回车就加在这个 Mission 下", async () => {

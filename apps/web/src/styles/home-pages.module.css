@@ -156,7 +156,7 @@ label.row:hover { background: var(--default-soft); }
 /* 就地改（本月页第 3 步）：名字、标准平时是字，悬停有底，聚焦出框，放不下换行（复盘页备注框的样子）；和本体不一样的一种底色。展开着时行首那一格收起。 */
 .monthFold { display: inline-grid; flex: none; place-items: center; padding: 0; border: 0; border-radius: var(--r-control); background: none; color: inherit; cursor: pointer; }
 .monthFold:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-.monthTask[data-open] > div.monthTaskLine { cursor: default; }
+.monthTask[data-open] > div.monthTaskLine { cursor: pointer; }
 .monthTask[data-open] > div.monthTaskLine:hover { background: none; }
 .monthCriterionText { display: grid; flex: 1; grid-template-columns: minmax(0, 1fr); min-width: 0; }
 .monthCriterionText > span { white-space: normal; overflow-wrap: anywhere; }
@@ -165,6 +165,16 @@ label.row:hover { background: var(--default-soft); }
 .monthEdit:focus { border-color: var(--field-border-focus); background: var(--neutral-wash); color: var(--ink); }
 .monthEdit[data-changed] { background: var(--accent-soft); }
 .monthEdit::placeholder { color: var(--ink-faint); }
+/* Task 名：改过的一种底色（同改过的标准）；展开后是按钮，悬停有底，点了才变输入框，只占字那么宽。 */
+.monthName { min-width: 0; margin: 0 0 0 calc(-1 * var(--space-1)); padding: 2px var(--space-1); border: 0; border-radius: var(--r-control); background: none; color: inherit; font: inherit; text-align: left; white-space: normal; overflow-wrap: anywhere; }
+.monthName[data-changed] { background: var(--accent-soft); }
+button.monthName { cursor: text; }
+button.monthName:hover { background: var(--default-soft); }
+button.monthName:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.monthNameOriginal { flex-basis: 100%; color: var(--ink-faint); white-space: normal; overflow-wrap: anywhere; }
+.monthRemoved { color: var(--ink-faint); text-decoration: line-through; white-space: normal; overflow-wrap: anywhere; }
+/* 深色只有两级字色：Task 名用次一级，和加重的 Mission 名拉开（浅色是字重拉开）。 */
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .monthTaskLine { color: var(--ink-muted); }
 .monthAdd { display: inline-flex; align-items: center; gap: 2px; height: var(--row-28); margin-left: calc(-1 * var(--space-1)); padding: 0 var(--space-1); border: 0; border-radius: var(--r-capsule); background: none; color: var(--ink-faint); font: inherit; cursor: pointer; }
 .monthAdd:hover { background: var(--default-soft); color: var(--ink-muted); }
 .monthAdd:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
