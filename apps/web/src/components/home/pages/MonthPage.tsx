@@ -290,7 +290,7 @@ export function MonthTaskRow({ task, period, go, extra, actions }: { task: Month
                 if (criterion.removed) return (
                   <li key={shown} className={p.monthCriterion} data-testid="month-criterion-removed">
                     <span className={h.slotState} />
-                    <span className={p.monthCriterionText}>
+                    <span className={p.monthRemovedLine}>
                       <span className={p.monthRemoved}>{criterion.text}</span>
                       {actions ? <button type="button" className={p.monthLink} onClick={() => void saveCriteria([...texts.slice(0, index), criterion.text, ...texts.slice(index)])}>恢复</button> : null}
                     </span>
