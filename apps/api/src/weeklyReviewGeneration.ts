@@ -41,7 +41,7 @@ export type WeeklyReviewDraftInput = {
 };
 
 const day = (date: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", month: "2-digit", day: "2-digit" }).format(date).replace("-", "/");
-const clip = (text: string, max: number) => text.length > max ? `${text.slice(0, max - 1)}…` : text;
+const clip = (text: string, max: number) => text.length > max ? text.slice(0, max) : text;
 const shortDay = (iso: string) => iso.slice(5).replace("-", "/");
 
 export const CURRENT_HANDLING = ["继续推进", "责任范围内调整", "需要升级处理"] as const;

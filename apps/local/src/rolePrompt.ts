@@ -223,7 +223,7 @@ export function changesBrief(ws: { branch: string; baseBranch: string; baseCommi
   ].join("\n");
   if (typeof diff === "string") return `${head}\n\n改动没取到（${diff}），请直接读文件核对。`;
   if (!diff.stat) return `${head}\n\n开工以来没有改动。`;
-  const cut = diff.truncated ? "\n…（太长，后面截掉了，没列出的改动请直接读文件）" : "";
+  const cut = diff.truncated ? "\n（太长，后面截掉了，没列出的改动请直接读文件）" : "";
   return `${head}\n\n\`\`\`\n${diff.stat}\n\`\`\`\n\n\`\`\`diff\n${diff.patch}${cut}\n\`\`\``;
 }
 

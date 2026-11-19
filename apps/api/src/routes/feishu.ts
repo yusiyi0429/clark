@@ -119,7 +119,7 @@ export function registerFeishuAuthRoutes(app: AppInstance, ctx: RouteContext, cl
       if (outcome.kind !== "ok") return reply.status(outcome.kind === "code_invalid" ? 400 : OUTCOME_STATUS[outcome.kind].status).send(failurePage(outcome.message));
       reply.header("set-cookie", [clearOAuthStateCookie(), sessionCookie(outcome)]);
       const target = outcome.onboarded ? verified.next : `/welcome?next=${encodeURIComponent(verified.next)}`;
-      return reply.send(page("正在进入天枢…", `<a href="${escapeHtml(target)}">没有自动跳转请点这里</a>`, target));
+      return reply.send(page("正在进入天枢", `<a href="${escapeHtml(target)}">没有自动跳转请点这里</a>`, target));
     },
   );
 

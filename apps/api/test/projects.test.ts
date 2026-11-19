@@ -316,7 +316,7 @@ describe("项目", { timeout: 60_000 }, () => {
       await f.call("PATCH", url, { note: [{ title: "怎么跑起来", lines: ["CHAT_TOKEN 找人豪要", "CHAT_TOKEN=sk-abcdefghijklmnopqrstuv"] }] });
       const blocked = await f.call("POST", `${url}/send`);
       expect([blocked.statusCode, blocked.json()]).toEqual([422, { code: "SECRET_IN_NOTE", message: expect.any(String),
-        findings: [{ section: "怎么跑起来", line: 2, sample: "sk-abc…" }] }]);
+        findings: [{ section: "怎么跑起来", line: 2, sample: "sk-abc" }] }]);
       await f.call("PATCH", url, { note: [{ title: "怎么跑起来", lines: ["CHAT_TOKEN 找人豪要"] }] });
       expect((await f.call("POST", `${url}/send`)).json()).toMatchObject({ status: "sent", decidedAt: NOW });
       expect((await f.call("PATCH", url, { includeHistory: true })).statusCode).toBe(409);

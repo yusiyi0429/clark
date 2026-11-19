@@ -23,7 +23,7 @@ function businessValues(attributes: Record<string, unknown> = {}): string[] {
 function componentText(component: WorldComponent): string {
   return [component.text ?? '', ...businessValues(component.attributes)].filter(Boolean).join('；');
 }
-const clip = (text: string, max: number) => (text.length > max ? `${text.slice(0, max)}…` : text);
+const clip = (text: string, max: number) => (text.length > max ? text.slice(0, max) : text);
 const STATE_TEXT_MAX = 400;
 const STATE_LINES_MAX = 12;
 /**

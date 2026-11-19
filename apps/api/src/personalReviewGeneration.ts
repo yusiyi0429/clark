@@ -41,7 +41,7 @@ export type PersonalReviewDraftInput = {
 };
 
 const day = (date: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", month: "2-digit", day: "2-digit" }).format(date).replace("-", "/");
-const clip = (text: string, max: number) => text.length > max ? `${text.slice(0, max - 1)}…` : text;
+const clip = (text: string, max: number) => text.length > max ? text.slice(0, max) : text;
 const monthWindow = (period: string) => {
   const [year, month] = period.split("-").map(Number);
   // 北京时间当月 1 日 0 点到次月 1 日 0 点；周进展允许次月首周补记（与单元复盘同一口径）。

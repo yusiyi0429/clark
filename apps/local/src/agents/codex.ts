@@ -22,7 +22,7 @@ const INPUT_CHARS = 2_000;
 /** Windows 上 Codex 把命令包进 PowerShell，按 PowerShell 认路径和危险命令；别的系统按 Bash。 */
 const SHELL = process.platform === "win32" ? "PowerShell" : "Bash";
 
-const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n)}…` : s);
+const clip = (s: string, n: number) => s.slice(0, n);
 
 /** 命令本身：commandActions 里是 Codex 解析好的（不带外面那层 pwsh -Command '…'），没有就用原样。 */
 function commandOf(p: Json): string {

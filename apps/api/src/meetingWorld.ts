@@ -22,7 +22,7 @@ const BRIEF_MAX = 80;
 const brief = (text: string | null | undefined): string | null => {
   const value = text?.trim();
   if (!value) return null;
-  return value.length > BRIEF_MAX ? `${value.slice(0, BRIEF_MAX - 1)}…` : value;
+  return value.slice(0, BRIEF_MAX);
 };
 /** 对象的生命周期状态（tkos.world 0.3 records.lifecycle.status：draft 草稿、established 已成立、in_progress 进行中……；没有为 null）。 */
 const lifecycleOf = (head: WorldHead): string | null => {

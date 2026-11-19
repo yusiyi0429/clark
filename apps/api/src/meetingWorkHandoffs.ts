@@ -235,7 +235,7 @@ export async function withMeetingWorkBrief(q: Query, actor: string, kind: "card"
   const remaining = 20_000 - original.length - prefix.length;
   if (work.length <= remaining) return { markdown: original + prefix + work };
   // Even a full-length free session must see the receipt. Include explicit, authorized ways to read both complete inputs.
-  const marker = `…（原交代完整内容见 /api/me/${kind === "card" ? "cards" : "topics"}/${id}/brief 的 originalMarkdown 字段）…`;
+  const marker = `（原交代完整内容见 /api/me/${kind === "card" ? "cards" : "topics"}/${id}/brief 的 originalMarkdown 字段）`;
   const latest = rows[0]!;
   const summary = `确认 ${latest.confirmation_ref} · 第 ${latest.revision} 版 · 共 ${rows.length} 条；完整会后变化见 /api/me/projects/${latest.destination.projectId}/feed`;
   const budget = 20_000 - prefix.length - summary.length - 2;

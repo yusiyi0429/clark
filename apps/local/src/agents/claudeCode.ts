@@ -31,7 +31,7 @@ type Json = Record<string, any>;
 function clipInput(input: Json): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(input ?? {})) {
-    if (typeof v === "string") out[k] = v.length > INPUT_CHARS ? `${v.slice(0, INPUT_CHARS)}…（共 ${v.length} 字）` : v;
+    if (typeof v === "string") out[k] = v.length > INPUT_CHARS ? `${v.slice(0, INPUT_CHARS)}（共 ${v.length} 字）` : v;
     else out[k] = v;
   }
   return out;
@@ -41,7 +41,7 @@ function previewOf(content: unknown): string {
   const text = typeof content === "string"
     ? content
     : Array.isArray(content) ? content.map((c: Json) => (c?.type === "text" ? c.text : `[${c?.type}]`)).join("\n") : JSON.stringify(content ?? "");
-  return text.length > PREVIEW_CHARS ? `${text.slice(0, PREVIEW_CHARS)}…` : text;
+  return text.slice(0, PREVIEW_CHARS);
 }
 
 /** AskUserQuestion 的问题按契约整理（字段缺了补空，超长截断）。 */

@@ -30,7 +30,7 @@ export function firstSentences(text: string | null | undefined): string | null {
   let out = "";
   for (const s of sentences.slice(0, 2)) out += out && !END.test(out) ? ` ${s}` : s;
   out = out.replace(/[；;]$/, "。");
-  return out.length > MAX ? `${out.slice(0, MAX - 1)}…` : out;
+  return out.slice(0, MAX);
 }
 
 /** 执行方一轮出错停住时，没有现成的话可截，按出错的种类写一句。 */

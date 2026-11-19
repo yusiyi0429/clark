@@ -39,7 +39,7 @@ function changeText(revision: number, after: TCardAgreement, briefChanged: boole
     ...after.standards.map((text, index) => `${index + 1}. ${text}`)].join("\n");
   if (!briefChanged) return head;
   const brief = `\n新的交代：\n${after.brief ?? "（不写交代了）"}`;
-  return head.length + brief.length <= COMMAND_MAX ? head + brief : `${head}${brief.slice(0, COMMAND_MAX - head.length - 1)}…`;
+  return head.length + brief.length <= COMMAND_MAX ? head + brief : head + brief.slice(0, COMMAND_MAX - head.length);
 }
 
 /** 给这张卡最近一次本机会话登记一条转话（由那台电脑上开着的网页认领后说给执行方）。always = false 时只在执行方正在干活时登记。 */

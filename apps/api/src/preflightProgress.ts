@@ -25,7 +25,7 @@ export const PROGRESS_WRITE_INTERVAL_MS = 700;
 
 const clip = (text: string, max: number) => {
   const flat = text.replace(/\s+/g, " ").trim();
-  return flat.length <= max ? flat : `${flat.slice(0, max - 1)}…`;
+  return flat.slice(0, max);
 };
 
 const SHANGHAI_DAY = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", month: "numeric", day: "numeric" });
@@ -230,7 +230,7 @@ export function cleanThought(text: string): string | undefined {
   const cjk = value.match(/[一-龥]/g)?.length ?? 0;
   const latin = value.match(/[A-Za-z]/g)?.length ?? 0;
   if (cjk < 2 || cjk < latin || FORBIDDEN_IN_THOUGHT.test(value)) return undefined;
-  return value.length > 30 ? `${value.slice(0, 30)}…` : value;
+  return value.slice(0, 30);
 }
 
 /** 推理摘要里最新的一个完整小标题（「**标题**」）。 */

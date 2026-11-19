@@ -355,7 +355,7 @@ export async function verifyBrief(q: Query, ownerId: string, handbackKey: string
   const history = (await q("SELECT * FROM card_handbacks WHERE task_id=$1 AND attempt<$2 ORDER BY attempt DESC", [row.task_id, row.attempt])).rows as HandbackRow[];
   const previous = history.find((item) => item.status === "done" && item.result);
   const changes = await agreementChangeLines(q, task.id);
-  const cut = (text: string) => text.length > BRIEF_ITEM_CHARS ? `${text.slice(0, BRIEF_ITEM_CHARS)}…` : text;
+  const cut = (text: string) => text.length > BRIEF_ITEM_CHARS ? text.slice(0, BRIEF_ITEM_CHARS) : text;
   const pointed = task.criterion_index && task.criterion_text ? [`这张卡对的是 Task 第 ${task.criterion_index} 条标准：${task.criterion_text}`] : [];
   const lines = [
     `# 验收：${task.title}`, "",

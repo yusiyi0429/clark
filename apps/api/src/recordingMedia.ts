@@ -96,13 +96,12 @@ const clip = (text: string) => (text.length > STDERR_KEEP ? text.slice(-STDERR_K
 function tail(stderr: string): string {
   const text = stderr.trim();
   if (!text) return "（它一个字都没往 stderr 写。）";
-  const cut = text.length > STDERR_SHOW;
-  const lines = (cut ? text.slice(-STDERR_SHOW) : text)
+  const lines = text.slice(-STDERR_SHOW)
     .split(/\r?\n/)
     .map((line) => line.trimEnd())
     .filter((line) => line.trim().length > 0)
     .slice(-8);
-  return (cut ? "…\n" : "") + lines.join("\n");
+  return lines.join("\n");
 }
 
 function asToolError(err: unknown, bin: string): Error {
