@@ -69,8 +69,8 @@ export async function plannedDueDates(q: Query, tasks: { taskId: string; mission
 const backfilled = async (q: Query) => (await q("SELECT 1 FROM task_planned_due_date_backfill")).rows.length > 0;
 
 /**
- * 上线后补记一次：完整读所有人当月、下月 Mission 下的本体 Task（天枢里添的不算），按 Mission 进天枢的日子（不晚于今天）作基准，
- * 把最近的节点记成「原」；已记过的不动。补记完留一个标记，之后不再补；本体读不到就抛出去、不留标记，下一轮再补。
+ * 上线后补记一次：完整读所有人当月、下月 Mission 下的本体 Task（天枢里添的不算）。上线前已经存着日子的（迁移 290 从项目目标搬来的），
+ * 存着的日子就是「原」（本人 11/19 定：上线后再改才和「原」不同）；没存的按 Mission 进天枢的日子（不晚于今天）作基准，记最近的节点。已记过的不动。补记完留一个标记，之后不再补；本体读不到就抛出去、不留标记，下一轮再补。
  */
 export async function backfillPlannedDueDates(q: Query, planTasks: PlanTaskSource, now: Date): Promise<void> {
   if (await backfilled(q)) return;
@@ -82,11 +82,12 @@ export async function backfillPlannedDueDates(q: Query, planTasks: PlanTaskSourc
   const tasks = await planTasks(rows.map((m) => ({ id: m.id, code: m.code,
     world: m.world_scope_id && m.world_object_id && m.world_domain_id ? { scopeId: m.world_scope_id, objectId: m.world_object_id, domainId: m.world_domain_id } : null })));
   const today = shanghaiDate(now);
+  const stored = await taskDueDates(q, tasks.map((task) => task.taskId));
   for (const task of tasks as EditedPlanTask[]) {
     const mission = byId.get(task.missionId);
     if (task.added || !mission) continue;
     const entered = shanghaiDate(mission.created_at);
-    const due = missionGate(mission.milestones, mission.period, entered > today ? today : entered);
+    const due = stored.get(task.taskId) ?? missionGate(mission.milestones, mission.period, entered > today ? today : entered);
     if (due) await q(`INSERT INTO task_planned_due_dates(task_id,mission_id,due_date,period,recorded_at) VALUES($1,$2,$3,$4,$5)
       ON CONFLICT (task_id) DO NOTHING`, [task.taskId, task.missionId, due, mission.period, now]);
   }

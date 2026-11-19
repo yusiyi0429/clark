@@ -68,6 +68,19 @@ describe("「原」验收时间点", () => {
     expect(await g.task("task-open")).toMatchObject({ dueDate: "2026-11-18", missionDueDate: "2026-11-18" });
   }, 180_000);
 
+  it("上线前已经存着日子的件（迁移 290 从项目目标搬来的），补记把存着的日子记成「原」：页面不出「原」；之后本人再改才出「原 旧值」", async () => {
+    const g = f = await fixture(new Date("2026-11-19T02:00:00.000Z"));
+    await g.t.sql("INSERT INTO task_due_dates(task_id,due_date) VALUES('task-open','2026-11-25')");
+    await g.backfill();
+    expect(await g.recorded()).toEqual([
+      { task_id: "task-open", mission_id: "mine", due_date: "2026-11-25", period: "2026-11" },
+      { task_id: "task-theirs", mission_id: "mine", due_date: "2026-11-18", period: "2026-11" },
+    ]);
+    expect(await g.task("task-open")).toMatchObject({ dueDate: "2026-11-25", missionDueDate: "2026-11-25" });
+    expect((await g.call("PUT", "/api/me/tasks/task-open/due-date", { dueDate: "2026-11-28" })).statusCode).toBe(200);
+    expect(await g.task("task-open")).toMatchObject({ dueDate: "2026-11-28", missionDueDate: "2026-11-25" });
+  }, 180_000);
+
   it("补记时 Mission 还没写节点的不记；后来补了节点，按第一次读到那天记", async () => {
     const g = f = await fixture(new Date("2026-11-06T02:00:00.000Z"));
     await g.t.sql(`UPDATE missions SET milestones='[]' WHERE id='mine'`);
