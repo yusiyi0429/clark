@@ -42,7 +42,7 @@ describe("项目从首页 v2 来（16.2、16.3）", () => {
 describe("项目行（16.2）", () => {
   const project = (patch: Partial<Project>): Project => ({
     id: "p", name: "p", folder: null, archived: false, goals: [], current: [], subSessions: [], items: [], scope: "project:p",
-    waiting: 0, lastActivity: null, budget: null, transfer: null, unseen: false, ...patch,
+    waiting: 0, lastActivity: null, budget: null, transfer: null, unseen: false, scratch: false, ...patch,
   });
   const current = fromHome(home("p", { goals: [goal("t1", "对所有 DRI 开放")] }), data, new Map()).goals;
 

@@ -156,6 +156,18 @@ describe("左栏：项目（16.2）", () => {
     expect(html).toMatch(/aria-label="其他".*其他.*data-testid="tree-item".*整理会议纪要.*11\/09/);
   });
 
+  it("左栏和已归档都不列随手项目", () => {
+    const base = withTask([]);
+    const both = { ...base, projects: [...base.projects, { ...base.projects[0]!, projectId: "s1", name: "随手", goals: [], scratch: true }] } as WorkHomeData;
+    const html = render({ data: both });
+    expect(html).toContain("首页改版");
+    expect(html).not.toContain("随手");
+    // 已归档里同样不列，「已归档 N」也不数它。
+    const archived = render({ data: both, projects: [], archived: projectsOf(both).map((project) => ({ ...project, archived: true })) });
+    expect(archived).toMatch(/aria-label="已归档 1"[^>]*data-testid="tree-archived"/);
+    expect(archived).not.toContain("随手");
+  });
+
   it("已归档只列项目", () => {
     const archived = projectsOf(withTask([])).map((project) => ({ ...project, archived: true }));
     const archivedSubs = [{ kind: "topic", id: "t1", title: "选型", projectId: "p1", projectName: "首页改版", archivedAt: "2026-11-09T02:00:00.000Z" }];

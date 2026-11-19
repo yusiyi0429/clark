@@ -30,7 +30,7 @@ import { decideProposal } from "@/lib/team/roles";
 import { canCommandHere, decide } from "@/lib/work/actions";
 import { mergeCard } from "@/lib/work/merge";
 import { waitingHref } from "@/lib/home/derive";
-import type { Project } from "@/lib/home/projects";
+import { scratchWaiting, type Project } from "@/lib/home/projects";
 import type { ProjectsApi } from "./useProjects";
 import { clock, monthDayTime, relativeDayTime } from "@/lib/companyTime";
 import type { RouteTarget, WaitingItem, WorkHomeData } from "@/lib/home/types";
@@ -98,7 +98,7 @@ export function HomeWaiting({ data, api, go, offline = false, phone = false, rec
     const timer = window.setTimeout(() => setWaited(true), MEETINGS_WAIT_MS);
     return () => window.clearTimeout(timer);
   }, [loaded]);
-  const rows = focusList({ waiting: data.waiting, meetings: items, offline, recordingMeetingId, now: Date.now(), ignoredMeetings: data.ignoredMeetings });
+  const rows = focusList({ waiting: scratchWaiting(data.waiting, data.projects), meetings: items, offline, recordingMeetingId, now: Date.now(), ignoredMeetings: data.ignoredMeetings });
   const className = phone ? h.phoneWaiting : h.section;
   if (!loaded && !waited) return <section aria-label="等你" aria-busy="true" className={className} />;
   return <section aria-label="等你" aria-busy={!api.known || undefined} className={className}>
@@ -479,6 +479,8 @@ export function HomeComposer({ buddy, projects, route, onSend }: { buddy: Buddy 
   const label = target === "auto" ? (text.trim() ? `自动 · ${nameOf(guess)}` : "自动") : nameOf(target);
   const send = async (value: string, files: File[]) => { await onSend(value, target, files); return true; };
   const keyOf = (value: SendTarget) => (value === "auto" || value === "main" ? value : `project:${value.projectId}`);
+  // 「随手」项目收在幕后（本人 11/19）：菜单里不列。
+  const listed = projects.filter((project) => !project.scratch);
   const current = keyOf(target);
   const pick = (key: string) => setTarget(key === "auto" || key === "main" ? key : { projectId: key.slice("project:".length) });
   const item = (key: string, text: string) => (
@@ -496,10 +498,10 @@ export function HomeComposer({ buddy, projects, route, onSend }: { buddy: Buddy 
                   {item("auto", "自动")}
                   {item("main", name)}
                 </Dropdown.Section>
-                {projects.length ? (
+                {listed.length ? (
                   <Dropdown.Section className={h.menuSection}>
                     <Header className={h.menuHeader}>项目</Header>
-                    {projects.map((project) => item(`project:${project.id}`, project.name))}
+                    {listed.map((project) => item(`project:${project.id}`, project.name))}
                   </Dropdown.Section>
                 ) : null}
               </Dropdown.Menu>

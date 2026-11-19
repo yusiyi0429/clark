@@ -184,7 +184,7 @@ function tool(name: string, args: Args): ToolReply {
       if (!title) return fail("INVALID_ARGS", "title 不能全是空白");
       const project = args.scratch ? projectOf(IDS.scratch) : projectOf(args.projectId);
       if (!project) return fail("NOT_FOUND", "找不到这个项目");
-      return ok(name, `在项目「${project.name}」里开了「${title}」，本人电脑上开着的网页接下后就开始`,
+      return ok(name, `${args.scratch ? "开了会话" : `在项目「${project.name}」里开了`}「${title}」，本人电脑上开着的网页接下后就开始`,
         { dispatchId: randomUUID(), projectId: project.projectId, projectName: project.name, kind: "topic", id: randomUUID(), title });
     }
     case "set_task_due_date": {
@@ -239,7 +239,7 @@ const FAKE_STEPS: Record<number, Step[]> = {
   2: [{ reply: "可以这样写：\n\n您好，感谢贵司这段时间的报价和配合。经过内部评估，我们这次决定不继续推进合作，希望以后还有机会。祝好。" }],
   3: [{ reply: "两份主要差在三处：交付期乙晚两周；尾款甲是 30 日内付 30%，乙是 60 日内付 20%；违约金甲每日千分之一不封顶，乙每日万分之五、上限 10%，争议解决也不同。" }],
   4: [HOME_READ, { calls: [["open_session", { scratch: true, title: "比对合同文件夹", brief: "比对桌面「合同」文件夹里那十几份合同，列出彼此的差异。" }]] },
-    { reply: "在项目「随手」里开了「比对合同文件夹」，本人电脑上开着的网页接下后就开始。" }],
+    { reply: "开了会话「比对合同文件夹」去看，本人电脑上开着的网页接下后就开始。" }],
   5: [HOME_READ, { calls: [["open_session", { projectId: IDS.chat, title: "修流式断开不重试", brief: "改一下 Chat 服务里流式断掉不重试的 bug。" }]] },
     { reply: "在项目「Chat 服务」里开了「修流式断开不重试」，本人电脑上开着的网页接下后就开始。" }],
   6: [HOME_READ, { calls: [["read_project", { projectId: IDS.tianshu }]] },

@@ -37,6 +37,12 @@ const never = (calls: ToolCall[], ...names: string[]) => names.filter((name) => 
 const want = (ok: boolean, what: string) => (ok ? [] : [`没有${what}`]);
 const sub = (kind: "card" | "topic", id: string) => (args: Args) => args.kind === kind && args.id === id;
 const inProject = (projectId: string) => (args: Args) => args.projectId === projectId && !args.scratch;
+/** 调过 ask_user，而且在第一次 open_session 之前（一次都没开也算）。 */
+const askedFirst = (calls: ToolCall[]) => {
+  const ask = calls.findIndex((call) => call.name === "ask_user");
+  const open = calls.findIndex((call) => call.name === "open_session");
+  return ask >= 0 && (open < 0 || ask < open);
+};
 
 const CONTRACT_A = "合同甲：乙方于 2026 年 12 月 31 日前交付全部软件，验收合格后 30 日内付清尾款 30%；逾期每日按合同额千分之一计违约金；争议提交上海仲裁委员会。";
 const CONTRACT_B = "合同乙：乙方于 2027 年 1 月 15 日前交付全部软件，验收合格后 60 日内付清尾款 20%；逾期每日按合同额万分之五计违约金，上限 10%；争议由甲方所在地法院管辖。";
@@ -45,8 +51,10 @@ export const CASES: EvalCase[] = [
   { id: 1, message: "查一下 ANT 适不适合打新", expect: "不调写动作", forbid: "", check: noWrite },
   { id: 2, message: "帮我写封邮件回绝这家供应商", expect: "不调写动作", forbid: "", check: noWrite },
   { id: 3, message: `比对这两份合同\n\n${CONTRACT_A}\n\n${CONTRACT_B}`, expect: "不调写动作", forbid: "", check: noWrite },
-  { id: 4, message: "比对桌面「合同」文件夹里那十几份", expect: "open_session 带「随手」（scratch）", forbid: "",
-    check: (calls) => want(done(calls, "open_session", (args) => args.scratch === true && !args.projectId), "做成的 open_session 带 scratch") },
+  // 本人 11/19（随手收到幕后）：碰本机文件的一次性活直接开会话，不先问；回话里不说「随手」。
+  { id: 4, message: "比对桌面「合同」文件夹里那十几份", expect: "open_session 带「随手」（scratch）", forbid: "在 open_session 之前调了 ask_user；回话里出现「随手」",
+    check: (calls, reply) => [...want(done(calls, "open_session", (args) => args.scratch === true && !args.projectId), "做成的 open_session 带 scratch"),
+      ...(askedFirst(calls) ? ["在 open_session 之前调了 ask_user"] : []), ...(reply.includes("随手") ? ["回话里出现「随手」"] : [])] },
   { id: 5, message: "改一下 Chat 服务里流式断掉不重试的 bug", expect: "open_session 带「Chat 服务」的 projectId", forbid: "",
     check: (calls) => want(done(calls, "open_session", inProject(IDS.chat)), "做成的 open_session 带「Chat 服务」") },
   { id: 6, message: "天枢新版进度怎么样", expect: "不调写动作；回话里提到「首页改版」", forbid: "",

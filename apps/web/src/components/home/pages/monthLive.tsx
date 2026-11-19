@@ -49,7 +49,7 @@ function AttachSlot({ task, projects }: { task: HomeTask; projects: ProjectsApi 
     onCreate={() => attempt(() => projects.actions.create(task.name, task.taskId))} />;
 }
 
-/** 没挂项目的 Task 后面「挂到…」（16.4）：点开选现有项目，或者用 Task 名新建一个挂上。 */
+/** 没挂项目的 Task 后面「挂到…」（16.4）：点开选现有项目（「随手」不列，本人 11/19），或者用 Task 名新建一个挂上。 */
 function AttachMenu({ taskName, projects, onPick, onCreate }: { taskName: string; projects: Project[]; onPick: (projectId: string) => void; onCreate: () => void }) {
   return (
     <Dropdown>
@@ -57,7 +57,7 @@ function AttachMenu({ taskName, projects, onPick, onCreate }: { taskName: string
       <Dropdown.Popover placement="bottom end" offset={8} className={h.pop}>
         <Dropdown.Menu aria-label="挂到" className={h.menuList} onAction={(key) => (key === "new" ? onCreate() : onPick(String(key)))}>
           <Dropdown.Section className={h.menuSection}>
-            {projects.map((project) => <Dropdown.Item key={project.id} id={project.id} textValue={project.name} className={h.menuItem}>{project.name}</Dropdown.Item>)}
+            {projects.filter((project) => !project.scratch).map((project) => <Dropdown.Item key={project.id} id={project.id} textValue={project.name} className={h.menuItem}>{project.name}</Dropdown.Item>)}
           </Dropdown.Section>
           <Dropdown.Section className={h.menuSection}>
             <Dropdown.Item key="new" id="new" textValue={`新建「${taskName}」`} className={h.menuItem}><Plus {...ICON} />新建「{taskName}」</Dropdown.Item>

@@ -12,7 +12,7 @@ const me = { personId: "sun-mingze", name: "孙铭泽" };
 const chen = { personId: "chen-chenxing", name: "陈晨星" };
 const sub = (id: string, state: string) => ({ id, kind: "card", title: `卡${id}`, state, waiting: null, updatedAt: "a", queueReason: null, holdUntil: null, sessionId: `s${id}` });
 const project = (patch: Partial<Project> = {}): Project => ({
-  id: "p", name: "Chat 服务", folder: null, archived: false, goals: [], subSessions: [], items: [], waiting: 0, lastActivity: null, budget: null, transfer: null, unseen: false, scope: "project:p",
+  id: "p", name: "Chat 服务", folder: null, archived: false, goals: [], subSessions: [], items: [], waiting: 0, lastActivity: null, budget: null, transfer: null, unseen: false, scratch: false, scope: "project:p",
   current: [{ taskId: "t1", missionId: "m1", missionTitle: "Chat", period: "2026-11", name: "回答的样子", due: "11/30", dueDate: "2026-11-30", dueSet: false, criteria: [], completedAt: null, responsible: null }], ...patch,
 });
 const NOTE = [{ title: "到哪了", lines: ["11 月目标：回答的样子 · 11/30 验收"] }, { title: "没做完的事", lines: ["卡1", "补上评测集"] }, { title: "可以问谁", lines: ["孙铭泽"] }];

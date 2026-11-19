@@ -84,6 +84,8 @@ describe("右边的 thread 视图（设计 6.6）", () => {
     expect(html).toMatch(/data-testid="thread-from"[^>]*>品牌建设 · 从主线开的</);
     expect(html.indexOf("首页手机检查")).toBeLessThan(html.indexOf("从主线开的"));
     expect(render(outer())).not.toContain("从主线开的");
+    // 随手的会话（项目名给空）：只写「从主线开的」。
+    expect(render(outer(), vi.fn(), vi.fn(), { from: "" })).toMatch(/data-testid="thread-from"[^>]*>从主线开的</);
   });
 
   it("等文件夹的会话：右边就地问「在哪个文件夹开工？」", () => {

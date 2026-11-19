@@ -163,6 +163,22 @@ describe("右边「会话」面板（设计 4.3）", () => {
     expect(go).toHaveBeenCalledWith("/me/work/projects/p2/new");
   });
 
+  it("随手的会话归进「其他」，不写「随手」；「新会话」菜单不列它；归档了的随手会话不带项目名", () => {
+    tap.open = false;
+    const scratch = project("s1", "随手", [sub("t8", "比对合同", { updatedAt: "2026-11-17T04:00:00.000Z" })], { scratch: true });
+    const html = render({ view: { kind: "buddy" }, projects: [P1, scratch], archivedSubs: [archivedSub("a3", "旧比对", "s1", "随手")] });
+    expect(text(html)).toMatch(/\|首页改版\|调研\|改登录页\|其他\|以前的会话\|比对合同\|/);
+    expect(html).not.toContain("随手");
+    expect(html).not.toContain('data-key="s1"');
+    // 没有别的不挂项目的会话：照样一组「其他」。
+    expect(text(render({ view: { kind: "buddy" }, projects: [scratch], other: [], archivedSubs: [] }))).toMatch(/\|其他\|比对合同\|/);
+    (tap.props.get("panel-archived")?.onClick as () => void)();
+    const opened = render({ view: { kind: "buddy" }, projects: [P1, scratch], archivedSubs: [archivedSub("a3", "旧比对", "s1", "随手")] });
+    expect(opened).toContain("旧比对");
+    expect(opened).not.toContain("随手");
+    tap.open = false;
+  });
+
   it("没有能加的项目时不出", () => {
     expect(render({ view: { kind: "buddy" }, projects: [project("p4", "旧项目", [], { archived: true })] })).not.toContain("panel-new-sub");
     expect(render({ view: { kind: "buddy" }, actions: null })).not.toContain("panel-new-sub");

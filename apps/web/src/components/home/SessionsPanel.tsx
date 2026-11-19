@@ -3,7 +3,7 @@
 /**
  * 右边「会话」面板（设计 4.3，取代原来的「后台任务」），从上到下：
  * 1. 会话：项目页（含这个项目的卡、专题页）只列这个项目的子会话（派活单的先后）；其余页面按项目分组（组名淡色，没有子会话的项目不列），
- *    最后「其他」放不挂项目的。一行就是左栏原来那一行（SubRow，「…」菜单照旧），名字后面一个淡色短状态（subStatus）。
+ *    最后「其他」放不挂项目的和「随手」项目的（本人 11/19 收到幕后，不写「随手」）。一行就是左栏原来那一行（SubRow，「…」菜单照旧），名字后面一个淡色短状态（subStatus）。
  * 2. 「新会话」：规矩同原来项目行上的「+」。项目页直接去这个项目的新建页；其余页面先弹一列能加的项目，选了再去；一个能加的都没有不出。
  * 3. 「已归档 N」：点开就地列出这个范围里归档了的子会话，「…」里能恢复；没有不出。
  * 4. 发丝线 → 这台电脑（资源块）→ 后台任务。手机的底部抽屉：会话那几样，下面接原来的 BackgroundPanel。
@@ -70,11 +70,13 @@ export function SessionsPanel({ view, projects, other, archivedSubs, actions, go
   );
   // 同原来项目行上的「+」：有菜单动作、项目没归档；这台电脑的本机程序连着却开不了自由子会话（protocol < 4）时不出，手机、没连上照出。
   const canAddTo = (project: Project) => !!actions && !project.archived && !(local?.phase === "ready" && !local.runner.freeSessions);
-  const addable = scoped ? (canAddTo(scoped) ? [scoped] : []) : projects.filter(canAddTo);
+  const scratch = projects.find((project) => project.scratch);
+  const addable = scoped ? (canAddTo(scoped) ? [scoped] : []) : projects.filter((project) => !project.scratch && canAddTo(project));
   const canAdd = addable.length > 0;
   const archived = scoped ? archivedSubs.filter((sub) => sub.projectId === scoped.id) : archivedSubs;
-  const groups = scoped ? [] : projects.filter((project) => project.subSessions.length);
-  const listed = scoped ? scoped.subSessions.length > 0 : groups.length > 0 || other.length > 0;
+  const groups = scoped ? [] : projects.filter((project) => !project.scratch && project.subSessions.length);
+  const loose = scratch ? [...other, ...scratch.subSessions] : other;
+  const listed = scoped ? scoped.subSessions.length > 0 : groups.length > 0 || loose.length > 0;
   return (
     <ActionsContext.Provider value={actions}>
       <div className={h.sessions} data-testid="sessions-panel">
@@ -84,7 +86,7 @@ export function SessionsPanel({ view, projects, other, archivedSubs, actions, go
               {groups.map((project) => (
                 <section key={project.id} aria-label={project.name}><p className={h.sessionsGroup}>{project.name}</p>{rows(project.subSessions)}</section>
               ))}
-              {other.length ? <section aria-label="其他"><p className={h.sessionsGroup}>其他</p>{rows(other)}</section> : null}
+              {loose.length ? <section aria-label="其他"><p className={h.sessionsGroup}>其他</p>{rows(loose)}</section> : null}
             </>}
             {canAdd && scoped ? (
               <button type="button" className={h.sessionsRow} onClick={() => go(newSubHref(scoped.id))} data-testid="panel-new-sub"><Plus {...ICON} />新会话</button>
@@ -103,7 +105,7 @@ export function SessionsPanel({ view, projects, other, archivedSubs, actions, go
                 {`已归档 ${archived.length}`}
               </button>
             ) : null}
-            {archivedOpen && archived.length ? <ul className={h.subs}>{archived.map((sub) => <ArchivedSubRow key={subKey(sub)} sub={sub} go={go} />)}</ul> : null}
+            {archivedOpen && archived.length ? <ul className={h.subs}>{archived.map((sub) => <ArchivedSubRow key={subKey(sub)} sub={sub.projectId && sub.projectId === scratch?.id ? { ...sub, projectName: null } : sub} go={go} />)}</ul> : null}
           </div>
         ) : null}
         {handheld ? <BackgroundPanel items={items} resources={resources} onStop={onStop} handheld /> : <>

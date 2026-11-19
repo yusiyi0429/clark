@@ -565,6 +565,9 @@ function HomeFrame({ account }: { account: Account }) {
   /** 项目对话里项目自己的几块：转交（16.7）从「准备交接」那一刻起，到发出、等接手。 */
   /** 这个项目的卡或自由子会话在等它在这台电脑上绑文件夹（这台电脑连着本机程序、还没绑）。 */
   const waitingFolder = useCallback((projectId: string) => here && needFolder.has(projectId) && !projects.bound.has(projectId), [here, needFolder, projects.bound]);
+  // 「随手」项目在这台电脑上绑的文件夹（工作目录）完整路径：主线里随手会话做完一轮那行带上（本人 11/19）；取不到为 null。
+  const scratchId = projects.all.find((project) => project.scratch)?.id;
+  const scratchFolder = (scratchId && projects.bound.get(scratchId)?.path) || null;
   /** 「在哪个文件夹开工？」（17.2 第 32 条）：卡或自由子会话等着这个项目在这台电脑上绑文件夹时才有，选完绑上就收起、接着开。 */
   const folderAsk = (project: Project) => (waitingFolder(project.id)
     ? <FolderAsk folders={local.folders} onBind={(folder) => projects.actions.setFolder(project.id, folder.id, project.name)} onPickOther={() => local.pickFolder()} /> : null);
@@ -613,7 +616,7 @@ function HomeFrame({ account }: { account: Account }) {
       case "meetings": return <MeetingsPage meeting={meeting} go={go} />;
       case "meeting": return <MeetingView key={current.id} id={current.id} go={go} />;
       case "buddy": return <BuddyView buddy={buddy} outbox={outbox} consume={consume} onSpeaking={setSpeaking} waiting={data.waiting} go={go} context={buddyContext} onClearContext={() => setBuddyContext(null)}
-        subs={subs} projects={projects.all} waitingFolder={waitingFolder} />;
+        subs={subs} projects={projects.all} waitingFolder={waitingFolder} scratchFolder={scratchFolder} />;
       case "mission": {
         const mission = data.month.missions.find((entry) => entry.missionId === current.id);
         if (!mission) return <Missing loading={!api.ready} onRetry={api.planFailed ? () => void api.retryPlan() : undefined} />;
