@@ -9,7 +9,7 @@
  * - 自动接力上限（18.12）：连续自动接力多少轮停下来问本人，缺省 20，可以不限（PATCH autoRelayLimit，不限是 null）；
  * - 转交（16.7）：「转给…」发起一份（POST /api/me/projects/:projectId/transfers），准备中、等接手时能撤回；
  * - 改名、归档（归档的能取消），调 PATCH /api/me/projects/:projectId，没成写「失败 · 重试」；
- * - 当前那件 Task 的验收截止日：日期选择（同其他地方的 DatePicker），本人改了存在天枢里（PUT …/goals/:taskId/due-date），改过的能清掉、退回 Mission 的节点；
+ * - 当前那件 Task 的验收截止日：日期选择（同其他地方的 DatePicker），本人改了存在天枢里（PUT …/goals/:taskId/due-date），改过的能清掉、退回记下的原验收时间点；
  * - 当前那件 Task 的预算、完成标准、约定、交付物：沿用原来 Task 详情的样子（TaskBudget、TaskDeliverable）。
  * 新首页桌面上项目对话页头的「详情」在右栏打开（side：没有页头，只有这几节）；/info 地址照旧是整页（左栏「转交给…」、手机）。
  */

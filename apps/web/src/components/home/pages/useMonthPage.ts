@@ -5,7 +5,7 @@
  * - GET  /api/me/months/:period → MonthPageData：这个月本人的每件 Task 和天枢备好的状态（Mission 的成果、完成标准原文和哪几条达到、验收时间点、去向、
  *   交付第几版、还在跑的、受阻的、本人确认完成没有、了结了没有（完成 / 到此为止 / 已延续，延续去了哪）、从哪件延续来的），以及下个月 Co-Agent 的草稿（暂为 null，等溪南）。
  *   第一版的复盘答案（PUT …/tasks/:taskId/decision）删了：去向和评定都在复盘页（useMonthReview）。
- * - PUT  /api/me/tasks/:taskId/due-date → 就地改验收时间点（按 Task 存，不要求挂项目）；null 退回 Mission 的节点。
+ * - PUT  /api/me/tasks/:taskId/due-date → 就地改验收时间点（按 Task 存，不要求挂项目）；null 退回记下的原验收时间点。
  * - PUT  /api/me/months/:period/review/tasks/:taskId/disposition → 定去向（和复盘页同一个接口，月中也能定）。
  * - PUT  /api/me/tasks/:taskId/goal → 就地改名字和完成标准（天枢里先生效、标未进本体；和本体一样就撤掉，「恢复」把原文存回去）。
  * - POST /api/me/months/:period/tasks → 「+ 添一件」，在本人这个月的 Mission 下新建一件天枢里的 Task（不写本体）。

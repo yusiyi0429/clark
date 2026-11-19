@@ -51,17 +51,22 @@ function apply<T extends Omit<PlanTask, "missionId">>(task: T, edit: EditRow | u
     edit: { worldName: task.name, worldCriteria, name: nameEdited, criteria: criteriaEdited } };
 }
 
-/** 和本体现在的值已经一样的那一样（名字或标准）清掉；两样都一样整行删。 */
+/**
+ * 和本体现在的值已经一样的那一样（名字或标准）清掉；两样都一样整行删。
+ * 只在这一行还是刚才读到的那个值时动：读完到清理之间本人又存了新改动，就不碰，下次读再清。
+ */
 async function dropStale(q: Query, tasks: Omit<PlanTask, "missionId">[], edits: Map<string, EditRow>): Promise<void> {
+  const unchanged = "name IS NOT DISTINCT FROM $2 AND criteria IS NOT DISTINCT FROM $3::jsonb";
   for (const task of tasks) {
     const edit = edits.get(task.taskId);
     if (!edit) continue;
     const nameStale = edit.name !== null && edit.name === task.name;
     const criteriaStale = edit.criteria !== null && same(edit.criteria, taskBasis({ ...task, missionId: "" }).criteria);
     if (!nameStale && !criteriaStale) continue;
-    if ((nameStale || edit.name === null) && (criteriaStale || edit.criteria === null)) await q("DELETE FROM task_goal_edits WHERE task_id=$1", [task.taskId]);
-    else await q(`UPDATE task_goal_edits SET name=CASE WHEN $2 THEN NULL ELSE name END,criteria=CASE WHEN $3 THEN NULL ELSE criteria END WHERE task_id=$1`,
-      [task.taskId, nameStale, criteriaStale]);
+    const read = [task.taskId, edit.name, edit.criteria && JSON.stringify(edit.criteria)];
+    if ((nameStale || edit.name === null) && (criteriaStale || edit.criteria === null)) await q(`DELETE FROM task_goal_edits WHERE task_id=$1 AND ${unchanged}`, read);
+    else await q(`UPDATE task_goal_edits SET name=CASE WHEN $4 THEN NULL ELSE name END,criteria=CASE WHEN $5 THEN NULL ELSE criteria END WHERE task_id=$1 AND ${unchanged}`,
+      [...read, nameStale, criteriaStale]);
   }
 }
 

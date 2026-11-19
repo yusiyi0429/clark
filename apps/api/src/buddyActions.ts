@@ -63,7 +63,9 @@ const IRREVERSIBLE = "这一步撤不回：只在动手前请本人点头时说�
 /** 本人 11/16：界面上不再显示子会话的字母，读到的 letter 只用来调动作。 */
 const SAY_NAMES = "子会话的 letter 只是调动作用的编号，界面上不显示；跟本人说话时叫子会话的名字，不说字母。";
 /** 本人 11/16（少开子会话）：只写进规矩，不做硬限制。 */
-const RUNNING_LIMIT = "同一个项目同时在跑的子会话不超过 2 个（本机最多同时跑 3 个，留一个给本人）；已经有 2 个在跑就等一个停下再开，急的先问本人。";
+const RUNNING_LIMIT = "同一个项目同时在跑的子会话不超过 2 个（本机最多同时跑 3 个，留一个给本人）；这条只管你自己开新会话、拆新卡，已经有 2 个在跑就等一个停下再开。";
+/** 本人 11/19：本人明说要开、要续的照做，上限只管伙伴自己开新的。只放在续上已有会话、对已有卡开工的动作里。 */
+const OWNER_NAMED = "本人明说要开、要续的那几个会话照做，不受同项目在跑的上限，超了就在回话里顺带说一句这个项目现在有几个在跑；你自己判断要拆、要开的仍受上限。";
 /** 本人 11/18：简单的自己做，项目级的进项目（.scratch/buddy-duet-20261117/借鉴dots开会话.md 第 2 节）。属于以后要迁进 harness 的规矩，收在这一处。 */
 const DISPATCH_RULES = "先分清是哪一种："
   + "①某个项目手上的活——要改它的文件，或者要改它某个会话的约定（做成什么样算完）——交给那个项目，再小也是；只是问进度、卡在哪，自己读了再答。"
@@ -85,7 +87,7 @@ const DESCRIPTION: Record<BuddyActionName, string> = {
   open_page: "让本人的网页打开某一处：home 首页、preferences 偏好，或某个项目、子会话（同「等你」的 open）。只动界面。",
   set_appearance: "切外观：system 跟随系统、light 浅色、dark 深色。",
   set_feishu_push: "打开或关掉飞书推送（feishu: true 开）。",
-  start_sub_session: "让一个卡或专题开工：登记要开工，本人电脑上开着的网页接下后交给本机。已经在跑的不用再开。" + RUNNING_LIMIT,
+  start_sub_session: "让一个卡或专题开工：登记要开工，本人电脑上开着的网页接下后交给本机。已经在跑的不用再开。" + RUNNING_LIMIT + OWNER_NAMED,
   stop_sub_session: `停掉一个子会话：还没被电脑接下的撤掉开工登记；在跑的请它所在的那台电脑停掉。${IRREVERSIBLE}`,
   archive_sub_session: "归档一个子会话（卡或专题），从首页收起。在跑的要先停掉。",
   delete_sub_session: "删掉一个子会话：先进回收站，30 天内能恢复。在跑的要先停掉。",
@@ -115,7 +117,7 @@ const DESCRIPTION: Record<BuddyActionName, string> = {
     + "伙伴主线里起新活只走两条路：用 open_session 放进项目（一次性的放「随手」），或用 message_project 交给项目对话去拆卡；主线里起新活不直接用 split_cards、start_sub_session。已经拆好的卡或专题要开工，照旧用 start_sub_session。"
     + DISPATCH_RULES + RUNNING_LIMIT
     + "回话里用同一个名字叫这个会话，说一声放在哪个项目。会话做完一轮主线里会自动出一行，不要许诺你自己会再来汇报。",
-  tell_session: "对一个已有的会话说一句话：本人让你转的，比如「再试一次」「把按钮改成蓝的」，或者你安排它接下来怎么做。会话停着就续上，在跑就在下一步前送到。kind 和 id 见 read_work_home。"
+  tell_session: "对一个已有的会话说一句话：本人让你转的，比如「再试一次」「把按钮改成蓝的」，或者你安排它接下来怎么做。会话停着就续上，在跑就在下一步前送到。" + OWNER_NAMED + "kind 和 id 见 read_work_home。"
     + "这句话要是改了约定（做成什么样算完），不用它，转给项目对话（message_project）。",
   send_message: "给同事转达一句话（toPersonIds 是人员目录里的 id）。不会直接发：先出一张卡给本人看，本人点「发出」才由天枢机器人发，开头是「本人名字请我转达：」。",
   update_plan: "计划清单：要做两步以上的事时，先列出步骤（每次交整张清单，status 为 pending / in_progress / completed），做的过程中更新。少于两步不用列。最后一步做完、回答收尾前，把清单全部标好状态再交一次。",
@@ -127,13 +129,13 @@ const DESCRIPTION: Record<BuddyActionName, string> = {
     + "调完这一轮就结束：回答里最多再说一句，不要接着往下做，等本人回答。本人的回答会作为下一条消息发来（点选的会拼成「短标题：选项」）；本人也可能先聊别的、不答，那就照新的话办。",
   sub_session_tell: "只在项目对话里用：按字母给这个项目里的一个子会话转一句话（本人让你转的、或你安排它接下来怎么做）。它在跑就在下一步前送到，停着就续上接着做。"
     + "字母见 read_work_home 里子会话的 letter。由本人电脑上开着的网页交给本机，立即返回。"
-    + "这句话如果改变了「做成什么样算完」（加了要做的事、改了交付物、去掉某条标准），先用 update_card 改卡的约定，再转话。",
+    + "这句话如果改变了「做成什么样算完」（加了要做的事、改了交付物、去掉某条标准），先用 update_card 改卡的约定，再转话。" + OWNER_NAMED,
   sub_session_stop: `只在项目对话里用：按字母停下这个项目里的一个子会话（同 stop_sub_session）。${IRREVERSIBLE}`,
   sub_session_rename: "只在项目对话里用：按字母给这个项目里的一个子会话改名（左栏、子会话页上显示的名字）。名字照 Claude Code 给会话起名：一个短的动宾短语，十来个字，"
     + "细节留在卡的交代和完成标准里，不放进名字。本人让你改名、或名字太长在左栏看不全时用；一次改一个，几个要改就调几次。",
   sub_session_link: "只在项目对话里用：按字母把这个项目里的一个子会话挂到这个项目上的一件 Task（taskId），写明它对的是这件 Task 验收标准的第几条（criterion，从 1 起；标准看 read_work_home 里这个项目 goals 的 criteria，第一条是 1；对不上任何一条写 null，专题一律 null）。本月页照它算这件 Task 的进度：对某一条的卡验收通过，这一条算达到。"
     + "以前按项目拆出来、没挂 Task 的子会话，一个一个挂上；拿不准挂哪件、对哪条就问本人，不要硬挂。",
-  sub_session_restart: "只在项目对话里用：按字母重开这个项目里的一个子会话。还没开过工的登记开工；停着的（做完一轮、被停下、出错停住）往里说一句 text 续上，不给 text 是「接着做」。" + RUNNING_LIMIT,
+  sub_session_restart: "只在项目对话里用：按字母重开这个项目里的一个子会话。还没开过工的登记开工；停着的（做完一轮、被停下、出错停住）往里说一句 text 续上，不给 text 是「接着做」。" + RUNNING_LIMIT + OWNER_NAMED,
   sub_session_answer: "只在项目对话里用：替本人回答一个子会话在问的问题（本人说了「C 的问题选第二个」这类话时用）。choices 每题选中的选项 label（照它问的原样，条数和题数一样），"
     + "text 是另外要说的话。本人没表态的不要替本人选。",
   sub_session_approve: "只在项目对话里用：批准（decision = allow）或拒绝（deny）一个子会话在等批准的那一步。硬规矩：只有本人在这次对话里明说了"

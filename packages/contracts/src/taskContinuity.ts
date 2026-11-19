@@ -128,7 +128,7 @@ export const MonthPageResponse = Type.Object({
   draft: Nullable(MonthDraft),
 }, strict);
 
-/** PUT /api/me/tasks/:taskId/due-date：存这件 Task 的验收时间点（按 Task 存，不要求挂项目；只有 Task 负责人能改）；null 不存了，退回 Mission 的节点。 */
+/** PUT /api/me/tasks/:taskId/due-date：存这件 Task 的验收时间点（按 Task 存，不要求挂项目；只有 Task 负责人能改）；null 不存了，退回记下的原验收时间点。 */
 export const SetTaskDueDateRequest = Type.Object({ dueDate: Nullable(Day) }, strict);
 export const TaskDueDateResponse = Type.Object({ taskId: Type.String({ minLength: 1 }), name: Type.String(), dueDate: Nullable(Day) }, strict);
 

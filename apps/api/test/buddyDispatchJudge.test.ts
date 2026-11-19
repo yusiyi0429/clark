@@ -22,14 +22,25 @@ describe("伙伴主线评测的用例", () => {
 });
 
 describe("判定", () => {
-  it("自己做的几条：不调写动作算对，调了算错；GTA 那条问本人也算对", () => {
-    for (const id of [1, 2, 3, 12]) {
+  it("自己做的几条：不调写动作算对，调了算错", () => {
+    for (const id of [1, 2, 3]) {
       expect(verdict(id, attempt([home])).pass).toBe(true);
       const wrong = verdict(id, attempt([call("open_session", { scratch: true, title: "查", brief: "查" })], "在「随手」里开了「查」。"));
       expect(wrong.pass).toBe(false);
       expect(wrong.reasons.join()).toContain("open_session");
     }
+  });
+
+  it("12（本人 11/19）：自己查完回话、问本人、放进「随手」会话都算对；开进别的项目、转给项目算错", () => {
+    expect(verdict(12, attempt([home])).pass).toBe(true);
     expect(verdict(12, attempt([call("ask_user", { questions: [] })], "")).pass).toBe(true);
+    expect(verdict(12, attempt([call("open_session", { scratch: true, title: "查首发路线", brief: "查" })], "在「随手」里开了「查首发路线」。")).pass).toBe(true);
+    const project = verdict(12, attempt([call("open_session", { projectId: IDS.tianshu, title: "查首发路线", brief: "查" })], "在「天枢新版」里开了「查首发路线」。"));
+    expect(project.pass).toBe(false);
+    expect(project.reasons.join()).toContain("open_session");
+    expect(verdict(12, attempt([call("message_project", { projectId: IDS.tianshu, text: "查" })], "转给了项目对话。")).pass).toBe(false);
+    // 带 scratch 的也要做成，同第 4、5 条。
+    expect(verdict(12, attempt([call("open_session", { scratch: true, title: "查首发路线", brief: "查" }, { ok: false, code: "INVALID_ARGS" })], "没开成。")).pass).toBe(false);
   });
 
   it("4、5：开会话要放对地方，而且要做成", () => {

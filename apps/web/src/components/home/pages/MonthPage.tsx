@@ -347,7 +347,7 @@ function AddLine({ text, label, placeholder, onSave }: { text: string; label: st
   return <InlineText value="" label={label} placeholder={placeholder} required autoFocus onSave={onSave} onDone={() => setAdding(false)} />;
 }
 
-/** 展开里的「验收」：项目详情那个小日期选择（按 Task 存）；改过的能清掉、退回 Mission 的节点。没成写「失败 · 重试」。 */
+/** 展开里的「验收」：项目详情那个小日期选择（按 Task 存）；改过的能清掉、退回记下的原验收时间点。没成写「失败 · 重试」。 */
 function DueDatePick({ task, actions }: { task: MonthTask; actions: MonthActions }) {
   const [failed, setFailed] = useState<{ reason: string; retry: () => void } | null>(null);
   const change = (value: string) => {

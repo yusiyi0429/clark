@@ -181,7 +181,7 @@ export const setPipelineModel = (projectId: string, choice: TConversationModelCh
 /** 本人打开了一个子会话（sub，卡或专题的 id）或项目对话（project）：记下看过，左栏蓝点消失（26 条，204、幂等）。 */
 export const markWorkSeen = (kind: "sub" | "project", id: string) =>
   unwrap<unknown>(browserApi.POST("/api/me/work-seen", { body: { kind, id } }) as Promise<Result<unknown>>);
-/** 给挂在这个项目上的一件 Task 存验收截止日（YYYY-MM-DD），null 是不存了、退回 Mission 的节点。 */
+/** 给挂在这个项目上的一件 Task 存验收截止日（YYYY-MM-DD），null 是不存了、退回记下的原验收时间点。 */
 export const setGoalDueDate = (projectId: string, taskId: string, dueDate: string | null) =>
   unwrap<unknown>(browserApi.PUT("/api/me/projects/{projectId}/goals/{taskId}/due-date", { params: { path: { projectId, taskId } }, body: { dueDate } }) as Promise<Result<unknown>>);
 /** 把一件 Task 挂到这个项目（原来挂在别处就移过来）。 */

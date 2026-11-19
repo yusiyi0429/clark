@@ -200,10 +200,10 @@ export const workHomePaths: OpenAPIV3.Document["paths"] = {
   "/api/me/projects/{projectId}/goals/{taskId}/due-date": {
     put: {
       operationId: "setProjectGoalDueDate",
-      summary: "给挂在这个项目上的一件 Task 存验收截止日（null 不存了，退回 Mission 的节点）；没挂在这个项目上 404",
+      summary: "给挂在这个项目上的一件 Task 存验收截止日（null 不存了，退回记下的原验收时间点）；没挂在这个项目上 404，已经过去的月份 409",
       parameters: path("projectId", "taskId"),
       requestBody: body("SetGoalDueDateRequest"),
-      responses: { "200": json("这条挂接", "ProjectGoal"), ...errors(400, 401, 403, 404) },
+      responses: { "200": json("这条挂接", "ProjectGoal"), ...errors(400, 401, 403, 404, 409) },
     },
   },
   "/api/me/projects/{projectId}/auto-relay": {

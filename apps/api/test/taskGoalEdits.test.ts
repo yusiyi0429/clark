@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
+import type { Query } from "../src/meetingStore.js";
 import type { PlanTask } from "../src/planTasks.js";
+import { withTaskGoalEdits } from "../src/taskGoalEdits.js";
 import { BOARD_TASKS, boardFixture, THIRD } from "./boardFixture.js";
 import { TEST_MEMBER } from "./helpers.js";
 
@@ -179,5 +181,42 @@ describe("本月页改名字和完成标准", () => {
     expect(await g.t.sql("SELECT task_id FROM task_goal_edits")).toEqual([]);
     g.tasks[0]!.name = "对话质量达标（V3）";
     expect(await g.month()).toMatchObject({ name: "对话质量达标（V3）", edited: null });
+  }, 180_000);
+
+  it("读出旧改动后、清理前本人又存了新改动：清理只动还是刚才读到的那个值，新改动不被删、不被置空", async () => {
+    const g = f = await fixture();
+    const pool = g.t.pool;
+    const row = async () => (await pool.query("SELECT name,criteria FROM task_goal_edits WHERE task_id='task-open'")).rows[0] as { name: string | null; criteria: string[] | null } | undefined;
+    /** 读完改动、清理之前，本人存了新的（race 照 SQL 原样写一行）。 */
+    let race: string | null = null;
+    const q: Query = async (sql, params) => {
+      const result = await pool.query(sql, params);
+      if (race && sql.startsWith("SELECT task_id,name,criteria FROM task_goal_edits")) { await pool.query(race); race = null; }
+      return result;
+    };
+    const read = withTaskGoalEdits(q, async (missions) => g.tasks.filter((task) => missions.some((mission) => mission.id === task.missionId)));
+    const mine = [{ id: "mine", code: "mine" }];
+
+    // 整行删那条路：名字、标准都和本体一样了，清理前本人又改了名字。
+    expect((await g.goal("task-open", { name: "对话质量达标（V2）" })).statusCode).toBe(200);
+    g.tasks[0]!.name = "对话质量达标（V2）";
+    race = "UPDATE task_goal_edits SET name='对话质量达标（V3）' WHERE task_id='task-open'";
+    await read(mine);
+    expect(await row()).toEqual({ name: "对话质量达标（V3）", criteria: null });
+
+    // 置空一样那条路：名字和本体一样了、标准还改着，清理前本人又改了名字。
+    expect((await g.goal("task-open", { name: "对话质量达标（V2）", criteria: ["有题库打分结果", "有三个新人上手录屏"] })).statusCode).toBe(200);
+    g.tasks[0]!.name = "对话质量达标（V2）";
+    expect(await row()).toEqual({ name: null, criteria: ["有题库打分结果", "有三个新人上手录屏"] });
+    expect((await g.goal("task-open", { name: "对话质量达标（V4）" })).statusCode).toBe(200);
+    g.tasks[0]!.name = "对话质量达标（V4）";
+    race = "UPDATE task_goal_edits SET name='对话质量达标（V5）' WHERE task_id='task-open'";
+    await read(mine);
+    expect(await row()).toEqual({ name: "对话质量达标（V5）", criteria: ["有题库打分结果", "有三个新人上手录屏"] });
+
+    // 没人插进来时照旧清：名字和本体一样了就置空。
+    g.tasks[0]!.name = "对话质量达标（V5）";
+    await read(mine);
+    expect(await row()).toEqual({ name: null, criteria: ["有题库打分结果", "有三个新人上手录屏"] });
   }, 180_000);
 });

@@ -5193,7 +5193,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** 给挂在这个项目上的一件 Task 存验收截止日（null 不存了，退回 Mission 的节点）；没挂在这个项目上 404 */
+        /** 给挂在这个项目上的一件 Task 存验收截止日（null 不存了，退回记下的原验收时间点）；没挂在这个项目上 404，已经过去的月份 409 */
         put: operations["setProjectGoalDueDate"];
         post?: never;
         delete?: never;
@@ -41273,6 +41273,15 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
