@@ -16,6 +16,7 @@ const Instant = Type.String({ format: "date-time" });
 const Nullable = <T extends TSchema>(schema: T) => Type.Union([schema, Type.Null()]);
 export const MonthPeriod = Type.String({ pattern: "^\\d{4}-(0[1-9]|1[0-2])$" });
 const Note = Type.String({ minLength: 1, maxLength: 200 });
+const Day = Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" });
 
 /** 另一件 Task：id、名字（写入延续那一刻的快照）、在哪个 Mission、那个 Mission 是哪个月（Mission 不在了为 null）。 */
 export const TaskRef = Type.Object({
@@ -68,7 +69,8 @@ export const TaskSettlementResponse = Type.Object({ taskId: Type.String({ minLen
  * 月份页上这个月本人的一件 Task（本人这个月的 Mission 下、本人负责的；本体没登记负责人的算本人的）。
  * missionOutcome：所在 Mission 的成果（没写为 null）。
  * criteria：完成标准原文（本体验收标准，没有就按完成定义算一条），met 是这一条达到了（本人对它的卡里有一张最近一次有结论的验收算通过）。
- * dueDate：验收时间点（YYYY-MM-DD）：天枢里单独存的，没存按 Mission 今天以后最近的节点（都过了取最后一个），Mission 没写节点为 null。
+ * dueDate：验收时间点（YYYY-MM-DD）：天枢里按 Task 存的那一份，没存按 Mission 今天以后最近的节点（都过了取最后一个），Mission 没写节点为 null。
+ * missionDueDate：按 Mission 节点算的那个（原值）；和 dueDate 不同时网页写「原 11/18」。
  * disposition / deferredTo：去向（同复盘页：本期验收 / 延期到某月 / 已取消；没定过的按了结推：延续出去的算延期，到此为止的算取消）。
  * version：交付物到第几版，没交过为 null。running：还在跑的子会话（本机会话还开着的卡和专题）。blocked：受阻的子会话（卡连续两次验收没过）。
  * done：本人确认完成了（最新一版交付了，之后没返工），不问怎么办。
@@ -82,7 +84,8 @@ export const MonthTask = Type.Object({
   missionOutcome: Nullable(Type.String()),
   name: Type.String(),
   criteria: Type.Array(Type.Object({ text: Type.String(), met: Type.Boolean() }, strict)),
-  dueDate: Nullable(Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" })),
+  dueDate: Nullable(Day),
+  missionDueDate: Nullable(Day),
   disposition: Type.Union([Type.Literal("current"), Type.Literal("deferred"), Type.Literal("cancelled")]),
   deferredTo: Nullable(MonthPeriod),
   version: NullableInteger({ minimum: 1 }),
@@ -119,6 +122,10 @@ export const MonthPageResponse = Type.Object({
   draft: Nullable(MonthDraft),
 }, strict);
 
+/** PUT /api/me/tasks/:taskId/due-date：存这件 Task 的验收时间点（按 Task 存，不要求挂项目；只有 Task 负责人能改）；null 不存了，退回 Mission 的节点。 */
+export const SetTaskDueDateRequest = Type.Object({ dueDate: Nullable(Day) }, strict);
+export const TaskDueDateResponse = Type.Object({ taskId: Type.String({ minLength: 1 }), dueDate: Nullable(Day) }, strict);
+
 export type TTaskRef = Static<typeof TaskRef>;
 export type TTaskSettlement = Static<typeof TaskSettlement>;
 export type TContinueTaskRequest = Static<typeof ContinueTaskRequest>;
@@ -128,3 +135,5 @@ export type TTaskSettlementResponse = Static<typeof TaskSettlementResponse>;
 export type TMonthTask = Static<typeof MonthTask>;
 export type TMonthDraft = Static<typeof MonthDraft>;
 export type TMonthPageResponse = Static<typeof MonthPageResponse>;
+export type TSetTaskDueDateRequest = Static<typeof SetTaskDueDateRequest>;
+export type TTaskDueDateResponse = Static<typeof TaskDueDateResponse>;

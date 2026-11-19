@@ -75516,6 +75516,17 @@
                 ]
               }
             }
+          },
+          "dueDate": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -79680,6 +79691,17 @@
                       ]
                     }
                   }
+                },
+                "dueDate": {
+                  "anyOf": [
+                    {
+                      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               }
             }
@@ -137806,6 +137828,7 @@
           "name",
           "criteria",
           "dueDate",
+          "missionDueDate",
           "disposition",
           "deferredTo",
           "version",
@@ -137860,6 +137883,17 @@
             }
           },
           "dueDate": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "missionDueDate": {
             "anyOf": [
               {
                 "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
@@ -138175,6 +138209,7 @@
                 "name",
                 "criteria",
                 "dueDate",
+                "missionDueDate",
                 "disposition",
                 "deferredTo",
                 "version",
@@ -138229,6 +138264,17 @@
                   }
                 },
                 "dueDate": {
+                  "anyOf": [
+                    {
+                      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "missionDueDate": {
                   "anyOf": [
                     {
                       "pattern": "^\\d{4}-\\d{2}-\\d{2}$",

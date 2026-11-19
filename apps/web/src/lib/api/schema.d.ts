@@ -13645,6 +13645,7 @@ export interface components {
                 score: number | null;
                 version: number | null;
             };
+            dueDate?: string | null;
         };
         TaskDeliverableStatus: {
             status: "none" | "reviewing" | "iterating" | "ready" | "delivered";
@@ -14193,6 +14194,7 @@ export interface components {
                     score: number | null;
                     version: number | null;
                 };
+                dueDate?: string | null;
             }[];
             activities: {
                 item: {
@@ -22547,6 +22549,7 @@ export interface components {
                 met: boolean;
             }[];
             dueDate: string | null;
+            missionDueDate: string | null;
             disposition: "current" | "deferred" | "cancelled";
             deferredTo: string | null;
             version: number | null;
@@ -22603,6 +22606,7 @@ export interface components {
                     met: boolean;
                 }[];
                 dueDate: string | null;
+                missionDueDate: string | null;
                 disposition: "current" | "deferred" | "cancelled";
                 deferredTo: string | null;
                 version: number | null;

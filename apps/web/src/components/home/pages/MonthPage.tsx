@@ -8,11 +8,15 @@
  * - 每件 Task 一行，行尾只写有的：达到了几条「1/3」，再加最多一个词（等你 N / 受阻 N / 进行中 N / 交付第 N 版，取第一个有的）。
  *   完成的行首一个勾、整行变淡；延续来的写「延续自 10 月的 X」，已经延续出去的下面一行「已延续到 X」（点了进那件）。
  * - 点行展开、再点收起：每条完成标准一行，达到的打勾；下面一行验收时间点、去向、项目名（点了进这件 Task 的管线；没挂的「挂到」和「详情」）。
+ *   验收时间点就地改（项目详情那个小日期选择，按 Task 存），改了行上淡色「原 11/18」（原值是 Mission 节点算的，改回一样就不写）；
+ *   去向就地定（复盘页的去向下拉，同一个接口，月中也能定）。没成写「失败 · 重试」，不弹 toast。
+ * - 定了延期、取消的从上面挪到最下面「延期和取消」：一件一行，名字、去向下拉。
  * - 下半：下个月 Co-Agent 的草稿，按 Mission 分组（接口等溪南，现在没有）。
  * 数据见 useMonthPage。
  * 复盘期间（月份已经过去，或本月最后两天，同服务端）月份页就是复盘页（MonthReview，设计第三版，读 GET …/review），上面这些不画。
  */
 import { useEffect, useState } from "react";
+import { DatePicker } from "@/components/ui/DatePicker";
 import { Check, ChevronLeft, ChevronRight } from "lucide-react";
 import { HeroButton } from "@/components/HeroButton";
 import { FailedLine } from "@/components/work/DecisionBox";
@@ -20,19 +24,19 @@ import { BUDDY_HREF, monthLabel, projectHref, taskHref } from "@/lib/home/derive
 import { monthHref } from "../pageKeys";
 import type { MonthExtras } from "./monthLive";
 import type { MonthPageProps } from "./index";
-import { MonthReviewView, ReviewHeadTrail } from "./MonthReview";
+import { DispositionPick, MonthReviewView, ReviewHeadTrail } from "./MonthReview";
 import { dispositionText, headText, useMonthReview, type MonthReview, type ReviewActions } from "./useMonthReview";
 import { ICON, Loading, Section } from "./parts";
-import { nextPeriod, useMonthPage, type MonthPageData, type MonthTask } from "./useMonthPage";
+import { monthSource, nextPeriod, useMonthPage, type MonthActions, type MonthPageData, type MonthTask } from "./useMonthPage";
 import h from "@/styles/home.module.css";
 import p from "@/styles/home-pages.module.css";
 
-export function MonthPage({ go, period, today = null, onHead, extras }: MonthPageProps) {
+export function MonthPage({ go, period, today = null, onHead, extras, onChanged }: MonthPageProps) {
   const { review, failed, retry, actions } = useMonthReview(period, today);
   if (failed !== null) return <FailedLine reason={failed} onRetry={retry} />;
   if (review === undefined) return <Loading />;
   if (review) return <ReviewPage review={review} actions={actions} go={go} onHead={onHead} />;
-  return <MonthTasks go={go} period={period} today={today} onHead={onHead} extras={extras} />;
+  return <MonthTasks go={go} period={period} today={today} onHead={onHead} extras={extras} onChanged={onChanged} />;
 }
 
 const FIRST_PERIOD = "2026-10";
@@ -67,15 +71,16 @@ function ReviewPage({ review, actions, go, onHead }: { review: MonthReview; acti
   return <MonthReviewView review={review} actions={actions} />;
 }
 
-function MonthTasks({ go, period, today, onHead, extras }: { go: (href: string) => void; period: string; today: string | null; onHead: MonthPageProps["onHead"]; extras: MonthPageProps["extras"] }) {
-  const { data, failed, retry } = useMonthPage(period);
+function MonthTasks({ go, period, today, onHead, extras, onChanged }: { go: (href: string) => void; period: string; today: string | null; onHead: MonthPageProps["onHead"];
+  extras: MonthPageProps["extras"]; onChanged: MonthPageProps["onChanged"] }) {
+  const { data, failed, retry, actions } = useMonthPage(period, monthSource, onChanged);
   useEffect(() => {
     onHead?.({ title: monthLabel(period), trail: <MonthNav period={period} today={today} go={go} /> });
   }, [onHead, period, today, go]);
   useEffect(() => () => onHead?.(null), [onHead]);
   if (failed !== null) return <FailedLine reason={failed} onRetry={retry} />;
   if (!data) return <Loading />;
-  return <MonthView data={data} go={go} extras={extras} today={today} />;
+  return <MonthView data={data} go={go} extras={extras} today={today} actions={actions} />;
 }
 
 const DAY_MS = 86_400_000;
@@ -125,15 +130,31 @@ function missionCount(tasks: MonthTask[]): string {
   return [`${tasks.filter(isDone).length}/${tasks.length}`, deferred ? `延期 ${deferred}` : null, cancelled ? `取消 ${cancelled}` : null].filter(Boolean).join(" · ");
 }
 
-/** extras（只有当月有，来自首页数据）：每件 Task 等你几件、挂着的项目，没挂的「挂到」。 */
-export function MonthView({ data, go, extras, today = null }: { data: MonthPageData; go: (href: string) => void; extras?: (task: { taskId: string; missionId: string }) => MonthExtras; today?: string | null }) {
+/**
+ * extras（只有当月有，来自首页数据）：每件 Task 等你几件、挂着的项目，没挂的「挂到」。
+ * actions：就地改验收时间点、定去向；没有（只读的预览、测试）时那两样只写字。
+ */
+export function MonthView({ data, go, extras, today = null, actions }: { data: MonthPageData; go: (href: string) => void; extras?: (task: { taskId: string; missionId: string }) => MonthExtras;
+  today?: string | null; actions?: MonthActions }) {
   const draft = data.draft;
   const extraOf = (task: MonthTask) => extras?.({ taskId: task.taskId, missionId: task.missionId });
+  const aside = data.tasks.filter((task) => task.disposition !== "current");
   return (
     <>
       {data.tasks.length ? byMission(data.tasks, (task) => task.missionId).map((tasks) => (
-        <MissionBlock key={tasks[0]!.missionId} tasks={tasks} go={go} extraOf={extraOf} today={today} />
+        <MissionBlock key={tasks[0]!.missionId} tasks={tasks} period={data.period} go={go} extraOf={extraOf} today={today} actions={actions} />
       )) : <p className={h.waitEmpty} data-testid="month-empty">{monthLabel(data.period)}还没有 Mission</p>}
+      {aside.length ? (
+        <section className={p.monthMission} aria-label="延期和取消" data-testid="month-set-aside">
+          <div className={p.monthMissionHead}><h2 className={p.monthMissionName}>延期和取消</h2></div>
+          {aside.map((task) => (
+            <div key={task.taskId} className={p.monthAside} data-testid="month-aside-row">
+              <span className={p.monthAsideName}>{task.name}</span>
+              {actions ? <DispositionPick task={{ ...task, canChange: true }} period={data.period} actions={actions} /> : <span className={p.monthFaint}>{dispositionText(task)}</span>}
+            </div>
+          ))}
+        </section>
+      ) : null}
       {draft && draft.missions.some((mission) => mission.tasks.length) ? (
         <Section title={`${monthLabel(draft.period)}的草稿`} testId="month-draft">
           <div>
@@ -160,7 +181,8 @@ export function MonthView({ data, go, extras, today = null }: { data: MonthPageD
   );
 }
 
-function MissionBlock({ tasks, go, extraOf, today }: { tasks: MonthTask[]; go: (href: string) => void; extraOf: (task: MonthTask) => MonthExtras | undefined; today: string | null }) {
+function MissionBlock({ tasks, period, go, extraOf, today, actions }: { tasks: MonthTask[]; period: string; go: (href: string) => void; extraOf: (task: MonthTask) => MonthExtras | undefined;
+  today: string | null; actions?: MonthActions }) {
   const { missionTitle: title, missionOutcome: outcome } = tasks[0]!;
   const waitingOf = (task: MonthTask) => extraOf(task)?.waiting ?? 0;
   return (
@@ -170,13 +192,13 @@ function MissionBlock({ tasks, go, extraOf, today }: { tasks: MonthTask[]; go: (
         <span className={p.monthFaint}>{missionCount(tasks)}</span>
       </div>
       {outcome && outcome !== title ? <p className={p.monthOutcome}>{outcome}</p> : null}
-      {bySegments(tasks, waitingOf).map((segment) => {
+      {bySegments(tasks.filter((task) => task.disposition === "current"), waitingOf).map((segment) => {
         const days = segment.date ? daysTo(segment.date, today) : null;
         const overdue = days !== null && days < 0 && segment.tasks.some((task) => !isDone(task) && task.disposition === "current");
         return (
           <div key={segment.date ?? "none"}>
             {segment.date ? <p className={p.segmentTitle} data-testid="month-segment" data-overdue={overdue ? "" : undefined}>{segmentLabel(segment.date, today)}</p> : null}
-            {segment.tasks.map((task) => <MonthTaskRow key={task.taskId} task={task} go={go} extra={extraOf(task)} />)}
+            {segment.tasks.map((task) => <MonthTaskRow key={task.taskId} task={task} period={period} go={go} extra={extraOf(task)} actions={actions} />)}
           </div>
         );
       })}
@@ -185,7 +207,7 @@ function MissionBlock({ tasks, go, extraOf, today }: { tasks: MonthTask[]; go: (
 }
 
 /** 一件 Task：点行展开看完成标准和验收时间点、去向、项目，再点收起。 */
-export function MonthTaskRow({ task, go, extra }: { task: MonthTask; go: (href: string) => void; extra?: MonthExtras }) {
+export function MonthTaskRow({ task, period, go, extra, actions }: { task: MonthTask; period: string; go: (href: string) => void; extra?: MonthExtras; actions?: MonthActions }) {
   const [open, setOpen] = useState(false);
   const done = isDone(task);
   const to = task.settlement?.kind === "continued" ? task.settlement.to : null;
@@ -198,6 +220,7 @@ export function MonthTaskRow({ task, go, extra }: { task: MonthTask; go: (href: 
         <span className={h.slotState}>{done ? <Check {...ICON} aria-label="已完成" /> : null}</span>
         <span className={p.monthTaskText}>
           <span>{task.name}</span>
+          {task.dueDate && task.missionDueDate && task.dueDate !== task.missionDueDate ? <span className={p.monthFaint}>原 {shortDate(task.missionDueDate)}</span> : null}
           {from ? <span className={p.monthFaint}>延续自{from.period ? ` ${monthLabel(from.period)}` : ""}的{from.name}</span> : null}
         </span>
         {trail ? <span className={p.monthTrail} data-testid="task-status">{trail}</span> : null}
@@ -215,8 +238,8 @@ export function MonthTaskRow({ task, go, extra }: { task: MonthTask; go: (href: 
             </ul>
           ) : null}
           <div className={p.monthFacts}>
-            {task.dueDate ? <span>验收 {shortDate(task.dueDate)}</span> : null}
-            <span>{dispositionText(task)}</span>
+            {actions ? <DueDatePick task={task} actions={actions} /> : task.dueDate ? <span>验收 {shortDate(task.dueDate)}</span> : null}
+            {actions ? <DispositionPick task={{ ...task, canChange: true }} period={period} actions={actions} /> : <span>{dispositionText(task)}</span>}
             {project ? <button type="button" className={p.monthLink} onClick={() => go(projectHref(project.projectId))}>{project.name}</button> : (
               <>
                 {extra?.attach ?? null}
@@ -230,5 +253,24 @@ export function MonthTaskRow({ task, go, extra }: { task: MonthTask; go: (href: 
         <p className={h.line} data-testid="month-continued"><button type="button" className={h.lineLink} onClick={() => go(taskHref(to.taskId))}>已延续到{to.period ? ` ${monthLabel(to.period)}` : ""}的{to.name}</button></p>
       ) : null}
     </div>
+  );
+}
+
+/** 展开里的「验收」：项目详情那个小日期选择（按 Task 存）；改过的能清掉、退回 Mission 的节点。没成写「失败 · 重试」。 */
+function DueDatePick({ task, actions }: { task: MonthTask; actions: MonthActions }) {
+  const [failed, setFailed] = useState<{ reason: string; retry: () => void } | null>(null);
+  const change = (value: string) => {
+    const once = () => {
+      setFailed(null);
+      void actions.setDueDate(task.taskId, value || null).catch((error: unknown) => setFailed({ reason: error instanceof Error ? error.message : "", retry: once }));
+    };
+    once();
+  };
+  return (
+    <span className={p.monthDue} data-testid="month-due">
+      <span>验收</span>
+      <DatePicker label="验收" size="compact" value={task.dueDate ?? ""} clearable={task.dueDate !== task.missionDueDate} onChange={change} />
+      {failed ? <FailedLine inline reason={failed.reason} onRetry={failed.retry} /> : null}
+    </span>
   );
 }

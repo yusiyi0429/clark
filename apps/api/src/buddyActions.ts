@@ -26,6 +26,7 @@ import { logEvent } from "./observability.js";
 import { dispatchCards, findDispatch, recordDispatch, type DispatchCard } from "./buddyDispatches.js";
 import { ensureScratchProject } from "./projects.js";
 import { projectPaused } from "./projectTransfers.js";
+import { taskDueDates } from "./taskDueDates.js";
 
 /**
  * 伙伴代本人做事（新首页 17.4，契约 buddyActions.ts）。Chat 每轮读动作清单（actionList），模型调哪个就按名字执行（runAction）。
@@ -489,8 +490,7 @@ const handlers: Handlers = {
     return { summary: "改了新 Task 的缺省预算", undo: { kind: "budget", taskId: null, previous: before }, ui: [{ kind: "refresh", what: ["settings"] }] };
   },
   set_task_due_date: async (deps, call, args) => {
-    const previous = ((await deps.q("SELECT due_date FROM project_goals WHERE owner_id=$1 AND project_id=$2 AND task_id=$3", [call.personId, args.projectId, args.taskId]))
-      .rows[0]?.due_date ?? null) as string | null;
+    const previous = (await taskDueDates(deps.q, [args.taskId])).get(args.taskId) ?? null;
     const goal = await web<{ taskName: string }>(deps, call.personId, "PUT",
       `/api/me/projects/${encodeURIComponent(args.projectId)}/goals/${encodeURIComponent(args.taskId)}/due-date`, { dueDate: args.dueDate });
     return { summary: args.dueDate ? `把「${goal.taskName}」的验收截止日定成 ${args.dueDate}` : `「${goal.taskName}」不再单独存截止日，按 Mission 的节点算`,

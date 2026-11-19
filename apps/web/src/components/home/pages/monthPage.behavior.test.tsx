@@ -23,9 +23,9 @@ const textOf = (node: ReactNode): string => Children.toArray(node).map((child) =
 
 const task: MonthTask = { taskId: "t1", missionId: "m1", missionTitle: "天枢 11 月", missionOutcome: null, name: "甲",
   criteria: [{ text: "有题库打分结果", met: true }, { text: "有新人上手录屏", met: false }, { text: "过 75 分", met: false }],
-  dueDate: "2026-11-18", disposition: "current", deferredTo: null, version: null, running: 0, blocked: 0, done: false, settlement: null, continuedFrom: null };
+  dueDate: "2026-11-18", missionDueDate: "2026-11-18", disposition: "current", deferredTo: null, version: null, running: 0, blocked: 0, done: false, settlement: null, continuedFrom: null };
 const go = vi.fn();
-const row = () => { hooks.position = 0; return MonthTaskRow({ task, go }) as ReactNode; };
+const row = () => { hooks.position = 0; return MonthTaskRow({ task, period: "2026-11", go }) as ReactNode; };
 const toggle = (tree: ReactNode) => nodes(tree).find((node) => "aria-expanded" in node.props)!;
 const criteria = (tree: ReactNode) => nodes(tree).filter((node) => node.props["data-testid"] === "month-criterion");
 

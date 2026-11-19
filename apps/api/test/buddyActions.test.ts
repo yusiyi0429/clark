@@ -538,6 +538,31 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
       expect((await f.call("GET", `/api/me/projects/${project}`)).json().goals[0].dueDate).toBeNull();
     } finally { await f.close(); }
   });
+  it("验收时间点只有一份：老的项目目标接口和伙伴动作改的是同一个地方", async () => {
+    const f = await fixture();
+    try {
+      await f.grant();
+      const project = (await f.call("POST", "/api/me/projects", { name: "天枢", taskId: "task-open" })).json().projectId as string;
+      const stored = async () => (await f.t.sql("SELECT task_id,due_date FROM task_due_dates")) as { task_id: string; due_date: string }[];
+      const monthDue = async () => (await f.call("GET", "/api/me/months/2026-11")).json().tasks[0].dueDate as string | null;
+      const goalDue = async () => (await f.call("GET", `/api/me/projects/${project}`)).json().goals[0].dueDate as string | null;
+      // 老的项目目标接口写的，新接口、月份页、项目页读到的是同一个。
+      expect((await f.call("PUT", `/api/me/projects/${project}/goals/task-open/due-date`, { dueDate: "2026-11-20" })).statusCode).toBe(200);
+      expect(await stored()).toEqual([{ task_id: "task-open", due_date: "2026-11-20" }]);
+      expect([await monthDue(), await goalDue()]).toEqual(["2026-11-20", "2026-11-20"]);
+      // 新接口写的，老的项目页读到。
+      expect((await f.call("PUT", "/api/me/tasks/task-open/due-date", { dueDate: "2026-11-22" })).statusCode).toBe(200);
+      expect([await monthDue(), await goalDue()]).toEqual(["2026-11-22", "2026-11-22"]);
+      // 伙伴动作改的也是这一份，撤回回到它改之前的。
+      const done = await f.ok("set_task_due_date", { projectId: project, taskId: "task-open", dueDate: "2026-11-30" });
+      expect(await stored()).toEqual([{ task_id: "task-open", due_date: "2026-11-30" }]);
+      expect([await monthDue(), await goalDue()]).toEqual(["2026-11-30", "2026-11-30"]);
+      await f.undo(done.auditId!);
+      expect(await stored()).toEqual([{ task_id: "task-open", due_date: "2026-11-22" }]);
+      // project_goals 上不再有自己的一份。
+      expect(await f.t.sql("SELECT column_name FROM information_schema.columns WHERE table_name='project_goals' AND column_name='due_date'")).toEqual([]);
+    } finally { await f.close(); }
+  });
   it("17.2 第 25 条：蓝点只在本人没看过的新情况时出——子会话停下晚于打开、项目对话有新的回复或汇报晚于打开；打开记在云端", async () => {
     const f = await fixture();
     try {

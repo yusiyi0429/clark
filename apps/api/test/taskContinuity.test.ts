@@ -208,7 +208,7 @@ describe("跨月延续与月份", () => {
     expect(month.statusCode).toBe(200);
     // 每件带上 Mission 的成果、完成标准原文和哪几条达到、去向、验收时间点（没单独存的按 Mission 今天以后最近的节点）。
     expect(month.json()).toEqual({ period: "2026-11", draft: null, tasks: [{ taskId: "task-open", missionId: "mine", missionTitle: "内部版上线", missionOutcome: "内部 20 人每天用",
-      name: "对话质量达标", criteria: [{ text: "有题库打分结果", met: true }, { text: "有新人上手录屏", met: false }], dueDate: "2026-11-18",
+      name: "对话质量达标", criteria: [{ text: "有题库打分结果", met: true }, { text: "有新人上手录屏", met: false }], dueDate: "2026-11-18", missionDueDate: "2026-11-18",
       disposition: "current", deferredTo: null, version: 1, running: 1, blocked: 1, done: false, settlement: null, continuedFrom: null }] });
     // 单独存过的验收时间点照存的写。
     const project = (await g.call("POST", "/api/me/projects", { name: "对话质量", taskId: "task-open" })).json().projectId as string;

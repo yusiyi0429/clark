@@ -1,8 +1,9 @@
 import { Type } from "@sinclair/typebox";
 import type { FastifyReply } from "fastify";
-import { ContinueTaskRequest, ContinueTaskResponse, MonthPageResponse, MonthPeriod, StopTaskRequest, TaskSettlementResponse } from "@warmap/contracts";
+import { ContinueTaskRequest, ContinueTaskResponse, MonthPageResponse, MonthPeriod, SetTaskDueDateRequest, StopTaskRequest, TaskDueDateResponse, TaskSettlementResponse } from "@warmap/contracts";
 import { readMonthPage } from "../monthPage.js";
 import { continueTask, stopTask, unstopTask } from "../taskContinuity.js";
+import { setTaskDueDate } from "../taskDueDates.js";
 import { boardTask, CardError, planTaskOpener } from "../taskCards.js";
 import type { AppInstance, Guard, RouteContext } from "./shared.js";
 
@@ -46,6 +47,14 @@ export function registerTaskContinuityRoutes(app: AppInstance, ctx: RouteContext
     const own = await boardTask(open, req.person!.personId, req.params.taskId);
     await unstopTask(q, own.task.taskId);
     return reply.status(204).send();
+  }));
+
+  // 验收时间点（本月页就地改）：按 Task 存，不要求挂项目；只有这件 Task 的负责人能改（同到此为止）。
+  app.put("/api/me/tasks/:taskId/due-date", { preHandler: requireMember, schema: { params: taskParams, body: SetTaskDueDateRequest,
+    response: { 200: TaskDueDateResponse } } }, async (req, reply) => handle(reply, async () => {
+    const own = await boardTask(open, req.person!.personId, req.params.taskId);
+    await setTaskDueDate(q, own.task.taskId, req.body.dueDate);
+    return { taskId: own.task.taskId, dueDate: req.body.dueDate };
   }));
 
   app.get("/api/me/months/:period", { preHandler: requireMember, schema: { params: monthParams, response: { 200: MonthPageResponse } } }, async (req) =>

@@ -123,8 +123,9 @@ function MissionBlock({ mission, period, actions }: { mission: ReviewMission; pe
   );
 }
 
-/** 去向下拉：本期验收 / 延期到某月 / 已取消；改不了的只写字。 */
-function DispositionPick({ task, period, actions }: { task: ReviewTask; period: string; actions: ReviewActions }) {
+/** 去向下拉：本期验收 / 延期到某月 / 已取消；改不了的只写字。本月页（月中定去向）也用它。 */
+export function DispositionPick({ task, period, actions }: { task: Pick<ReviewTask, "taskId" | "name" | "disposition" | "deferredTo" | "canChange">; period: string;
+  actions: { setDisposition: ReviewActions["setDisposition"] } }) {
   const { failed, busy, attempt } = useAttempt();
   const options = dispositionOptions(period);
   const current = dispositionKey(task);

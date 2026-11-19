@@ -240,9 +240,13 @@ export function goalDueDate(projects: readonly { goals: readonly { taskId: strin
   return null;
 }
 
-/** 「本月」、Mission 详情里 Task 一行的行尾：「11/18 验收」，先看挂着的项目目标，取不到退回 Mission 下一个验收时间点。 */
-export function taskGateLabel(projects: Parameters<typeof goalDueDate>[0], plan: Parameters<typeof gateLabel>[0], task: { taskId: string; missionId: string }): string | null {
-  const due = goalDueDate(projects, task.taskId);
+/**
+ * 「本月」、Mission 详情里 Task 一行的行尾：「11/18 验收」。先看按 Task 存的那一份（首页计划里这件 Task 的 dueDate，没挂项目也有），
+ * 再看挂着的项目目标（服务端已经按同一份算好），取不到退回 Mission 下一个验收时间点。
+ */
+export function taskGateLabel(projects: Parameters<typeof goalDueDate>[0], plan: (Parameters<typeof gateLabel>[0] & { tasks?: readonly { taskId: string; dueDate?: string | null }[] }) | null,
+  task: { taskId: string; missionId: string }): string | null {
+  const due = plan?.tasks?.find((entry) => entry.taskId === task.taskId)?.dueDate ?? goalDueDate(projects, task.taskId);
   return due ? `${due.slice(5).replace("-", "/")} 验收` : gateLabel(plan, task.missionId);
 }
 export function statusLine(task: StatusSource): string {

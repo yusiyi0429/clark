@@ -84,6 +84,9 @@ describe("新首页的数据（B 的 work-home 没上时照契约的形状拼）
     const set = [{ goals: [{ taskId: "t9", dueDate: "2026-11-18" }] }];
     expect(taskGateLabel(set, plan, { taskId: "t9", missionId: "m1" })).toBe("11/18 验收");
     expect(taskGateLabel(set, plan, { taskId: "t8", missionId: "m1" })).toBe("11/20 验收");
+    // 按 Task 存的（没挂项目也有）是唯一一份，先看它（11/19 本月页就地改）。
+    const withDue = { ...plan, tasks: [{ taskId: "t8", missionId: "m1", name: "t8", doneDefinition: null, criteria: [], dueDate: "2026-11-25" }] };
+    expect(taskGateLabel([], withDue, { taskId: "t8", missionId: "m1" })).toBe("11/25 验收");
     expect(project.goals[1]!.completedAt).not.toBeNull();
     expect(data.month.missions[0]!.tasks[1]!.completedAt).not.toBeNull();
     expect(data.other.subSessions).toEqual([expect.objectContaining({ id: "tp1", kind: "topic" })]);

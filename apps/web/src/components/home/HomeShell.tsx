@@ -658,7 +658,7 @@ function HomeFrame({ account }: { account: Account }) {
         // 当月就是「本月」（11/16 重新设计第 6 节）：带上首页数据里的现状；桌面上和首页、会议并列，不画返回。
         const thisMonth = current.period === data.period;
         return <SecondaryFrame key={current.period} title={monthHead?.title ?? `${Number(current.period.slice(5))} 月`} trail={monthHead?.trail} go={go} back={handheld || !thisMonth}>
-          {Month ? <Month go={go} period={current.period} today={work.plan?.today ?? null} onHead={setMonthHead} extras={thisMonth ? monthExtras : undefined} /> : null}
+          {Month ? <Month go={go} period={current.period} today={work.plan?.today ?? null} onHead={setMonthHead} extras={thisMonth ? monthExtras : undefined} onChanged={api.refresh} /> : null}
         </SecondaryFrame>;
       }
     }

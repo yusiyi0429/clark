@@ -16,7 +16,7 @@ import { PreferencesPage } from "./PreferencesPage";
 import { MONTH_PAGE, SECONDARY_PAGES } from "./index";
 import { dutyLine } from "./RolesPage";
 import { PAGE_TITLE } from "../pageKeys";
-import { httpMonthSource, monthFixture, nextPeriod, type MonthPageData, type MonthTask } from "./useMonthPage";
+import { httpMonthSource, monthFixture, nextPeriod, type MonthActions, type MonthPageData, type MonthTask } from "./useMonthPage";
 
 const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 const NOW = Date.parse("2026-11-07T04:00:00.000Z");
@@ -238,11 +238,11 @@ describe("连接（卡片网格 + 三组）", () => {
 
 describe("月份页（设计 10.4、10.5；11/19 DRI 根据地）", () => {
   const go = vi.fn();
-  const render = (data: MonthPageData, extras?: (task: { taskId: string; missionId: string }) => MonthExtras, today: string | null = "2026-11-19") =>
-    renderToStaticMarkup(<MonthView data={data} go={go} extras={extras} today={today} />);
+  const render = (data: MonthPageData, extras?: (task: { taskId: string; missionId: string }) => MonthExtras, today: string | null = "2026-11-19", actions?: MonthActions) =>
+    renderToStaticMarkup(<MonthView data={data} go={go} extras={extras} today={today} actions={actions} />);
   const MISSION = "天枢 11 月：V1 11/18 上线，V2 11/30 上线";
   const task = (patch: Partial<MonthTask> = {}): MonthTask => ({ taskId: "t1", missionId: "m1", missionTitle: MISSION, missionOutcome: "内部 20 人每天用天枢派活", name: "甲",
-    criteria: [{ text: "标准一", met: false }], dueDate: "2026-11-30", disposition: "current", deferredTo: null, version: null, running: 0, blocked: 0, done: false,
+    criteria: [{ text: "标准一", met: false }], dueDate: "2026-11-30", missionDueDate: "2026-11-30", disposition: "current", deferredTo: null, version: null, running: 0, blocked: 0, done: false,
     settlement: null, continuedFrom: null, ...patch });
   const month = (tasks: MonthTask[]): MonthPageData => ({ period: "2026-11", tasks, draft: null });
   /** 按 data-testid 切开：attrs 是这个元素 data-testid 后面那几个属性，body 是它的内容（到下一个同名元素为止）。 */
@@ -304,9 +304,29 @@ describe("月份页（设计 10.4、10.5；11/19 DRI 根据地）", () => {
     expect(trail("戊")).toBeNull();
   });
 
+  it("改过验收时间点的行上淡色写「原 11/18」，改回和原值一样的不写", () => {
+    const html = render(month([task({ taskId: "a", name: "甲", dueDate: "2026-11-25", missionDueDate: "2026-11-18" }),
+      task({ taskId: "b", name: "乙", dueDate: "2026-11-18", missionDueDate: "2026-11-18" })]));
+    expect(rowText(rows(html).find((row) => rowText(row).startsWith("甲"))!)).toContain("甲 原 11/18");
+    expect(rowText(rows(html).find((row) => rowText(row).startsWith("乙"))!)).not.toContain("原");
+  });
+
+  it("月中能定去向，定了延期的挪到延期和取消", () => {
+    const html = render(month([task({ taskId: "a", name: "甲" }), task({ taskId: "b", name: "乙", disposition: "deferred", deferredTo: "2026-12" }),
+      task({ taskId: "c", name: "丙", disposition: "cancelled" })]), undefined, "2026-11-19", { setDueDate: vi.fn(), setDisposition: vi.fn() });
+    // 上面的分段里只剩本期验收的甲。
+    expect(rows(html).map((row) => rowText(row).split(" ")[0])).toEqual(["甲"]);
+    const aside = parts(html, "month-set-aside")[0]!.body;
+    expect(text(aside.slice(0, aside.indexOf("</section>")))).toBe("延期和取消 乙 延期到 12 月 丙 已取消");
+    expect(aside).toContain('aria-label="乙的去向"');
+    // Mission 行照样数上它们。
+    expect(text(parts(html, "month-mission")[0]!.body)).toContain("0/3 · 延期 1 · 取消 1");
+  });
+
   it("完成的行首一个勾、整行变淡；延续来的写「延续自 10 月的 X」，延续出去的下面一行「已延续到 12 月的 X」", () => {
     const data = monthFixture("2026-11");
     data.tasks[0] = { ...data.tasks[0]!, continuedFrom: { taskId: "old", name: "首页改版一期", missionId: "m0", period: "2026-10" } };
+    data.tasks[2] = { ...data.tasks[2]!, disposition: "current", deferredTo: null };
     const html = render(data);
     const byName = (name: string) => rows(html).find((part) => rowText(part).startsWith(name))!;
     expect(rowText(byName("新首页改版"))).toContain("延续自 10 月的首页改版一期");

@@ -8,6 +8,7 @@ import { LOCATE_BUDGET_MS, taskBasis } from "./planTaskAccess.js";
 import { readPlanTasks, type PlanTask, type PlanTaskMission, type PlanTaskSource } from "./planTasks.js";
 import { continuedFrom, settlementsOf } from "./taskContinuity.js";
 import { deliverableStatuses } from "./taskDeliverables.js";
+import { taskDueDates } from "./taskDueDates.js";
 import { ACTIVE } from "./workers.js";
 import { shanghaiDate } from "./workdays.js";
 
@@ -76,12 +77,6 @@ async function runningSubSessions(q: Query, personId: string, taskIds: string[])
   return count;
 }
 
-/** 天枢里单独存的验收时间点（挂接上的，迁移 261）。 */
-async function storedDueDates(q: Query, taskIds: string[]): Promise<Map<string, string>> {
-  const rows = (await q("SELECT task_id,due_date FROM project_goals WHERE task_id=ANY($1::text[]) AND due_date IS NOT NULL", [taskIds])).rows as { task_id: string; due_date: string }[];
-  return new Map(rows.map((row) => [row.task_id, row.due_date]));
-}
-
 /** 复盘的去向表里定过的（月中也能定）；没定过的按了结推，同复盘页。 */
 async function dispositions(q: Query, period: string, taskIds: string[]): Promise<Map<string, { disposition: TMonthTask["disposition"]; deferredTo: string | null }>> {
   const rows = (await q("SELECT task_id,disposition,deferred_to FROM month_review_tasks WHERE period=$1 AND task_id=ANY($2::text[])", [period, taskIds])).rows as
@@ -94,15 +89,16 @@ export async function readMonthPage(q: Query, planTasks: PlanTaskSource, personI
   const { tasks, missions } = await monthTasks(q, planTasks, personId, period);
   const ids = tasks.map((task) => task.taskId);
   const [settlements, sources, deliverables, cards, running, stored, chosen] = await Promise.all([settlementsOf(q, ids), continuedFrom(q, ids),
-    deliverableStatuses(q, ids), tallyCards(q, personId, ids), runningSubSessions(q, personId, ids), storedDueDates(q, ids), dispositions(q, period, ids)]);
+    deliverableStatuses(q, ids), tallyCards(q, personId, ids), runningSubSessions(q, personId, ids), taskDueDates(q, ids), dispositions(q, period, ids)]);
   const today = shanghaiDate(now);
   const rows: TMonthTask[] = tasks.map((task) => {
     const met = cards.met.get(task.taskId) ?? new Set<number>();
     const settlement = settlements.get(task.taskId) ?? null;
     const mission = missions.get(task.missionId);
+    const missionDueDate = mission ? missionGate(mission.milestones, mission.period, today) : null;
     return { taskId: task.taskId, missionId: task.missionId, missionTitle: mission?.title ?? "", missionOutcome: mission?.outcome?.trim() || null, name: task.name,
       criteria: taskBasis(task).criteria.map((text, index) => ({ text, met: met.has(index + 1) })),
-      dueDate: stored.get(task.taskId) ?? (mission ? missionGate(mission.milestones, mission.period, today) : null),
+      dueDate: stored.get(task.taskId) ?? missionDueDate, missionDueDate,
       ...chosen.get(task.taskId) ?? defaultDisposition(settlement ?? undefined, period),
       version: deliverables.get(task.taskId)?.version ?? null, running: running.get(task.taskId) ?? 0, blocked: cards.blocked.get(task.taskId) ?? 0,
       done: settlement?.kind === "completed", settlement, continuedFrom: sources.get(task.taskId) ?? null };

@@ -5,10 +5,13 @@
  * - GET  /api/me/months/:period → MonthPageData：这个月本人的每件 Task 和天枢备好的状态（Mission 的成果、完成标准原文和哪几条达到、验收时间点、去向、
  *   交付第几版、还在跑的、受阻的、本人确认完成没有、了结了没有（完成 / 到此为止 / 已延续，延续去了哪）、从哪件延续来的），以及下个月 Co-Agent 的草稿（暂为 null，等溪南）。
  *   第一版的复盘答案（PUT …/tasks/:taskId/decision）删了：去向和评定都在复盘页（useMonthReview）。
+ * - PUT  /api/me/tasks/:taskId/due-date → 就地改验收时间点（按 Task 存，不要求挂项目）；null 退回 Mission 的节点。
+ * - PUT  /api/me/months/:period/review/tasks/:taskId/disposition → 定去向（和复盘页同一个接口，月中也能定）。
+ * 写完重读这一页；没成抛给调用的地方写「失败 · 重试」。
  * 接口还没有（404）时：开发和测试里用假数据（monthFixture），生产里写「失败 · 重试」，不拿假数据冒充。换来源只换 MonthSource。
  */
 import { useCallback, useEffect, useState } from "react";
-import type { TMonthDraft, TMonthPageResponse, TMonthTask } from "@warmap/contracts";
+import type { TMonthDraft, TMonthPageResponse, TMonthTask, TPutReviewDispositionRequest } from "@warmap/contracts";
 
 /** 这个月的一件 Task；settlement 不为 null 的已经了结（完成、到此为止、已延续）。 */
 export type MonthTask = TMonthTask;
@@ -17,6 +20,8 @@ export type MonthPageData = TMonthPageResponse;
 
 export type MonthSource = {
   load: (period: string) => Promise<MonthPageData>;
+  setDueDate: (taskId: string, dueDate: string | null) => Promise<void>;
+  setDisposition: (period: string, taskId: string, body: TPutReviewDispositionRequest) => Promise<void>;
 };
 
 /** 「2026-11」的下一个月「2026-12」。 */
@@ -32,13 +37,13 @@ export function monthFixture(period: string): MonthPageData {
     period,
     tasks: [
       { taskId: "fixture-home", missionId: "fixture-m1", missionTitle: "首页与派活", missionOutcome: "首页和派活每天有人用", name: "新首页改版",
-        criteria: [{ text: "首页只放等你", met: true }, { text: "派活一步到位", met: true }, { text: "手机上能用", met: false }], dueDate: `${period}-18`,
+        criteria: [{ text: "首页只放等你", met: true }, { text: "派活一步到位", met: true }, { text: "手机上能用", met: false }], dueDate: `${period}-18`, missionDueDate: `${period}-18`,
         disposition: "current", deferredTo: null, version: 2, running: 1, blocked: 0, done: false, settlement: null, continuedFrom: null },
       { taskId: "fixture-meeting", missionId: "fixture-m1", missionTitle: "首页与派活", missionOutcome: "首页和派活每天有人用", name: "会后写回本体",
-        criteria: [{ text: "会后自动写回", met: true }], dueDate: `${period}-30`, disposition: "current", deferredTo: null, version: 3, running: 0, blocked: 0, done: true,
+        criteria: [{ text: "会后自动写回", met: true }], dueDate: `${period}-30`, missionDueDate: `${period}-30`, disposition: "current", deferredTo: null, version: 3, running: 0, blocked: 0, done: true,
         settlement: { kind: "completed", at: `${period}-20T08:00:00.000Z`, by: null, note: null, to: null }, continuedFrom: null },
       { taskId: "fixture-review", missionId: "fixture-m2", missionTitle: "复盘与拆解", missionOutcome: null, name: "月度复盘入口",
-        criteria: [{ text: "复盘进新首页", met: false }, { text: "逐条对验收", met: false }], dueDate: `${period}-30`, disposition: "deferred", deferredTo: next,
+        criteria: [{ text: "复盘进新首页", met: false }, { text: "逐条对验收", met: false }], dueDate: `${period}-30`, missionDueDate: `${period}-30`, disposition: "deferred", deferredTo: next,
         version: null, running: 0, blocked: 1, done: false,
         settlement: { kind: "continued", at: `${period}-28T08:00:00.000Z`, by: null, note: null, to: { taskId: "fixture-review-next", name: "复盘入口收尾", missionId: "fixture-m3", period: next } },
         continuedFrom: null },
@@ -66,6 +71,11 @@ export function httpMonthSource(request: typeof fetch = (...args) => fetch(...ar
     if (!response.ok) throw new Error(`没读到（${response.status}）`);
     return response;
   };
+  /** 写：带上服务端那句（400 日期不对、403 不是负责人这种），没有就写状态码。 */
+  const write = async (path: string, body: unknown) => {
+    const response = await request(path, { method: "PUT", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    if (!response.ok) throw new Error((await response.json().catch(() => null) as { message?: string } | null)?.message ?? `没成（${response.status}）`);
+  };
   return {
     load: async (period) => {
       try { return await (await call(`/api/me/months/${encodeURIComponent(period)}`)).json() as MonthPageData; }
@@ -74,13 +84,15 @@ export function httpMonthSource(request: typeof fetch = (...args) => fetch(...ar
         return monthFixture(period);
       }
     },
+    setDueDate: (taskId, dueDate) => write(`/api/me/tasks/${encodeURIComponent(taskId)}/due-date`, { dueDate }),
+    setDisposition: (period, taskId, body) => write(`/api/me/months/${encodeURIComponent(period)}/review/tasks/${encodeURIComponent(taskId)}/disposition`, body),
   };
 }
 
 export const monthSource: MonthSource = httpMonthSource();
 
-/** 月份页用的：data（null 是还在读）、failed（没读到的原因）、retry。 */
-export function useMonthPage(period: string, source: MonthSource = monthSource) {
+/** 月份页用的：data（null 是还在读）、failed（没读到的原因）、retry，和就地改的两样（写完重读；onChanged 给外壳刷新首页数据）。 */
+export function useMonthPage(period: string, source: MonthSource = monthSource, onChanged?: () => void) {
   const [data, setData] = useState<MonthPageData | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
   const load = useCallback(() => {
@@ -88,6 +100,19 @@ export function useMonthPage(period: string, source: MonthSource = monthSource) 
     void source.load(period).then(setData).catch((error: unknown) => setFailed(error instanceof Error ? error.message : ""));
   }, [period, source]);
   useEffect(load, [load]);
-  return { data, failed, retry: load };
+  const after = async (write: Promise<void>) => {
+    await write;
+    onChanged?.();
+    setData(await source.load(period));
+  };
+  const actions: MonthActions = {
+    setDueDate: (taskId, dueDate) => after(source.setDueDate(taskId, dueDate)),
+    setDisposition: (taskId, body) => after(source.setDisposition(period, taskId, body)),
+  };
+  return { data, failed, retry: load, actions };
 }
+export type MonthActions = {
+  setDueDate: (taskId: string, dueDate: string | null) => Promise<void>;
+  setDisposition: (taskId: string, body: TPutReviewDispositionRequest) => Promise<void>;
+};
 

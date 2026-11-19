@@ -20,7 +20,7 @@ import { missionGate } from "./monthPlan.js";
 import { settlementsOf } from "./taskContinuity.js";
 import { visibleMissions } from "./visibleMissions.js";
 import { taskBasis } from "./planTaskAccess.js";
-import { CARD_PROJECT, goalsOf, ownProject, PROJECT_SCOPE_PREFIX, projectScope, type GoalRow } from "./projects.js";
+import { CARD_PROJECT, GOALS_WITH_DUE_DATE, goalsOf, ownProject, PROJECT_SCOPE_PREFIX, projectScope, type GoalRow } from "./projects.js";
 import { handedAway, openTransfers, transferView } from "./projectTransfers.js";
 import { syncProjects } from "./projectSync.js";
 import { criteriaMetCounts, type StoredMerge } from "./taskFeed.js";
@@ -303,7 +303,7 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
     [ownerId, goalTasks.map((task) => `task:${task.taskId}`)])).rows as { view: TLocalTaskBudgetView }[] : [];
   // 交接过来的项目（16.7）：挂着的 Task 跟着项目走、负责人还是原来的人，不在本人的树上。按挂上时的快照列（标准读不到，记 0 条），
   // 没了结的，加这个月确认完成了的；目标条上画负责人（responsible）。
-  const othersGoals = active.length ? (await q("SELECT * FROM project_goals WHERE project_id=ANY($1::uuid[]) AND owner_id<>$2 ORDER BY linked_at",
+  const othersGoals = active.length ? (await q(`${GOALS_WITH_DUE_DATE} WHERE g.project_id=ANY($1::uuid[]) AND g.owner_id<>$2 ORDER BY g.linked_at`,
     [[...activeIds], ownerId])).rows as GoalRow[] : [];
   const othersSettled = await settlementsOf(q, othersGoals.map((goal) => goal.task_id));
   const transfers = await openTransfers(q, [...activeIds]);
