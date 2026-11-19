@@ -48,25 +48,35 @@ describe("判定", () => {
     expect(verdict(6, attempt([home, tell(IDS.topicA)], "「首页改版」在跑。")).pass).toBe(false);
   });
 
-  it("7：tell_session 给首页改版；不能转给项目、不能开工", () => {
+  const running = { ok: false, code: "ALREADY_RUNNING" };
+  const start = (id: string, extra: Partial<ToolCall> = {}) => call("start_sub_session", { kind: "topic", id }, extra);
+
+  it("7：tell_session 给首页改版；不能有做成的转给项目、开工；开工撞 409 再改对算过", () => {
     expect(verdict(7, attempt([home, tell(IDS.topicA)])).pass).toBe(true);
     expect(verdict(7, attempt([home, tell(IDS.topicB)])).pass).toBe(false);
     expect(verdict(7, attempt([home, tell(IDS.topicA), call("message_project", { projectId: IDS.tianshu, text: "改蓝" })])).pass).toBe(false);
-    expect(verdict(7, attempt([home, call("start_sub_session", { kind: "topic", id: IDS.topicA }), tell(IDS.topicA)])).pass).toBe(false);
+    expect(verdict(7, attempt([home, start(IDS.topicA), tell(IDS.topicA)])).pass).toBe(false);
+    expect(verdict(7, attempt([home, start(IDS.topicA, running), tell(IDS.topicA)])).pass).toBe(true);
   });
 
-  it("8：B 和 C 各说一次；少一个、多一次、开工都算错", () => {
+  it("8：B 和 C 各说一次；少一个、多一次、做成了开工都算错；开工撞 409 再改对算过，撞了就放弃算没过", () => {
     expect(verdict(8, attempt([home, tell(IDS.topicB), tell(IDS.topicC)])).pass).toBe(true);
     expect(verdict(8, attempt([home, tell(IDS.topicB)])).pass).toBe(false);
     expect(verdict(8, attempt([home, tell(IDS.topicB), tell(IDS.topicB), tell(IDS.topicC)])).pass).toBe(false);
-    expect(verdict(8, attempt([home, tell(IDS.topicB), tell(IDS.topicC), call("start_sub_session", { kind: "topic", id: IDS.topicB })])).pass).toBe(false);
+    expect(verdict(8, attempt([home, tell(IDS.topicB), tell(IDS.topicC), start(IDS.topicB)])).pass).toBe(false);
+    expect(verdict(8, attempt([home, start(IDS.topicB, running), start(IDS.topicC, running), tell(IDS.topicB), tell(IDS.topicC)])).pass).toBe(true);
+    const gaveUp = verdict(8, attempt([home, start(IDS.topicB, running), start(IDS.topicC, running)], "两个会话都停着等下一句，这次没让它们重跑，没做成。"));
+    expect(gaveUp.pass).toBe(false);
+    expect(gaveUp.reasons.join()).toContain("tell_session");
+    expect(gaveUp.reasons.join()).not.toContain("回话");
   });
 
-  it("9：改约定转给天枢新版；不能直接 tell_session", () => {
+  it("9：改约定转给天枢新版；不能有做成的 tell_session", () => {
     const forward = call("message_project", { projectId: IDS.tianshu, text: "首页改版的完成标准加一条「手机上也要能用」" });
     expect(verdict(9, attempt([home, forward])).pass).toBe(true);
     expect(verdict(9, attempt([home, call("message_project", { projectId: IDS.chat, text: "加一条" })])).pass).toBe(false);
     expect(verdict(9, attempt([home, forward, tell(IDS.topicA)])).pass).toBe(false);
+    expect(verdict(9, attempt([home, tell(IDS.topicA, { ok: false, code: "INVALID_ARGS" }), forward])).pass).toBe(true);
   });
 
   it("10：截止日存在「首页改版」上、日期 2026-11-25", () => {

@@ -7,7 +7,8 @@
  * - 系统提示 = driSystemPrompt（同 scripts/buddy-persona-eval.ts 的取法）+ Chat 那段「# 代本人在天枢里做事」（下面 BUDDY_ACTION_RULES，照抄的）。
  * - 13 句本人的话（用例和判定在 scripts/buddy-dispatch-judge.ts，测试 test/buddyDispatchJudge.test.ts），每句跑 --runs 遍（缺省 2），每遍单独判：
  *   模型一直调工具，直到给出最后回话或 8 轮工具来回用完。读的动作回写死的假首页和项目（形状照 read_work_home / read_project 的真实返回，
- *   启动时按契约校验）；写动作回成功，summary 照 api 的口径；只有对从没开过工的「登录页」卡 tell_session 照 api 原文回 409 NOT_STARTED。
+ *   启动时按契约校验）；写动作回成功，summary 照 api 的口径；照 api 原文回 409 的只有两处：对从没开过工的「登录页」卡 tell_session（NOT_STARTED），
+ *   对在跑或停着等下一句的会话 start_sub_session（ALREADY_RUNNING）。第 7、8、9 条的「不能出现」只算做成了的调用，撞了 409 再改对算过。
  *   参数不合契约（INVALID_ARGS）、id 对不上（NOT_FOUND）也照 api 回错，这是模型自己调错了。
  * - 假首页：「天枢新版」挂 Task「首页改版」，子会话有在跑的「首页改版」（A）、出错停下的「清点 md 文件」（B）和「写 hello.py」（C）、从没开过工的卡「登录页」（D）；
  *   「Chat 服务」挂 Task「答复质量」；「随手」带 scratch。
@@ -162,6 +163,9 @@ function tool(name: string, args: Args): ToolReply {
     case "start_sub_session": {
       const sub = subOf(args);
       if (!sub) return fail("NOT_FOUND", "没有这个子会话");
+      // 开过工的：在跑的、停着等下一句的（本机 run 是 idle），同 buddyActions.ts 在伙伴主线里的原文。
+      if (sub.state === "running") return fail("ALREADY_RUNNING", `「${sub.title}」已经在跑了`);
+      if (sub.sessionId) return fail("ALREADY_RUNNING", `「${sub.title}」停着等下一句，用 tell_session 对它说一句就能续上。`);
       return ok(name, `让「${sub.title}」开工了，本人电脑上开着的网页接下后就开始`, null, true);
     }
     case "message_project": {
@@ -227,7 +231,7 @@ const FAKE_STEPS: Record<number, Step[]> = {
   6: [HOME_READ, { calls: [["read_project", { projectId: IDS.tianshu }]] },
     { reply: "天枢新版：「首页改版」在跑，上一轮把首页改成只留「等你」、字号统一成一种，验收标准达到 1/2；「清点 md 文件」和「写 hello.py」都出错停下了；「登录页」还没开工。" }],
   7: [HOME_READ, { calls: [["tell_session", { kind: "topic", id: IDS.topicA, text: "把按钮改成蓝的" }]] }, { reply: `把话转给了「首页改版」${LATER}。` }],
-  8: [HOME_READ, { calls: [["tell_session", { kind: "topic", id: IDS.topicB, text: "再跑一次" }], ["tell_session", { kind: "topic", id: IDS.topicC, text: "再跑一次" }]] },
+  8: [HOME_READ, { calls: [["start_sub_session", { kind: "topic", id: IDS.topicB }], ["start_sub_session", { kind: "topic", id: IDS.topicC }]] }, { calls: [["tell_session", { kind: "topic", id: IDS.topicB, text: "再跑一次" }], ["tell_session", { kind: "topic", id: IDS.topicC, text: "再跑一次" }]] },
     { reply: `让「清点 md 文件」和「写 hello.py」各再跑一次，话都转过去了${LATER}。` }],
   9: [HOME_READ, { calls: [["message_project", { projectId: IDS.tianshu, text: "首页改版的完成标准加一条「手机上也要能用」" }]] },
     { reply: "已把这条要求排进项目「天枢新版」的对话，由它去改「首页改版」的约定。" }],

@@ -32,7 +32,8 @@ const noWrite = (calls: ToolCall[]) => {
   const writes = calls.filter((call) => call.write).map((call) => call.name);
   return writes.length ? [`调了写动作 ${writes.join("、")}`] : [];
 };
-const never = (calls: ToolCall[], ...names: string[]) => names.filter((name) => calls.some((call) => call.name === name)).map((name) => `调了不该调的 ${name}`);
+/** 不能有做成的 X：撞了错（比如 409）再改对的不算。 */
+const never = (calls: ToolCall[], ...names: string[]) => names.filter((name) => done(calls, name)).map((name) => `做成了不该做的 ${name}`);
 const want = (ok: boolean, what: string) => (ok ? [] : [`没有${what}`]);
 const sub = (kind: "card" | "topic", id: string) => (args: Args) => args.kind === kind && args.id === id;
 const inProject = (projectId: string) => (args: Args) => args.projectId === projectId && !args.scratch;
@@ -50,17 +51,17 @@ export const CASES: EvalCase[] = [
     check: (calls) => want(done(calls, "open_session", inProject(IDS.chat)), "做成的 open_session 带「Chat 服务」") },
   { id: 6, message: "天枢新版进度怎么样", expect: "不调写动作；回话里提到「首页改版」", forbid: "",
     check: (calls, reply) => [...noWrite(calls), ...(reply.includes("首页改版") ? [] : ["回话里没提到「首页改版」"])] },
-  { id: 7, message: "让首页改版那个会话把按钮改成蓝的", expect: "tell_session（topic A）", forbid: "message_project、start_sub_session",
+  { id: 7, message: "让首页改版那个会话把按钮改成蓝的", expect: "tell_session（topic A）", forbid: "成功的 message_project、start_sub_session",
     check: (calls) => [...want(done(calls, "tell_session", sub("topic", IDS.topicA)), "做成的 tell_session 给「首页改版」"),
       ...never(calls, "message_project", "start_sub_session")] },
-  { id: 8, message: "那两个出错停下的会话，让它们再跑一次", expect: "tell_session 两次（topic B 和 C 各一次）", forbid: "start_sub_session",
+  { id: 8, message: "那两个出错停下的会话，让它们再跑一次", expect: "tell_session 两次（topic B 和 C 各一次）", forbid: "成功的 start_sub_session",
     check: (calls) => {
       const tells = calls.filter((call) => call.name === "tell_session");
       const once = (id: string, title: string) => tells.filter((call) => call.ok && sub("topic", id)(call.args)).length === 1 ? [] : [`tell_session 没有给「${title}」正好做成一次`];
       return [...(tells.length === 2 ? [] : [`tell_session 调了 ${tells.length} 次`]), ...once(IDS.topicB, "清点 md 文件"), ...once(IDS.topicC, "写 hello.py"),
         ...never(calls, "start_sub_session")];
     } },
-  { id: 9, message: "首页改版的完成标准加一条「手机上也要能用」", expect: "message_project 带「天枢新版」", forbid: "tell_session",
+  { id: 9, message: "首页改版的完成标准加一条「手机上也要能用」", expect: "message_project 带「天枢新版」", forbid: "成功的 tell_session",
     check: (calls) => [...want(done(calls, "message_project", (args) => args.projectId === IDS.tianshu), "做成的 message_project 带「天枢新版」"),
       ...never(calls, "tell_session")] },
   { id: 10, message: "首页改版的验收挪到 11/25", expect: "set_task_due_date，taskId 是「首页改版」、日期 2026-11-25", forbid: "",
