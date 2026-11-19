@@ -38,7 +38,7 @@ export const HomePlanTask = Type.Object(
     criteria: Type.Array(Type.String()),
     responsibleId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
     deliverable: Type.Optional(TaskDeliverableStatus),
-    /** 天枢里按 Task 存的验收时间点（迁移 290），没存为 null。 */
+    /** 验收时间点：本人改过的（按 Task 存的那一份），没改过用第一次读到时记下的 Mission 节点（「原」）；都没有为 null。 */
     dueDate: Type.Optional(Type.Union([DateOnly, Type.Null()])),
   },
   { additionalProperties: false },

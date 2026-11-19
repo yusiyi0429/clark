@@ -5,7 +5,7 @@ import { companyPeriod } from "./monthlyPlans.js";
 import { listPlanMarks } from "./planMarks.js";
 import { listUnplacedTasks } from "./tasks.js";
 import { readPlanTasks, type PlanTaskMission, type PlanTaskSource } from "./planTasks.js";
-import { taskDueDates } from "./taskDueDates.js";
+import { effectiveDueDates } from "./taskDueDates.js";
 import { deliverableStatuses } from "./taskDeliverables.js";
 import { isWorkday, monthDays, weekOf } from "./workCalendar.js";
 import { shanghaiDate } from "./workdays.js";
@@ -105,7 +105,7 @@ export async function readHomePlan(q: Query, person: { personId: string }, now: 
     listUnplacedTasks(q, person.personId, deps.names),
   ]);
   const shown = new Set(rows.map((m) => m.id));
-  const [deliverables, dueDates] = await Promise.all([deliverableStatuses(q, tasks.map((task) => task.taskId)), taskDueDates(q, tasks.map((task) => task.taskId))]);
+  const [deliverables, dueDates] = await Promise.all([deliverableStatuses(q, tasks.map((task) => task.taskId)), effectiveDueDates(q, tasks, now)]);
   return { period, fallbackFrom, today, weekStart, weekEnd, days, missions, gates, marks,
     tasks: tasks.map((task) => ({ ...task, responsibleId: task.responsibleId ?? null, deliverable: deliverables.get(task.taskId) ?? { status: "none", score: null, version: null },
       dueDate: dueDates.get(task.taskId) ?? null })),

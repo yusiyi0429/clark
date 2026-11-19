@@ -16,9 +16,9 @@ export type PlanTask = THomePlanTask & { agreement?: WorldAgreement };
 export type PlanTaskMission = { id: string; code: string; world?: { scopeId: string; objectId: string; domainId: string } | null };
 /**
  * 按 id 读一件本体 Task（跨月找 Task 用，planTaskAccess.locatePlanTask 的第三步）：parents 是它父引用指向的本体对象 id（所属 Mission），
- * task 是 Task 行，missionId 由调用方按 parents 找本地 Mission 补上。本体里没有这件（或不是 Task）为 null。
+ * task 是 Task 行，missionId 由调用方按 parents 找本地 Mission 补上（天枢里新加的 Task 直接给 missionId）。本体里没有这件（或不是 Task）为 null。
  */
-export type PlanTaskById = (taskId: string) => Promise<{ parents: string[]; task: Omit<PlanTask, "missionId"> } | null>;
+export type PlanTaskById = (taskId: string) => Promise<{ parents: string[]; missionId?: string; task: Omit<PlanTask, "missionId"> } | null>;
 /** 首页 Task 行的来源：本体里挂在这些 Mission 下的 Task。byId：按 id 读一件（本体来源有；测试的假来源可以不给，不给就没有第三步）。 */
 export type PlanTaskSource = ((missions: PlanTaskMission[]) => Promise<PlanTask[]>) & { byId?: PlanTaskById };
 

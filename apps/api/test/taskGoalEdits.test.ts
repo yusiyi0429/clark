@@ -59,6 +59,8 @@ describe("本月页改名字和完成标准", () => {
     // 名字不能空、标准不能有空的 400；不是负责人 403（Mission 负责人也不行）；看不到的 404。
     expect((await g.goal("task-open", { name: "  " })).statusCode).toBe(400);
     expect((await g.goal("task-open", { criteria: ["有题库打分结果", " "] })).statusCode).toBe(400);
+    // 标准全删光不收（至少留一条）。
+    expect((await g.goal("task-open", { criteria: [] })).statusCode).toBe(400);
     expect((await g.goal("task-theirs", { name: "别人的" })).statusCode).toBe(403);
     expect((await g.goal("task-open", { name: "x" }, g.third)).statusCode).toBe(404);
     expect((await g.goal("task-other", { name: "x" })).statusCode).toBe(404);
@@ -111,5 +113,48 @@ describe("本月页改名字和完成标准", () => {
     expect(open(changed)).toEqual([["有题库打分结果", true], ["有三个新人上手录屏", false]]);
     await prefill();
     expect(open(await review())).toEqual([["有题库打分结果", true], ["有三个新人上手录屏", true]]);
+  }, 180_000);
+
+  it("插入、删除、调换一条标准后，月份页和项目页的「n/m」和打勾位置一致", async () => {
+    const g = f = await fixture();
+    expect((await g.call("POST", "/api/me/projects", { name: "对话质量", taskId: "task-open" })).statusCode).toBe(201);
+    // 对第 1 条（有题库打分结果）的卡验收过了。
+    const passed = await g.card("打分");
+    await g.t.sql("UPDATE tasks SET criterion_index=1,criterion_text='有题库打分结果' WHERE id=$1", [passed]);
+    await g.t.sql(`INSERT INTO card_handbacks(id,task_id,owner_id,client_id,attempt,status,outcome,finished_at) VALUES($1,$2,$3,'h-1',1,'done','pass',now())`,
+      [randomUUID(), passed, MEMBER]);
+    const ticks = async () => ((await g.month()).criteria as { met: boolean }[]).map((criterion) => criterion.met);
+    const project = async () => {
+      const goal = ((await g.call("GET", "/api/me/work-home")).json().projects as { goals: { taskId: string; criteriaMet: number; criteriaTotal: number }[] }[])
+        .flatMap((entry) => entry.goals).find((entry) => entry.taskId === "task-open")!;
+      return `${goal.criteriaMet}/${goal.criteriaTotal}`;
+    };
+    const index = async () => (await g.t.sql("SELECT criterion_index FROM tasks WHERE id=$1", [passed]))[0].criterion_index as number | null;
+    const check = async (criteria: string[], expected: boolean[]) => {
+      expect((await g.goal("task-open", { criteria })).statusCode).toBe(200);
+      expect(await ticks()).toEqual(expected);
+      expect(await project()).toBe(`${expected.filter(Boolean).length}/${expected.length}`);
+      // 卡对的是哪一条跟着原文走（找不到的置空），项目页、首页、月份页都按序号读这一份。
+      expect(await index()).toBe(expected.includes(true) ? expected.indexOf(true) + 1 : null);
+    };
+    expect(await ticks()).toEqual([true, false]);
+    await check(["先列题库", "有题库打分结果", "有新人上手录屏"], [false, true, false]);
+    await check(["先列题库", "有新人上手录屏"], [false, false]);
+    await check(["有新人上手录屏", "有题库打分结果"], [false, true]);
+    // 恢复成本体原文：卡回到第 1 条。
+    await check(WORLD_CRITERIA, [true, false]);
+  }, 180_000);
+
+  it("本体后来改成和本人改的一样，未进本体的标记自己消失", async () => {
+    const g = f = await fixture();
+    expect((await g.goal("task-open", { name: "对话质量达标（V2）", criteria: ["有题库打分结果", "有三个新人上手录屏"] })).statusCode).toBe(200);
+    expect((await g.month()).edited).toEqual({ name: "对话质量达标", criteria: WORLD_CRITERIA });
+    // 本体只改了名字：只剩标准那一处还没进本体。
+    g.tasks[0]!.name = "对话质量达标（V2）";
+    expect((await g.month()).edited).toEqual({ name: null, criteria: WORLD_CRITERIA });
+    // 标准也一样了：标记没了，也没有「原」。
+    g.tasks[0]!.criteria = ["有题库打分结果", "有三个新人上手录屏"];
+    expect(await g.month()).toMatchObject({ name: "对话质量达标（V2）", edited: null,
+      criteria: [{ text: "有题库打分结果", changed: false, original: null }, { text: "有三个新人上手录屏", changed: false, original: null }] });
   }, 180_000);
 });

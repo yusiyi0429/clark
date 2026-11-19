@@ -77,7 +77,8 @@ export const BuddyAskQuestion = Type.Object({
  * - split_cards（write）：登记拆卡（Task 或没挂 Task 的项目，带本人原话）。可撤（去掉登记）。
  *   本人对用什么来源、模型、思考有要求时，把那一截原话放进 modelWords（第 69 条），原样带，不要自己翻译成型号；派活单上照它预选。
  * - set_budget（write）：改一件 Task 的预算或本人的缺省预算（taskId 不带是缺省）。可撤。
- * - set_task_due_date（write）：给挂在项目上的一件 Task 存验收截止日（同 PUT /api/me/projects/:projectId/goals/:taskId/due-date，null 不存了）。可撤（改回原来的）。
+ * - set_task_due_date（write）：给一件 Task 存验收截止日，不用挂项目（同 PUT /api/me/tasks/:taskId/due-date，按 Task 存的那一份；null 不存了，退回记下的 Mission 节点）。
+ *   projectId 可选，带了只用来刷新那个项目。可撤（改回原来的）。
  * - message_project（write）：把本人在伙伴台说的、关于某个项目的话转给这个项目的对话（设计 18 节第 8 条：伙伴台 → 项目对话 → 子会话，一层管一层，
  *   伙伴不直接和子会话对话；凡是要改子会话手上的活的都走它）。天枢把话写进那个项目的对话（标成伙伴转来的，ConversationMessage.via = buddy），
  *   触发项目对话这一轮，由它去派活、问子会话；立即回 summary，不等项目对话回完（项目对话正在回上一轮时排在后面，不打断它）。
@@ -151,7 +152,7 @@ export const BuddyActionParams = {
     /** 第 69 条：本人对用什么来源、模型、思考有要求时那一截原话，原样带，不要自己翻译成型号（见 cardSplits.ts 的 ModelWords）。 */
     modelWords: Type.Optional(ModelWords) }, strict),
   set_budget: Type.Object({ taskId: Type.Optional(Type.String({ minLength: 1 })), budget: Budget }, strict),
-  set_task_due_date: Type.Object({ projectId: Uuid, taskId: Type.String({ minLength: 1 }),
+  set_task_due_date: Type.Object({ projectId: Type.Optional(Uuid), taskId: Type.String({ minLength: 1 }),
     dueDate: Type.Union([Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" }), Type.Null()]) }, strict),
   message_project: Type.Object({ projectId: Uuid, text: Type.String({ minLength: 1, maxLength: 4000 }) }, strict),
   open_session: Type.Object({

@@ -538,6 +538,18 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
       expect((await f.call("GET", `/api/me/projects/${project}`)).json().goals[0].dueDate).toBeNull();
     } finally { await f.close(); }
   });
+  it("伙伴给没挂项目的 Task 定验收时间点，能撤销", async () => {
+    const f = await fixture();
+    try {
+      await f.grant();
+      const done = await f.ok("set_task_due_date", { taskId: "task-open", dueDate: "2026-11-25" });
+      expect(done).toMatchObject({ summary: "把「对话质量达标」的验收截止日定成 2026-11-25", undoable: true });
+      expect(await f.t.sql("SELECT project_id FROM project_goals WHERE task_id='task-open'")).toEqual([]);
+      expect((await f.call("GET", "/api/me/months/2026-11")).json().tasks[0].dueDate).toBe("2026-11-25");
+      expect((await f.undo(done.auditId!)).statusCode).toBe(200);
+      expect(await f.t.sql("SELECT task_id FROM task_due_dates")).toEqual([]);
+    } finally { await f.close(); }
+  });
   it("验收时间点只有一份：老的项目目标接口和伙伴动作改的是同一个地方", async () => {
     const f = await fixture();
     try {

@@ -54,6 +54,7 @@ async function companyMissions(q: Query, now: Date): Promise<PlanTaskMission[]> 
  */
 async function taskById(q: Query, planTasks: PlanTaskSource, taskId: string): Promise<PlanTask | null> {
   const found = await readPlanTaskById(planTasks, taskId, LOCATE_BUDGET_MS);
+  if (found?.missionId) return { ...found.task, missionId: found.missionId };
   if (!found?.parents.length) return null;
   const mission = (await q(`SELECT id FROM missions WHERE NOT placeholder AND world_object_id=ANY($1::text[]) ORDER BY period DESC, id LIMIT 1`,
     [found.parents])).rows[0] as { id: string } | undefined;

@@ -4,7 +4,7 @@ import { AddMonthTaskRequest, AddMonthTaskResponse, ContinueTaskRequest, Continu
 import { readMonthPage } from "../monthPage.js";
 import { continueTask, stopTask, unstopTask } from "../taskContinuity.js";
 import { setTaskDueDate } from "../taskDueDates.js";
-import { addTask, setTaskGoal } from "../taskGoalEdits.js";
+import { addTask, assertOpenPeriod, setTaskGoal, taskPeriod } from "../taskGoalEdits.js";
 import { boardTask, CardError, planTaskOpener } from "../taskCards.js";
 import type { AppInstance, Guard, RouteContext } from "./shared.js";
 
@@ -54,14 +54,18 @@ export function registerTaskContinuityRoutes(app: AppInstance, ctx: RouteContext
   app.put("/api/me/tasks/:taskId/due-date", { preHandler: requireMember, schema: { params: taskParams, body: SetTaskDueDateRequest,
     response: { 200: TaskDueDateResponse } } }, async (req, reply) => handle(reply, async () => {
     const own = await boardTask(open, req.person!.personId, req.params.taskId);
+    const period = await taskPeriod(q, own.task.missionId);
+    if (period) assertOpenPeriod(period, ctx.now());
     await setTaskDueDate(q, own.task.taskId, req.body.dueDate);
-    return { taskId: own.task.taskId, dueDate: req.body.dueDate };
+    return { taskId: own.task.taskId, name: own.task.name, dueDate: req.body.dueDate };
   }));
 
   // 名字和完成标准（本月页就地改）：天枢里先生效、标未进本体，不写本体；只有这件 Task 的负责人能改。
   app.put("/api/me/tasks/:taskId/goal", { preHandler: requireMember, schema: { params: taskParams, body: PutTaskGoalRequest,
     response: { 200: TaskGoalResponse } } }, async (req, reply) => handle(reply, async () => {
     const own = await boardTask(open, req.person!.personId, req.params.taskId);
+    const period = await taskPeriod(q, own.task.missionId);
+    if (period) assertOpenPeriod(period, ctx.now());
     return setTaskGoal(q, own.task, req.body, req.person!.personId, ctx.now());
   }));
 

@@ -72,8 +72,9 @@ export const TaskSettlementResponse = Type.Object({ taskId: Type.String({ minLen
  *   changed 是这一条和本体里的不一样（改过或新加的），original 是它替换掉的那条本体原文（同一位置的本体原文已不在改后的标准里时才有）。
  * added：天枢里「+ 添一件」新加的（没有本体原文，也写「未进本体」，不出「恢复」）。
  * edited：本人在天枢里改过名字或标准、还没进本体时，本体里的原文（name / criteria，没改的那一样为 null）；没改过为 null。网页写「未进本体」「原 〈原文〉」「恢复」。
- * dueDate：验收时间点（YYYY-MM-DD）：天枢里按 Task 存的那一份，没存按 Mission 今天以后最近的节点（都过了取最后一个），Mission 没写节点为 null。
- * missionDueDate：按 Mission 节点算的那个（原值）；和 dueDate 不同时网页写「原 11/18」。
+ * dueDate：验收时间点（YYYY-MM-DD）：本人改过的（按 Task 存的那一份），没改过用 missionDueDate；两样都没有为 null。
+ * missionDueDate：「原」验收时间点：天枢第一次读到这件 Task 时记下的当时最近的 Mission 节点，之后不往后滚（Mission 没写节点为 null）；
+ *   和 dueDate 不同时网页写「原 11/18」。
  * disposition / deferredTo：去向（同复盘页：本期验收 / 延期到某月 / 已取消；没定过的按了结推：延续出去的算延期，到此为止的算取消）。
  * version：交付物到第几版，没交过为 null。running：还在跑的子会话（本机会话还开着的卡和专题）。blocked：受阻的子会话（卡连续两次验收没过）。
  * done：本人确认完成了（最新一版交付了，之后没返工），不问怎么办。
@@ -129,7 +130,7 @@ export const MonthPageResponse = Type.Object({
 
 /** PUT /api/me/tasks/:taskId/due-date：存这件 Task 的验收时间点（按 Task 存，不要求挂项目；只有 Task 负责人能改）；null 不存了，退回 Mission 的节点。 */
 export const SetTaskDueDateRequest = Type.Object({ dueDate: Nullable(Day) }, strict);
-export const TaskDueDateResponse = Type.Object({ taskId: Type.String({ minLength: 1 }), dueDate: Nullable(Day) }, strict);
+export const TaskDueDateResponse = Type.Object({ taskId: Type.String({ minLength: 1 }), name: Type.String(), dueDate: Nullable(Day) }, strict);
 
 /**
  * PUT /api/me/tasks/:taskId/goal：就地改名字和完成标准（天枢里先生效、标未进本体，天枢不写本体；只有 Task 负责人能改）。

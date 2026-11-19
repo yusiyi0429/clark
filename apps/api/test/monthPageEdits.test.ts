@@ -22,7 +22,7 @@ describe("本月页就地改", () => {
     expect(await open()).toMatchObject({ dueDate: "2026-11-18", missionDueDate: "2026-11-18" });
 
     const res = await g.call("PUT", "/api/me/tasks/task-open/due-date", { dueDate: "2026-11-25" });
-    expect([res.statusCode, res.json()]).toEqual([200, { taskId: "task-open", dueDate: "2026-11-25" }]);
+    expect([res.statusCode, res.json()]).toEqual([200, { taskId: "task-open", name: "对话质量达标", dueDate: "2026-11-25" }]);
     expect(await g.t.sql("SELECT project_id FROM project_goals WHERE task_id='task-open'")).toEqual([]);
     // 月份页写改后的，原值（Mission 的节点）照旧给，网页写「原 11/18」。
     expect(await open()).toMatchObject({ dueDate: "2026-11-25", missionDueDate: "2026-11-18" });
@@ -37,7 +37,7 @@ describe("本月页就地改", () => {
     expect((await g.call("PUT", "/api/me/tasks/task-other/due-date", { dueDate: "2026-11-25" })).statusCode).toBe(404);
 
     // 清掉：退回 Mission 的节点。
-    expect((await g.call("PUT", "/api/me/tasks/task-open/due-date", { dueDate: null })).json()).toEqual({ taskId: "task-open", dueDate: null });
+    expect((await g.call("PUT", "/api/me/tasks/task-open/due-date", { dueDate: null })).json()).toEqual({ taskId: "task-open", name: "对话质量达标", dueDate: null });
     expect(await open()).toMatchObject({ dueDate: "2026-11-18", missionDueDate: "2026-11-18" });
   }, 120_000);
 
