@@ -22547,7 +22547,13 @@ export interface components {
             criteria: {
                 text: string;
                 met: boolean;
+                changed: boolean;
+                original: string | null;
             }[];
+            edited: {
+                name: string | null;
+                criteria: string[] | null;
+            } | null;
             dueDate: string | null;
             missionDueDate: string | null;
             disposition: "current" | "deferred" | "cancelled";
@@ -22604,7 +22610,13 @@ export interface components {
                 criteria: {
                     text: string;
                     met: boolean;
+                    changed: boolean;
+                    original: string | null;
                 }[];
+                edited: {
+                    name: string | null;
+                    criteria: string[] | null;
+                } | null;
                 dueDate: string | null;
                 missionDueDate: string | null;
                 disposition: "current" | "deferred" | "cancelled";

@@ -68,7 +68,9 @@ export const TaskSettlementResponse = Type.Object({ taskId: Type.String({ minLen
 /**
  * 月份页上这个月本人的一件 Task（本人这个月的 Mission 下、本人负责的；本体没登记负责人的算本人的）。
  * missionOutcome：所在 Mission 的成果（没写为 null）。
- * criteria：完成标准原文（本体验收标准，没有就按完成定义算一条），met 是这一条达到了（本人对它的卡里有一张最近一次有结论的验收算通过）。
+ * criteria：完成标准（本体验收标准，没有就按完成定义算一条；本人在天枢里改过的按改后的），met 是这一条达到了（本人对它的卡里有一张最近一次有结论的验收算通过）；
+ *   changed 是这一条和本体里的不一样（改过或新加的），original 是它替换掉的那条本体原文（同一位置的本体原文已不在改后的标准里时才有）。
+ * edited：本人在天枢里改过名字或标准、还没进本体时，本体里的原文（name / criteria，没改的那一样为 null）；没改过为 null。网页写「未进本体」「原 〈原文〉」「恢复」。
  * dueDate：验收时间点（YYYY-MM-DD）：天枢里按 Task 存的那一份，没存按 Mission 今天以后最近的节点（都过了取最后一个），Mission 没写节点为 null。
  * missionDueDate：按 Mission 节点算的那个（原值）；和 dueDate 不同时网页写「原 11/18」。
  * disposition / deferredTo：去向（同复盘页：本期验收 / 延期到某月 / 已取消；没定过的按了结推：延续出去的算延期，到此为止的算取消）。
@@ -83,7 +85,8 @@ export const MonthTask = Type.Object({
   missionTitle: Type.String(),
   missionOutcome: Nullable(Type.String()),
   name: Type.String(),
-  criteria: Type.Array(Type.Object({ text: Type.String(), met: Type.Boolean() }, strict)),
+  criteria: Type.Array(Type.Object({ text: Type.String(), met: Type.Boolean(), changed: Type.Boolean(), original: Nullable(Type.String()) }, strict)),
+  edited: Nullable(Type.Object({ name: Nullable(Type.String()), criteria: Nullable(Type.Array(Type.String())) }, strict)),
   dueDate: Nullable(Day),
   missionDueDate: Nullable(Day),
   disposition: Type.Union([Type.Literal("current"), Type.Literal("deferred"), Type.Literal("cancelled")]),
@@ -126,6 +129,16 @@ export const MonthPageResponse = Type.Object({
 export const SetTaskDueDateRequest = Type.Object({ dueDate: Nullable(Day) }, strict);
 export const TaskDueDateResponse = Type.Object({ taskId: Type.String({ minLength: 1 }), dueDate: Nullable(Day) }, strict);
 
+/**
+ * PUT /api/me/tasks/:taskId/goal：就地改名字和完成标准（天枢里先生效、标未进本体，天枢不写本体；只有 Task 负责人能改）。
+ * 没带的那一样照旧；和本体一样就撤掉那一样（「恢复」就是把原文存回去）。criteria 是整份，清空一条再存就是删。
+ */
+export const PutTaskGoalRequest = Type.Object({
+  name: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+  criteria: Type.Optional(Type.Array(Type.String({ maxLength: 500 }), { maxItems: 30 })),
+}, { ...strict, minProperties: 1 });
+export const TaskGoalResponse = Type.Object({ taskId: Type.String({ minLength: 1 }), name: Type.String(), criteria: Type.Array(Type.String()) }, strict);
+
 export type TTaskRef = Static<typeof TaskRef>;
 export type TTaskSettlement = Static<typeof TaskSettlement>;
 export type TContinueTaskRequest = Static<typeof ContinueTaskRequest>;
@@ -137,3 +150,5 @@ export type TMonthDraft = Static<typeof MonthDraft>;
 export type TMonthPageResponse = Static<typeof MonthPageResponse>;
 export type TSetTaskDueDateRequest = Static<typeof SetTaskDueDateRequest>;
 export type TTaskDueDateResponse = Static<typeof TaskDueDateResponse>;
+export type TPutTaskGoalRequest = Static<typeof PutTaskGoalRequest>;
+export type TTaskGoalResponse = Static<typeof TaskGoalResponse>;

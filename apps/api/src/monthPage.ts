@@ -9,6 +9,7 @@ import { readPlanTasks, type PlanTask, type PlanTaskMission, type PlanTaskSource
 import { continuedFrom, settlementsOf } from "./taskContinuity.js";
 import { deliverableStatuses } from "./taskDeliverables.js";
 import { taskDueDates } from "./taskDueDates.js";
+import type { EditedPlanTask } from "./taskGoalEdits.js";
 import { ACTIVE } from "./workers.js";
 import { shanghaiDate } from "./workdays.js";
 
@@ -37,22 +38,24 @@ async function monthTasks(q: Query, planTasks: PlanTaskSource, personId: string,
   return { tasks, missions: new Map(rows.map((row) => [row.id, row])) };
 }
 
-type CardTally = { met: Map<string, Set<number>>; blocked: Map<string, number> };
+type CardTally = { met: Map<string, Set<number>>; metTexts: Map<string, Set<string>>; blocked: Map<string, number> };
 /**
  * 本人在这几件 Task 下的卡：约定的哪几条达到了（对这条的卡里有一张最近一次有结论的验收算通过，含本人「仍然通过」，同 Task 管线的验收行）；
- * 受阻的几张（没完成、连续两次验收没过，同首页）。
+ * 受阻的几张（没完成、连续两次验收没过，同首页）。达到的那几条按序号记，也按卡上记的标准原文记（本人改过标准的 Task 按原文对）。
  */
 async function tallyCards(q: Query, personId: string, taskIds: string[]): Promise<CardTally> {
-  const cards = (await q(`SELECT id::text,plan_task_id,status,criterion_index FROM tasks WHERE plan_task_id=ANY($1::text[]) AND owner_id=$2 AND status<>'returned'`,
-    [taskIds, personId])).rows as { id: string; plan_task_id: string; status: string; criterion_index: number | null }[];
+  const cards = (await q(`SELECT id::text,plan_task_id,status,criterion_index,criterion_text FROM tasks WHERE plan_task_id=ANY($1::text[]) AND owner_id=$2 AND status<>'returned'`,
+    [taskIds, personId])).rows as { id: string; plan_task_id: string; status: string; criterion_index: number | null; criterion_text: string | null }[];
   const handbacks = cards.length ? (await q(`SELECT task_id::text,status,outcome,overruled_at,gap_closed_at FROM card_handbacks WHERE task_id=ANY($1::uuid[]) ORDER BY attempt DESC`,
     [cards.map((card) => card.id)])).rows as Pick<HandbackRow, "task_id" | "status" | "outcome" | "overruled_at" | "gap_closed_at">[] : [];
-  const tally: CardTally = { met: new Map(), blocked: new Map() };
+  const tally: CardTally = { met: new Map(), metTexts: new Map(), blocked: new Map() };
   for (const card of cards) {
     const mine = handbacks.filter((row) => row.task_id === card.id);
     const latest = mine.find((row) => row.status === "done" && effectiveOutcome(row) !== null);
-    if (card.criterion_index && latest && effectiveOutcome(latest) === "pass")
+    if (card.criterion_index && latest && effectiveOutcome(latest) === "pass") {
       tally.met.set(card.plan_task_id, (tally.met.get(card.plan_task_id) ?? new Set()).add(card.criterion_index));
+      if (card.criterion_text) tally.metTexts.set(card.plan_task_id, (tally.metTexts.get(card.plan_task_id) ?? new Set()).add(card.criterion_text));
+    }
     if (card.status !== "done" && failStreak(mine) >= 2) tally.blocked.set(card.plan_task_id, (tally.blocked.get(card.plan_task_id) ?? 0) + 1);
   }
   return tally;
@@ -93,11 +96,20 @@ export async function readMonthPage(q: Query, planTasks: PlanTaskSource, personI
   const today = shanghaiDate(now);
   const rows: TMonthTask[] = tasks.map((task) => {
     const met = cards.met.get(task.taskId) ?? new Set<number>();
+    const metTexts = cards.metTexts.get(task.taskId) ?? new Set<string>();
+    const { edit } = task as EditedPlanTask;
+    const criteria = taskBasis(task).criteria;
     const settlement = settlements.get(task.taskId) ?? null;
     const mission = missions.get(task.missionId);
     const missionDueDate = mission ? missionGate(mission.milestones, mission.period, today) : null;
     return { taskId: task.taskId, missionId: task.missionId, missionTitle: mission?.title ?? "", missionOutcome: mission?.outcome?.trim() || null, name: task.name,
-      criteria: taskBasis(task).criteria.map((text, index) => ({ text, met: met.has(index + 1) })),
+      criteria: criteria.map((text, index) => {
+        if (!edit?.criteria) return { text, met: met.has(index + 1), changed: false, original: null };
+        const replaced = edit.worldCriteria[index];
+        return { text, met: metTexts.has(text), changed: !edit.worldCriteria.includes(text),
+          original: !edit.worldCriteria.includes(text) && replaced !== undefined && !criteria.includes(replaced) ? replaced : null };
+      }),
+      edited: edit ? { name: edit.name ? edit.worldName : null, criteria: edit.criteria ? edit.worldCriteria : null } : null,
       dueDate: stored.get(task.taskId) ?? missionDueDate, missionDueDate,
       ...chosen.get(task.taskId) ?? defaultDisposition(settlement ?? undefined, period),
       version: deliverables.get(task.taskId)?.version ?? null, running: running.get(task.taskId) ?? 0, blocked: cards.blocked.get(task.taskId) ?? 0,

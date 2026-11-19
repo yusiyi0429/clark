@@ -11,13 +11,15 @@
  *   验收时间点就地改（项目详情那个小日期选择，按 Task 存），改了行上淡色「原 11/18」（原值是 Mission 节点算的，改回一样就不写）；
  *   去向就地定（复盘页的去向下拉，同一个接口，月中也能定）。没成写「失败 · 重试」，不弹 toast。
  * - 定了延期、取消的从上面挪到最下面「延期和取消」：一件一行，名字、去向下拉。
+ * - 名字、完成标准就地改（复盘页备注框的样子：平时是字，悬停有底，聚焦出框；回车或离开保存，Esc 取消；清空一条再存就是删；「+ 加一条」）。
+ *   天枢里先生效、不写本体：行上淡色「未进本体」，改过的标准一种底色、下面淡色「原 〈原文〉」，展开里「未进本体 · 恢复」。
  * - 下半：下个月 Co-Agent 的草稿，按 Mission 分组（接口等溪南，现在没有）。
  * 数据见 useMonthPage。
  * 复盘期间（月份已经过去，或本月最后两天，同服务端）月份页就是复盘页（MonthReview，设计第三版，读 GET …/review），上面这些不画。
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DatePicker } from "@/components/ui/DatePicker";
-import { Check, ChevronLeft, ChevronRight } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { HeroButton } from "@/components/HeroButton";
 import { FailedLine } from "@/components/work/DecisionBox";
 import { BUDDY_HREF, monthLabel, projectHref, taskHref } from "@/lib/home/derive";
@@ -206,7 +208,10 @@ function MissionBlock({ tasks, period, go, extraOf, today, actions }: { tasks: M
   );
 }
 
-/** 一件 Task：点行展开看完成标准和验收时间点、去向、项目，再点收起。 */
+/**
+ * 一件 Task：点行展开看完成标准和验收时间点、去向、项目，再点收起。
+ * 有 actions 时展开里就地改：名字（展开后行上的名字变成可改的字）、每条标准、「+ 加一条」、改过的「恢复」。
+ */
 export function MonthTaskRow({ task, period, go, extra, actions }: { task: MonthTask; period: string; go: (href: string) => void; extra?: MonthExtras; actions?: MonthActions }) {
   const [open, setOpen] = useState(false);
   const done = isDone(task);
@@ -214,27 +219,61 @@ export function MonthTaskRow({ task, period, go, extra, actions }: { task: Month
   const from = task.continuedFrom;
   const trail = rowTrail(task, extra?.waiting ?? 0);
   const project = extra?.project ?? null;
+  const texts = task.criteria.map((criterion) => criterion.text);
+  const saveCriteria = (criteria: string[]) => actions!.setGoal(task.taskId, { criteria: criteria.map((text) => text.trim()).filter(Boolean) });
+  const saveName = async (text: string) => { if (text.trim()) await actions!.setGoal(task.taskId, { name: text.trim() }); };
+  const restore = () => task.edited ? actions?.setGoal(task.taskId, { name: task.edited.name ?? task.name, criteria: task.edited.criteria ?? texts }) : undefined;
+  const marks = (
+    <>
+      {task.dueDate && task.missionDueDate && task.dueDate !== task.missionDueDate ? <span className={p.monthFaint}>原 {shortDate(task.missionDueDate)}</span> : null}
+      {task.edited ? <span className={p.monthFaint}>未进本体</span> : null}
+      {from ? <span className={p.monthFaint}>延续自{from.period ? ` ${monthLabel(from.period)}` : ""}的{from.name}</span> : null}
+    </>
+  );
+  const slot = <span className={h.slotState}>{done ? <Check {...ICON} aria-label="已完成" /> : null}</span>;
+  const status = trail ? <span className={p.monthTrail} data-testid="task-status">{trail}</span> : null;
   return (
-    <div className={p.monthTask} data-testid="month-task" data-done={done ? "" : undefined}>
-      <button type="button" className={p.monthTaskLine} aria-expanded={open} onClick={() => setOpen(!open)}>
-        <span className={h.slotState}>{done ? <Check {...ICON} aria-label="已完成" /> : null}</span>
-        <span className={p.monthTaskText}>
-          <span>{task.name}</span>
-          {task.dueDate && task.missionDueDate && task.dueDate !== task.missionDueDate ? <span className={p.monthFaint}>原 {shortDate(task.missionDueDate)}</span> : null}
-          {from ? <span className={p.monthFaint}>延续自{from.period ? ` ${monthLabel(from.period)}` : ""}的{from.name}</span> : null}
-        </span>
-        {trail ? <span className={p.monthTrail} data-testid="task-status">{trail}</span> : null}
-      </button>
+    <div className={p.monthTask} data-testid="month-task" data-done={done ? "" : undefined} data-open={open ? "" : undefined}>
+      {open && actions ? (
+        // 展开着、能改：名字变成可改的字；点这一行别的地方（或行首）收起。
+        <div className={p.monthTaskLine} data-testid="month-task-line" onClick={(event) => { if (!(event.target as HTMLElement).closest("textarea, input")) setOpen(false); }}>
+          <button type="button" className={p.monthFold} aria-expanded aria-label="收起" onClick={(event) => { event.stopPropagation(); setOpen(false); }}>{slot}</button>
+          <span className={p.monthTaskText}>
+            <InlineText value={task.name} label="Task 名" required changed={task.edited?.name != null} onSave={saveName} />
+            {marks}
+          </span>
+          {status}
+        </div>
+      ) : (
+        <button type="button" className={p.monthTaskLine} data-testid="month-task-line" aria-expanded={open} onClick={() => setOpen(!open)}>
+          {slot}
+          <span className={p.monthTaskText}>
+            <span>{task.name}</span>
+            {marks}
+          </span>
+          {status}
+        </button>
+      )}
       {open ? (
         <div className={p.monthDetail} data-testid="month-detail">
-          {task.criteria.length ? (
+          {task.criteria.length || actions ? (
             <ul className={p.monthCriteria}>
               {task.criteria.map((criterion, index) => (
-                <li key={index} className={p.monthCriterion} data-testid="month-criterion">
+                <li key={index} className={p.monthCriterion} data-testid="month-criterion" data-changed={criterion.changed ? "" : undefined}>
                   <span className={h.slotState}>{criterion.met ? <Check {...ICON} aria-label="达到" /> : null}</span>
-                  <span>{criterion.text}</span>
+                  <span className={p.monthCriterionText}>
+                    {actions ? <InlineText value={criterion.text} label={`第 ${index + 1} 条完成标准`} changed={criterion.changed}
+                      onSave={(text) => saveCriteria(texts.map((value, at) => (at === index ? text : value)))} /> : <span>{criterion.text}</span>}
+                    {criterion.original ? <span className={p.monthFaint}>原 {criterion.original}</span> : null}
+                  </span>
                 </li>
               ))}
+              {actions ? (
+                <li className={p.monthCriterion}>
+                  <span className={h.slotState} />
+                  <AddLine label="加一条完成标准" placeholder="完成标准" onSave={(text) => saveCriteria([...texts, text])} />
+                </li>
+              ) : null}
             </ul>
           ) : null}
           <div className={p.monthFacts}>
@@ -246,6 +285,9 @@ export function MonthTaskRow({ task, period, go, extra, actions }: { task: Month
                 <button type="button" className={p.monthLink} onClick={() => go(taskHref(task.taskId))}>详情</button>
               </>
             )}
+            {task.edited ? (
+              <span>未进本体{actions ? <> · <button type="button" className={p.monthLink} onClick={() => void restore()}>恢复</button></> : null}</span>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -254,6 +296,45 @@ export function MonthTaskRow({ task, period, go, extra, actions }: { task: Month
       ) : null}
     </div>
   );
+}
+
+type Failure = { reason: string; retry: () => void };
+/**
+ * 就地改的字（复盘页备注框的样子）：平时是字，悬停有底，聚焦出框，放不下换行；回车或离开保存，Esc 取消。
+ * 没改不存；required 的清空了不存、换回原来的；没成写「失败 · 重试」，不弹 toast。changed：和本体不一样的一种底色。
+ */
+function InlineText({ value, label, placeholder, required = false, changed = false, autoFocus = false, onSave, onDone }: { value: string; label: string; placeholder?: string;
+  required?: boolean; changed?: boolean; autoFocus?: boolean; onSave: (text: string) => Promise<void>; onDone?: () => void }) {
+  const [text, setText] = useState(value);
+  const [failed, setFailed] = useState<Failure | null>(null);
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => { setText(value); }, [value]);
+  const commit = () => {
+    if (text.trim() === value.trim() || (required && !text.trim())) { setText(value); onDone?.(); return; }
+    const once = () => {
+      setFailed(null);
+      void onSave(text).then(() => onDone?.(), (error: unknown) => setFailed({ reason: error instanceof Error ? error.message : "", retry: once }));
+    };
+    once();
+  };
+  return (
+    <>
+      <textarea ref={ref} className={p.monthEdit} rows={1} value={text} placeholder={placeholder} aria-label={label} maxLength={500} autoFocus={autoFocus}
+        data-changed={changed ? "" : undefined} onChange={(event) => setText(event.target.value.replace(/\n/g, ""))} onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") { event.preventDefault(); ref.current?.blur(); }
+          if (event.key === "Escape") { event.preventDefault(); setText(value); window.requestAnimationFrame(() => ref.current?.blur()); }
+        }} />
+      {failed ? <FailedLine inline reason={failed.reason} onRetry={failed.retry} /> : null}
+    </>
+  );
+}
+
+/** 「+ 加一条」（复盘页「+ 添加」的样子）：点了变成空的输入框，回车加上；空着离开就收回去。 */
+function AddLine({ label, placeholder, onSave }: { label: string; placeholder: string; onSave: (text: string) => Promise<void> }) {
+  const [adding, setAdding] = useState(false);
+  if (!adding) return <button type="button" className={p.monthAdd} onClick={() => setAdding(true)}><Plus size={14} strokeWidth={1.8} aria-hidden />加一条</button>;
+  return <InlineText value="" label={label} placeholder={placeholder} required autoFocus onSave={onSave} onDone={() => setAdding(false)} />;
 }
 
 /** 展开里的「验收」：项目详情那个小日期选择（按 Task 存）；改过的能清掉、退回 Mission 的节点。没成写「失败 · 重试」。 */

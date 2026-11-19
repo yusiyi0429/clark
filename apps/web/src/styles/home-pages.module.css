@@ -149,6 +149,21 @@ label.row:hover { background: var(--default-soft); }
 .monthLink { min-width: 0; padding: 0; border: 0; background: none; color: var(--ink-muted); font: inherit; text-align: left; white-space: normal; overflow-wrap: anywhere; cursor: pointer; }
 .monthLink:hover { color: var(--ink); }
 .monthLink:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-control); }
+/* 就地改（本月页第 3 步）：名字、标准平时是字，悬停有底，聚焦出框，放不下换行（复盘页备注框的样子）；和本体不一样的一种底色。展开着时行首那一格收起。 */
+.monthFold { display: inline-grid; flex: none; place-items: center; padding: 0; border: 0; border-radius: var(--r-control); background: none; color: inherit; cursor: pointer; }
+.monthFold:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.monthTask[data-open] > div.monthTaskLine { cursor: default; }
+.monthTask[data-open] > div.monthTaskLine:hover { background: none; }
+.monthCriterionText { display: grid; flex: 1; grid-template-columns: minmax(0, 1fr); min-width: 0; }
+.monthCriterionText > span { white-space: normal; overflow-wrap: anywhere; }
+.monthEdit { box-sizing: border-box; display: block; width: 100%; min-width: 0; margin: 0 0 0 calc(-1 * var(--space-1)); padding: 2px var(--space-1); border: 1px solid transparent; border-radius: var(--r-control); background: none; color: inherit; font: inherit; resize: none; overflow: hidden; field-sizing: content; white-space: pre-wrap; overflow-wrap: anywhere; outline: none; }
+.monthEdit:hover { background: var(--default-soft); }
+.monthEdit:focus { border-color: var(--field-border-focus); background: var(--neutral-wash); color: var(--ink); }
+.monthEdit[data-changed] { background: var(--accent-soft); }
+.monthEdit::placeholder { color: var(--ink-faint); }
+.monthAdd { display: inline-flex; align-items: center; gap: 2px; height: var(--row-28); margin-left: calc(-1 * var(--space-1)); padding: 0 var(--space-1); border: 0; border-radius: var(--r-capsule); background: none; color: var(--ink-faint); font: inherit; cursor: pointer; }
+.monthAdd:hover { background: var(--default-soft); color: var(--ink-muted); }
+.monthAdd:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .monthDue { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-width: 0; }
 /* 最下面「延期和取消」：一件一行，名字和去向下拉，名字和上面 Task 名的字对齐。 */
 .monthAside { display: flex; align-items: center; gap: var(--space-2); min-height: var(--row-48); padding: 6px var(--space-2) 6px calc(var(--space-2) * 2 + 16px); }

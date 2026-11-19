@@ -22,7 +22,8 @@ const textOf = (node: ReactNode): string => Children.toArray(node).map((child) =
   ? textOf((child.props as { children?: ReactNode }).children) : String(child ?? "")).join("");
 
 const task: MonthTask = { taskId: "t1", missionId: "m1", missionTitle: "天枢 11 月", missionOutcome: null, name: "甲",
-  criteria: [{ text: "有题库打分结果", met: true }, { text: "有新人上手录屏", met: false }, { text: "过 75 分", met: false }],
+  criteria: [{ text: "有题库打分结果", met: true, changed: false, original: null }, { text: "有新人上手录屏", met: false, changed: false, original: null },
+    { text: "过 75 分", met: false, changed: false, original: null }], edited: null,
   dueDate: "2026-11-18", missionDueDate: "2026-11-18", disposition: "current", deferredTo: null, version: null, running: 0, blocked: 0, done: false, settlement: null, continuedFrom: null };
 const go = vi.fn();
 const row = () => { hooks.position = 0; return MonthTaskRow({ task, period: "2026-11", go }) as ReactNode; };
@@ -56,5 +57,58 @@ describe("本月页一行", () => {
     tree = row();
     expect(toggle(tree).props["aria-expanded"]).toBe(false);
     expect(criteria(tree)).toHaveLength(0);
+  });
+});
+
+describe("本月页就地改名字和完成标准", () => {
+  const edited: MonthTask = { ...task, name: "甲（V2）",
+    criteria: [{ text: "有题库打分结果", met: true, changed: false, original: null }, { text: "有三个新人上手录屏", met: false, changed: true, original: "有新人上手录屏" },
+      { text: "过 80 分", met: false, changed: true, original: null }],
+    edited: { name: "甲", criteria: ["有题库打分结果", "有新人上手录屏", "过 75 分"] } };
+  const actions = () => ({ setDueDate: vi.fn(async () => {}), setDisposition: vi.fn(async () => {}), setGoal: vi.fn(async () => {}) });
+  const open = (item: MonthTask, acts: ReturnType<typeof actions>) => {
+    hooks.position = 0;
+    hooks.values = [];
+    const first = MonthTaskRow({ task: item, period: "2026-11", go, actions: acts }) as ReactNode;
+    (toggle(first).props.onClick as () => void)();
+    hooks.position = 0;
+    return MonthTaskRow({ task: item, period: "2026-11", go, actions: acts }) as ReactNode;
+  };
+  /** 就地改的字（InlineText、「+ 加一条」）：按读屏名字找。 */
+  const field = (tree: ReactNode, label: string) => nodes(tree).find((node) => node.props.label === label)!;
+
+  it("改过的行上淡色「未进本体」；展开里改过的标准一种底色、下面淡色「原 〈原文〉」；「恢复」把原文存回去", async () => {
+    const acts = actions();
+    const tree = open(edited, acts);
+    expect(textOf(nodes(tree).find((node) => node.props["data-testid"] === "month-task-line")!.props.children as ReactNode)).toContain("未进本体");
+    const lines = criteria(tree);
+    expect(lines.map((line) => line.props["data-changed"] !== undefined)).toEqual([false, true, true]);
+    expect(lines.map((line) => textOf(line.props.children as ReactNode))).toEqual(["", "原 有新人上手录屏", ""]);
+    const restore = nodes(tree).find((node) => node.type === "button" && textOf(node.props.children as ReactNode) === "恢复")!;
+    (restore.props.onClick as () => void)();
+    expect(acts.setGoal).toHaveBeenCalledWith("t1", { name: "甲", criteria: ["有题库打分结果", "有新人上手录屏", "过 75 分"] });
+    // 没改过的不出「未进本体」「恢复」。
+    const plain = open(task, actions());
+    expect(textOf(plain as ReactNode)).not.toContain("未进本体");
+    expect(nodes(plain).some((node) => textOf(node.props.children as ReactNode) === "恢复")).toBe(false);
+  });
+
+  it("就地改：改一条存整份标准，清空一条再存就是删，「+ 加一条」加在最后，改名字只存名字", async () => {
+    const acts = actions();
+    const tree = open(task, acts);
+    const save = (label: string, text: string) => (field(tree, label).props.onSave as (text: string) => Promise<void>)(text);
+    await save("第 2 条完成标准", "有三个新人上手录屏");
+    expect(acts.setGoal).toHaveBeenLastCalledWith("t1", { criteria: ["有题库打分结果", "有三个新人上手录屏", "过 75 分"] });
+    await save("第 3 条完成标准", "  ");
+    expect(acts.setGoal).toHaveBeenLastCalledWith("t1", { criteria: ["有题库打分结果", "有新人上手录屏"] });
+    await save("加一条完成标准", "过 80 分");
+    expect(acts.setGoal).toHaveBeenLastCalledWith("t1", { criteria: ["有题库打分结果", "有新人上手录屏", "过 75 分", "过 80 分"] });
+    expect(field(tree, "加一条完成标准").props.placeholder).toBe("完成标准");
+    await save("Task 名", "甲（V2）");
+    expect(acts.setGoal).toHaveBeenLastCalledWith("t1", { name: "甲（V2）" });
+    // 名字清空不存（服务端也不收空名字）。
+    acts.setGoal.mockClear();
+    await save("Task 名", " ");
+    expect(acts.setGoal).not.toHaveBeenCalled();
   });
 });

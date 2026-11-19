@@ -137827,6 +137827,7 @@
           "missionOutcome",
           "name",
           "criteria",
+          "edited",
           "dueDate",
           "missionDueDate",
           "disposition",
@@ -137870,7 +137871,9 @@
               "type": "object",
               "required": [
                 "text",
-                "met"
+                "met",
+                "changed",
+                "original"
               ],
               "properties": {
                 "text": {
@@ -137878,9 +137881,62 @@
                 },
                 "met": {
                   "type": "boolean"
+                },
+                "changed": {
+                  "type": "boolean"
+                },
+                "original": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               }
             }
+          },
+          "edited": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "name",
+                  "criteria"
+                ],
+                "properties": {
+                  "name": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "criteria": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "dueDate": {
             "anyOf": [
@@ -138208,6 +138264,7 @@
                 "missionOutcome",
                 "name",
                 "criteria",
+                "edited",
                 "dueDate",
                 "missionDueDate",
                 "disposition",
@@ -138251,7 +138308,9 @@
                     "type": "object",
                     "required": [
                       "text",
-                      "met"
+                      "met",
+                      "changed",
+                      "original"
                     ],
                     "properties": {
                       "text": {
@@ -138259,9 +138318,62 @@
                       },
                       "met": {
                         "type": "boolean"
+                      },
+                      "changed": {
+                        "type": "boolean"
+                      },
+                      "original": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
                       }
                     }
                   }
+                },
+                "edited": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "name",
+                        "criteria"
+                      ],
+                      "properties": {
+                        "name": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "criteria": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 },
                 "dueDate": {
                   "anyOf": [

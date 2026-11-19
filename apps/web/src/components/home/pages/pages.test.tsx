@@ -242,7 +242,7 @@ describe("月份页（设计 10.4、10.5；11/19 DRI 根据地）", () => {
     renderToStaticMarkup(<MonthView data={data} go={go} extras={extras} today={today} actions={actions} />);
   const MISSION = "天枢 11 月：V1 11/18 上线，V2 11/30 上线";
   const task = (patch: Partial<MonthTask> = {}): MonthTask => ({ taskId: "t1", missionId: "m1", missionTitle: MISSION, missionOutcome: "内部 20 人每天用天枢派活", name: "甲",
-    criteria: [{ text: "标准一", met: false }], dueDate: "2026-11-30", missionDueDate: "2026-11-30", disposition: "current", deferredTo: null, version: null, running: 0, blocked: 0, done: false,
+    criteria: [{ text: "标准一", met: false, changed: false, original: null }], edited: null, dueDate: "2026-11-30", missionDueDate: "2026-11-30", disposition: "current", deferredTo: null, version: null, running: 0, blocked: 0, done: false,
     settlement: null, continuedFrom: null, ...patch });
   const month = (tasks: MonthTask[]): MonthPageData => ({ period: "2026-11", tasks, draft: null });
   /** 按 data-testid 切开：attrs 是这个元素 data-testid 后面那几个属性，body 是它的内容（到下一个同名元素为止）。 */
@@ -284,7 +284,7 @@ describe("月份页（设计 10.4、10.5；11/19 DRI 根据地）", () => {
   });
 
   it("行尾只写有的：1/3 加等你、受阻、进行中、交付第几版里的第一个", () => {
-    const three = (met: number) => [0, 1, 2].map((i) => ({ text: `标准${i + 1}`, met: i < met }));
+    const three = (met: number) => [0, 1, 2].map((i) => ({ text: `标准${i + 1}`, met: i < met, changed: false, original: null }));
     const html = render(month([
       task({ taskId: "a", name: "甲", criteria: three(1), blocked: 1, running: 1, version: 2 }),
       task({ taskId: "b", name: "乙", criteria: three(0), blocked: 1, running: 1, version: 2 }),
@@ -313,7 +313,7 @@ describe("月份页（设计 10.4、10.5；11/19 DRI 根据地）", () => {
 
   it("月中能定去向，定了延期的挪到延期和取消", () => {
     const html = render(month([task({ taskId: "a", name: "甲" }), task({ taskId: "b", name: "乙", disposition: "deferred", deferredTo: "2026-12" }),
-      task({ taskId: "c", name: "丙", disposition: "cancelled" })]), undefined, "2026-11-19", { setDueDate: vi.fn(), setDisposition: vi.fn() });
+      task({ taskId: "c", name: "丙", disposition: "cancelled" })]), undefined, "2026-11-19", { setDueDate: vi.fn(), setDisposition: vi.fn(), setGoal: vi.fn() });
     // 上面的分段里只剩本期验收的甲。
     expect(rows(html).map((row) => rowText(row).split(" ")[0])).toEqual(["甲"]);
     const aside = parts(html, "month-set-aside")[0]!.body;
