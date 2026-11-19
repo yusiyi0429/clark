@@ -124,20 +124,20 @@ export function useLeftCollapsed(): { collapsed: boolean; toggle(): void } {
 export type LeftSnapshot = { waiting: number; unseen: ReadonlyMap<string, string> };
 
 export function leftSnapshot(projects: Project[], seen: SeenMarks | undefined, waitingCount: number): LeftSnapshot {
-  const unseen = new Map(projects.filter((project) => showUnseen(project.unseen, seen, "project", project.id, project.lastActivity))
+  const unseen = new Map(projects.filter((project) => !project.scratch && showUnseen(project.unseen, seen, "project", project.id, project.lastActivity))
     .map((project) => [project.id, project.lastActivity ?? ""] as const));
   return { waiting: waitingCount, unseen };
 }
 
 /**
  * 收起期间有新东西（按钮上一颗蓝点，设计 4.1）：哪个项目出了没看过的蓝点（同左栏的「刚看过」），而收起那一刻（since）它没有、或那之后又有了新动静；
- * 或者等你的件数比那一刻多了。收起那一刻已经没看的不算。还没记下那一刻（刷新后数据没到）、展开了都不亮。
+ * 或者等你的件数比那一刻多了。收起那一刻已经没看的不算。还没记下那一刻（刷新后数据没到）、展开了都不亮。「随手」项目不算（左栏不列它，本人 11/19）。
  */
 export function leftUnseen({ collapsed, projects, seen, waitingCount, since }: {
   collapsed: boolean; projects: Project[]; seen?: SeenMarks; waitingCount: number; since: LeftSnapshot | null;
 }): boolean {
   if (!collapsed || !since) return false;
-  return waitingCount > since.waiting || projects.some((project) => showUnseen(project.unseen, seen, "project", project.id, project.lastActivity)
+  return waitingCount > since.waiting || projects.some((project) => !project.scratch && showUnseen(project.unseen, seen, "project", project.id, project.lastActivity)
     && since.unseen.get(project.id) !== (project.lastActivity ?? ""));
 }
 

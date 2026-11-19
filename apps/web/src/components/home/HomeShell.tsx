@@ -65,11 +65,11 @@ import { SideDetailContext, type PanelKind, type SideDetail } from "./SideDetail
 import { seenKey, withSeen, type SeenKind, type SeenMarks } from "@/lib/home/seen";
 import { seenSequence } from "@/lib/home/transfer";
 import { claimTopic, projectIdOf, startFolder } from "@/lib/home/startFolder";
-import { FolderAsk } from "./FolderAsk";
+import { FolderAsk, ScratchFolders } from "./FolderAsk";
 import { TransferFlow, TransferView } from "./Transfer";
 import type { TimedBlock } from "@/components/work/WorkTimeline";
 import { useProjects } from "./useProjects";
-import { projectHref, projectWorking, type Project } from "@/lib/home/projects";
+import { crumbProject, projectHref, projectWorking, type Project } from "@/lib/home/projects";
 import { usePhone } from "./usePhone";
 import { ViewChrome, PAGE_TITLE, monthHref, scopeOf, viewOf, type View } from "./view";
 import { MONTH_PAGE, SECONDARY_PAGES, type MonthHead, type SecondaryPageProps } from "./pages";
@@ -525,7 +525,7 @@ function HomeFrame({ account }: { account: Account }) {
   ), [running, machine.quotaAlert, handheld, sessionsOpen, show]);
   // 子会话页头的上一级：它在哪个项目里，点了回到项目对话。
   const subId = view.kind === "card" || view.kind === "topic" ? view.id : null;
-  const owner = subId ? projects.all.find((project) => project.subSessions.some((sub) => sub.id === subId)) ?? null : null;
+  const owner = crumbProject(projects.all, subId);
   const parent = useMemo(() => (owner ? (
     <button type="button" className={h.crumb} onClick={() => go(projectHref(owner.id))}>{owner.name} / </button>
   ) : null), [owner, go]);
@@ -565,6 +565,11 @@ function HomeFrame({ account }: { account: Account }) {
   /** 项目对话里项目自己的几块：转交（16.7）从「准备交接」那一刻起，到发出、等接手。 */
   /** 这个项目的卡或自由子会话在等它在这台电脑上绑文件夹（这台电脑连着本机程序、还没绑）。 */
   const waitingFolder = useCallback((projectId: string) => here && needFolder.has(projectId) && !projects.bound.has(projectId), [here, needFolder, projects.bound]);
+  // 「随手」项目在这台电脑上绑的文件夹（工作目录）完整路径：主线里随手会话做完一轮那行带上（本人 11/19）；取不到为 null。
+  const scratchId = projects.all.find((project) => project.scratch)?.id;
+  const scratchFolder = (scratchId && projects.bound.get(scratchId)?.path) || null;
+  // 随手项目绑的文件夹：选文件夹的几处不列（ScratchFolders）。
+  const scratchFolders = useMemo(() => new Set((scratchId && projects.boundAll.get(scratchId)?.map((folder) => folder.id)) || []), [scratchId, projects.boundAll]);
   /** 「在哪个文件夹开工？」（17.2 第 32 条）：卡或自由子会话等着这个项目在这台电脑上绑文件夹时才有，选完绑上就收起、接着开。 */
   const folderAsk = (project: Project) => (waitingFolder(project.id)
     ? <FolderAsk folders={local.folders} onBind={(folder) => projects.actions.setFolder(project.id, folder.id, project.name)} onPickOther={() => local.pickFolder()} /> : null);
@@ -613,7 +618,7 @@ function HomeFrame({ account }: { account: Account }) {
       case "meetings": return <MeetingsPage meeting={meeting} go={go} />;
       case "meeting": return <MeetingView key={current.id} id={current.id} go={go} />;
       case "buddy": return <BuddyView buddy={buddy} outbox={outbox} consume={consume} onSpeaking={setSpeaking} waiting={data.waiting} go={go} context={buddyContext} onClearContext={() => setBuddyContext(null)}
-        subs={subs} projects={projects.all} waitingFolder={waitingFolder} />;
+        subs={subs} projects={projects.all} waitingFolder={waitingFolder} scratchFolder={scratchFolder} />;
       case "mission": {
         const mission = data.month.missions.find((entry) => entry.missionId === current.id);
         if (!mission) return <Missing loading={!api.ready} onRetry={api.planFailed ? () => void api.retryPlan() : undefined} />;
@@ -667,7 +672,7 @@ function HomeFrame({ account }: { account: Account }) {
   const machineDot = handheld ? null : { alert: machine.alert, word: machine.word };
   // 正在后台干活的项目（左栏标题右边闪的灰点）：子会话在跑、规划员或验收员在做，或正开着的这个项目对话在回复。
   const working = useMemo(() => new Set(projects.projects
-    .filter((project) => projectWorking(project, work.workers, speaking && view.kind === "project" && view.id === project.id))
+    .filter((project) => !project.scratch && projectWorking(project, work.workers, speaking && view.kind === "project" && view.id === project.id))
     .map((project) => project.id)), [projects.projects, work.workers, speaking, view]);
 
   // 名片上的「在听」和走秒由名片自己读外壳给的开会状态（HomeMeetingProvider）：走秒时只有名片跟着重画。
@@ -709,6 +714,7 @@ function HomeFrame({ account }: { account: Account }) {
       <WorkspaceContext.Provider value={workspace}>
         <ViewChrome.Provider value={chrome}>
           <SeenContext.Provider value={seen}>
+          <ScratchFolders.Provider value={scratchFolders}>
           <HomeMeetingProvider meeting={meeting}>
           <div className={h.app} data-phone="" data-view={view.kind} data-scheme="auto" data-type-scale="one" data-entering={entering ? "" : undefined} data-testid="work-home">
             {/* 首屏兼首页（5.7）：左栏那几样，底部固定首页的输入框（带「发给」）。 */}
@@ -726,6 +732,7 @@ function HomeFrame({ account }: { account: Account }) {
             ) : null}
           </div>
           </HomeMeetingProvider>
+          </ScratchFolders.Provider>
           </SeenContext.Provider>
         </ViewChrome.Provider>
       </WorkspaceContext.Provider>
@@ -738,6 +745,7 @@ function HomeFrame({ account }: { account: Account }) {
       <ViewChrome.Provider value={chrome}>
         <SideDetailContext.Provider value={side}>
           <SeenContext.Provider value={seen}>
+          <ScratchFolders.Provider value={scratchFolders}>
           <HomeMeetingProvider meeting={meeting}>
           <div className={h.app} data-panel={panel === "file" || panel === "thread" ? "file" : panel ? "open" : "closed"} data-left={collapsed ? "closed" : undefined} data-wide={slot === "file" && wide ? "" : undefined} data-view={view.kind} data-scheme="auto" data-type-scale="one" data-entering={entering ? "" : undefined} data-testid="work-home"
             data-resizing={leftWidth.dragging || rightWidth.dragging || fileWidth.dragging ? "" : undefined} style={{
@@ -770,6 +778,7 @@ function HomeFrame({ account }: { account: Account }) {
             ) : null}
           </div>
           </HomeMeetingProvider>
+          </ScratchFolders.Provider>
           </SeenContext.Provider>
         </SideDetailContext.Provider>
       </ViewChrome.Provider>

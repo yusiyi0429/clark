@@ -7,6 +7,7 @@
  *   首页数据里还没读到它（刚开）：先照卡上存的名字画，点了照样打开（电脑上在右边开，数据到了右边就画出来）；等文件夹时同样写「等你」。
  * - 转给项目对话 active：「项目名 ›」，项目对话里有没看过的新回复带蓝点，点了去那个项目的对话。
  * - archived / gone：一行淡色「项目名 · 会话名」（转给项目的只有项目名），不能点。
+ * 「随手」项目的会话（本人 11/19 收到幕后）：不写「项目名 · 」，只写会话名；点开右边页头只写「从主线开的」。
  * 放不下就换行，不截断。
  */
 import type { TConversationCard } from "@warmap/contracts";
@@ -21,28 +22,31 @@ export type DispatchCard = Extract<TConversationCard, { kind: "buddy_dispatch" }
 export function DispatchChip({ card, subs, projects, waitingFolder, onOpenSub, onOpenProject }: {
   card: DispatchCard;
   subs: readonly SubSession[];
-  projects: readonly Pick<Project, "id" | "name" | "archived" | "unseen">[];
+  projects: readonly (Pick<Project, "id" | "name" | "archived" | "unseen"> & { scratch?: boolean })[];
   waitingFolder: (projectId: string) => boolean;
   onOpenSub: (sub: Pick<SubSession, "kind" | "id">, from: string) => void;
   onOpenProject: (projectId: string) => void;
 }) {
   const project = projects.find((entry) => entry.id === card.projectId);
   const name = project?.name ?? card.projectName;
+  /** 会话名前面那段（随手的为 null）；点开右边页头写的项目名（随手的给空）。 */
+  const prefix = project?.scratch ? null : name;
+  const from = prefix ?? "";
   const target = card.sub;
   const live = target?.id ? subs.find((entry) => entry.kind === target.kind && entry.id === target.id) : undefined;
   const waiting = waitingFolder(card.projectId);
   const node = card.state !== "active"
-    ? <span className={h.dispatchFaded} data-testid="dispatch-faded">{target ? `${name} · ${live?.title ?? target.title}` : name}</span>
+    ? <span className={h.dispatchFaded} data-testid="dispatch-faded">{target ? (prefix ? `${prefix} · ` : "") + (live?.title ?? target.title) : name}</span>
     : !target ? (
       <button type="button" className={h.thread} onClick={() => onOpenProject(card.projectId)} data-testid="dispatch-project">
         <span className={h.threadName}>{`${name} ›`}</span>
         {project?.unseen ? <i className={h.threadDot} aria-hidden data-testid="thread-dot" /> : null}
       </button>
-    ) : live ? <ThreadChip sub={live} project={name} needsYou={waiting} onOpen={(sub) => onOpenSub(sub, name)} />
+    ) : live ? <ThreadChip sub={live} project={prefix ?? undefined} needsYou={waiting} onOpen={(sub) => onOpenSub(sub, from)} />
     : (
-      <button type="button" className={h.thread} onClick={() => onOpenSub({ kind: target.kind, id: target.id! }, name)} data-testid="thread-chip">
+      <button type="button" className={h.thread} onClick={() => onOpenSub({ kind: target.kind, id: target.id! }, from)} data-testid="thread-chip">
         {waiting ? <StateIcon state="waiting" /> : null}
-        <span className={h.threadName}><span className={h.threadProject}>{`${name} · `}</span>{target.title}</span>
+        <span className={h.threadName}>{prefix ? <span className={h.threadProject}>{`${prefix} · `}</span> : null}{target.title}</span>
         {waiting ? <span className={h.threadStatus} data-wait="">等你</span> : null}
       </button>
     );

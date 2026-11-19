@@ -60,7 +60,8 @@ const subGoal = "LEFT JOIN project_goals g ON g.task_id=s.plan_task_id AND g.own
 const subProject = "COALESCE(g.project_id,s.project_id)";
 
 export async function meetingWorkTargets(q: Query, actor: string, open: OpenPlanTask): Promise<TMeetingWorkTargetOption[]> {
-  const rows = (await q(`WITH mine AS (SELECT id,name FROM projects WHERE owner_id=$1 AND archived_at IS NULL)
+  // 「随手」项目和它的会话不当去向（收在幕后，本人 11/19）。
+  const rows = (await q(`WITH mine AS (SELECT id,name FROM projects WHERE owner_id=$1 AND archived_at IS NULL AND NOT scratch)
     SELECT p.id AS "projectId",p.name AS "projectName",'project' AS kind,p.id::text AS id,p.name FROM mine p
     UNION ALL SELECT p.id,p.name,'task',g.task_id,g.task_name FROM project_goals g JOIN mine p ON p.id=g.project_id WHERE g.owner_id=$1
     UNION ALL SELECT p.id,p.name,'card',s.id::text,s.title FROM tasks s ${subGoal} JOIN mine p ON p.id=${subProject}

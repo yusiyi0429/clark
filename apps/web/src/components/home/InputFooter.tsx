@@ -12,7 +12,7 @@ import { FailedLine } from "@/components/work/DecisionBox";
 import { LocalContext, type LocalRunnerState } from "@/lib/local/LocalRunnerProvider";
 import { LocalRunnerError } from "@/lib/local/runner";
 import { showWorkspaceToast } from "@/lib/toast";
-import { PICK_OTHER } from "./FolderAsk";
+import { PICK_OTHER, useShownFolders } from "./FolderAsk";
 import { useHoverTip } from "./NameTip";
 import { ICON } from "./StateIcon";
 import h from "@/styles/home.module.css";
@@ -37,7 +37,7 @@ export function createFolderError(error: unknown): string {
  * 选别的和新建都是本机一步绑到项目上，onPickOther / onCreate 不给就没有这两项。
  * 照 Claude Code「开始以后就不在输入框下面改」：只在这台电脑上项目还没绑文件夹时给；绑了以后调用方用 FolderText（不能换），换在项目详情的「文件夹」一节。
  */
-export function FolderMenu({ folders, onPick, onPickOther, onCreate }: {
+export function FolderMenu({ folders: given, onPick, onPickOther, onCreate }: {
   folders: readonly { id: string; label: string }[];
   onPick: (folderId: string | null) => void;
   onPickOther?: () => Promise<unknown>;
@@ -46,6 +46,8 @@ export function FolderMenu({ folders, onPick, onPickOther, onCreate }: {
   const [naming, setNaming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 随手项目绑的文件夹不列（本人 11/19）。
+  const folders = useShownFolders(given);
   const create = async (name: string) => {
     if (!onCreate || busy) return;
     if (!name.trim()) { setNaming(false); setError(null); return; }

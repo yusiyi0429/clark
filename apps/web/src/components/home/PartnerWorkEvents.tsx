@@ -9,26 +9,31 @@ import h from "@/styles/home.module.css";
 
 /** 在右边开这个会话（rightOpener）：开了回 true；手机上、首页数据里找不到的回 false。 */
 type OpenRight = (subject: { kind: "card" | "topic"; id: string }, from?: string) => boolean;
+/** 本人的「随手」项目：id，和这台电脑上它绑的文件夹完整路径（取不到为 null）。 */
+type Scratch = { id: string; folder: string | null };
 
 /**
  * 主线里的事件行：项目名 · 会话名 · 说明；从主线开的会话做完一轮写「做完一轮」，有摘要接「：摘要」（放不下换行，不截）。
  * 点了：给了 open 时先在右边开（从主线开的带上项目名）；开不了的照旧去原卡、原提问或那个会话。
+ * 「随手」项目的会话（本人 11/19 收到幕后）：不写项目名，右边页头也不写；从主线开的做完一轮，后面接「 · 文件夹 完整路径」，取不到不写。
  */
-export function workEventBlocks(items: readonly TPartnerWorkEvent[], waiting: readonly WaitingItem[], go: (href: string) => void, open?: OpenRight): TimedBlock[] {
+export function workEventBlocks(items: readonly TPartnerWorkEvent[], waiting: readonly WaitingItem[], go: (href: string) => void, open?: OpenRight, scratch: Scratch | null = null): TimedBlock[] {
   const byId = new Map(waiting.map(item => [item.id, item]));
   return items.map(item => {
     const original = item.waitingId ? byId.get(item.waitingId) : undefined;
     const href = original ? waitingHref(original) : item.subjectKind === "card" ? cardHref(item.subjectId) : topicHref(item.subjectId);
-    const press = () => { if (!open?.({ kind: item.subjectKind, id: item.subjectId }, item.fromMain ? item.projectName : undefined)) go(href); };
-    const words = item.done ? `做完一轮${item.detail ? `：${item.detail}` : ""}` : item.detail;
+    const hidden = item.projectId === scratch?.id;
+    const press = () => { if (!open?.({ kind: item.subjectKind, id: item.subjectId }, item.fromMain ? (hidden ? "" : item.projectName) : undefined)) go(href); };
+    const folder = hidden && item.fromMain && item.done && scratch?.folder ? ` · 文件夹 ${scratch.folder}` : "";
+    const words = item.done ? `做完一轮${item.detail ? `：${item.detail}` : ""}${folder}` : item.detail;
     return { key: item.id, at: item.at, node: <div className={h.line}>
-      <button type="button" className={h.lineLink} onClick={press} data-testid="work-event">{`${item.projectName} · ${item.title} · ${words}`}</button>
+      <button type="button" className={h.lineLink} onClick={press} data-testid="work-event">{`${hidden ? "" : `${item.projectName} · `}${item.title} · ${words}`}</button>
     </div> };
   });
 }
 
 /** 同一件事从首页和伙伴都能进入原卡或原提问。已处理的旧事件仍可回看原件。 */
-export function usePartnerWorkEvents(waiting: WaitingItem[], go: (href: string) => void, open?: OpenRight): TimedBlock[] {
+export function usePartnerWorkEvents(waiting: WaitingItem[], go: (href: string) => void, open?: OpenRight, scratch: Scratch | null = null): TimedBlock[] {
   const [items, setItems] = useState<TPartnerWorkEvent[]>([]);
   useEffect(() => {
     const controller = new AbortController();
@@ -50,5 +55,5 @@ export function usePartnerWorkEvents(waiting: WaitingItem[], go: (href: string) 
     document.addEventListener("visibilitychange", read);
     return () => { controller.abort(); window.clearInterval(timer); document.removeEventListener("visibilitychange", read); };
   }, []);
-  return useMemo(() => workEventBlocks(items, waiting, go, open), [items, waiting, go, open]);
+  return useMemo(() => workEventBlocks(items, waiting, go, open, scratch), [items, waiting, go, open, scratch]);
 }

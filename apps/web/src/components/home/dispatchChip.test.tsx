@@ -20,7 +20,9 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace: 
 import type { ConversationData } from "@/conversation/useConversation";
 import type { SubSession } from "@/lib/home/types";
 import { WorkTimeline } from "@/components/work/WorkTimeline";
+import type { TPartnerWorkEvent } from "@warmap/contracts";
 import { DispatchChip, type DispatchCard } from "./DispatchChip";
+import { workEventBlocks } from "./PartnerWorkEvents";
 import type { SideDetail } from "./SideDetail";
 import { threadOpener } from "./ThreadChip";
 
@@ -114,6 +116,42 @@ describe("伙伴主线的派活卡（本人 11/18）", () => {
     expect(text(archived)).toContain("|品牌建设|");
     expect(archived).not.toContain("<button");
     expect(archived).not.toContain("›");
+  });
+
+  it("随手的会话在主线小条和事件行里不带项目名，别的项目照旧带", () => {
+    const scratch = [{ ...project({ name: "随手" }), scratch: true }];
+    const scratchCard = card({ projectName: "随手" });
+    // 小条：只写会话名；点了右边页头只写「从主线开的」（项目名给空）。
+    const onOpenSub = vi.fn();
+    const live = chip({ card: scratchCard, projects: scratch, onOpenSub });
+    expect(text(live)).toContain("|首页换深色|在跑|");
+    expect(live).not.toContain("随手");
+    (tap.props.get("thread-chip")?.onClick as () => void)();
+    expect(onOpenSub).toHaveBeenCalledWith(expect.objectContaining({ kind: "topic", id: TOPIC }), "");
+    // 首页数据里还没读到这个会话（刚开）、归档或删了的淡色那行：同样只写会话名。
+    expect(chip({ card: scratchCard, projects: scratch, subs: [] })).not.toContain("随手");
+    for (const state of ["archived", "gone"] as const) {
+      const faded = chip({ card: card({ projectName: "随手", state }), projects: scratch, subs: [] });
+      expect(text(faded)).toContain("|首页换深色|");
+      expect(faded).not.toContain("随手");
+    }
+    // 别的项目照旧带「项目名 · 」。
+    expect(text(chip())).toContain("|品牌建设 · |首页换深色|");
+    expect(text(chip({ card: card({ state: "archived" }), subs: [] }))).toContain("|品牌建设 · 首页换深色|");
+    // 事件行：随手的只写「会话名 · 说明」，点了右边页头同样不写项目名；别的项目照旧「项目名 · 会话名 · 说明」。
+    const event = (extra: Partial<TPartnerWorkEvent>): TPartnerWorkEvent => ({ id: "e1", at: "2026-11-18T02:00:00.000Z", projectId: PROJECT, projectName: "随手",
+      title: "比对合同", detail: "卡在第三份", subjectKind: "topic", subjectId: TOPIC, waitingId: null, fromMain: true, ...extra });
+    const open = vi.fn(() => true);
+    tap.props.clear();
+    const [mine, other] = workEventBlocks([event({}), event({ id: "e2", projectId: "p2", projectName: "品牌建设" })], [], vi.fn(), open, { id: PROJECT, folder: null })
+      .map((block) => text(renderToStaticMarkup(<>{block.node}</>)));
+    expect(mine).toBe("|比对合同 · 卡在第三份|");
+    expect(other).toBe("|品牌建设 · 比对合同 · 卡在第三份|");
+    (tap.props.get("work-event")?.onClick as () => void)();
+    expect(open).toHaveBeenLastCalledWith({ kind: "topic", id: TOPIC }, "品牌建设");
+    workEventBlocks([event({})], [], vi.fn(), open, { id: PROJECT, folder: null }).forEach((block) => renderToStaticMarkup(<>{block.node}</>));
+    (tap.props.get("work-event")?.onClick as () => void)();
+    expect(open).toHaveBeenLastCalledWith({ kind: "topic", id: TOPIC }, "");
   });
 
   it("等文件夹的会话小条写等你，右边能就地选文件夹", () => {

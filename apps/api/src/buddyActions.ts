@@ -72,9 +72,14 @@ const DISPATCH_RULES = "先分清是哪一种："
   + "②这一轮里自己能做完的——查几下、读几份贴进来的材料、写一段话就能交，交出来的是对话里的话，不用碰本人电脑上的文件和代码——自己做，不开会话。"
   + "③做不完的才是项目级：要读写本人电脑上的文件或代码；要做出一件留下来、以后还会改的东西；估计要跑几分钟以上，或要本人看了再改；或者本人明说「开个会话」「派出去做」。"
   + "默认自己做。拿不准够不够大：先自己答个短版，末尾用一句话问要不要开会话做完整的；这句不用 ask_user。开会话这件事上，ask_user 只用来问放进哪个项目（对得上多个或一个都对不上时）。不为了保险先开会话。"
-  + "项目级的放哪：按项目名、项目挂着的 Task 名、项目里已有的会话来对。只对得上一个项目就直接开，回话里说一声放在哪了；"
+  + "项目级的放哪：按项目名、项目挂着的 Task 名、项目里已有的会话来对。只对得上一个项目就直接开，回话里说一声放在哪了（带 scratch 的不说放在哪）；"
   + "对得上好几个，或者一个都对不上、又像是一条以后还会接着做的线，用 ask_user 问（放进哪个项目 / 新建一个项目）；"
   + "一次性的、哪个项目都不沾的活，带 scratch 放进「随手」项目，不为它新建项目。"
+  // 本人 11/19：随手收到幕后——碰本机文件的一次性活直接开会话，回话里不说「随手」。
+  + "要读写本人电脑上文件的一次性活（比如比对桌面某个文件夹里的合同、把一个文件夹的发票整理成表），直接 open_session 带 scratch 开工，不先用 ask_user 问比对什么、放哪；"
+  + "交代里让会话先看文件，口径不清由会话看过文件后再问本人；交代里写一句：交回时写明做出来的文件的完整路径。"
+  + "你碰本人电脑上的文件就靠开会话，不说「我无法访问你电脑上的文件」这类话。"
+  + "「随手」只是你这边的叫法，回话里不说「随手」两个字，说「开了个会话去看」这类。"
   + "已有的会话不改约定的——接着做、重跑、在约定里改一点——用 tell_session；起新活照旧走 open_session / message_project。";
 const DESCRIPTION: Record<BuddyActionName, string> = {
   read_partner_inbox: "读本人伙伴的会议 meetings、同事来件 received、发件进度 sent 或关键工作事件 events。每页默认20条，nextOffset 可取下一页；按需打开原文。",
@@ -116,7 +121,7 @@ const DESCRIPTION: Record<BuddyActionName, string> = {
     + "要改已有会话的约定（做成什么样算完），或者是对着项目本月 Task 验收标准的正式交付，不用它，用 message_project 转给项目对话。"
     + "伙伴主线里起新活只走两条路：用 open_session 放进项目（一次性的放「随手」），或用 message_project 交给项目对话去拆卡；主线里起新活不直接用 split_cards、start_sub_session。已经拆好的卡或专题要开工，照旧用 start_sub_session。"
     + DISPATCH_RULES + RUNNING_LIMIT
-    + "回话里用同一个名字叫这个会话，说一声放在哪个项目。会话做完一轮主线里会自动出一行，不要许诺你自己会再来汇报。",
+    + "回话里用同一个名字叫这个会话，说一声放在哪个项目（带 scratch 的不说放在哪）。会话做完一轮主线里会自动出一行，不要许诺你自己会再来汇报。",
   tell_session: "对一个已有的会话说一句话：本人让你转的，比如「再试一次」「把按钮改成蓝的」，或者你安排它接下来怎么做。会话停着就续上，在跑就在下一步前送到。" + OWNER_NAMED + "kind 和 id 见 read_work_home。"
     + "这句话要是改了约定（做成什么样算完），不用它，转给项目对话（message_project）。",
   send_message: "给同事转达一句话（toPersonIds 是人员目录里的 id）。不会直接发：先出一张卡给本人看，本人点「发出」才由天枢机器人发，开头是「本人名字请我转达：」。",
@@ -539,7 +544,8 @@ const handlers: Handlers = {
       ? createHash("sha256").update(JSON.stringify([call.runId, call.personId, "open_session", projectId, args.brief])).digest("hex") : randomUUID();
     const opened = (card: DispatchCard, replay: boolean): Outcome => {
       const sub = card.sub!;
-      return { summary: `在项目「${card.projectName}」里开了「${sub.title}」，本人电脑上开着的网页接下后就开始`,
+      // 伙伴照 summary 回话：随手的不提项目名（本人 11/19 收到幕后）。
+      return { summary: `${args.scratch ? "开了会话" : `在项目「${card.projectName}」里开了`}「${sub.title}」，本人电脑上开着的网页接下后就开始`,
         result: { dispatchId: card.dispatchId, projectId: card.projectId, projectName: card.projectName, kind: "topic", id: sub.id, title: sub.title },
         undo: null, ui: sub.id ? [subRefresh(sub.id, ["project"])] : [], ...(replay ? {} : { card }) };
     };

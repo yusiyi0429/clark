@@ -105,7 +105,10 @@ export function LeftColumn({ data, view, buddy, go, phone, account, today, machi
   const tree = useRef<HTMLDivElement>(null);
   const [naming, setNaming] = useState(false);
   const [archivedOpen, setArchivedOpen] = useState(false);
-  const archivedCount = archived.length;
+  // 「随手」项目收在幕后（本人 11/19）：项目和已归档里都不列。
+  const listed = projects.filter((project) => !project.scratch);
+  const archivedListed = archived.filter((project) => !project.scratch);
+  const archivedCount = archivedListed.length;
   // 新建项目的弹窗里有没有文件夹那一块：这台电脑连着本机程序才有（手机、没装的没有）。
   const localReady = useContext(LocalContext)?.phase === "ready";
   return (
@@ -155,12 +158,12 @@ export function LeftColumn({ data, view, buddy, go, phone, account, today, machi
             <NewProjectDialog withFolders={!phone && localReady} limit={folderLimit} onClose={() => setNaming(false)}
               onCreate={(name, folderIds) => onCreate(name, folderIds).then((id) => go(projectHref(id)))} />
           ) : null}
-          {projects.map((project) => <ProjectNode key={project.id} project={project} view={view} go={go} personId={account.personId} working={!!working?.has(project.id)} />)}
+          {listed.map((project) => <ProjectNode key={project.id} project={project} view={view} go={go} personId={account.personId} working={!!working?.has(project.id)} />)}
         </section>
         {archivedOpen && archivedCount ? (
           <section aria-label="已归档" className={h.group}>
             <p className={h.groupTitle}>已归档</p>
-            {archived.map((project) => <ProjectNode key={project.id} project={project} view={view} go={go} personId={account.personId} />)}
+            {archivedListed.map((project) => <ProjectNode key={project.id} project={project} view={view} go={go} personId={account.personId} />)}
           </section>
         ) : null}
         {data.other.items.length ? (

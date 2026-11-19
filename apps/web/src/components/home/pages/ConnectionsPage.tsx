@@ -31,6 +31,7 @@ import { modelDisplayName } from "@/lib/local/runModel";
 import type { SecondaryPageProps } from "./index";
 import { TokenHubDialog } from "./TokenHubDialog";
 import { AddSourceDialog } from "../AddSourceDialog";
+import { useShownFolders } from "../FolderAsk";
 import { KINGDEE_PLACEHOLDER, agentRow, feishuRow, isCliTool, localToolRow, mcpRow, programRow, tokenHubRow, toolRow, type RowAction, type RowModel, type TokenLike } from "./connectionRows";
 import { AddButton, Added, Card, CardGrid, ICON, QuotaBlock, Row, Section, StateLine, SwitchRow, relative, useMe, type Me } from "./parts";
 import h from "@/styles/home.module.css";
@@ -134,18 +135,19 @@ function ThisComputer({ me }: { me: Me | null }) {
 
 /**
  * 文件夹（本人 11/18）：默认收起，只有「文件夹 N 个」和「添加」；点「文件夹 N 个」展开收起，不记住。
- * 刚加了文件夹就展开，看得到新加的那个；没选上之类的报错收没收起都显示。
+ * 刚加了文件夹就展开，看得到新加的那个；没选上之类的报错收没收起都显示。「随手」项目绑的文件夹不列、不数（本人 11/19）。
  */
 export function Folders({ run }: { run: (key: string, work: () => Promise<unknown>) => void }) {
   const local = useLocalRunner();
   const [open, setOpen] = useState(false);
+  const folders = useShownFolders(local.folders);
   const add = async () => { if (await local.pickFolder()) setOpen(true); };
   return (
-    <Row testId="row-folders" name="文件夹" sub={local.folders.length ? `${local.folders.length} 个` : null}
-      fold={local.folders.length ? { open, onToggle: () => setOpen(!open) } : undefined}
+    <Row testId="row-folders" name="文件夹" sub={folders.length ? `${folders.length} 个` : null}
+      fold={folders.length ? { open, onToggle: () => setOpen(!open) } : undefined}
       action={<HeroButton variant="tertiary" size="sm" onPress={() => void add()}>添加</HeroButton>}>
-      {(open && local.folders.length) || local.error ? <>
-        {open ? local.folders.map((folder) => (
+      {(open && folders.length) || local.error ? <>
+        {open ? folders.map((folder) => (
           <div key={folder.id} className={p.sub} title={folder.path}>
             <b>{folder.label}</b><span className={p.path}>{folder.path}</span><span className={p.grow} />
             <HeroButton variant="ghost" size="sm" isIconOnly title="移除" aria-label={`移除 ${folder.label}`}

@@ -81,4 +81,20 @@ describe("主线里的会话事件（本人 11/18）", () => {
     expect(text(lines([event({ done: true, detail: long })])[0]!)).toContain(long);
     expect(text(lines([event({ done: true, detail: long })])[0]!)).not.toContain("…");
   });
+
+  it("随手会话做完一轮那行带文件夹路径，取不到就不写", () => {
+    const folder = "C:\\Users\\me\\天枢\\随手";
+    const scratch = (extra: Partial<TPartnerWorkEvent>) => event({ projectName: "随手", title: "比对合同", done: true, fromMain: true, detail: "列好了差异表", ...extra });
+    const render = (items: TPartnerWorkEvent[], where: string | null) =>
+      workEventBlocks(items, [], vi.fn(), undefined, { id: "p1", folder: where }).map((block) => text(renderToStaticMarkup(<>{block.node}</>)));
+    const [withSummary, noSummary, stuck] = render([scratch({ id: "a" }), scratch({ id: "b", detail: "" }), scratch({ id: "c", done: undefined, detail: "卡在第三份" })], folder);
+    expect(withSummary).toBe(`比对合同 · 做完一轮：列好了差异表 · 文件夹 ${folder}`);
+    expect(noSummary).toBe(`比对合同 · 做完一轮 · 文件夹 ${folder}`);
+    // 没做完的行不带文件夹。
+    expect(stuck).toBe("比对合同 · 卡在第三份");
+    // 取不到文件夹（本机程序没连上、没绑）：不写。
+    expect(render([scratch({})], null)).toEqual(["比对合同 · 做完一轮：列好了差异表"]);
+    // 别的项目做完一轮照旧，不带文件夹。
+    expect(render([event({ projectId: "p2", done: true, fromMain: true, detail: "换好了" })], folder)).toEqual(["品牌建设 · 首页换深色 · 做完一轮：换好了"]);
+  });
 });

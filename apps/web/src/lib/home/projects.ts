@@ -57,6 +57,8 @@ export type Project = {
   unseen: boolean;
   /** 正在转交的那一份（preparing、sent），或本人交出去了的（accepted，项目在本人这边归档、只读）；没有为 null。 */
   transfer: Transfer | null;
+  /** 本人的「随手」项目（契约 scratch）：收在幕后（本人 11/19），左栏、发给、挂到不列它，会话名前不写它的名字。 */
+  scratch: boolean;
 };
 
 /** 这台电脑上各项目绑的文件夹：项目 id → 文件夹名。 */
@@ -80,7 +82,7 @@ export function fromHome(project: HomeProject, data: Pick<WorkHomeData, "month" 
     subSessions: project.subSessions, items: project.items, scope: project.pipeline.scope,
     waiting: project.summary.needsYou, lastActivity: project.lastActivityAt,
     budget: project.budget ? { percent: project.budget.percent, state: project.budget.state } : null,
-    transfer: project.transfer, unseen: project.unseen,
+    transfer: project.transfer, unseen: project.unseen, scratch: !!project.scratch,
   };
 }
 
@@ -89,8 +91,14 @@ export function fromListed(project: TProject, folders: Folders): Project {
   return {
     id: project.projectId, name: project.name, folder: folders.get(project.projectId) ?? null, archived: true,
     goals: [], current: [], subSessions: [], items: [], scope: `project:${project.projectId}`,
-    waiting: 0, lastActivity: project.lastActivityAt, budget: null, transfer: project.transfer, unseen: false,
+    waiting: 0, lastActivity: project.lastActivityAt, budget: null, transfer: project.transfer, unseen: false, scratch: !!project.scratch,
   };
+}
+
+/** 子会话页头的上一级：它所在的项目；「随手」的会话不画上一级（本人 11/19 收到幕后），找不到也是 null。 */
+export function crumbProject(projects: readonly Project[], subId: string | null): Project | null {
+  const owner = subId ? projects.find((project) => project.subSessions.some((sub) => sub.id === subId)) : undefined;
+  return owner && !owner.scratch ? owner : null;
 }
 
 /** 「2 小时前」「3 天前」。 */

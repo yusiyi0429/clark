@@ -150,21 +150,24 @@ function useEscStopsReply(data: ConversationData) {
 /**
  * context：从 Mission 详情「问伙伴」带来的「关于：{Mission}」，输入框左上角一枚胶囊（14.5），去掉调 onClearContext。
  * subs、projects：首页数据里的会话和项目（派活卡的小条照它们画名字、状态）；waitingFolder：这个项目的会话在等本人选文件夹。
+ * scratchFolder：「随手」项目在这台电脑上绑的文件夹完整路径（事件行做完一轮带上），取不到为 null。
  * 派活卡的小条：电脑上在右边开（页头写「项目名 · 从主线开的」），刚开、首页数据里还没有的也是，数据到了右边就画出来；手机上去那个会话。
  * 主线事件行：电脑上、首页数据里有这个会话就在右边开，手机上、找不到的照旧跳。
  * 伙伴话里的会话名：派活卡开的会话还开着（首页数据里找得到）的，伙伴写完的话里同名的那几个字带下划线，点了和点小条一样。
  */
-export function BuddyView({ buddy, outbox, consume, onSpeaking, waiting, go, context = null, onClearContext, subs, projects, waitingFolder }: {
+export function BuddyView({ buddy, outbox, consume, onSpeaking, waiting, go, context = null, onClearContext, subs, projects, waitingFolder, scratchFolder = null }: {
   buddy: Buddy | null; outbox: Outbox; consume: (id: number) => void; onSpeaking: (speaking: boolean) => void; context?: string | null; onClearContext?: () => void;
   waiting: WaitingItem[]; go: (href: string) => void;
-  subs: SubSession[]; projects: Project[]; waitingFolder: (projectId: string) => boolean;
+  subs: SubSession[]; projects: Project[]; waitingFolder: (projectId: string) => boolean; scratchFolder?: string | null;
 }) {
   const data = useConversation("global");
   const chrome = useViewChrome();
   const team = usePartnerTeam();
   const side = useSideDetail();
   const openRight = useMemo(() => rightOpener(side, subs), [side, subs]);
-  const events = usePartnerWorkEvents(waiting, go, openRight);
+  const scratchId = projects.find((project) => project.scratch)?.id ?? null;
+  const scratch = useMemo(() => (scratchId ? { id: scratchId, folder: scratchFolder } : null), [scratchId, scratchFolder]);
+  const events = usePartnerWorkEvents(waiting, go, openRight, scratch);
   const openSub = useMemo(() => threadOpener(side, go), [side, go]);
   const dispatch = useMemo(
     () => (card: DispatchCard) => <DispatchChip card={card} subs={subs} projects={projects} waitingFolder={waitingFolder} onOpenSub={openSub} onOpenProject={(id) => go(projectHref(id))} />,
@@ -232,7 +235,9 @@ function dispatchedThreads(cards: readonly TConversationCard[], subs: readonly S
     if (card.kind !== "buddy_dispatch" || card.state !== "active" || !card.sub?.id) continue;
     const target = card.sub;
     const sub = subs.find((entry) => entry.kind === target.kind && entry.id === target.id);
-    if (sub) threads.set(`${sub.kind}:${sub.id}`, { sub, from: projects.find((entry) => entry.id === card.projectId)?.name ?? card.projectName });
+    const project = projects.find((entry) => entry.id === card.projectId);
+    // 「随手」的会话右边页头不写项目名（本人 11/19）。
+    if (sub) threads.set(`${sub.kind}:${sub.id}`, { sub, from: project?.scratch ? "" : project?.name ?? card.projectName });
   }
   return threads;
 }

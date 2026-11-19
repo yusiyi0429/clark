@@ -52,6 +52,23 @@ describe("判定", () => {
     expect(verdict(5, attempt([call("open_session", { projectId: IDS.tianshu, title: "修流式重试", brief: "修" })])).pass).toBe(false);
   });
 
+  it("4（本人 11/19 随手收到幕后）：先 ask_user 再开会话算没过；回话里有「随手」算没过", () => {
+    const scratch = call("open_session", { scratch: true, title: "比对合同", brief: "先看文件夹里的合同再比对" });
+    const ask = call("ask_user", { questions: [] });
+    expect(verdict(4, attempt([home, scratch], "开了个会话「比对合同」去看。")).pass).toBe(true);
+    const askedFirst = verdict(4, attempt([ask, scratch], "开了个会话「比对合同」去看。"));
+    expect(askedFirst.pass).toBe(false);
+    expect(askedFirst.reasons.join()).toContain("ask_user");
+    // 只问、没开会话：同样没过（算对那条本来就不满足，这条也记上）。
+    expect(verdict(4, attempt([ask], "")).reasons.join()).toContain("ask_user");
+    // 开了会话之后再问的不算「先问」。
+    expect(verdict(4, attempt([scratch, ask], "开了个会话「比对合同」去看。")).pass).toBe(true);
+    const named = verdict(4, attempt([scratch], "在项目「随手」里开了「比对合同」。"));
+    expect(named.pass).toBe(false);
+    expect(named.reasons.join()).toContain("随手");
+    expect(CASES[3]!.forbid).toBe("在 open_session 之前调了 ask_user；回话里出现「随手」");
+  });
+
   it("6：不调写动作，回话里要提到「首页改版」", () => {
     expect(verdict(6, attempt([home, call("read_project", { projectId: IDS.tianshu })], "「首页改版」已经做完一轮，下一步把本月页挪出去。")).pass).toBe(true);
     expect(verdict(6, attempt([home], "「首页改版」上一轮已经把首页改成只留「等你」，已经让字号统一成一种。")).pass).toBe(true);

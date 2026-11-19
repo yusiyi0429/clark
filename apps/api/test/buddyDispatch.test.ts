@@ -74,6 +74,8 @@ describe("伙伴主线开会话（open_session）", { timeout: 60_000 }, () => {
       const first = (await f.act("open_session", { scratch: true, title: "查一下汇率", brief: "查今天美元兑人民币" }, { turn: turn() })).json();
       const second = (await f.act("open_session", { scratch: true, title: "改简历", brief: "把简历改短一页" }, { turn: turn() })).json();
       expect(first.result).toMatchObject({ projectName: "随手", kind: "topic" });
+      // 伙伴回话照 summary 说：随手的不提项目名（本人 11/19 收到幕后）。
+      expect(first.summary).toBe("开了会话「查一下汇率」，本人电脑上开着的网页接下后就开始");
       expect(second.result.projectId).toBe(first.result.projectId);
       expect(await f.t.sql("SELECT id::text,name FROM projects WHERE owner_id=$1 AND scratch", [TEST_MEMBER.personId])).toEqual([
         { id: first.result.projectId, name: "随手" }]);
@@ -365,6 +367,17 @@ describe("动作说明里的判断规矩", () => {
     expect(text).toContain("同一个项目同时在跑的子会话不超过 2 个（本机最多同时跑 3 个，留一个给本人）；这条只管你自己开新会话、拆新卡，已经有 2 个在跑就等一个停下再开。");
     expect(text).not.toContain("本人明说要开");
     expect(text).not.toContain("急的先问本人");
+  });
+
+  it("碰本机文件的一次性活直接开随手会话：不先问、不说碰不到文件、回话不说随手、交回写文件路径（本人 11/19）", () => {
+    const text = described("open_session");
+    expect(text).toContain("要读写本人电脑上文件的一次性活（比如比对桌面某个文件夹里的合同、把一个文件夹的发票整理成表），直接 open_session 带 scratch 开工，不先用 ask_user 问比对什么、放哪");
+    expect(text).toContain("交代里让会话先看文件，口径不清由会话看过文件后再问本人");
+    expect(text).toContain("交代里写一句：交回时写明做出来的文件的完整路径");
+    expect(text).toContain("不说「我无法访问你电脑上的文件」这类话");
+    expect(text).toContain("回话里不说「随手」两个字");
+    // 「说一声放在哪了」对随手例外。
+    expect(text).toContain("带 scratch 的不说放在哪");
   });
 
   it("message_project 的说明不再许诺回报", () => {

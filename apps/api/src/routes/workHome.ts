@@ -91,12 +91,12 @@ export function registerWorkHomeRoutes(app: AppInstance, ctx: RouteContext): voi
   app.get("/api/me/background", { preHandler: requireMember, schema: { querystring: BackgroundQuery, response: { 200: BackgroundResponse } } }, async (req, reply) =>
     handle(reply, () => readBackground({ q, now: ctx.now(), planTasks: ctx.planTasks }, req.person!.personId, req.query.scope)));
 
-  // 「自动」发给谁：没归档的项目，带它的名字和挂着的 Task（名字、完成定义、标准）。
+  // 「自动」发给谁：没归档的项目（「随手」不算，收在幕后，本人 11/19），带它的名字和挂着的 Task（名字、完成定义、标准）。
   app.post("/api/me/route", { preHandler: requireMember, schema: { body: RouteRequest, response: { 200: RouteResponse } } }, async (req) => {
     const personId = req.person!.personId;
     const { tasks } = await treeTasks(q, ctx.planTasks, personId, ctx.now());
     const goals = await goalsOf(q, personId);
-    const projects = (await q("SELECT id::text,name FROM projects WHERE owner_id=$1 AND archived_at IS NULL", [personId])).rows as { id: string; name: string }[];
+    const projects = (await q("SELECT id::text,name FROM projects WHERE owner_id=$1 AND archived_at IS NULL AND NOT scratch", [personId])).rows as { id: string; name: string }[];
     return routeMessage(req.body.text, projects.map((project) => {
       const linked = tasks.filter((task) => goals.get(task.taskId)?.project_id === project.id);
       return { projectId: project.id, names: [project.name, ...linked.map((task) => task.name)],
