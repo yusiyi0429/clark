@@ -3,6 +3,7 @@ import { splitStableBlocks } from "./smoothText";
 /**
  * 伙伴的一条回复拆成气泡和卡片（设计稿 6.2）。
  * - 卡片：以标题开头的一节（吞到下一个标题或末尾）、表格、代码块 / 富块 / 公式块、长清单；相邻的非标题卡片料并成一张。
+ * - 清单项里的加粗（`- **标签**：说明`）不算小标题，照常是清单；短清单一律气泡（本人 11/19）。
  * - 单独一行的加粗当小标题，吞到下一个小标题：里面有卡片料就整节成卡（标题是小标题），否则整节一个气泡。
  *   小标题紧跟着又是加粗行（中间只隔空行）：并成一节，标题取第一行。
  * - 其余是气泡；以冒号结尾的段落和紧跟着的短清单并成一个气泡。
@@ -26,7 +27,8 @@ const HEADING = /^ {0,3}#{1,6}(?:[ \t]|$)/;
 const TABLE_ROW = /^ {0,3}\|/;
 const LIST_ITEM = /^([ \t]*)(?:[-*+]|\d{1,9}[.)])(?:[ \t]|$)/;
 const SHORT_LIST_ITEMS = 5;
-const SHORT_LIST_ITEM_CHARS = 24;
+/** 整张清单去掉记号后的字数超过这么多就算长（本人 11/19）。 */
+const SHORT_LIST_CHARS = 150;
 /** 摘要只取够两行渐隐用的一段原文，不拼省略号（本人 11/18）；标题完整给，放不下由样式换行。 */
 const SUMMARY_CHARS = 120;
 
@@ -142,16 +144,19 @@ function describeCard(markdown: string): { title: string; summary: string } {
   return { title: texts[0] ?? "", summary: head(texts[1] ?? "", SUMMARY_CHARS) };
 }
 
-/** 长清单：超过 5 项，或有嵌套，或有一项超过 24 个字。 */
+/** 长清单：超过 5 项，或有嵌套，或各项（连同续行）去掉记号后加起来超过 150 个字。 */
 function isLongList(part: Part): boolean {
   const base = LIST_ITEM.exec(part.lines[0])?.[1].length ?? 0;
   let items = 0;
+  let chars = 0;
   for (const line of part.lines) {
     const indent = LIST_ITEM.exec(line)?.[1].length;
-    if (indent === undefined) continue;
-    if (indent > base) return true;
-    items += 1;
-    if (items > SHORT_LIST_ITEMS || [...plain(line)].length > SHORT_LIST_ITEM_CHARS) return true;
+    if (indent !== undefined) {
+      if (indent > base) return true;
+      items += 1;
+    }
+    chars += [...plain(line)].length;
+    if (items > SHORT_LIST_ITEMS || chars > SHORT_LIST_CHARS) return true;
   }
   return false;
 }

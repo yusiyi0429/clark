@@ -120,20 +120,22 @@ describe("splitReply", () => {
     expect(splitReply("**甲** 和 **乙**\n\n说明。").segments).toEqual([{ kind: "bubble", markdown: "**甲** 和 **乙**" }, { kind: "bubble", markdown: "说明。" }]);
     expect(splitReply("**两行**\n第二行\n\n说明。").segments).toEqual([{ kind: "bubble", markdown: "**两行**\n第二行" }, { kind: "bubble", markdown: "说明。" }]);
   });
-  it("ant-answer 原文拆成 说明气泡 / 卡 / 卡 / 气泡 / 卡", () => {
+  it("ant-answer 原文拆成 说明气泡 / 卡 / 卡 / 气泡 / 气泡", () => {
     const { segments } = splitReply(ANT_ANSWER);
-    expect(segments.map((s) => s.kind)).toEqual(["bubble", "card", "card", "bubble", "card"]);
+    // 最后一节的清单只有 3 项、不到 150 个字，是短清单，整节一个气泡（本人 11/19）。
+    expect(segments.map((s) => s.kind)).toEqual(["bubble", "card", "card", "bubble", "bubble"]);
     expect(segments[0].markdown).toMatch(/^这次没调查成/);
     expect(segments[1]).toMatchObject({ title: "先确认 ANT 指的是哪家", summary: expect.stringMatching(/^蚂蚁集团：2020 年/) });
     expect(segments[2]).toMatchObject({ title: "判断一只新股适不适合打新，主要看这几项", summary: expect.stringMatching(/^在哪里上市、散户怎么参与。/) });
     expect(segments[3].markdown).toMatch(/^\*\*打新本身要算清的账\*\*\n\n用孖展加大申购/);
-    expect(segments[4]).toMatchObject({ title: "接下来可以这样做" });
+    expect(segments[4].markdown).toMatch(/^\*\*接下来可以这样做\*\*\n\n- 招股书/);
     // 不再有单独的粗体小气泡。
     expect(segments.filter((s) => /^\*\*[^*]+\*\*$/.test(s.markdown.trim()))).toEqual([]);
   });
   it("流式逐字到达时已经出过的块不变", () => {
     // 第二条：「**结论**」写完一整行时像小标题，接着写出「：」就成了普通段落，前一节要等它定下来才出。
-    const longItem = `- ${"很长的一项".repeat(6)}`;
+    // longItem 一项就超过 150 个字，是卡片料。
+    const longItem = `- ${"很长的一项".repeat(31)}`;
     for (const reply of [ANT_ANSWER, `**甲**\n\n${longItem}\n\n**结论**：今天先不买\n\n**乙**\n\n说明。`]) {
       const chars = [...reply];
       let previous: ReturnType<typeof splitReply>["segments"] = [];
@@ -151,7 +153,8 @@ describe("splitReply", () => {
     expect(splitReply(head, true).tail).toMatchObject({ kind: "card", title: "先确认 ANT 指的是哪家" });
   });
   it("流式时加粗小标题一节的尾巴是卡片壳子，写长了不会从气泡变成卡", () => {
-    const reply = `**要做的事**\n\n先说一句。\n\n- ${"很长的一项".repeat(6)}\n- 第二项\n\n**风险**\n\n没有。`;
+    const six = Array.from({ length: 6 }, (_, i) => `- 第${i + 1}项`).join("\n");
+    const reply = `**要做的事**\n\n先说一句。\n\n${six}\n\n**风险**\n\n没有。`;
     // 清单还没写到：尾巴已经是卡片壳子，标题是小标题。
     expect(splitReply("**要做的事**\n\n先说一句。", true)).toEqual({ segments: [], tail: { kind: "card", markdown: "**要做的事**\n\n先说一句。", title: "要做的事" } });
     expect(splitReply("**要做的事：**\n\n先", true).tail).toMatchObject({ kind: "card", title: "要做的事" });
@@ -165,13 +168,34 @@ describe("splitReply", () => {
     expect(splitReply(reply).segments).toMatchObject([{ kind: "bubble" }, { kind: "card", title: "数据", summary: "先看一下这张表，再说结论。" }, { kind: "bubble" }]);
   });
   it("两行加粗只隔空行时并成一节，不出单独的粗体小气泡", () => {
-    const longItem = `- ${"很长的一项".repeat(6)}`;
-    expect(splitReply(`**甲**\n\n**乙**\n\n${longItem}\n\n**丙**\n\n说明。`).segments).toEqual([
-      { kind: "card", markdown: `**甲**\n\n**乙**\n\n${longItem}`, title: "甲", summary: "乙" },
+    const six = Array.from({ length: 6 }, (_, i) => `- 第${i + 1}项`).join("\n");
+    expect(splitReply(`**甲**\n\n**乙**\n\n${six}\n\n**丙**\n\n说明。`).segments).toEqual([
+      { kind: "card", markdown: `**甲**\n\n**乙**\n\n${six}`, title: "甲", summary: "乙" },
       { kind: "bubble", markdown: "**丙**\n\n说明。" },
     ]);
     expect(splitReply("**甲**\n\n**乙**\n\n说明。").segments).toEqual([{ kind: "bubble", markdown: "**甲**\n\n**乙**\n\n说明。" }]);
-    expectNoBubbleTurnsCard(`**甲**\n\n**乙**\n\n${longItem}\n\n**丙**\n\n说明。`);
+    expectNoBubbleTurnsCard(`**甲**\n\n**乙**\n\n${six}\n\n**丙**\n\n说明。`);
+  });
+  it("加粗小标题一节里只有一项的短清单：整节一个气泡", () => {
+    const item = `- ${"很长的一项".repeat(6)}`;
+    expect(splitReply(`**甲**\n\n**乙**\n\n${item}\n\n**丙**\n\n说明。`).segments).toEqual([
+      { kind: "bubble", markdown: `**甲**\n\n**乙**\n\n${item}` },
+      { kind: "bubble", markdown: "**丙**\n\n说明。" },
+    ]);
+    expectNoBubbleTurnsCard(`**甲**\n\n**乙**\n\n${item}\n\n**丙**\n\n说明。`);
+  });
+  it("清单项的续行也算进这一项的字数", () => {
+    const note = "这一行是改首页这一项的说明，写在清单项下面的续行里，字数要算进这一项。".repeat(5);
+    expect([...note].length).toBeGreaterThan(150);
+    // 缩进续行。
+    const indented = `- **改首页**\n  ${note}\n- **补测试**`;
+    expect(splitReply(indented).segments).toMatchObject([{ kind: "card", title: "改首页" }]);
+    // 不隔空行、不缩进接着写的续行。
+    const lazy = `- **改首页**\n${note}\n- **补测试**`;
+    expect(splitReply(lazy).segments).toMatchObject([{ kind: "card", title: "改首页" }]);
+    // 续行短，合计不到 150：照旧是气泡。
+    const short = "- **改首页**\n  今天先做完\n- **补测试**";
+    expect(splitReply(short).segments).toEqual([{ kind: "bubble", markdown: short }]);
   });
   it("卡片标题完整显示，摘要不拼省略号", () => {
     const title = "这是一个很长很长的标题，用来确认卡片标题放不下时完整显示交给样式去换行，而不是在后面截断再拼省略号";
@@ -192,6 +216,34 @@ describe("splitReply", () => {
     const cells = Array.from({ length: 12 }, (_, i) => `第${i + 1}列标题`);
     const table = splitReply(`| ${cells.join(" | ")} |\n|${"---|".repeat(12)}\n| ${cells.map(() => "x").join(" | ")} |`).segments[0] as { title: string };
     expect(table.title).toBe(cells.join(" · "));
+  });
+  it("列表项开头的加粗不算小标题，不拆成卡", () => {
+    // 本人 11/19 在 3700 上看到的两段（第二项写全，超过 24 个字）：短清单一律气泡，不按「有一项超过 24 个字」成卡。
+    const sessions = "你可以在天枢里看一眼这两个会话：\n\n- **写并运行 hello.py**（在「随手」里）\n- **清点项目 .md 文件**（在「新版天枢应用」里，就是刚才新开的那一个）";
+    expect(splitReply(sessions).segments).toEqual([{ kind: "bubble", markdown: sessions }]);
+    const why = "- **为什么挂这件**：你没指定挂哪件 Task，我挂在你最近在做的那件上。\n- **交给拆卡的内容**：需求原文和完成标准一起交过去。";
+    expect(splitReply(why).segments).toEqual([{ kind: "bubble", markdown: why }]);
+    for (const reply of [sessions, why]) expectNoBubbleTurnsCard(reply);
+  });
+  it("清单超过 5 项、有嵌套或整张很长才成卡", () => {
+    const six = Array.from({ length: 6 }, (_, i) => `- **第${i + 1}项**`).join("\n");
+    expect(splitReply(six).segments).toEqual([{ kind: "card", markdown: six, title: "第1项", summary: "第2项" }]);
+    const nested = "- **甲**\n  - 甲的细节\n- **乙**";
+    expect(splitReply(nested).segments).toEqual([{ kind: "card", markdown: nested, title: "甲", summary: "甲的细节" }]);
+    // 整张很长：去掉清单记号后各项字数加起来超过 150。
+    const item = "这一项写得很长，用来把整张清单的字数撑过一百五十个字的那条线。";
+    const long = Array.from({ length: 5 }, () => `- ${item}`).join("\n");
+    expect([...item].length * 5).toBeGreaterThan(150);
+    expect(splitReply(long).segments).toMatchObject([{ kind: "card", title: item }]);
+    const justUnder = Array.from({ length: 5 }, () => `- ${"字".repeat(30)}`).join("\n");
+    expect(splitReply(justUnder).segments).toEqual([{ kind: "bubble", markdown: justUnder }]);
+  });
+  it("单独一行的加粗照旧当小标题", () => {
+    const six = Array.from({ length: 6 }, (_, i) => `- 第${i + 1}项`).join("\n");
+    expect(splitReply(`**要做的事**：\n\n${six}`).segments).toEqual([{ kind: "card", markdown: `**要做的事**：\n\n${six}`, title: "要做的事", summary: "第1项" }]);
+    // 小标题下面是加粗开头的短清单：整节一个气泡，清单项不另起小标题。
+    const short = "**要做的事**\n\n- **改首页**：把等你那一栏换成新的样子，今天先做完\n- **补测试**：两段原文都要覆盖";
+    expect(splitReply(short).segments).toEqual([{ kind: "bubble", markdown: short }]);
   });
   it("空的回复", () => {
     expect(splitReply("")).toEqual({ segments: [], tail: null });
