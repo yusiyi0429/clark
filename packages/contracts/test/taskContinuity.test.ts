@@ -24,16 +24,25 @@ describe("跨月延续与月份页契约", () => {
   });
 
   it("月份页：每件 Task 的摘要、了结、延续自哪；草稿先是 null；不再带复盘答案", () => {
-    const task = { taskId: "T-11", missionId: "M-11", missionTitle: "内部版上线", name: "上线 V1", agreement: { met: 1, total: 3 }, version: 2, running: 1, blocked: 0,
-      done: false, settlement: continued, continuedFrom: null };
+    // 本月页（迁移 290–293）：约定 met/total 换成逐条的完成标准，另有 Mission 成果、改动、添的、验收时间点和「原」、去向。
+    const task = { taskId: "T-11", missionId: "M-11", missionTitle: "内部版上线", missionOutcome: "内部版能用", name: "上线 V1",
+      criteria: [{ text: "有题库打分", met: true, changed: false, original: null }, { text: "有录屏", met: false, changed: true, original: "有截图" },
+        { text: "有复盘", met: false, changed: false, original: null }],
+      edited: { name: null, criteria: ["有题库打分", "有录屏", "有复盘"] }, added: false, dueDate: "2026-11-25", missionDueDate: "2026-11-18",
+      disposition: "current", deferredTo: null, version: 2, running: 1, blocked: 0, done: false, settlement: continued, continuedFrom: null };
     expect(Value.Check(MonthPageResponse, { period: "2026-11", tasks: [task], draft: null })).toBe(true);
-    expect(Value.Check(MonthPageResponse, { period: "2026-11", tasks: [{ ...task, agreement: null, version: null, settlement: null,
-      continuedFrom: { ...to, period: null } }],
+    expect(Value.Check(MonthPageResponse, { period: "2026-11", tasks: [{ ...task, missionOutcome: null, edited: null, dueDate: null, missionDueDate: null,
+      disposition: "deferred", deferredTo: "2026-12", version: null, settlement: null, continuedFrom: { ...to, period: null } }],
     draft: { period: "2026-12", missions: [{ id: "m", title: "12 月的 Mission", tasks: [{ id: "d", name: "接着做",
       continuesFrom: { taskId: "T-11", name: "上线 V1", period: "2026-11", summary: "约定 1/3 · 交付第 2 版" } }] }] } })).toBe(true);
     expect(Value.Check(MonthPageResponse, { period: "11 月", tasks: [], draft: null })).toBe(false);
     expect(Value.Check(MonthPageResponse, { period: "2026-11", tasks: [{ ...task, agreement: { met: 0, total: 0 } }], draft: null })).toBe(false);
     expect(Value.Check(MonthPageResponse, { period: "2026-11", tasks: [{ ...task, answer: null }], draft: null })).toBe(false);
+    // 本月页新加的字段缺哪个都不行。
+    for (const key of ["missionOutcome", "criteria", "edited", "added", "dueDate", "missionDueDate", "disposition", "deferredTo"] as const) {
+      const { [key]: _dropped, ...without } = task;
+      expect(Value.Check(MonthPageResponse, { period: "2026-11", tasks: [without], draft: null }), key).toBe(false);
+    }
   });
 
   it("约定带 draftFrom（延续来的草稿）", () => {
