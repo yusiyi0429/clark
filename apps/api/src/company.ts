@@ -5,6 +5,7 @@ import { worldConfigured, type WorldEnv, type WorldHead } from './worldClient.js
 import { logEvent } from './observability.js';
 import { companyPeriod } from './monthlyPlans.js';
 import { createCompanyWorldReader, type CompanyWorldObject, type WorldBlock, type WorldComponent } from './companyWorld.js';
+import { cutText } from './textCut.js';
 
 export type CompanyViewer = { personId: string; role: 'ceo' | 'member' };
 /** ref 是本体对象的 `<object_id>@<version>`（与 worldRef 同一写法），type 是对象类型；答案要带出处时原样引用。 */
@@ -23,7 +24,7 @@ function businessValues(attributes: Record<string, unknown> = {}): string[] {
 function componentText(component: WorldComponent): string {
   return [component.text ?? '', ...businessValues(component.attributes)].filter(Boolean).join('；');
 }
-const clip = (text: string, max: number) => (text.length > max ? `${text.slice(0, max)}…` : text);
+const clip = (text: string, max: number) => (text.length > max ? cutText(text, max) : text);
 const STATE_TEXT_MAX = 400;
 const STATE_LINES_MAX = 12;
 /**

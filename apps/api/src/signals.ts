@@ -62,7 +62,7 @@ function sourceImages(value: unknown): SourceImage[] {
 /** 核心观点是 Signal 的卡片标题；UI 统一限制 30 个字符，避免长研判吞掉阅读首屏。 */
 export function shortSignalTitle(summary: string): string {
   const chars = Array.from(summary);
-  return chars.length > 30 ? `${chars.slice(0, 29).join("")}…` : summary;
+  return chars.length > 30 ? chars.slice(0, 30).join("") : summary;
 }
 
 const FULL_TEXT_OUTLETS = new Set(RADAR_OUTLETS.filter((outlet) => outlet.fullText).map((outlet) => outlet.outletId));

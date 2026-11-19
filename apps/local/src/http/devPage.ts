@@ -16,7 +16,7 @@ button{margin:2px 4px 2px 0}input,textarea,select{font:inherit}textarea{width:10
 </style></head><body>
 <h2>天枢本机程序 · 测试页</h2>
 <fieldset><legend>1 连接</legend>
-<span id="health">…</span> <button id="pair">配对</button> <span id="pairInfo"></span> <button id="unpair">取消配对</button>
+<span id="health"></span> <button id="pair">配对</button> <span id="pairInfo"></span> <button id="unpair">取消配对</button>
 <div id="agent"></div><button id="login">登录 Claude</button></fieldset>
 <fieldset><legend>2 文件夹与模型</legend>
 <button id="pick">添加文件夹（本机弹框）</button> <select id="folders"></select> <select id="models"></select></fieldset>

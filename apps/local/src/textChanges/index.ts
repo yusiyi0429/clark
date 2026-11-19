@@ -6,7 +6,7 @@ import { decodeText, encodeText } from "./encoding.js";
 import { trimTables } from "./trim.js";
 
 export { diffText, restoreText, TEXT_DIFF_LIMITS, type TextChange, type TextSpan } from "./diff.js";
-export { TRIM_LIMITS, ELLIPSIS_LINE } from "./trim.js";
+export { TRIM_LIMITS, foldedLine } from "./trim.js";
 
 export const FILE_CHANGE_LIMITS = {
   /** 文本文件超过这么多字节（任一边）只说改过，不给明细；转出来的文字也按这个算。 */

@@ -1,3 +1,5 @@
+import { cutText } from "./textCut.js";
+
 /**
  * 子会话停了的报告（契约 LocalStopReport，新首页设计 18.10）用到的一两句话：都从会话里现成的内容截，不另调模型。
  */
@@ -30,7 +32,7 @@ export function firstSentences(text: string | null | undefined): string | null {
   let out = "";
   for (const s of sentences.slice(0, 2)) out += out && !END.test(out) ? ` ${s}` : s;
   out = out.replace(/[；;]$/, "。");
-  return out.length > MAX ? `${out.slice(0, MAX - 1)}…` : out;
+  return cutText(out, MAX);
 }
 
 /** 执行方一轮出错停住时，没有现成的话可截，按出错的种类写一句。 */

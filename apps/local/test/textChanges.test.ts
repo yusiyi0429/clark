@@ -1,7 +1,8 @@
 // 比两份内容、切出一处一处的改动，能把其中几处恢复回去（设计第 72 条）。
 import { afterEach, describe, expect, it } from "vitest";
-import { ELLIPSIS_LINE, FILE_CHANGE_LIMITS, compareFiles, diffText, restoreFile, restoreText, type TextChange } from "../src/textChanges/index.js";
+import { FILE_CHANGE_LIMITS, compareFiles, diffText, restoreFile, restoreText, type TextChange } from "../src/textChanges/index.js";
 import { makeDocx, makeXlsx, noteParts, p } from "./docTextFiles.js";
+import { trimTables } from "../src/textChanges/trim.js";
 
 /** 每一处：改前那几个字 → 改后那几个字。 */
 const pieces = (a: string, b: string, cs: TextChange[]) => cs.map((c) => [a.slice(c.before.start, c.before.end), b.slice(c.after.start, c.after.end)]);
@@ -224,7 +225,7 @@ describe("Word、Excel：转文字再比（converted，只给看）", () => {
     const r = compareFiles("xlsx", makeXlsx([{ name: "表", data: sheet(base) }]), makeXlsx([{ name: "表", data: sheet(edited) }]));
     if (r.detail === "none") throw new Error("应该能比");
     const expected = (v: string) =>
-      ["## 表", "", "|  | A | B |", "| --- | --- | --- |", ELLIPSIS_LINE, "| 148 | 项目148 | 1480 |", "| 149 | 项目149 | 1490 |", `| 150 | 项目150 | ${v} |`, "| 151 | 项目151 | 1510 |", "| 152 | 项目152 | 1520 |", ELLIPSIS_LINE, ""].join("\n");
+      ["## 表", "", "|  | A | B |", "| --- | --- | --- |", "| 中间 147 行没改 |", "| 148 | 项目148 | 1480 |", "| 149 | 项目149 | 1490 |", `| 150 | 项目150 | ${v} |`, "| 151 | 项目151 | 1510 |", "| 152 | 项目152 | 1520 |", "| 中间 148 行没改 |", ""].join("\n");
     expect(r.before).toBe(expected("1500"));
     expect(r.after).toBe(expected("7"));
     expect(pieces(r.before!, r.after!, r.changes)).toEqual([["1500", "7"]]);
@@ -236,8 +237,11 @@ describe("Word、Excel：转文字再比（converted，只给看）", () => {
     const r = compareFiles("xlsx", makeXlsx([{ name: "表", data: sheet(base) }]), makeXlsx([{ name: "表", data: sheet(edited) }]));
     if (r.detail === "none") throw new Error("应该能比");
     const lines = (s: string) => s.split("\n");
-    expect(lines(r.before!).filter((l) => l === ELLIPSIS_LINE)).toHaveLength(1);
-    expect(lines(r.after!).filter((l) => l === ELLIPSIS_LINE)).toHaveLength(1);
+    const folds = (s: string) => lines(s).filter((l) => /^\| 中间 \d+ 行没改 \|$/.test(l));
+    expect(folds(r.before!)).toHaveLength(1);
+    expect(folds(r.after!)).toHaveLength(1);
+    // 改前、改后折起来的那一行完全一样（折掉的行数也一样）。
+    expect(folds(r.before!)).toEqual(folds(r.after!));
     expect(pieces(r.before!, r.after!, r.changes)).toEqual([["", "| 1 | 表头说明 | 0 |\n"], ["| 120 | 项目120 | 1200 |\n", ""]]);
     expect(r.before!.length).toBeLessThan(400);
   });
@@ -248,8 +252,8 @@ describe("Word、Excel：转文字再比（converted，只给看）", () => {
     const r = compareFiles("xlsx", makeXlsx([{ name: "表", data: sheet(base) }]), makeXlsx([{ name: "表", data: sheet(edited) }]));
     if (r.detail === "none") throw new Error("应该能比");
     expect(pieces(r.before!, r.after!, r.changes)).toEqual([["", "| 61 | 新项目 | 5 |\n"]]);
-    expect(r.before!.split("\n").slice(4)).toEqual([ELLIPSIS_LINE, "| 59 | 项目59 | 590 |", "| 60 | 项目60 | 600 |", "| 61 | 项目61 | 610 |", "| 62 | 项目62 | 620 |", ELLIPSIS_LINE, ""]);
-    expect(r.after!.split("\n").slice(4)).toEqual([ELLIPSIS_LINE, "| 59 | 项目59 | 590 |", "| 60 | 项目60 | 600 |", "| 61 | 新项目 | 5 |", "| 62 | 项目61 | 610 |", "| 63 | 项目62 | 620 |", ELLIPSIS_LINE, ""]);
+    expect(r.before!.split("\n").slice(4)).toEqual(["| 中间 58 行没改 |", "| 59 | 项目59 | 590 |", "| 60 | 项目60 | 600 |", "| 61 | 项目61 | 610 |", "| 62 | 项目62 | 620 |", "| 中间 58 行没改 |", ""]);
+    expect(r.after!.split("\n").slice(4)).toEqual(["| 中间 58 行没改 |", "| 59 | 项目59 | 590 |", "| 60 | 项目60 | 600 |", "| 61 | 新项目 | 5 |", "| 62 | 项目61 | 610 |", "| 63 | 项目62 | 620 |", "| 中间 58 行没改 |", ""]);
   });
 
   it("Excel 大表带批注：改一格时批注也折掉；改一条批注，只留那条和上下各两行", () => {
@@ -263,8 +267,22 @@ describe("Word、Excel：转文字再比（converted，只给看）", () => {
     expect(pieces(cell.before!, cell.after!, cell.changes)).toEqual([["410", "7"]]);
     const note = compareFiles("xlsx", book(base), book(base, 9));
     if (note.detail === "none") throw new Error("应该能比");
-    expect(note.after!.split("\n### 批注\n\n")[1]).toBe([ELLIPSIS_LINE, "- B9：批注9", "  第二行", "- B10：改过的批注", "- B11：批注11", "  第二行", ELLIPSIS_LINE, ""].join("\n"));
+    // 批注不是表格：折起来的写「中间 N 条批注没改」，不带竖线，N 数批注条数；前面空一行，不被并进上一条批注。
+    expect(note.after!.split("\n### 批注\n\n")[1]).toBe(["中间 8 条批注没改", "- B9：批注9", "  第二行", "- B10：改过的批注", "- B11：批注11", "  第二行", "", "中间 9 条批注没改", ""].join("\n"));
+    expect(cell.after!.split("\n### 批注\n\n")[1]).toBe("中间 20 条批注没改\n");
     expect(pieces(note.before!, note.after!, note.changes)).toEqual([["批注10\n  第二行", "改过的批注"]]);
+  });
+
+  it("表格折起来的行写「中间 N 行没改」，N 是这一处实际折掉的行数", () => {
+    // 60 行数据，改第 10 行：上面折掉第 1–7 行，下面折掉第 13–60 行；表头不算、不折。
+    const table = (v: string) => ["|  | A |\n", "| --- | --- |\n", ...Array.from({ length: 60 }, (_, i) => `| ${i + 1} | ${i === 9 ? v : i + 1} |\n`)];
+    const starts = (lines: string[]) => new Set(lines.slice(2).map((_, i) => lines.slice(0, i + 2).join("").length));
+    const before = table("10"), after = table("改");
+    const r = trimTables(before.join(""), after.join(""), starts(before), starts(after));
+    const expected = (v: string) => ["|  | A |", "| --- | --- |", "| 中间 7 行没改 |", "| 8 | 8 |", "| 9 | 9 |", `| 10 | ${v} |`, "| 11 | 11 |", "| 12 | 12 |", "| 中间 48 行没改 |", ""].join("\n");
+    expect(r.before).toBe(expected("10"));
+    expect(r.after).toBe(expected("改"));
+    expect(r.before).not.toContain("…");
   });
 
   it("同样输入结果稳定", () => {

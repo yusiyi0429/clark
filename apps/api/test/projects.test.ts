@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { THomePlanTask } from "@warmap/contracts";
 import { describe, expect, it, vi } from "vitest";
 import type { HandoverInput, HandoverNoteAgent } from "../src/handoverNoteAgent.js";
+import { secretFindings } from "../src/projectTransfers.js";
 import { TEST_MEMBER } from "./helpers.js";
 import { BOARD_NOW, BOARD_TASKS, boardFixture, THIRD, type BoardFixture } from "./boardFixture.js";
 
@@ -32,6 +33,15 @@ const written = (f: BoardFixture, id: string) => vi.waitFor(async () => {
 const events = (payload: string) => payload.split("\n\n").flatMap((block) => {
   const line = block.split("\n").find((candidate) => candidate.startsWith("data:"));
   return line ? [JSON.parse(line.slice(5)) as Record<string, unknown>] : [];
+});
+
+describe("交接说明里像密钥的提示", () => {
+  it("Key 掩码用圆点，不出省略号，也不像完整的 Key", () => {
+    const [finding] = secretFindings([{ title: "怎么跑起来", lines: ["CHAT_TOKEN=sk-abcdefghijklmnopqrstuv"] }]);
+    expect(finding.sample).toBe("sk-abc••••");
+    expect(finding.sample).not.toMatch(/…|\.\.\./);
+    expect(finding.sample).not.toBe("sk-abcdefghijklmnopqrstuv".slice(0, finding.sample.length));
+  });
 });
 
 describe("项目", { timeout: 60_000 }, () => {
@@ -316,7 +326,7 @@ describe("项目", { timeout: 60_000 }, () => {
       await f.call("PATCH", url, { note: [{ title: "怎么跑起来", lines: ["CHAT_TOKEN 找人豪要", "CHAT_TOKEN=sk-abcdefghijklmnopqrstuv"] }] });
       const blocked = await f.call("POST", `${url}/send`);
       expect([blocked.statusCode, blocked.json()]).toEqual([422, { code: "SECRET_IN_NOTE", message: expect.any(String),
-        findings: [{ section: "怎么跑起来", line: 2, sample: "sk-abc…" }] }]);
+        findings: [{ section: "怎么跑起来", line: 2, sample: "sk-abc••••" }] }]);
       await f.call("PATCH", url, { note: [{ title: "怎么跑起来", lines: ["CHAT_TOKEN 找人豪要"] }] });
       expect((await f.call("POST", `${url}/send`)).json()).toMatchObject({ status: "sent", decidedAt: NOW });
       expect((await f.call("PATCH", url, { includeHistory: true })).statusCode).toBe(409);

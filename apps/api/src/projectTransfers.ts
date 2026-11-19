@@ -121,7 +121,7 @@ const SECRET_PATTERNS: RegExp[] = [
 export function secretFindings(note: THandoverNote): THandoverSecretFinding[] {
   return note.flatMap((section) => section.lines.flatMap((text, index) => {
     const match = SECRET_PATTERNS.map((pattern) => pattern.exec(text)?.[0]).find(Boolean);
-    return match ? [{ section: section.title, line: index + 1, sample: `${match.slice(0, 6)}…` }] : [];
+    return match ? [{ section: section.title, line: index + 1, sample: `${match.slice(0, 6)}••••` }] : [];
   }));
 }
 export class SecretsInNote extends Error { constructor(readonly findings: THandoverSecretFinding[]) { super("交接说明里有像密钥的内容，改掉再发"); } }

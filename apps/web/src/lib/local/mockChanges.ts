@@ -37,7 +37,7 @@ const SHEET = [
   `| --- | ${MONTHS.map(() => "---").join(" | ")} | --- |`,
   `| 收入 | ${MONTHS.map((_, i) => 120 + i * 5).join(" | ")} | =SUM(B2:M2) |`,
   `| 成本 | ${MONTHS.map((_, i) => 80 + i * 3).join(" | ")} | =SUM(B3:M3) |`,
-  "| … | | | | | | | | | | | | | |",
+  "| 中间 5 行没改 | | | | | | | | | | | | | |",
   `| 毛利 | ${MONTHS.map((_, i) => `=${String.fromCharCode(66 + i)}2-${String.fromCharCode(66 + i)}3`).join(" | ")} | =SUM(B9:M9) |`,
   "",
   "## 说明", "", "数字单位：万元。", "",

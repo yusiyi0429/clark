@@ -7,6 +7,7 @@ import { Value } from "@sinclair/typebox/value";
 import { LocalSyncItem } from "@warmap/contracts";
 import { firstSentences } from "../src/stopReport.js";
 import { registerFormats } from "../src/store.js";
+import { cutText } from "../src/textCut.js";
 import { api, pair, raw, startTestRunner, tempDir } from "./helpers.js";
 
 registerFormats();
@@ -114,5 +115,15 @@ describe("停了、要人介入都报给云端", { timeout: 30_000 }, () => {
     const s = (await call("POST", "/v1/sessions", c)).body;
     const [stop] = await until(() => (stops(s.id).length ? stops(s.id) : null));
     expect(stop.data).toEqual({ why: "error", summary: null, blocker: "Not logged in · Please run /login", outputs: [] });
+  });
+});
+
+describe("上屏文字的截断", () => {
+  it("截断不会留下半个 emoji", () => {
+    // 第 200 个 UTF-16 单元正好是 😀 的前一半：网页上会画成 �。
+    expect(firstSentences(`${"字".repeat(199)}😀尾`)).toBe("字".repeat(199));
+    expect(cutText(`${"字".repeat(5)}😀尾`, 6)).toBe("字".repeat(5));
+    expect(cutText("ab😀", 4)).toBe("ab😀");
+    expect(cutText("短", 6)).toBe("短");
   });
 });
