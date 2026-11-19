@@ -167,6 +167,8 @@ label.row:hover { background: var(--default-soft); }
 /* Mission 末尾「+ 添一件」：和 Task 名的字对齐。 */
 .monthAddTask { padding: 2px var(--space-2) 0 calc(var(--space-2) * 2 + 16px); }
 .monthDue { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-width: 0; }
+/* 小日期选择（ProjectInfo 那个）默认占满一行：这里跟在「验收」后面，按字宽。 */
+.monthDue > div { width: auto; }
 /* 最下面「延期和取消」：一件一行，名字和去向下拉，名字和上面 Task 名的字对齐。 */
 .monthAside { display: flex; align-items: center; gap: var(--space-2); min-height: var(--row-48); padding: 6px var(--space-2) 6px calc(var(--space-2) * 2 + 16px); }
 .monthAsideName { flex: 1; min-width: 0; color: var(--ink); white-space: normal; overflow-wrap: anywhere; }
