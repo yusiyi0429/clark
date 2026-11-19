@@ -41,6 +41,21 @@ describe("本月页就地改", () => {
     expect(await open()).toMatchObject({ dueDate: "2026-11-18", missionDueDate: "2026-11-18" });
   }, 120_000);
 
+  it("项目页和本月页的验收时间点同一个口径：Mission 没节点又没存日子，两页都不写；存了日子两页一样", async () => {
+    const g = f = await fixture();
+    await g.t.sql(`UPDATE missions SET milestones='[]' WHERE id='mine'`);
+    const project = (await g.call("POST", "/api/me/projects", { name: "对话质量", taskId: "task-open" })).json().projectId as string;
+    const both = async () => {
+      const month = (await g.call("GET", "/api/me/months/2026-11")).json().tasks.find((task: { taskId: string }) => task.taskId === "task-open");
+      const goal = ((await g.call("GET", "/api/me/work-home")).json().projects as { projectId: string; goals: { taskId: string; dueDate: string | null }[] }[])
+        .find((entry) => entry.projectId === project)!.goals.find((entry) => entry.taskId === "task-open")!;
+      return [month.dueDate, goal.dueDate];
+    };
+    expect(await both()).toEqual([null, null]);
+    expect((await g.call("PUT", "/api/me/tasks/task-open/due-date", { dueDate: "2026-11-25" })).statusCode).toBe(200);
+    expect(await both()).toEqual(["2026-11-25", "2026-11-25"]);
+  }, 120_000);
+
   it("月中能定去向，定了延期的挪到延期和取消", async () => {
     const g = f = await fixture();
     const put = (body: unknown) => g.call("PUT", "/api/me/months/2026-11/review/tasks/task-open/disposition", body);

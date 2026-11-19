@@ -7,8 +7,8 @@ import { LOCATE_BUDGET_MS, taskBasis } from "./planTaskAccess.js";
 import { readPlanTasks, type PlanTask, type PlanTaskMission, type PlanTaskSource } from "./planTasks.js";
 import { continuedFrom, settlementsOf } from "./taskContinuity.js";
 import { deliverableStatuses } from "./taskDeliverables.js";
-import { plannedDueDates, taskDueDates } from "./taskDueDates.js";
-import type { EditedPlanTask } from "./taskGoalEdits.js";
+import { dueDatesOf } from "./taskDueDates.js";
+import type { EditedPlanTask, TaskGoalEdit } from "./taskGoalEdits.js";
 import { ACTIVE } from "./workers.js";
 
 /**
@@ -83,30 +83,45 @@ async function dispositions(q: Query, period: string, taskIds: string[]): Promis
   return new Map(rows.map((row) => [row.task_id, { disposition: row.disposition, deferredTo: row.deferred_to }]));
 }
 
+/**
+ * 改过的标准：改的那条「原」是它从本体哪条来的那条原文（按来处对，不按序号；新加的没有「原」，原文还在的也不写）；
+ * 删掉的本体标准（没有哪条从它来、原文也不在了）留在原位置，removed，不算达到、不算条数。达到按改后的序号。
+ */
+function editedCriteria(criteria: string[], edit: TaskGoalEdit, met: Set<number>): TMonthTask["criteria"] {
+  const world = edit.worldCriteria;
+  const gone = world.flatMap((text, index) => (criteria.includes(text) || edit.criteriaFrom.includes(index) ? [] : [index]));
+  const rows: TMonthTask["criteria"] = [];
+  const flush = (before: number) => { while (gone.length && gone[0]! < before) rows.push({ text: world[gone.shift()!]!, met: false, changed: false, original: null, removed: true }); };
+  criteria.forEach((text, index) => {
+    const from = edit.criteriaFrom[index] ?? null;
+    if (from !== null) flush(from);
+    const changed = !world.includes(text);
+    const source = from === null ? undefined : world[from];
+    rows.push({ text, met: met.has(index + 1), changed, original: changed && source !== undefined && !criteria.includes(source) ? source : null, removed: false });
+  });
+  flush(Infinity);
+  return rows;
+}
+
 /** GET /api/me/months/:period。 */
 export async function readMonthPage(q: Query, planTasks: PlanTaskSource, personId: string, period: string, now: Date): Promise<TMonthPageResponse> {
   const { tasks, missions } = await monthTasks(q, planTasks, personId, period);
   const ids = tasks.map((task) => task.taskId);
-  const [settlements, sources, deliverables, cards, running, stored, chosen] = await Promise.all([settlementsOf(q, ids), continuedFrom(q, ids),
-    deliverableStatuses(q, ids), tallyCards(q, personId, ids), runningSubSessions(q, personId, ids), taskDueDates(q, ids), dispositions(q, period, ids)]);
-  const planned = await plannedDueDates(q, tasks, now);
+  const [settlements, sources, deliverables, cards, running, dues, chosen] = await Promise.all([settlementsOf(q, ids), continuedFrom(q, ids),
+    deliverableStatuses(q, ids), tallyCards(q, personId, ids), runningSubSessions(q, personId, ids), dueDatesOf(q, tasks, now), dispositions(q, period, ids)]);
   const rows: TMonthTask[] = tasks.map((task) => {
     const met = cards.met.get(task.taskId) ?? new Set<number>();
     const { edit, added } = task as EditedPlanTask;
     const criteria = taskBasis(task).criteria;
     const settlement = settlements.get(task.taskId) ?? null;
     const mission = missions.get(task.missionId);
-    const missionDueDate = planned.get(task.taskId) ?? null;
+    const due = dues.get(task.taskId);
     return { taskId: task.taskId, missionId: task.missionId, missionTitle: mission?.title ?? "", missionOutcome: mission?.outcome?.trim() || null, name: task.name,
-      criteria: criteria.map((text, index) => {
-        if (!edit?.criteria) return { text, met: met.has(index + 1), changed: false, original: null };
-        const replaced = edit.worldCriteria[index];
-        return { text, met: met.has(index + 1), changed: !edit.worldCriteria.includes(text),
-          original: !edit.worldCriteria.includes(text) && replaced !== undefined && !criteria.includes(replaced) ? replaced : null };
-      }),
+      criteria: edit?.criteria ? editedCriteria(criteria, edit, met)
+        : criteria.map((text, index) => ({ text, met: met.has(index + 1), changed: false, original: null, removed: false })),
       edited: edit ? { name: edit.name ? edit.worldName : null, criteria: edit.criteria ? edit.worldCriteria : null } : null,
       added: added === true,
-      dueDate: stored.get(task.taskId) ?? missionDueDate, missionDueDate,
+      dueDate: due?.dueDate ?? null, missionDueDate: due?.planned ?? null,
       ...chosen.get(task.taskId) ?? defaultDisposition(settlement ?? undefined, period),
       version: deliverables.get(task.taskId)?.version ?? null, running: running.get(task.taskId) ?? 0, blocked: cards.blocked.get(task.taskId) ?? 0,
       done: settlement?.kind === "completed", settlement, continuedFrom: sources.get(task.taskId) ?? null };

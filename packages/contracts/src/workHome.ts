@@ -155,7 +155,7 @@ const Period = Type.String({ pattern: "^\\d{4}-(0[1-9]|1[0-2])$" });
  * dueDate 是验收截止日（YYYY-MM-DD），按这个先后取：
  *   1. 本体 Task 自己的截止日（本体 0.3 的 Task 还没有这个字段，现在跳过）；
  *   2. 天枢里给这件目标存的截止日（本人或伙伴改，PUT /api/me/projects/:projectId/goals/:taskId/due-date）；
- *   3. 都没有，取记下的原验收时间点（第一次读到时所在 Mission 最近的那个节点，之后不往后滚）；没记下时取它所在月份的最后一天。
+ *   3. 都没有，取记下的原验收时间点（第一次读到时所在 Mission 最近的那个节点，之后不往后滚）；Mission 没节点又没存的为 null（和本月页同一个口径）。
  *   dueDateSource 说是哪一种：set 天枢里存的，mission 退回记下的原验收时间点（以后本体有了再加 task）。
  * criteriaMet / criteriaTotal：标准几条达到（每条至少一张对它的卡、最近一次有结论的交回算通过）/ 一共几条（本体没写标准时是完成定义那一条，都没有为 0）。
  * criteria 是标准原文（目标条点开逐条看）；completedAt 是本人确认完成的时间。
@@ -167,7 +167,7 @@ export const HomeProjectGoal = Type.Object({
   missionId: Type.String({ minLength: 1 }),
   name: Type.String(),
   period: Period,
-  dueDate: Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" }),
+  dueDate: Nullable(Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" })),
   dueDateSource: Type.Union([Type.Literal("set"), Type.Literal("mission")]),
   criteria: Type.Array(Type.String()),
   criteriaMet: Type.Integer({ minimum: 0 }),

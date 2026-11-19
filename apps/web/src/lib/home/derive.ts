@@ -232,7 +232,7 @@ export function gateLabel(plan: Pick<THomePlanResponse, "gates" | "today"> | nul
  * 一件 Task 的验收截止日（YYYY-MM-DD）：挂在项目上的照那条目标的 dueDate（B 契约 f3525766：天枢里存的，没存退回记下的原验收时间点）；
  * 没挂在项目上的为 null，调用方退回 Mission 下一个验收时间点。
  */
-export function goalDueDate(projects: readonly { goals: readonly { taskId: string; dueDate: string }[] }[], taskId: string): string | null {
+export function goalDueDate(projects: readonly { goals: readonly { taskId: string; dueDate: string | null }[] }[], taskId: string): string | null {
   for (const project of projects) {
     const goal = project.goals.find((entry) => entry.taskId === taskId);
     if (goal) return goal.dueDate;
@@ -280,7 +280,7 @@ export function monthEnd(period: string): string {
 
 /** 项目的顺序（16.2）：有等你的在前，然后是有目标的、按最早的截止日，最后按最近动静从近到远。 */
 export function sortHomeProjects(projects: HomeProject[]): HomeProject[] {
-  const due = (project: HomeProject) => project.goals.map((goal) => goal.dueDate).sort()[0] ?? null;
+  const due = (project: HomeProject) => project.goals.flatMap((goal) => (goal.dueDate ? [goal.dueDate] : [])).sort()[0] ?? null;
   return [...projects].sort((a, b) => {
     if (!!a.summary.needsYou !== !!b.summary.needsYou) return a.summary.needsYou ? -1 : 1;
     const [x, y] = [due(a), due(b)];
@@ -343,7 +343,7 @@ export function deriveWorkHome({ plan, workers, boards, notices, proposals, merg
       goals: own.map((task) => {
         // 本体没写标准时是完成定义那一条（契约 criteriaTotal）。
         const criteria = task.criteria.length ? task.criteria : task.doneDefinition ? [task.doneDefinition] : [];
-        return { taskId: task.taskId, missionId: mission.missionId, name: task.name, period, dueDate: monthEnd(period), dueDateSource: "mission" as const, criteria, criteriaMet: 0, criteriaTotal: criteria.length, completedAt: completedAt(task), responsible: null };
+        return { taskId: task.taskId, missionId: mission.missionId, name: task.name, period, dueDate: task.dueDate ?? null, dueDateSource: "mission" as const, criteria, criteriaMet: 0, criteriaTotal: criteria.length, completedAt: completedAt(task), responsible: null };
       }),
       budget: null,
       lastActivityAt: latest ?? `${today}T00:00:00.000Z`,

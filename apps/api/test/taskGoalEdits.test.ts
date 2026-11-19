@@ -125,7 +125,8 @@ describe("本月页改名字和完成标准", () => {
     await g.t.sql("UPDATE tasks SET criterion_index=1,criterion_text='有题库打分结果' WHERE id=$1", [passed]);
     await g.t.sql(`INSERT INTO card_handbacks(id,task_id,owner_id,client_id,attempt,status,outcome,finished_at) VALUES($1,$2,$3,'h-1',1,'done','pass',now())`,
       [randomUUID(), passed, MEMBER]);
-    const ticks = async () => ((await g.month()).criteria as { met: boolean }[]).map((criterion) => criterion.met);
+    // 删掉的本体标准留在原位置（removed），不算在「n/m」里。
+    const ticks = async () => ((await g.month()).criteria as { met: boolean; removed: boolean }[]).filter((criterion) => !criterion.removed).map((criterion) => criterion.met);
     const project = async () => {
       const goal = ((await g.call("GET", "/api/me/work-home")).json().projects as { goals: { taskId: string; criteriaMet: number; criteriaTotal: number }[] }[])
         .flatMap((entry) => entry.goals).find((entry) => entry.taskId === "task-open")!;
@@ -145,6 +146,29 @@ describe("本月页改名字和完成标准", () => {
     await check(["有新人上手录屏", "有题库打分结果"], [false, true]);
     // 恢复成本体原文：卡回到第 1 条。
     await check(WORLD_CRITERIA, [true, false]);
+  }, 180_000);
+
+  it("「原」按原文对、不按序号：删一条再加一条、删第 1 条再改原第 2 条都配对；删掉的本体标准留在原位置，加回来就不算删", async () => {
+    const g = f = await fixture();
+    const [a, b, c] = ["有题库打分结果", "有新人上手录屏", "过 75 分"];
+    g.tasks[0]!.criteria = [a, b, c];
+    const shown = async () => ((await g.month()).criteria as { text: string; changed: boolean; original: string | null; removed: boolean }[])
+      .map(({ text, changed, original, removed }) => ({ text, changed, original, removed }));
+    const line = (text: string, changed = false, original: string | null = null, removed = false) => ({ text, changed, original, removed });
+
+    // 改第 1 条、加一条、删原第 2 条：新加的那条没有「原」；删掉的那条在原位置。
+    for (const criteria of [[`${a}（改）`, b, c], [`${a}（改）`, b, c, "对表结果发给本人"], [`${a}（改）`, c, "对表结果发给本人"]])
+      expect((await g.goal("task-open", { criteria })).statusCode).toBe(200);
+    expect(await shown()).toEqual([line(`${a}（改）`, true, a), line(b, false, null, true), line(c), line("对表结果发给本人", true)]);
+
+    // 恢复，再删第 1 条、改原第 2 条：「原」是原第 2 条，不是删掉的第 1 条。
+    expect((await g.goal("task-open", { criteria: [a, b, c] })).statusCode).toBe(200);
+    for (const criteria of [[b, c], [`${b}（改）`, c]]) expect((await g.goal("task-open", { criteria })).statusCode).toBe(200);
+    expect(await shown()).toEqual([line(a, false, null, true), line(`${b}（改）`, true, b), line(c)]);
+
+    // 删掉的那条「恢复」回来：放回原位置，不再算删。
+    expect((await g.goal("task-open", { criteria: [a, `${b}（改）`, c] })).statusCode).toBe(200);
+    expect(await shown()).toEqual([line(a), line(`${b}（改）`, true, b), line(c)]);
   }, 180_000);
 
   it("本体后来改成和本人改的一样，未进本体的标记自己消失", async () => {
@@ -191,7 +215,7 @@ describe("本月页改名字和完成标准", () => {
     let race: string | null = null;
     const q: Query = async (sql, params) => {
       const result = await pool.query(sql, params);
-      if (race && sql.startsWith("SELECT task_id,name,criteria FROM task_goal_edits")) { await pool.query(race); race = null; }
+      if (race && sql.startsWith("SELECT task_id,name,criteria,criteria_from FROM task_goal_edits")) { await pool.query(race); race = null; }
       return result;
     };
     const read = withTaskGoalEdits(q, async (missions) => g.tasks.filter((task) => missions.some((mission) => mission.id === task.missionId)));

@@ -22,8 +22,8 @@ const textOf = (node: ReactNode): string => Children.toArray(node).map((child) =
   ? textOf((child.props as { children?: ReactNode }).children) : String(child ?? "")).join("");
 
 const task: MonthTask = { taskId: "t1", missionId: "m1", missionTitle: "天枢 11 月", missionOutcome: null, name: "甲",
-  criteria: [{ text: "有题库打分结果", met: true, changed: false, original: null }, { text: "有新人上手录屏", met: false, changed: false, original: null },
-    { text: "过 75 分", met: false, changed: false, original: null }], edited: null, added: false,
+  criteria: [{ text: "有题库打分结果", met: true, changed: false, original: null, removed: false }, { text: "有新人上手录屏", met: false, changed: false, original: null, removed: false },
+    { text: "过 75 分", met: false, changed: false, original: null, removed: false }], edited: null, added: false,
   dueDate: "2026-11-18", missionDueDate: "2026-11-18", disposition: "current", deferredTo: null, version: null, running: 0, blocked: 0, done: false, settlement: null, continuedFrom: null };
 const go = vi.fn();
 const row = () => { hooks.position = 0; return MonthTaskRow({ task, period: "2026-11", go }) as ReactNode; };
@@ -62,8 +62,8 @@ describe("本月页一行", () => {
 
 describe("本月页就地改名字和完成标准", () => {
   const edited: MonthTask = { ...task, name: "甲（V2）",
-    criteria: [{ text: "有题库打分结果", met: true, changed: false, original: null }, { text: "有三个新人上手录屏", met: false, changed: true, original: "有新人上手录屏" },
-      { text: "过 80 分", met: false, changed: true, original: null }],
+    criteria: [{ text: "有题库打分结果", met: true, changed: false, original: null, removed: false }, { text: "有三个新人上手录屏", met: false, changed: true, original: "有新人上手录屏", removed: false },
+      { text: "过 80 分", met: false, changed: true, original: null, removed: false }],
     edited: { name: "甲", criteria: ["有题库打分结果", "有新人上手录屏", "过 75 分"] } };
   const actions = () => ({ setDueDate: vi.fn(async () => {}), setDisposition: vi.fn(async () => {}), setGoal: vi.fn(async () => {}), addTask: vi.fn(async () => {}) });
   const open = (item: MonthTask, acts: ReturnType<typeof actions>) => {

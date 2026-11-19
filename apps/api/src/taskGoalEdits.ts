@@ -18,9 +18,12 @@ export { assertOpenPeriod };
  * 还开着的拆卡草稿只记了序号，标准一变就置空，免得接受成卡时挂到别的标准上。
  */
 
-type EditRow = { task_id: string; name: string | null; criteria: string[] | null };
-/** 套上改动的 Task 带着这一样：本体里的原名字、原标准（按 taskBasis 算的那份），和哪一样改过。 */
-export type TaskGoalEdit = { worldName: string; worldCriteria: string[]; name: boolean; criteria: boolean };
+type EditRow = { task_id: string; name: string | null; criteria: string[] | null; criteria_from: (number | null)[] | null };
+/**
+ * 套上改动的 Task 带着这一样：本体里的原名字、原标准（按 taskBasis 算的那份），和哪一样改过；
+ * criteriaFrom 是改后的每条标准从本体第几条来的（0 起，新加的为 null），月份页按它写「原 〈原文〉」、把删掉的本体标准留在原位置。
+ */
+export type TaskGoalEdit = { worldName: string; worldCriteria: string[]; name: boolean; criteria: boolean; criteriaFrom: (number | null)[] };
 export type EditedPlanTask = PlanTask & { edit?: TaskGoalEdit; added?: boolean };
 type AddedRow = { task_id: string; mission_id: string; owner_id: string; name: string; criteria: string[] };
 
@@ -32,7 +35,7 @@ const same = (a: string[], b: string[]) => a.length === b.length && a.every((tex
 
 async function editsOf(q: Query, taskIds: string[]): Promise<Map<string, EditRow>> {
   if (!taskIds.length) return new Map();
-  const rows = (await q("SELECT task_id,name,criteria FROM task_goal_edits WHERE task_id=ANY($1::text[])", [taskIds])).rows as EditRow[];
+  const rows = (await q("SELECT task_id,name,criteria,criteria_from FROM task_goal_edits WHERE task_id=ANY($1::text[])", [taskIds])).rows as EditRow[];
   return new Map(rows.map((row) => [row.task_id, row]));
 }
 
@@ -47,8 +50,28 @@ function apply<T extends Omit<PlanTask, "missionId">>(task: T, edit: EditRow | u
   const realign = <V>(values: V[]) => criteria.map((text) => { const at = worldCriteria.indexOf(text); return at >= 0 ? values[at] ?? null : null; });
   const agreement = task.agreement && criteriaEdited
     ? { ...task.agreement, proofs: realign(task.agreement.proofs), acceptorIds: realign(task.agreement.acceptorIds) } : task.agreement;
+  const criteriaFrom = !criteriaEdited ? worldCriteria.map((_, index) => index)
+    : edit.criteria_from?.length === criteria.length ? edit.criteria_from
+    // 迁移 294 之前存的改动没记来处：和本体一字不差的是那一条，长度一样时按位置。
+    : criteria.map((text, index) => (worldCriteria.includes(text) ? worldCriteria.indexOf(text) : criteria.length === worldCriteria.length ? index : null));
   return { ...task, name: nameEdited ? edit.name! : task.name, criteria, ...(agreement ? { agreement } : {}),
-    edit: { worldName: task.name, worldCriteria, name: nameEdited, criteria: criteriaEdited } };
+    edit: { worldName: task.name, worldCriteria, name: nameEdited, criteria: criteriaEdited, criteriaFrom } };
+}
+
+/**
+ * 改后的每条标准从本体第几条来（null 是新加的）：和改之前那份比，前后一样的照旧，中间的按位置接上改之前那条的来处，多出来的是新加的；
+ * 和本体某条一字不差的就是那一条（删掉的加回来）。本月页一次只改一处（改一条、加一条、删一条），这样比就对得上。
+ */
+export function criteriaOrigins(before: string[], beforeFrom: (number | null)[], after: string[], world: string[]): (number | null)[] {
+  let head = 0;
+  while (head < before.length && head < after.length && before[head] === after[head]) head++;
+  let tail = 0;
+  while (tail < before.length - head && tail < after.length - head && before[before.length - 1 - tail] === after[after.length - 1 - tail]) tail++;
+  return after.map((text, index) => {
+    if (world.includes(text)) return world.indexOf(text);
+    if (index >= after.length - tail) return beforeFrom[before.length - (after.length - index)] ?? null;
+    return index < before.length - tail ? beforeFrom[index] ?? null : null;
+  });
 }
 
 /**
@@ -65,7 +88,8 @@ async function dropStale(q: Query, tasks: Omit<PlanTask, "missionId">[], edits: 
     if (!nameStale && !criteriaStale) continue;
     const read = [task.taskId, edit.name, edit.criteria && JSON.stringify(edit.criteria)];
     if ((nameStale || edit.name === null) && (criteriaStale || edit.criteria === null)) await q(`DELETE FROM task_goal_edits WHERE task_id=$1 AND ${unchanged}`, read);
-    else await q(`UPDATE task_goal_edits SET name=CASE WHEN $4 THEN NULL ELSE name END,criteria=CASE WHEN $5 THEN NULL ELSE criteria END WHERE task_id=$1 AND ${unchanged}`,
+    else await q(`UPDATE task_goal_edits SET name=CASE WHEN $4 THEN NULL ELSE name END,criteria=CASE WHEN $5 THEN NULL ELSE criteria END,
+      criteria_from=CASE WHEN $5 THEN NULL ELSE criteria_from END WHERE task_id=$1 AND ${unchanged}`,
       [...read, nameStale, criteriaStale]);
   }
 }
@@ -139,11 +163,13 @@ export async function setTaskGoal(q: Query, task: EditedPlanTask, body: { name?:
   if (criteria && !criteria.length) throw new CardError(400, "INVALID_INPUT", "至少留一条完成标准");
   const nextName = name === null || name === worldName ? null : name;
   const nextCriteria = criteria === null || same(criteria, worldCriteria) ? null : criteria;
+  const before = taskBasis(task).criteria;
+  const from = nextCriteria && criteriaOrigins(before, task.edit?.criteria ? task.edit.criteriaFrom : before.map((_, index) => index), nextCriteria, worldCriteria);
   if (nextName === null && nextCriteria === null) await q("DELETE FROM task_goal_edits WHERE task_id=$1", [task.taskId]);
-  else await q(`INSERT INTO task_goal_edits(task_id,name,criteria,world_name,world_criteria,edited_by,edited_at) VALUES($1,$2,$3::jsonb,$4,$5::jsonb,$6,$7)
-    ON CONFLICT (task_id) DO UPDATE SET name=EXCLUDED.name,criteria=EXCLUDED.criteria,world_name=EXCLUDED.world_name,world_criteria=EXCLUDED.world_criteria,
-      edited_by=EXCLUDED.edited_by,edited_at=EXCLUDED.edited_at`,
-  [task.taskId, nextName, nextCriteria && JSON.stringify(nextCriteria), worldName, JSON.stringify(worldCriteria), by, now]);
+  else await q(`INSERT INTO task_goal_edits(task_id,name,criteria,criteria_from,world_name,world_criteria,edited_by,edited_at) VALUES($1,$2,$3::jsonb,$4::jsonb,$5,$6::jsonb,$7,$8)
+    ON CONFLICT (task_id) DO UPDATE SET name=EXCLUDED.name,criteria=EXCLUDED.criteria,criteria_from=EXCLUDED.criteria_from,world_name=EXCLUDED.world_name,
+      world_criteria=EXCLUDED.world_criteria,edited_by=EXCLUDED.edited_by,edited_at=EXCLUDED.edited_at`,
+  [task.taskId, nextName, nextCriteria && JSON.stringify(nextCriteria), from && JSON.stringify(from), worldName, JSON.stringify(worldCriteria), by, now]);
   await realignCards(q, task.taskId, taskBasis(task).criteria, nextCriteria ?? worldCriteria);
   return { taskId: task.taskId, name: nextName ?? worldName, criteria: nextCriteria ?? worldCriteria };
 }

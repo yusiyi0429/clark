@@ -52,6 +52,8 @@ describe("新首页契约", () => {
     expect(Value.Check(WorkHomeResponse, { ...home, waiting: [{ ...home.waiting[0], open: { kind: "task", id: "T-1" } }] })).toBe(false);
     expect(Value.Check(WorkHomeResponse, { ...home, missions: [] })).toBe(false);
     expect(Value.Check(WorkHomeResponse, { ...home, projects: [{ ...project, goals: [{ ...goal, dueDate: "11 月底" }] }] })).toBe(false);
+    // Mission 没节点又没存日子：不写日子（和本月页同一个口径）。
+    expect(Value.Check(WorkHomeResponse, { ...home, projects: [{ ...project, goals: [{ ...goal, dueDate: null }] }] })).toBe(true);
     // 验收过但没合回的子会话等你合。
     const merge = { state: "needs_merge", commit: null, baseBranch: "main", reason: "dirty", message: "主文件夹有没提交的改动", at };
     expect(Value.Check(WorkHomeResponse, { ...home, other: { items: [], subSessions: [{ ...sub, state: "waiting", waiting: "merge", merge }] } })).toBe(true);

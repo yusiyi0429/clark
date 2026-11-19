@@ -109,8 +109,20 @@ export function assertOpenPeriod(period: string, now: Date): void {
   if (period < companyPeriod(now)) throw new CardError(409, "PERIOD_CLOSED", "这个月已经过去了，不能再改");
 }
 
-/** 验收时间点：本人改的（唯一一份）优先，没有用记下的「原」。 */
-export async function effectiveDueDates(q: Query, tasks: { taskId: string; missionId: string }[], now: Date): Promise<Map<string, string>> {
+/**
+ * 一件 Task 的验收时间点，本月页、项目页、首页计划同一个口径：本人改的（唯一一份，set）优先，没有用记下的「原」（planned）；
+ * Mission 没节点又没存日子的为 null（不退回月底）。
+ */
+export type TaskDue = { dueDate: string | null; planned: string | null; set: boolean };
+export async function dueDatesOf(q: Query, tasks: { taskId: string; missionId: string }[], now: Date): Promise<Map<string, TaskDue>> {
   const [stored, planned] = await Promise.all([taskDueDates(q, tasks.map((task) => task.taskId)), plannedDueDates(q, tasks, now)]);
-  return new Map([...planned, ...stored]);
+  return new Map(tasks.map((task) => {
+    const set = stored.get(task.taskId) ?? null;
+    return [task.taskId, { dueDate: set ?? planned.get(task.taskId) ?? null, planned: planned.get(task.taskId) ?? null, set: set !== null }];
+  }));
+}
+
+/** 只要有日子的那几件（首页计划）。 */
+export async function effectiveDueDates(q: Query, tasks: { taskId: string; missionId: string }[], now: Date): Promise<Map<string, string>> {
+  return new Map([...await dueDatesOf(q, tasks, now)].flatMap(([taskId, due]) => (due.dueDate ? [[taskId, due.dueDate] as const] : [])));
 }

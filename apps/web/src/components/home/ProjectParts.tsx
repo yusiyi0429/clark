@@ -41,7 +41,7 @@ function GoalLine({ goal, criteria: planned }: { goal: ProjectGoal; criteria: st
         <ChevronRight size={14} strokeWidth={1.8} aria-hidden className={h.chevron} data-open={open ? "" : undefined} />
         {goal.responsible ? <span title={goal.responsible.name} data-testid="goal-responsible"><PersonAvatar personId={goal.responsible.personId} className={h.itemAvatar}>{null}</PersonAvatar></span> : null}
         <span className={h.goalName}>{goal.name}</span>
-        <span className={`${h.goalMeta} ${h.num}`}>{goal.due} 验收</span>
+        {goal.due ? <span className={`${h.goalMeta} ${h.num}`}>{goal.due} 验收</span> : null}
         {criteria.length ? <span className={`${h.goalMeta} ${h.num}`}>{checked ? `标准 ${met}/${criteria.length}` : `标准 ${criteria.length} 条`}</span> : null}
       </button>
       {open ? (
