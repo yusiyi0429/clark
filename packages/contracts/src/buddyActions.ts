@@ -87,6 +87,9 @@ export const BuddyAskQuestion = Type.Object({
  *   同「+ 新会话」（POST /api/me/topics 带 free）：建自由会话、登记开工，本人电脑上开着的网页接下后就开始。项目对话里调 409 MAIN_ONLY；项目在交接 409 PROJECT_PAUSED。
  *   同一轮同一句交代重放只开一个。做成后出一张派活卡（ConversationCard 的 buddy_dispatch）。回 { dispatchId, projectId, projectName, kind: "topic", id, title }。不可撤。
  *   message_project 做成后也出一张派活卡（sub 为 null）。
+ * - tell_session（write，只在伙伴主线用，MAIN_ONLY_ACTIONS；本人 11/19）：对一个已有的卡或专题（kind、id 同 start_sub_session）说一句话（text），同 sub_session_tell：
+ *   它在跑就在下一步前送到，停着就续上。没开过工 409 NOT_STARTED（先 start_sub_session）；归档了、删进回收站、没有 404 NOT_FOUND；项目对话里调 409 MAIN_ONLY。
+ *   算一步自动接力（子会话在项目里时）。回 { kind, id, title, commandId }。不可撤。
  * - send_message（write）：给人员目录里的同事发一句话。先出一张卡（ConversationCard 的 buddy_message）给本人看，本人点「发出」才由天枢机器人转达；
  *   每人每天最多 20 条（回 429 DAILY_LIMIT）。不可撤（发出以后）。
  * - update_plan（plan）：计划清单，见 BuddyPlanParams。
@@ -160,6 +163,7 @@ export const BuddyActionParams = {
     title: Type.String({ minLength: 1, maxLength: 40 }),
     brief: Type.String({ minLength: 1, maxLength: 4000 }),
   }, strict),
+  tell_session: Type.Object({ ...SubSessionRef, text: Type.String({ minLength: 1, maxLength: 4000 }) }, strict),
   send_message: Type.Object({ toPersonIds: Type.Array(Type.String({ minLength: 1 }), { minItems: 1, maxItems: 5 }), text: Type.String({ minLength: 1, maxLength: 2000 }) }, strict),
   update_plan: Type.Object({
     /** 整张清单（每次都交全部，后一次取代前一次）。少于 2 条不出。 */
@@ -176,7 +180,7 @@ export const BuddyActionParams = {
   update_card: UpdateCardActionParams,
 } as const;
 /** 只在伙伴主线能用的动作。 */
-export const MAIN_ONLY_ACTIONS = ["open_session"] as const;
+export const MAIN_ONLY_ACTIONS = ["open_session", "tell_session"] as const;
 /** 只在项目对话里能用的动作（18 节第 10 条；update_card 是主循环第 60 条）。 */
 export const PROJECT_ONLY_ACTIONS = ["sub_session_tell", "sub_session_stop", "sub_session_rename", "sub_session_link", "sub_session_restart", "sub_session_answer", "sub_session_approve", "update_card"] as const;
 

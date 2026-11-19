@@ -578,3 +578,104 @@ describe("读历史：一轮的卡", { timeout: 120_000 }, () => {
     }
   });
 });
+
+describe("伙伴主线直接对会话说话（tell_session，本人 11/19）", { timeout: 60_000 }, () => {
+  /** 本机在一个会话里按序号往下报。 */
+  const machineFor = async (f: Fixture, topicId: string) => {
+    const machine = await f.local();
+    const session = randomUUID();
+    let seq = 0;
+    const status = async (value: string) => {
+      seq += 1;
+      const res = await f.t.app.inject({ method: "POST", url: "/api/local-runner/sync", headers: { authorization: `Bearer ${machine.token}` }, payload: {
+        deviceId: machine.device, runnerVersion: "0.1.0", slots: { max: 3, running: 1, queued: 0 }, items: [{ key: `${machine.device}:${session}:${seq}`, sessionId: session,
+          subject: { kind: "topic", topicId }, occurredAt: new Date(Date.UTC(2026, 10, 6, 1, 0, seq)).toISOString(), type: "status",
+          data: { status: value, title: "首页换深色", agent: "claude-code", modelLabel: "Opus 5.5" } }] } });
+      expect(res.json().rejected).toEqual([]);
+    };
+    return { device: machine.device, session, status };
+  };
+  const opened = async (f: Fixture, projectId: string) =>
+    (await f.act("open_session", { projectId, title: "首页换深色", brief: BRIEF }, { turn: turn() })).json().result.id as string;
+  const commands = (f: Fixture) => f.t.sql("SELECT command FROM session_commands");
+
+  it("伙伴主线 tell_session 给停着的会话排一条话", async () => {
+    const f = await fixture();
+    try {
+      await f.grant();
+      const projectId = await f.project("品牌建设");
+      const topic = await opened(f, projectId);
+      const machine = await machineFor(f, topic);
+      await machine.status("running");
+      await machine.status("idle");
+      expect(await f.listed(randomUUID())).toContain("tell_session");
+      const res = await f.act("tell_session", { kind: "topic", id: topic, text: "再试一次" }, { turn: turn() });
+      expect(res.statusCode, res.body).toBe(200);
+      const told = res.json();
+      expect(told.summary).toContain("「首页换深色」");
+      expect((await f.call("POST", "/api/me/session-commands/claim", { deviceId: machine.device })).json().commands).toEqual([{ id: told.result.commandId,
+        kind: "topic", subSessionId: topic, sessionId: machine.session, deviceId: machine.device, requestedAt: expect.any(String), command: { type: "message", text: "再试一次" } }]);
+      // 代本人转话算一步自动接力，同项目对话里的转话。
+      expect(await f.t.sql("SELECT auto_relay_count FROM projects WHERE id=$1", [projectId])).toEqual([{ auto_relay_count: 1 }]);
+
+      // 没有这个会话、会话归档了：404。
+      const missing = await f.act("tell_session", { kind: "topic", id: randomUUID(), text: "再试一次" }, { turn: turn() });
+      expect([missing.statusCode, missing.json().code]).toEqual([404, "NOT_FOUND"]);
+      await machine.status("exited");
+      expect((await f.call("PATCH", `/api/me/sub-sessions/topic/${topic}`, { archived: true })).statusCode).toBe(204);
+      const archived = await f.act("tell_session", { kind: "topic", id: topic, text: "再试一次" }, { turn: turn() });
+      expect([archived.statusCode, archived.json().code]).toEqual([404, "NOT_FOUND"]);
+      expect(await commands(f)).toHaveLength(1);
+    } finally { await f.close(); }
+  });
+
+  it("tell_session 在项目对话里不给", async () => {
+    const f = await fixture();
+    try {
+      await f.grant();
+      const projectId = await f.project("品牌建设");
+      const topic = await opened(f, projectId);
+      const machine = await machineFor(f, topic);
+      await machine.status("idle");
+      const conversationId = randomUUID();
+      await f.t.sql("INSERT INTO project_pipelines(project_id,owner_id,conversation_id) VALUES($1,$2,$3)", [projectId, TEST_MEMBER.personId, conversationId]);
+      expect(await f.listed(conversationId)).not.toContain("tell_session");
+      expect(await f.listed()).toContain("tell_session");
+      expect(PROJECT_MCP_ACTIONS).not.toContain("tell_session");
+      const res = await f.act("tell_session", { kind: "topic", id: topic, text: "再试一次" }, { turn: { runId: randomUUID(), conversationId } });
+      expect([res.statusCode, res.json().code]).toEqual([409, "MAIN_ONLY"]);
+      expect(await commands(f)).toEqual([]);
+    } finally { await f.close(); }
+  });
+
+  it("start_sub_session 遇到停着等话的会话，提示用 tell_session", async () => {
+    const f = await fixture();
+    try {
+      await f.grant();
+      const topic = await opened(f, await f.project("品牌建设"));
+      const machine = await machineFor(f, topic);
+      const start = async () => {
+        const res = await f.act("start_sub_session", { kind: "topic", id: topic }, { turn: turn() });
+        return [res.statusCode, res.json().message];
+      };
+      await machine.status("running");
+      expect(await start()).toEqual([409, "「首页换深色」已经在跑了"]);
+      await machine.status("idle");
+      expect(await start()).toEqual([409, "「首页换深色」停着等下一句，用 tell_session 对它说一句就能续上。"]);
+    } finally { await f.close(); }
+  });
+
+  it("tell_session 对没开过工的会话回 409", async () => {
+    const f = await fixture();
+    try {
+      await f.grant();
+      const projectId = await f.project("品牌建设");
+      const topic = await opened(f, projectId);
+      const res = await f.act("tell_session", { kind: "topic", id: topic, text: "再试一次" }, { turn: turn() });
+      expect([res.statusCode, res.json().code]).toEqual([409, "NOT_STARTED"]);
+      expect(res.json().message).toContain("start_sub_session");
+      expect(await commands(f)).toEqual([]);
+      expect(await f.t.sql("SELECT auto_relay_count FROM projects WHERE id=$1", [projectId])).toEqual([{ auto_relay_count: 0 }]);
+    } finally { await f.close(); }
+  });
+});

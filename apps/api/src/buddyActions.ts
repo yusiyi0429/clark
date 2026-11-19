@@ -14,7 +14,7 @@ import { UUID_PATTERN, type Query } from "./meetingStore.js";
 import { CLAIM_TTL, cancelStart, requestStarts } from "./sessionStarts.js";
 import { SESSION_COOKIE, createSessionToken } from "./session.js";
 import { ACTIVE } from "./workers.js";
-import { subByLetter } from "./subSessionLetters.js";
+import { subByLetter, subProject } from "./subSessionLetters.js";
 import { autoRelayStep } from "./autoRelay.js";
 import type { RunAsk } from "./localDevices.js";
 import { agreementRow, writeAgreement } from "./cardAgreements.js";
@@ -50,7 +50,7 @@ const KIND: Record<BuddyActionName, Kind> = {
   read_partner_inbox: "read", read_partner_item: "read",
   set_appearance: "write", set_feishu_push: "write", start_sub_session: "write", stop_sub_session: "write", archive_sub_session: "write",
   delete_sub_session: "write", create_project: "write", rename_project: "write", archive_project: "write", link_task_to_project: "write",
-  transfer_project: "write", split_cards: "write", set_budget: "write", set_task_due_date: "write", message_project: "write", open_session: "write", send_message: "write",
+  transfer_project: "write", split_cards: "write", set_budget: "write", set_task_due_date: "write", message_project: "write", open_session: "write", tell_session: "write", send_message: "write",
   sub_session_tell: "write", sub_session_stop: "write", sub_session_rename: "write", sub_session_link: "write", sub_session_restart: "write", sub_session_answer: "write", sub_session_approve: "write",
   update_card: "write",
 };
@@ -71,7 +71,8 @@ const DISPATCH_RULES = "先分清是哪一种："
   + "默认自己做。拿不准够不够大：先自己答个短版，末尾用一句话问要不要开会话做完整的；这句不用 ask_user。开会话这件事上，ask_user 只用来问放进哪个项目（对得上多个或一个都对不上时）。不为了保险先开会话。"
   + "项目级的放哪：按项目名、项目挂着的 Task 名、项目里已有的会话来对。只对得上一个项目就直接开，回话里说一声放在哪了；"
   + "对得上好几个，或者一个都对不上、又像是一条以后还会接着做的线，用 ask_user 问（放进哪个项目 / 新建一个项目）；"
-  + "一次性的、哪个项目都不沾的活，带 scratch 放进「随手」项目，不为它新建项目。";
+  + "一次性的、哪个项目都不沾的活，带 scratch 放进「随手」项目，不为它新建项目。"
+  + "已有的会话要接着做、重跑、改一点，用 tell_session；起新活照旧走 open_session / message_project。";
 const DESCRIPTION: Record<BuddyActionName, string> = {
   read_partner_inbox: "读本人伙伴的会议 meetings、同事来件 received、发件进度 sent 或关键工作事件 events。每页默认20条，nextOffset 可取下一页；按需打开原文。",
   read_partner_item: "以本人身份读会议正文 meeting、本人待整理的妙记 minute、团队请求及答复 delivery、请求附件文字 attachment。id 取自收件列表。会议有多个来源时可选 source（feishu 或 tianshu）；附件须带 attachmentId。没有内容或权限时如实说明。",
@@ -113,6 +114,8 @@ const DESCRIPTION: Record<BuddyActionName, string> = {
     + "伙伴主线里起新活只走两条路：用 open_session 放进项目（一次性的放「随手」），或用 message_project 交给项目对话去拆卡；主线里起新活不直接用 split_cards、start_sub_session。已经拆好的卡或专题要开工，照旧用 start_sub_session。"
     + DISPATCH_RULES + RUNNING_LIMIT
     + "回话里用同一个名字叫这个会话，说一声放在哪个项目。会话做完一轮主线里会自动出一行，不要许诺你自己会再来汇报。",
+  tell_session: "对一个已有的会话说一句话：本人让你转的，比如「再试一次」「把按钮改成蓝的」，或者你安排它接下来怎么做。会话停着就续上，在跑就在下一步前送到。kind 和 id 见 read_work_home。"
+    + "这句话如果改了做成什么样算完，转给项目对话（message_project）去改约定。",
   send_message: "给同事转达一句话（toPersonIds 是人员目录里的 id）。不会直接发：先出一张卡给本人看，本人点「发出」才由天枢机器人发，开头是「本人名字请我转达：」。",
   update_plan: "计划清单：要做两步以上的事时，先列出步骤（每次交整张清单，status 为 pending / in_progress / completed），做的过程中更新。少于两步不用列。最后一步做完、回答收尾前，把清单全部标好状态再交一次。",
   ask_user: "出一个选项框问本人。开工前要本人拍板、或者有几种做法可选时用它，不要把问题写成一段话让本人自己组织回答。"
@@ -369,7 +372,8 @@ const handlers: Handlers = {
     const sub = await ownSub(q, call.personId, args.kind, args.id);
     if (sub.trashed_at || sub.archived_at || (args.kind === "card" ? ["done", "returned"].includes(sub.status) : sub.status !== "active"))
       throw new BuddyError(409, "NOT_STARTABLE", `「${sub.title}」已经完成、归档或删掉了，不能开工`);
-    if (await activeRun(q, args.kind, args.id)) throw new BuddyError(409, "ALREADY_RUNNING", `「${sub.title}」已经在跑了`);
+    const run = await activeRun(q, args.kind, args.id);
+    if (run) throw new BuddyError(409, "ALREADY_RUNNING", run.state === "idle" ? `「${sub.title}」停着等下一句，用 tell_session 对它说一句就能续上。` : `「${sub.title}」已经在跑了`);
     const open = (await q(`SELECT 1 FROM session_starts WHERE ${column(args.kind)}=$1 AND closed_at IS NULL`, [args.id])).rowCount;
     if (open) return { summary: `「${sub.title}」已经登记过开工了，等电脑接下`, undo: null };
     await requestStarts(q, { ownerId: call.personId, origin: "buddy", now: deps.now(), items: [args.kind === "card"
@@ -593,6 +597,18 @@ const handlers: Handlers = {
     await relayStep(deps, sub.projectId);
     const commandId = await queueCommand(deps, call, sub, run, { type: "message", text: args.text });
     return { summary: `把话转给了${sub.label}${LATER}`, result: { letter: args.letter, kind: sub.kind, id: sub.id, title: sub.title, commandId }, ui: [subRefresh(sub.id)] };
+  },
+  tell_session: async (deps, call, args) => {
+    if ((await conversationScope(deps.q, call.personId, call.conversationId)).startsWith("project:"))
+      throw new BuddyError(409, "MAIN_ONLY", "这个动作只在伙伴主线用");
+    const row = await ownSub(deps.q, call.personId, args.kind, args.id);
+    if (row.trashed_at || row.archived_at || row.status === "archived") throw new BuddyError(404, "NOT_FOUND", "没有这个子会话");
+    const run = await lastRun(deps.q, args.kind, args.id);
+    if (!run) throw new BuddyError(409, "NOT_STARTED", `「${row.title}」还没开过工，先用 start_sub_session 开工`);
+    const projectId = await subProject(deps.q, args.kind, args.id);
+    if (projectId) await relayStep(deps, projectId);
+    const commandId = await queueCommand(deps, call, args, run, { type: "message", text: args.text });
+    return { summary: `把话转给了「${row.title}」${LATER}`, result: { kind: args.kind, id: args.id, title: row.title, commandId }, ui: [subRefresh(args.id)] };
   },
   sub_session_stop: async (deps, call, args) => {
     const sub = await lettered(deps, call, args.letter);
