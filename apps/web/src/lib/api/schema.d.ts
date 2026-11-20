@@ -6211,6 +6211,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/team-deliveries/{id}/recipients/{personId}/buddy/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 问的人让这位同事的伙伴再答一次（没答上来时；不另占当天名额，超上限 409） */
+        post: operations["retryTeamDeliveryBuddy"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/team-deliveries/{id}/recipients/{personId}/buddy/ask-owner": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 问的人不等伙伴了，转成普通征集进这位同事的等你（伙伴没答上来或超上限时） */
+        post: operations["askTeamDeliveryOwner"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/team-deliveries/{id}/attachments/{attachmentId}": {
         parameters: {
             query?: never;
@@ -23335,7 +23369,15 @@ export interface components {
                         sha256: string;
                         href: string;
                     }[];
+                    /** @constant */
+                    origin?: "buddy";
                 }[];
+                buddy?: {
+                    state: "answering" | "answered" | "handoff" | "failed" | "limited";
+                    note: string | null;
+                    /** Format: date-time */
+                    askedAt: string;
+                };
             }[];
         };
         TeamDeliveryAttachment: {
@@ -23345,6 +23387,12 @@ export interface components {
             size: number;
             sha256: string;
             href: string;
+        };
+        TeamDeliveryBuddy: {
+            state: "answering" | "answered" | "handoff" | "failed" | "limited";
+            note: string | null;
+            /** Format: date-time */
+            askedAt: string;
         };
         TeamDeliveryListQuery: {
             box: "received" | "sent";
@@ -23391,7 +23439,15 @@ export interface components {
                             sha256: string;
                             href: string;
                         }[];
+                        /** @constant */
+                        origin?: "buddy";
                     }[];
+                    buddy?: {
+                        state: "answering" | "answered" | "handoff" | "failed" | "limited";
+                        note: string | null;
+                        /** Format: date-time */
+                        askedAt: string;
+                    };
                 }[];
             }[];
         };
@@ -23415,7 +23471,15 @@ export interface components {
                     sha256: string;
                     href: string;
                 }[];
+                /** @constant */
+                origin?: "buddy";
             }[];
+            buddy?: {
+                state: "answering" | "answered" | "handoff" | "failed" | "limited";
+                note: string | null;
+                /** Format: date-time */
+                askedAt: string;
+            };
         };
         TeamDeliveryReply: {
             /** Format: uuid */
@@ -23432,6 +23496,8 @@ export interface components {
                 sha256: string;
                 href: string;
             }[];
+            /** @constant */
+            origin?: "buddy";
         };
         TeamDeliveryResponse: {
             delivery: {
@@ -23475,7 +23541,15 @@ export interface components {
                             sha256: string;
                             href: string;
                         }[];
+                        /** @constant */
+                        origin?: "buddy";
                     }[];
+                    buddy?: {
+                        state: "answering" | "answered" | "handoff" | "failed" | "limited";
+                        note: string | null;
+                        /** Format: date-time */
+                        askedAt: string;
+                    };
                 }[];
             };
         };
@@ -45354,6 +45428,124 @@ export interface operations {
             };
             /** @description 结果 */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    retryTeamDeliveryBuddy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                personId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamDeliveryResponse"];
+                };
+            };
+            /** @description 结果 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    askTeamDeliveryOwner: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                personId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamDeliveryResponse"];
+                };
+            };
+            /** @description 结果 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

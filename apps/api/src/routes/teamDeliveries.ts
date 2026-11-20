@@ -70,7 +70,7 @@ async function inputWithFiles<S extends TSchema>(req: FastifyRequest, schema: S)
 }
 
 export function registerTeamDeliveryRoutes(app: AppInstance, ctx: RouteContext): void {
-  const deps = () => ({ pool: ctx.pool, q: ctx.q, storageDir: ctx.materialStorageDir, now: ctx.now,
+  const deps = () => ({ pool: ctx.pool, q: ctx.q, storageDir: ctx.materialStorageDir, now: ctx.now, directory: ctx.peopleDirectory,
     people: new Map(ctx.peopleDirectory.searchPeople(undefined).filter(isRealPerson).map((p) => [p.personId, p.displayName])) });
   void app.register(async (server) => {
     const scoped = server.withTypeProvider<TypeBoxTypeProvider>();
@@ -97,6 +97,10 @@ export function registerTeamDeliveryRoutes(app: AppInstance, ctx: RouteContext):
     });
     scoped.post("/api/me/team-deliveries/:id/recipients/:personId/retry", { schema: { params: recipientId, response: { 200: TeamDeliveryResponse } } },
       async (req) => ({ delivery: await team.retryTeamRecipient(deps(), req.person!.personId, req.params.id, req.params.personId) }));
+    scoped.post("/api/me/team-deliveries/:id/recipients/:personId/buddy/retry", { schema: { params: recipientId, response: { 200: TeamDeliveryResponse } } },
+      async (req) => ({ delivery: await team.retryTeamBuddy(deps(), req.person!.personId, req.params.id, req.params.personId) }));
+    scoped.post("/api/me/team-deliveries/:id/recipients/:personId/buddy/ask-owner", { schema: { params: recipientId, response: { 200: TeamDeliveryResponse } } },
+      async (req) => ({ delivery: await team.askTeamOwner(deps(), req.person!.personId, req.params.id, req.params.personId) }));
     scoped.get("/api/me/team-deliveries/:id/attachments/:attachmentId", { schema: { params: fileId } }, async (req, reply) => {
       const found = await team.readTeamFile(deps(), req.person!.personId, req.params.id, req.params.attachmentId);
       if (!found) return ctx.fail(reply, 404, "NOT_FOUND", "这份文件不存在或不可读");

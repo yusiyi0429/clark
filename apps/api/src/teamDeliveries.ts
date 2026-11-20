@@ -6,14 +6,18 @@ import type { Pool } from "pg";
 import {
   ATTACHMENT_MAX_BYTES, ATTACHMENT_MAX_COUNT, attachmentKind, type TReplyTeamDeliveryRequest, type TSendTeamDeliveryRequest,
 } from "@warmap/contracts";
+import { colleagueAccess } from "./colleagueAccess.js";
+import { enqueueJob } from "./jobs.js";
 import { htmlToText } from "./meetingEvidence.js";
 import { MAX_MATERIAL_FILE_BYTES, MaterialParseError, runWorker } from "./materialParser.js";
 import type { Query } from "./meetingStore.js";
+import type { PeopleDirectory } from "./peopleDirectory.js";
 import { attachmentMimeType, listShareableSessionAttachments, readSessionAttachment } from "./sessionAttachments.js";
-import { readTeamDelivery } from "./teamDeliveryInbox.js";
+import { answeringLate, BUDDY_NOT_ANSWERED, readTeamDelivery } from "./teamDeliveryInbox.js";
 export { listPendingTeamRequests, listTeamDeliveries, readTeamDelivery } from "./teamDeliveryInbox.js";
 
-export type TeamDeliveryDeps = { q: Query; pool: Pool; storageDir: string; now: () => Date; people: ReadonlyMap<string, string> };
+/** people：人员目录里真人的名字；directory：整份人员目录（能不能问同事的伙伴由 colleagueAccess 按它判）。 */
+export type TeamDeliveryDeps = { q: Query; pool: Pool; storageDir: string; now: () => Date; people: ReadonlyMap<string, string>; directory: PeopleDirectory };
 type Upload = { filename: string; buffer: Buffer };
 type Source = { id: string; sha256: string };
 type FileInfo = { fileName: string; mimeType: string; size: number; sha256: string };
@@ -42,7 +46,7 @@ function sameOperation(saved: string, actual: string) {
   if (saved !== actual) throw new TeamDeliveryError(409, "IDEMPOTENCY_CONFLICT", "这次发送标识已用于不同内容，请使用新的发送标识");
 }
 
-async function transact<T>(pool: Pool, work: (q: Query, createdFiles: string[]) => Promise<T>): Promise<T> {
+export async function transact<T>(pool: Pool, work: (q: Query, createdFiles: string[]) => Promise<T>): Promise<T> {
   const client = await pool.connect();
   const createdFiles: string[] = [];
   let committing = false;
@@ -106,6 +110,46 @@ async function setRequestStatus(q: Query, id: string) {
     "updated_at=clock_timestamp() WHERE id=$1", [id]);
 }
 
+export const TEAM_BUDDY_ANSWER_JOB = "team.buddy-answer";
+/** 被问的人每天被代答最多几次；同一个问的人对同一个被问的人每天最多几次（A7，公司时区，发出时占名额，重试不另占）。 */
+export const BUDDY_DAILY_ANSWERS = 20;
+export const BUDDY_DAILY_PER_ASKER = 10;
+/** triggerId：追问那条回复的 id，首问为 null。 */
+export type BuddyAnswerTrigger = { requestId: string; recipientId: string; triggerId: string | null };
+export const buddyAnswerKey = (trigger: BuddyAnswerTrigger) =>
+  `${TEAM_BUDDY_ANSWER_JOB}:${trigger.requestId}:${trigger.recipientId}:${trigger.triggerId ?? "q"}`;
+
+async function startBuddy(q: Query, trigger: BuddyAnswerTrigger, dedupeKey: string, now: Date) {
+  await q("UPDATE request_recipients SET buddy_state='answering',buddy_note=NULL,buddy_asked_at=$3 WHERE request_id=$1 AND person_id=$2",
+    [trigger.requestId, trigger.recipientId, now]);
+  await enqueueJob(q, { kind: TEAM_BUDDY_ANSWER_JOB, dedupeKey, payload: trigger });
+}
+
+/**
+ * 在调用方的事务里：先问 colleagueAccess(ask)；不可以就什么都不做、回 false（这位收件人照没有伙伴的老路走）。
+ * 可以：当天名额满了标「超上限」（不入队，不进被问的人的等你，问的人只能问本人）；没满就占一个名额、标「伙伴在答」并入队。都回 true。
+ * 去重键 team.buddy-answer:<requestId>:<recipientId>:<triggerId 或 q>；名额按同一个触发记一行，重放不另占。
+ */
+export async function askBuddy(q: Query, directory: PeopleDirectory, asker: string, trigger: BuddyAnswerTrigger, now: Date): Promise<boolean> {
+  if (!(await colleagueAccess(q, directory, asker, trigger.recipientId, "ask")).allowed) return false;
+  // 同一个被问的人的名额串行数，事务结束释放。
+  await q("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", ["team-buddy-asks/" + trigger.recipientId]);
+  const used = (await q(`SELECT count(*)::int AS total,count(*) FILTER (WHERE asker_id=$3)::int AS mine FROM team_buddy_asks WHERE recipient_id=$1
+    AND date_trunc('day',asked_at AT TIME ZONE 'Asia/Shanghai')=date_trunc('day',$2::timestamptz AT TIME ZONE 'Asia/Shanghai')`,
+  [trigger.recipientId, now, asker])).rows[0] as { total: number; mine: number };
+  const full = used.total >= BUDDY_DAILY_ANSWERS ? `今天伙伴代答已到 ${BUDDY_DAILY_ANSWERS} 次`
+    : used.mine >= BUDDY_DAILY_PER_ASKER ? `今天问这位同事的伙伴已到 ${BUDDY_DAILY_PER_ASKER} 次` : null;
+  if (full) {
+    await q("UPDATE request_recipients SET buddy_state='limited',buddy_note=$3,buddy_asked_at=$4 WHERE request_id=$1 AND person_id=$2",
+      [trigger.requestId, trigger.recipientId, full, now]);
+    return true;
+  }
+  await q("INSERT INTO team_buddy_asks(request_id,recipient_id,trigger_key,asker_id,asked_at) VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING",
+    [trigger.requestId, trigger.recipientId, trigger.triggerId ?? "q", asker, now]);
+  await startBuddy(q, trigger, buddyAnswerKey(trigger), now);
+  return true;
+}
+
 function sourceUrl(raw: string | undefined) {
   if (!raw) return null;
   try {
@@ -146,6 +190,9 @@ export async function sendTeamDelivery(deps: TeamDeliveryDeps, actor: string, in
         [requestId, person, active.has(person) ? null : accountMissing]);
     }
     await attachFiles(q, deps.storageDir, actor, requestId, null, files, sources, createdFiles);
+    // 只问一个人、没附件、没截止的征集先交他的伙伴答（A6）；能不能问由 askBuddy 里的 colleagueAccess 定。
+    if (input.kind === "question" && recipients.length === 1 && !dueAt && !sources.length && !files.length && active.has(recipients[0]))
+      await askBuddy(q, deps.directory, actor, { requestId, recipientId: recipients[0], triggerId: null }, deps.now());
     await setRequestStatus(q, requestId);
     return requestId;
   });
@@ -196,7 +243,49 @@ export async function replyTeamDelivery(deps: TeamDeliveryDeps, actor: string, i
     const answered = input.status === "answered";
     await q("UPDATE request_recipients SET status=$3,done_by=$4,done_at=$5 WHERE request_id=$1 AND person_id=$2",
       [id, recipient, answered ? "done" : "pending", answered ? actor : null, answered ? at : null]);
+    // 被问的人自己回了：伙伴在答、没答上来、超上限的标记不再有用（作业见他不在「伙伴在答」就不落）。
+    if (!clarifying) await q("UPDATE request_recipients SET buddy_state=NULL,buddy_note=NULL,buddy_asked_at=NULL WHERE request_id=$1 AND person_id=$2 " +
+      "AND buddy_state IN ('answering','failed','limited')", [id, recipient]);
     await setRequestStatus(q, id);
+  });
+  return projectWritten(deps, actor, id);
+}
+
+/** 问的人对伙伴没答上来、超上限的那位收件人：只有发起人，只限没投递失败的征集。 */
+async function buddyTarget(q: Query, actor: string, id: string, personId: string) {
+  const row = (await q("SELECT rr.buddy_state,rr.buddy_note,rr.buddy_asked_at FROM requests r JOIN request_recipients rr ON rr.request_id=r.id " +
+    "WHERE r.id=$1 AND r.team_kind='question' AND r.initiator_id=$2 AND rr.person_id=$3 AND rr.team_delivery_error IS NULL FOR UPDATE OF rr",
+  [id, actor, personId])).rows[0] as { buddy_state: string | null; buddy_note: string | null; buddy_asked_at: Date | null } | undefined;
+  if (!row) throw absent();
+  return row;
+}
+const notStuck = () => new TeamDeliveryError(409, "BUDDY_NOT_STUCK", "这一条现在不用重试或转本人");
+
+/** 「重试」：伙伴没答上来（含在答超过 2 分钟）时重新入队，不另占名额；在答还没超时的照旧（不重复入队）；超上限 409。 */
+export async function retryTeamBuddy(deps: TeamDeliveryDeps, actor: string, id: string, personId: string) {
+  await transact(deps.pool, async q => {
+    const row = await buddyTarget(q, actor, id, personId);
+    const now = deps.now();
+    const late = answeringLate(row.buddy_state, row.buddy_asked_at, now);
+    if (row.buddy_state === "limited") throw new TeamDeliveryError(409, "BUDDY_LIMIT", "今天的代答次数满了，可以直接问本人");
+    if (row.buddy_state === "answering" && !late) return;
+    if (row.buddy_state !== "failed" && !late) throw notStuck();
+    const latest = (await q("SELECT id FROM team_delivery_replies WHERE request_id=$1 AND recipient_id=$2 ORDER BY seq DESC LIMIT 1", [id, personId])).rows[0];
+    const trigger = { requestId: id, recipientId: personId, triggerId: (latest?.id as string | undefined) ?? null };
+    await startBuddy(q, trigger, `${buddyAnswerKey(trigger)}:retry-${now.getTime()}`, now);
+  });
+  return projectWritten(deps, actor, id);
+}
+
+/** 「问本人」：伙伴没答上来或超上限时，这条变成普通征集进被问的人的等你（转本人，原因留着）。已经转了的照旧。 */
+export async function askTeamOwner(deps: TeamDeliveryDeps, actor: string, id: string, personId: string) {
+  await transact(deps.pool, async q => {
+    const row = await buddyTarget(q, actor, id, personId);
+    if (row.buddy_state === "handoff") return;
+    const late = answeringLate(row.buddy_state, row.buddy_asked_at, deps.now());
+    if (row.buddy_state !== "failed" && row.buddy_state !== "limited" && !late) throw notStuck();
+    await q("UPDATE request_recipients SET buddy_state='handoff',buddy_note=$3 WHERE request_id=$1 AND person_id=$2",
+      [id, personId, late ? BUDDY_NOT_ANSWERED : row.buddy_note]);
   });
   return projectWritten(deps, actor, id);
 }
