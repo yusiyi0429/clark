@@ -176,7 +176,7 @@ function Recipient({ delivery, person, sent, onSaved, onForward }: {
           <button type="button" className={s.linkButton} onClick={() => setWriting("needs_info")}>缺材料或需澄清</button>
         </> : <>
           {person.status === "needs_info" ? <button type="button" className={s.secondary} onClick={() => setWriting("clarification")}>给{person.displayName}补充说明</button> : null}
-          {latestBuddy && buddy?.state !== "answering" ? <button type="button" className={s.secondary} onClick={() => setWriting("follow_up")}>追问</button> : null}
+          {latestBuddy && buddy?.state !== "answering" && !(buddy?.state === "handoff" && person.status === "pending") ? <button type="button" className={s.secondary} onClick={() => setWriting("follow_up")}>追问</button> : null}
           {buddy?.state === "failed" ? <button type="button" className={s.secondary} disabled={!!acting}
             onClick={() => void act("retry", () => retryTeamBuddy(delivery.id, person.personId), "重试没有成功，请再试一次")}>{acting === "retry" ? "正在重试" : "重试"}</button> : null}
           {buddy?.state === "failed" || buddy?.state === "limited" ? <button type="button" className={s.linkButton} disabled={!!acting}

@@ -191,6 +191,15 @@ describe("卡上的伙伴答复", () => {
     expect(textOf(row(handoff, true)())).toContain("值守安排要本人定");
   });
 
+  it("转本人还没回：问的人那边没有「追问」；本人回过以后、或伙伴答完没转本人，照旧有", () => {
+    const handoff: TTeamDeliveryRecipient = { ...answered, buddy: { state: "handoff", note: "值守安排要本人定", askedAt: at, handoffBy: "buddy" } };
+    expect(button(row(handoff, true)(), "追问")).toBeUndefined();
+    expect(button(row({ ...handoff, buddy: { ...handoff.buddy!, note: "伙伴没答上来", handoffBy: "asker" } }, true)(), "追问")).toBeUndefined();
+    const own: TTeamDeliveryReply = { id: "reply-o", status: "answered", text: "我定了，周五值守", attachments: [], createdAt: at };
+    expect(button(row({ ...handoff, status: "answered", replies: [buddyReply, own] }, true)(), "追问")).toBeDefined();
+    expect(button(row(answered, true)(), "追问")).toBeDefined();
+  });
+
   it("发起人：没点过知道了的更正带「知道了」，点了就调接口；点过的不带；被问的人那边不带", async () => {
     const correction: TTeamDeliveryReply = { id: "reply-c", status: "answered", text: "要拆五件", attachments: [], createdAt: at, corrects: "reply-b" };
     const fresh = { ...answered, status: "answered" as const, replies: [{ ...buddyReply, reviewedAt: at }, correction] };
