@@ -3,7 +3,7 @@
 /**
  * 左栏「对话」那边（同事伙伴设计第 1 节）：上组是我去问过的同事（头像是对方的伙伴，对方回了我亮蓝点）；
  * 下组「来问 {伙伴名} 的」是来问我伙伴的同事（头像是对方本人，要我出面时亮黄点）。顺序照接口给的。
- * 每行两行字：名字、最近一句（前面带谁说的，不折行，右端渐隐）。
+ * 每行两行字：名字、最近一句（前面带谁说的，不折行，右端渐隐）。上组最前面是想加我好友的人（预览「想加你好友」、蓝点）。
  */
 import type { TChatListResponse, TChatRow } from "@warmap/contracts";
 import { PersonAvatar } from "@/components/avatar/PersonAvatar";
@@ -47,9 +47,19 @@ export function ChatList({ list, view, myBuddy, go }: { list: TChatListResponse;
       </li>
     );
   };
+  const request = ({ person }: TChatListResponse["requests"][number]) => (
+    <li key={`request:${person.personId}`}>
+      <button type="button" className={c.chatRow} aria-current={view.kind === "friendRequest" && view.personId === person.personId ? "page" : undefined}
+        onClick={() => go(`/me/work/chats/requests/${encodeURIComponent(person.personId)}`)} data-tree-row="">
+        <PersonAvatar personId={person.personId} className={c.avatar}>{[...person.displayName][0] ?? ""}</PersonAvatar>
+        <span className={c.chatText}><span className={c.chatName}>{person.displayName}</span><span className={c.preview}>想加你好友</span></span>
+        <span className={h.subDot} data-tone="stopped" role="img" aria-label="想加你好友"><i aria-hidden /></span>
+      </button>
+    </li>
+  );
   return (
     <>
-      <ul className={c.chatList}>{list.mine.map((row) => line(row, "with"))}</ul>
+      <ul className={c.chatList}>{list.requests.map(request)}{list.mine.map((row) => line(row, "with"))}</ul>
       {list.inbound.length ? (
         <>
           <p className={h.groupTitle}>{`来问 ${myBuddy} 的`}</p>

@@ -1,4 +1,4 @@
-import type { TChatListResponse, TChatView, TColleagueSearchResponse, TCorrectChatMessageRequest, TFriendView, TMainLine, TOwnerChatMessageRequest, TSendChatMessageRequest } from "@warmap/contracts";
+import type { TChatListResponse, TChatView, TColleagueSearchResponse, TCorrectChatMessageRequest, TFriendGrant, TFriendSettings, TFriendView, TMainLine, TOwnerChatMessageRequest, TSendChatMessageRequest } from "@warmap/contracts";
 import { browserApi } from "@/lib/api/client";
 
 /** 同事对话变了（发了一句、伙伴替本人问了）：读对话的地方跟着重读。 */
@@ -80,4 +80,36 @@ export async function searchColleagues(query: string, signal?: AbortSignal): Pro
 export async function requestFriend(personId: string): Promise<TFriendView> {
   const { data, response, error } = await browserApi.POST("/api/me/friends/{personId}/request", { params: { path: { personId } } });
   return result(data, response, error, "没有加上，请重试");
+}
+
+export async function readFriend(personId: string, signal?: AbortSignal): Promise<TFriendView> {
+  const { data, response, error } = await browserApi.GET("/api/me/friends/{personId}", { params: { path: { personId } }, signal, cache: "no-store" });
+  return result(data, response, error, "没有读到");
+}
+
+/** 同意他加我，带上这次勾的。 */
+export async function acceptFriend(personId: string, grant: TFriendGrant): Promise<TFriendView> {
+  const { data, response, error } = await browserApi.POST("/api/me/friends/{personId}/accept", { params: { path: { personId } }, body: grant });
+  return result(data, response, error, "没有开放上，请重试");
+}
+
+export async function setFriendGrant(personId: string, grant: TFriendGrant): Promise<TFriendView> {
+  const { data, response, error } = await browserApi.PUT("/api/me/friends/{personId}/grant", { params: { path: { personId } }, body: grant });
+  return result(data, response, error, "没有改上，请重试");
+}
+
+/** 删好友；也用于「暂不」（拒绝他加我）和「撤回」（我加他还没同意）。 */
+export async function removeFriend(personId: string): Promise<TFriendView> {
+  const { data, response, error } = await browserApi.DELETE("/api/me/friends/{personId}", { params: { path: { personId } } });
+  return result(data, response, error, "没有删掉，请重试");
+}
+
+export async function readFriendSettings(signal?: AbortSignal): Promise<TFriendSettings> {
+  const { data, response, error } = await browserApi.GET("/api/me/friend-settings", { signal, cache: "no-store" });
+  return result(data, response, error, "没有读到");
+}
+
+export async function saveFriendSettings(settings: TFriendSettings): Promise<TFriendSettings> {
+  const { data, response, error } = await browserApi.PUT("/api/me/friend-settings", { body: settings });
+  return result(data, response, error, "没有存上，请重试");
 }

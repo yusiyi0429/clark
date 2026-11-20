@@ -57,3 +57,24 @@
 .person .acts { align-items: center; margin-left: auto; }
 .relation { padding: 0 var(--space-2); }
 .more { margin: 0; padding: var(--space-2); }
+
+/* 好友：勾选单一行一项，锁定的两行淡一档、没有勾选框（文字和能勾的那行对齐）；加好友设置的单选也是这一行。 */
+.grants { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.grant { display: flex; align-items: center; gap: var(--space-2); min-height: var(--row-32); padding: 0 var(--space-2); color: var(--ink); overflow-wrap: anywhere; }
+.grant input { flex: none; width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
+label.grant { cursor: pointer; }
+label.grant:has(input:disabled) { cursor: default; }
+.grant[data-locked] { padding-left: calc(var(--space-2) * 2 + 16px); color: var(--ink-faint); }
+.grantTitle { margin: 0; padding: 0 var(--space-2); color: var(--ink-faint); }
+
+/* 有人加我那一页、对话页头点名字出来的好友面板。 */
+.request { display: grid; gap: var(--space-3); }
+.requestLine { margin: 0; padding: 0 var(--space-2); overflow-wrap: anywhere; }
+.requestActs { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: 0 var(--space-2); }
+.friendPanel { display: grid; gap: var(--space-3); width: min(400px, calc(100vw - 32px)); padding: var(--space-2) 0; }
+.friendDialog { outline: none; }
+.grantColumns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+.grantColumns > div { display: grid; align-content: start; gap: var(--space-1); }
+.nameButton { padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.nameButton:hover { text-decoration: underline; text-underline-offset: 3px; }
+.nameButton:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-control); }

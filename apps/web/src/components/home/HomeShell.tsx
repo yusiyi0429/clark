@@ -59,6 +59,7 @@ import { MissionInfo } from "./MissionInfo";
 import { MeetingView } from "./MeetingView";
 import { ChatView } from "./ChatView";
 import { ChatFind } from "./ChatFind";
+import { FriendRequestView } from "./FriendSheet";
 import { useColleagueChats } from "./useColleagueChats";
 import { MeetingsPage, meetingSections, nextMeetingTrail } from "./MeetingsPage";
 import { ProjectInfo } from "./ProjectInfo";
@@ -624,6 +625,7 @@ function HomeFrame({ account }: { account: Account }) {
       case "meeting": return <MeetingView key={current.id} id={current.id} go={go} />;
       case "chat": return <ChatView key={`${current.side}:${current.personId}`} side={current.side} personId={current.personId} buddy={buddy} go={go} />;
       case "chatFind": return <SecondaryFrame key="chatFind" title="找人" go={go}><ChatFind go={go} /></SecondaryFrame>;
+      case "friendRequest": return <FriendRequestView key={current.personId} personId={current.personId} go={go} />;
       case "buddy": return <BuddyView buddy={buddy} outbox={outbox} consume={consume} onSpeaking={setSpeaking} waiting={data.waiting} go={go} context={buddyContext} onClearContext={() => setBuddyContext(null)}
         subs={subs} projects={projects.all} waitingFolder={waitingFolder} scratchFolder={scratchFolder} />;
       case "mission": {

@@ -5,6 +5,7 @@
  * - 头像：现在的头像 96，「选照片 / 换一张」（次按钮）、「删掉照片」（弱按钮）；选了图在圆框里拖动、缩放，「保存」（主按钮）、「重新选」「取消」（弱按钮）。
  *   选图、裁剪、上传、删掉都是 useAvatarCrop（老菜单的换头像弹窗同一套）。
  * - 资料：名字（只看，登录 ID · 角色）；性别（可选），离开输入框时存，存好写「已保存」2 秒；没存上原处「失败 · 重试」。
+ * - 加我好友、新好友默认开放（同事伙伴设计第 3 节）：FriendSettingsSections。
  * 不写说明句（「仅本人可查看」之类）。
  */
 import { useEffect, useRef, useState } from "react";
@@ -15,6 +16,7 @@ import { PersonAvatar } from "@/components/avatar/PersonAvatar";
 import { HeroButton } from "@/components/HeroButton";
 import { FailedLine } from "@/components/work/DecisionBox";
 import { browserApi } from "@/lib/api/client";
+import { FriendSettingsSections } from "../FriendSheet";
 import type { SecondaryPageProps } from "./index";
 import { Loading, Row, Section, useMe, type Me } from "./parts";
 import p from "@/styles/home-pages.module.css";
@@ -24,7 +26,7 @@ type Profile = components["schemas"]["PersonalProfileView"];
 export function ProfilePage(_props: SecondaryPageProps) {
   const me = useMe();
   if (!me) return <Loading />;
-  return <><AvatarSection me={me} /><ProfileSection me={me} /></>;
+  return <><AvatarSection me={me} /><ProfileSection me={me} /><FriendSettingsSections /></>;
 }
 
 function AvatarSection({ me }: { me: Me }) {

@@ -5,8 +5,11 @@
  * - with（/me/work/chats/with/<id>）：我去问他的伙伴。问句下面按伙伴答到哪画（在答、没答上来、问满、转本人）；伙伴的话下面能「问本人」。
  * - from（/me/work/chats/from/<id>）：他来问我的伙伴。我的伙伴的话能改、能收回；他问的每句能「回这句」；打开时停在最早等我的那句。
  * 每句上面一行写谁说的（chatWho），我这边说的靠右、不写。对方已离开：只读，没有输入框和按钮。
+ * 页头点对方名字出好友面板（FriendPanel）。
  */
 import { Fragment, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { Popover } from "@heroui/react";
+import { Button as Pressable } from "react-aria-components";
 import { CHAT_WAIT_WORD, type TChatMessage, type TChatView } from "@warmap/contracts";
 import { PersonAvatar } from "@/components/avatar/PersonAvatar";
 import { BuddyMark } from "@/components/buddy/BuddyMark";
@@ -17,6 +20,7 @@ import { askChatOwner, correctMessage, ownerReply, retractMessage, retryChatAnsw
 import { showWorkspaceToast } from "@/lib/toast";
 import h from "@/styles/home.module.css";
 import c from "./chats.module.css";
+import { FriendPanel } from "./FriendSheet";
 import { InputBar } from "./InputBar";
 import { useColleagueChat } from "./useColleagueChat";
 import { useViewChrome } from "./view";
@@ -68,6 +72,7 @@ export function ChatBody({ chat, buddy, actions }: { chat: TChatView; buddy: Bud
   const readOnly = peer.left;
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
+  const [friendOpen, setFriendOpen] = useState(false);
   const [quote, setQuote] = useState<{ id: string; label: string } | null>(() => {
     const waiting = side === "from" && chat.firstWaiting ? byId.get(chat.firstWaiting) : undefined;
     return waiting ? quoteOf(waiting) : null;
@@ -161,7 +166,16 @@ export function ChatBody({ chat, buddy, actions }: { chat: TChatView; buddy: Bud
       <header className={h.viewHead}>
         {chrome.lead}
         <span className={c.mark}>{side === "with" ? buddyMark : personMark}</span>
-        <h1 className={h.viewTitle} tabIndex={-1}>{peer.displayName}{peer.left ? <span className={c.leftWord}>已离开</span> : null}</h1>
+        <h1 className={h.viewTitle} tabIndex={-1}>
+          {peer.left ? <>{peer.displayName}<span className={c.leftWord}>已离开</span></> : (
+            <Popover isOpen={friendOpen} onOpenChange={setFriendOpen}>
+              <Pressable className={c.nameButton} data-testid="chat-peer-name">{peer.displayName}</Pressable>
+              <Popover.Content placement="bottom start" offset={6} className={h.pop}>
+                <Popover.Dialog aria-label={peer.displayName} className={c.friendDialog}><FriendPanel personId={peer.personId} onClose={() => setFriendOpen(false)} /></Popover.Dialog>
+              </Popover.Content>
+            </Popover>
+          )}
+        </h1>
         {chrome.trail}
       </header>
       <div className={c.log} ref={log}><div className={c.inner}>{messages.map(line)}</div></div>
