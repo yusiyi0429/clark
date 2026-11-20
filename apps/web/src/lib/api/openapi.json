@@ -26146,6 +26146,158 @@
         }
       }
     },
+    "/api/me/team-deliveries/{id}/recipients/{personId}/buddy/retry": {
+      "post": {
+        "operationId": "retryTeamDeliveryBuddy",
+        "summary": "问的人让这位同事的伙伴再答一次（没答上来时；不另占当天名额，超上限 409）",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "personId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamDeliveryResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/team-deliveries/{id}/recipients/{personId}/buddy/ask-owner": {
+      "post": {
+        "operationId": "askTeamDeliveryOwner",
+        "summary": "问的人不等伙伴了，转成普通征集进这位同事的等你（伙伴没答上来或超上限时）",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "personId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamDeliveryResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/team-deliveries/{id}/attachments/{attachmentId}": {
       "get": {
         "operationId": "downloadTeamDeliveryAttachment",
@@ -142744,7 +142896,60 @@
                             }
                           }
                         }
+                      },
+                      "origin": {
+                        "const": "buddy",
+                        "type": "string"
                       }
+                    }
+                  }
+                },
+                "buddy": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "state",
+                    "note",
+                    "askedAt"
+                  ],
+                  "properties": {
+                    "state": {
+                      "anyOf": [
+                        {
+                          "const": "answering",
+                          "type": "string"
+                        },
+                        {
+                          "const": "answered",
+                          "type": "string"
+                        },
+                        {
+                          "const": "handoff",
+                          "type": "string"
+                        },
+                        {
+                          "const": "failed",
+                          "type": "string"
+                        },
+                        {
+                          "const": "limited",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "note": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "askedAt": {
+                      "format": "date-time",
+                      "type": "string"
                     }
                   }
                 }
@@ -142783,6 +142988,55 @@
             "type": "string"
           },
           "href": {
+            "type": "string"
+          }
+        }
+      },
+      "TeamDeliveryBuddy": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "state",
+          "note",
+          "askedAt"
+        ],
+        "properties": {
+          "state": {
+            "anyOf": [
+              {
+                "const": "answering",
+                "type": "string"
+              },
+              {
+                "const": "answered",
+                "type": "string"
+              },
+              {
+                "const": "handoff",
+                "type": "string"
+              },
+              {
+                "const": "failed",
+                "type": "string"
+              },
+              {
+                "const": "limited",
+                "type": "string"
+              }
+            ]
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "askedAt": {
+            "format": "date-time",
             "type": "string"
           }
         }
@@ -143067,7 +143321,60 @@
                                   }
                                 }
                               }
+                            },
+                            "origin": {
+                              "const": "buddy",
+                              "type": "string"
                             }
+                          }
+                        }
+                      },
+                      "buddy": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "state",
+                          "note",
+                          "askedAt"
+                        ],
+                        "properties": {
+                          "state": {
+                            "anyOf": [
+                              {
+                                "const": "answering",
+                                "type": "string"
+                              },
+                              {
+                                "const": "answered",
+                                "type": "string"
+                              },
+                              {
+                                "const": "handoff",
+                                "type": "string"
+                              },
+                              {
+                                "const": "failed",
+                                "type": "string"
+                              },
+                              {
+                                "const": "limited",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "note": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "askedAt": {
+                            "format": "date-time",
+                            "type": "string"
                           }
                         }
                       }
@@ -143209,7 +143516,60 @@
                       }
                     }
                   }
+                },
+                "origin": {
+                  "const": "buddy",
+                  "type": "string"
                 }
+              }
+            }
+          },
+          "buddy": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "state",
+              "note",
+              "askedAt"
+            ],
+            "properties": {
+              "state": {
+                "anyOf": [
+                  {
+                    "const": "answering",
+                    "type": "string"
+                  },
+                  {
+                    "const": "answered",
+                    "type": "string"
+                  },
+                  {
+                    "const": "handoff",
+                    "type": "string"
+                  },
+                  {
+                    "const": "failed",
+                    "type": "string"
+                  },
+                  {
+                    "const": "limited",
+                    "type": "string"
+                  }
+                ]
+              },
+              "note": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "askedAt": {
+                "format": "date-time",
+                "type": "string"
               }
             }
           }
@@ -143290,6 +143650,10 @@
                 }
               }
             }
+          },
+          "origin": {
+            "const": "buddy",
+            "type": "string"
           }
         }
       },
@@ -143550,7 +143914,60 @@
                                 }
                               }
                             }
+                          },
+                          "origin": {
+                            "const": "buddy",
+                            "type": "string"
                           }
+                        }
+                      }
+                    },
+                    "buddy": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "state",
+                        "note",
+                        "askedAt"
+                      ],
+                      "properties": {
+                        "state": {
+                          "anyOf": [
+                            {
+                              "const": "answering",
+                              "type": "string"
+                            },
+                            {
+                              "const": "answered",
+                              "type": "string"
+                            },
+                            {
+                              "const": "handoff",
+                              "type": "string"
+                            },
+                            {
+                              "const": "failed",
+                              "type": "string"
+                            },
+                            {
+                              "const": "limited",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "note": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "askedAt": {
+                          "format": "date-time",
+                          "type": "string"
                         }
                       }
                     }

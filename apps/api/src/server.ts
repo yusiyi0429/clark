@@ -325,7 +325,7 @@ const jobWorker = createJobWorker({
   pool,
   handlers: {
     [INTAKE_JOB]: () => scanIntake({ app, pool, env }),
-    ...exampleJobHandlers, ...feishuTokens?.handlers, ...followThroughJobs.handlers, ...docChangeJobs.handlers, ...app.collectionJobs.handlers, ...usageJobs.handlers, ...summaryJobs.handlers, ...ceoNoticeJobs.handlers, ...homePush.handlers, ...app.taskPlacementJobs, ...missionLoadJobs.handlers, ...app.nexusDri.jobs, ...app.monthReviewJobs.handlers, ...app.plannedDueDateJobs.handlers,
+    ...exampleJobHandlers, ...feishuTokens?.handlers, ...followThroughJobs.handlers, ...docChangeJobs.handlers, ...app.collectionJobs.handlers, ...usageJobs.handlers, ...summaryJobs.handlers, ...ceoNoticeJobs.handlers, ...homePush.handlers, ...app.taskPlacementJobs, ...app.teamBuddyAnswerJobs, ...missionLoadJobs.handlers, ...app.nexusDri.jobs, ...app.monthReviewJobs.handlers, ...app.plannedDueDateJobs.handlers,
     ...(env.feishu ? feishuEventJobs(pool, mergeFeishuEventHandlers(followThroughJobs.feishuEvents, docChangeJobs.feishuEvents, app.feishuChat?.events ?? {})) : {}),
     ...(feishuClient ? feishuNotifyJobs({ pool, client: feishuClient, publicOrigin: env.publicOrigin }) : {}),
   },

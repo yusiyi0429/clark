@@ -1,12 +1,12 @@
 import type { JsonSchema, OpenAPIV3 } from "./types/JsonSchemaTypes.js";
 import {
-  ReplyTeamDeliveryRequest, SendTeamDeliveryRequest, TeamDelivery, TeamDeliveryAttachment, TeamDeliveryListQuery,
+  ReplyTeamDeliveryRequest, SendTeamDeliveryRequest, TeamDelivery, TeamDeliveryAttachment, TeamDeliveryBuddy, TeamDeliveryListQuery,
   TeamDeliveryListResponse, TeamDeliveryRecipient, TeamDeliveryReply, TeamDeliveryResponse,
   TeamDeliverySource, TeamDeliverySourcesResponse, TeamDeliveryTextResponse,
 } from "./teamDeliveries.js";
 
 export const teamDeliverySchemas: Record<string, JsonSchema> = {
-  ReplyTeamDeliveryRequest, SendTeamDeliveryRequest, TeamDelivery, TeamDeliveryAttachment, TeamDeliveryListQuery,
+  ReplyTeamDeliveryRequest, SendTeamDeliveryRequest, TeamDelivery, TeamDeliveryAttachment, TeamDeliveryBuddy, TeamDeliveryListQuery,
   TeamDeliveryListResponse, TeamDeliveryRecipient, TeamDeliveryReply, TeamDeliveryResponse,
   TeamDeliverySource, TeamDeliverySourcesResponse, TeamDeliveryTextResponse,
 };
@@ -46,6 +46,14 @@ export const teamDeliveryPaths: OpenAPIV3.Document["paths"] = {
   "/api/me/team-deliveries/{id}/recipients/{personId}/retry": {
     post: { operationId: "retryTeamDeliveryRecipient", summary: "发送人重试原名单中的一人", parameters: path("id", "personId"),
       responses: { "200": response("TeamDeliveryResponse"), ...errors(400, 401, 403, 404) } },
+  },
+  "/api/me/team-deliveries/{id}/recipients/{personId}/buddy/retry": {
+    post: { operationId: "retryTeamDeliveryBuddy", summary: "问的人让这位同事的伙伴再答一次（没答上来时；不另占当天名额，超上限 409）", parameters: path("id", "personId"),
+      responses: { "200": response("TeamDeliveryResponse"), ...errors(400, 401, 404, 409) } },
+  },
+  "/api/me/team-deliveries/{id}/recipients/{personId}/buddy/ask-owner": {
+    post: { operationId: "askTeamDeliveryOwner", summary: "问的人不等伙伴了，转成普通征集进这位同事的等你（伙伴没答上来或超上限时）",
+      parameters: path("id", "personId"), responses: { "200": response("TeamDeliveryResponse"), ...errors(400, 401, 404, 409) } },
   },
   "/api/me/team-deliveries/{id}/attachments/{attachmentId}": {
     get: { operationId: "downloadTeamDeliveryAttachment", summary: "按本人和原件权限下载本次投递的指定版本", parameters: path("id", "attachmentId"),
