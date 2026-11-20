@@ -203,6 +203,8 @@ export const HomeProject = Type.Object({
   unseen: Type.Boolean(),
   /** 本人的「随手」项目（同 Project.scratch）；别的项目不带。 */
   scratch: Type.Optional(Type.Literal(true)),
+  /** 不给同事读（同 Project.hiddenFromColleagues）；没设的不带。 */
+  hiddenFromColleagues: Type.Optional(Type.Literal(true)),
 }, strict);
 
 /**
