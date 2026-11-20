@@ -66,12 +66,12 @@ const clientIdOf = (key: string) => {
 };
 
 /**
- * 这位收件人还在等伙伴答这一次：是征集、他是收件人、在「伙伴在答」、他那段往来最新一条正是触发的那条（首问是还没有回复）。
- * 连着追问两次时，第一次的作业到这里就不是最新一条了，什么都不写。
+ * 这位收件人还在等伙伴答这一次：是征集、他是收件人、在「伙伴在答」、他那段往来最新一条（更正不算）正是触发的那条（首问是还没有回复）。
+ * 连着追问两次时，第一次的作业到这里就不是最新一条了，什么都不写；在答时被问的人更正了旧答复，照常答。
  */
 async function waiting(q: Query, trigger: BuddyAnswerTrigger, lock: boolean) {
   const row = (await q(`SELECT r.initiator_id,r.body,r.sent_at,rr.buddy_asked_at,
-      (SELECT p.id FROM team_delivery_replies p WHERE p.request_id=r.id AND p.recipient_id=rr.person_id ORDER BY p.seq DESC LIMIT 1) AS latest
+      (SELECT p.id FROM team_delivery_replies p WHERE p.request_id=r.id AND p.recipient_id=rr.person_id AND p.corrects IS NULL ORDER BY p.seq DESC LIMIT 1) AS latest
     FROM requests r JOIN request_recipients rr ON rr.request_id=r.id
     WHERE r.id=$1 AND r.team_kind='question' AND rr.person_id=$2 AND rr.team_delivery_error IS NULL AND rr.buddy_state='answering'
     ${lock ? "FOR UPDATE OF rr" : ""}`, [trigger.requestId, trigger.recipientId])).rows[0] as

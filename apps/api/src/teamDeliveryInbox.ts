@@ -64,6 +64,8 @@ async function selectDeliveries({ q, people, now }: InboxDeps, viewer: string, b
     recipients.set(m.request_id + "/" + m.person_id,result);
     delivery.recipients.push(result);
   }
+  // 追问还没人接时落的更正不改收件人状态（更正只补旧答复，追问照旧等着）。
+  const openFollowUp = new Set<TTeamDeliveryRecipient>();
   for (const r of replyRows.rows as Reply[]) {
     const recipient = recipients.get(r.request_id + "/" + r.recipient_id);
     if (!recipient) continue;
@@ -71,7 +73,9 @@ async function selectDeliveries({ q, people, now }: InboxDeps, viewer: string, b
       ...(r.origin === "buddy" ? { origin: "buddy" as const } : {}), ...(r.reviewed_at ? { reviewedAt: r.reviewed_at.toISOString() } : {}),
       ...(r.corrects ? { corrects: r.corrects } : {}), ...(r.correction_seen_at ? { correctionSeenAt: r.correction_seen_at.toISOString() } : {}) });
     // 伙伴答的不算本人回复（A8）：收件人状态只看本人和发起人的往来。
-    if (!recipient.error && r.origin !== "buddy") recipient.status = r.status === "clarification" || r.status === "follow_up" ? "pending" : r.status;
+    if (!r.corrects) { if (r.status === "follow_up") openFollowUp.add(recipient); else openFollowUp.delete(recipient); }
+    if (!recipient.error && r.origin !== "buddy" && !(r.corrects && openFollowUp.has(recipient)))
+      recipient.status = r.status === "clarification" || r.status === "follow_up" ? "pending" : r.status;
   }
   return [...deliveries.values()];
 }

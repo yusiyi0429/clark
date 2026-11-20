@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { AnswerInput, ColleagueAnswerAgent, PickInput } from "../src/colleagueAnswerAgent.js";
 import { loadPeopleDirectory } from "../src/peopleDirectory.js";
-import { askBuddy, retryTeamBuddy, TEAM_BUDDY_ANSWER_JOB } from "../src/teamDeliveries.js";
+import { askBuddy, replyTeamDelivery, retryTeamBuddy, TEAM_BUDDY_ANSWER_JOB } from "../src/teamDeliveries.js";
 import { BOARD_NOW, boardFixture, THIRD } from "./boardFixture.js";
 import { TEST_CEO, TEST_MEMBER } from "./helpers.js";
 
@@ -263,6 +263,20 @@ describe("首问和追问共用的几处（T4 审查留下的）", { timeout: 60
     } finally { await s.f.close(); }
   });
 
+  it("追问时被问的人不再被覆盖：409 BUDDY_UNAVAILABLE，追问不落库", async () => {
+    const s = await setup();
+    try {
+      const { id } = await s.answered();
+      const deps = { q: s.q, pool: s.f.t.pool, storageDir: tmpdir(), now: () => BOARD_NOW, people: new Map<string, string>(),
+        directory: loadPeopleDirectory({ companyPeopleSeed: await peopleSeed("participant") }) };
+      await expect(replyTeamDelivery(deps, TEST_MEMBER.personId, id, { clientId: randomUUID(), status: "follow_up", recipientId: THIRD.personId, text: "那回滚怎么做" }))
+        .rejects.toMatchObject({ status: 409, code: "BUDDY_UNAVAILABLE" });
+      expect(await s.f.t.sql("SELECT count(*)::int AS n FROM team_delivery_replies WHERE request_id=$1 AND status='follow_up'", [id])).toEqual([{ n: 0 }]);
+      expect((await s.read(id)).recipients[0]).toMatchObject({ status: "pending", buddy: { state: "answered" } });
+      expect(await s.asks(id)).toBe(1);
+    } finally { await s.f.close(); }
+  });
+
   it("问本人以后：被问的人看到写给他的原因；分得出是模型转的还是问的人转的", async () => {
     const s = await setup();
     try {
@@ -366,23 +380,67 @@ describe("被问的人看过和更正", { timeout: 60_000 }, () => {
       s.fake.impl.answer = async () => ({ answer: "手册里没写谁值守", handoff: true, reason: "值守安排要测试丙本人定", sources: [] });
       const { id, reply } = await s.answered();
       expect(await s.waiting()).toContain(`team-request:${id}`);
+      // 转本人就是要本人亲自回：「没问题」不适用，状态不动。
+      const ok = await s.review(id, reply.id, { verdict: "ok" });
+      expect(ok.statusCode).toBe(409);
+      expect(ok.json().code).toBe("BUDDY_HANDOFF");
+      const still = (await s.read(id)).recipients[0];
+      expect(still).toMatchObject({ status: "pending", buddy: { state: "handoff", handoffBy: "buddy" } });
+      expect(still.replies[0]).not.toHaveProperty("reviewedAt");
+      expect(await s.waiting()).toContain(`team-request:${id}`);
       expect((await s.review(id, reply.id, { clientId: randomUUID(), verdict: "corrected", text: "我来值守" })).statusCode).toBe(200);
       expect((await s.read(id)).recipients[0].status).toBe("answered");
       expect(await s.waiting()).not.toContain(`team-request:${id}`);
     } finally { await s.f.close(); }
   });
 
-  it("伙伴在答追问时被问的人改了上一条：这次追问的作业不落，卡上不挂着在答", async () => {
+  it("伙伴在答追问时被问的人改了上一条：追问照旧在，作业照常落答复，更正照常进问的人等你", async () => {
     const s = await setup();
     try {
       const { id, reply } = await s.answered();
       const trigger = s.lastId((await s.followUp(id, "那回滚怎么做")).json().delivery);
       expect((await s.review(id, reply.id, { clientId: randomUUID(), verdict: "corrected", text: "要拆五件，回滚在第五件" })).statusCode).toBe(200);
+      expect((await s.read(id)).recipients[0]).toMatchObject({ status: "pending", buddy: { state: "answering" } });
+      expect(await s.waitingItems(s.f.member)).toContainEqual(expect.objectContaining({ id: `team-request:${id}`, title: "更正：部署怎么拆" }));
       await s.run(id, trigger);
-      expect(await s.buddyRows(id)).toHaveLength(1);
-      const recipient = (await s.read(id)).recipients[0];
-      expect(recipient.status).toBe("answered");
-      expect(recipient).not.toHaveProperty("buddy");
+      expect(await s.buddyRows(id)).toHaveLength(2);
+      expect(s.fake.seen.answer.at(-1)!.thread.map(({ by }) => by)).toEqual(["asker", "buddy", "asker", "owner"]);
+      expect((await s.read(id)).recipients[0]).toMatchObject({ status: "pending", buddy: { state: "answered" } });
+    } finally { await s.f.close(); }
+  });
+
+  it("追问没答上来时被问的人改了上一条：仍能重试，重试答的还是那条追问", async () => {
+    const s = await setup();
+    try {
+      const { id, reply } = await s.answered();
+      const trigger = s.lastId((await s.followUp(id, "那回滚怎么做")).json().delivery);
+      s.fake.impl.pick = async () => { throw new Error("模型挂了"); };
+      await s.run(id, trigger);
+      expect((await s.review(id, reply.id, { clientId: randomUUID(), verdict: "corrected", text: "要拆五件" })).statusCode).toBe(200);
+      expect((await s.read(id)).recipients[0]).toMatchObject({ status: "pending", buddy: { state: "failed", note: "伙伴没答上来" } });
+      expect(await s.waiting()).not.toContain(`team-request:${id}`);
+      expect(await s.waitingItems(s.f.member)).toContainEqual(expect.objectContaining({ id: `team-request:${id}`, title: "更正：部署怎么拆" }));
+      expect((await s.action(id, "retry")).json().delivery.recipients[0].buddy.state).toBe("answering");
+      s.fake.impl.pick = async () => ({ itemIds: ["note"] });
+      await s.run(id, trigger);
+      expect(await s.buddyRows(id)).toHaveLength(2);
+      expect((await s.read(id)).recipients[0].buddy?.state).toBe("answered");
+    } finally { await s.f.close(); }
+  });
+
+  it("追问超上限时被问的人改了上一条：仍能问本人，进被问的人的等你", async () => {
+    const s = await setup();
+    try {
+      const { id, reply } = await s.answered();
+      await s.used(id, 19);
+      await s.followUp(id, "那回滚怎么做");
+      expect((await s.review(id, reply.id, { clientId: randomUUID(), verdict: "corrected", text: "要拆五件" })).statusCode).toBe(200);
+      expect((await s.read(id)).recipients[0]).toMatchObject({ status: "pending", buddy: { state: "limited" } });
+      const asked = await s.action(id, "ask-owner");
+      expect(asked.statusCode, asked.body).toBe(200);
+      expect(await s.waiting()).toContain(`team-request:${id}`);
+      // 问的人转本人的那条：伙伴的答复上「没问题」也不适用。
+      expect((await s.review(id, reply.id, { verdict: "ok" })).json().code).toBe("BUDDY_HANDOFF");
     } finally { await s.f.close(); }
   });
 });
