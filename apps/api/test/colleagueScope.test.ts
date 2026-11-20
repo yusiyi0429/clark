@@ -6,6 +6,7 @@ import { CATALOG_MAX, colleagueIndex, dbScopeSource, matchColleagues, scopeEntri
 import { loadPeople } from "../src/peopleDirectory.js";
 import type { PlanTaskSource } from "../src/planTasks.js";
 import { ensureScratchProject } from "../src/projects.js";
+import { createDeliverableVersion } from "../src/taskDeliverables.js";
 import { BOARD_NOW, BOARD_TASKS, boardFixture, THIRD, type BoardFixture } from "./boardFixture.js";
 import { TEST_CEO, TEST_MEMBER } from "./helpers.js";
 
@@ -275,13 +276,20 @@ describe("从库里读（dbScopeSource）", { timeout: 60_000 }, () => {
       expect((await f.call("DELETE", `/api/me/projects/${hidden}/goals/task-open`)).statusCode).toBe(204);
       expect(await ids(f)).not.toContain(`deliverable:${itemId}`);
       expect(await read.read(`deliverable:${itemId}`)).toBeNull();
+      // 取下来以后在网页上沿用第 1 版出第 2 版：新版本不记项目，复制来的「报告正文」也不出。
+      const own = { task: BOARD_TASKS[0], viewerId: TEST_MEMBER.personId, responsibleId: null, canEdit: true, basis: "acceptance" as const,
+        criteria: BOARD_TASKS[0].criteria };
+      const copied = await createDeliverableVersion(f.t.pool, own, [], { links: [], statement: "沿用上一版", keep: [itemId] }, f.storage);
+      const [copiedItem] = await f.t.sql("SELECT id::text FROM deliverable_items WHERE version_id=$1", [copied.id]);
+      expect(await ids(f)).not.toContain(`deliverable:${copiedItem.id}`);
+      expect(await read.read(`deliverable:${copiedItem.id}`)).toBeNull();
       // 取下来以后卡还在「私事」里，它验收过的产出进了新的一版（这一版没记项目）：按准备中记的出处，条目也不出。
       const machine = await f.local();
       const handback = await machine.handBack(onTask);
       await f.t.app.cardAcceptance.idle();
       const nextVersion = randomUUID(), nextItem = randomUUID();
       await f.t.sql(`INSERT INTO deliverable_versions(id,task_id,mission_id,author_id,number,task_name,basis,criteria,statement)
-        VALUES($1,'task-open','mine',$2,2,'对话质量达标','acceptance','["有题库打分结果","有新人上手录屏"]','这一版纳入：私事里挂 Task 的卡')`, [nextVersion, TEST_MEMBER.personId]);
+        VALUES($1,'task-open','mine',$2,3,'对话质量达标','acceptance','["有题库打分结果","有新人上手录屏"]','这一版纳入：私事里挂 Task 的卡')`, [nextVersion, TEST_MEMBER.personId]);
       await f.t.sql(`INSERT INTO deliverable_items(id,version_id,position,kind,name,storage_key,extracted_text,read) VALUES($1,$2,0,'file','方案.md','deliverables/y','卡的方案正文','read')`,
         [nextItem, nextVersion]);
       await f.t.sql(`INSERT INTO deliverable_pending_items(id,plan_task_id,handback_id,added_by,version_id) VALUES($1,'task-open',$2,$3,$4)`,

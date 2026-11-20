@@ -174,12 +174,12 @@ export function dbScopeSource(deps: ScopeDeps, ownerId: string): ScopeSource {
     const tree = await treeTasks(q, deps.planTasks, ownerId, deps.now);
     const carried = new Set(tree.missions.filter((mission) => mission.carried).map((mission) => mission.id));
     const tasks = tree.tasks.map((task) => ({ taskId: task.taskId, name: task.name, carried: carried.has(task.missionId) }));
-    // 每件 Task 最新一版的条目。条目正文不出（A2）的三种：Task 现在挂在收起的项目上；这一版记的项目收起了（取下 Task 时版本还记着原来的项目）；
+    // 每件 Task 最新一版的条目。条目正文不出（A2）的三种：Task 现在挂在收起的项目上；这件 Task 的任何一版记的项目收起了（取下 Task 时版本还记着原来的项目，新版本不记项目、又会沿用上一版的条目）；
     // 这件 Task 进过版本的准备中各样（卡的交回、专题的一版）出自收起项目里的会话（沿用的条目是复制的，所以看全部进过版本的，不只最新一版）。
     const deliverables = tasks.length ? (await q(`SELECT i.id::text AS item_id,v.task_id,i.name,v.number,v.hidden FROM (
         SELECT DISTINCT ON (v.task_id) v.id,v.task_id,v.number,EXISTS (SELECT 1 FROM project_goals g JOIN projects p ON p.id=g.project_id
             WHERE g.task_id=v.task_id AND p.hidden_from_colleagues)
-          OR EXISTS (SELECT 1 FROM projects p WHERE p.id=v.project_id AND p.hidden_from_colleagues)
+          OR EXISTS (SELECT 1 FROM deliverable_versions o JOIN projects p ON p.id=o.project_id WHERE o.task_id=v.task_id AND p.hidden_from_colleagues)
           OR EXISTS (SELECT 1 FROM deliverable_pending_items d LEFT JOIN card_handbacks h ON h.id=d.handback_id LEFT JOIN tasks t ON t.id=h.task_id
               LEFT JOIN topic_versions tv ON tv.id=d.topic_version_id LEFT JOIN research_topics r ON r.id=tv.topic_id
               JOIN projects p ON p.id=COALESCE(${CARD_PROJECT("t")},${TOPIC_PROJECT("r")}) AND p.hidden_from_colleagues
