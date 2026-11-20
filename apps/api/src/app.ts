@@ -166,6 +166,7 @@ import { registerTaskPipelineRoutes } from "./routes/taskPipelines.js";
 import { registerProjectRoutes } from "./routes/projects.js";
 import { registerProjectTransferRoutes } from "./routes/projectTransfers.js";
 import { registerBuddyActionRoutes } from "./routes/buddyActions.js";
+import { registerColleagueFriendRoutes } from "./routes/colleagueFriends.js";
 import { closeQuestions, collapsePlan, runExtras } from "./buddyActions.js";
 import { recordProjectReply } from "./workSeen.js";
 import { recordTurnFallback, recordTurnModel, turnModels } from "./chatTurnModels.js";
@@ -1041,6 +1042,7 @@ export async function buildApp({
   registerPartnerMeetingRoutes(app, ctx);
   registerTeamDeliveryRoutes(app, ctx);
   registerColleagueMaterialRoutes(app, ctx);
+  registerColleagueFriendRoutes(app, ctx);
   registerMeetingWorkHandoffRoutes(app, ctx);
   registerSessionStartRoutes(app, ctx);
   registerTaskPipelineRoutes(app, ctx);
