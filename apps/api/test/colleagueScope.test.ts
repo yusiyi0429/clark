@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { colleagueNames } from "../src/colleagueAccess.js";
 import { CATALOG_MAX, colleagueIndex, dbScopeSource, matchColleagues, scopeEntries, scopeReader, type ColleagueIndexEntry, type OwnerRows, type ScopeDeps,
   type ScopeSource } from "../src/colleagueScope.js";
 import { loadPeople } from "../src/peopleDirectory.js";
@@ -93,6 +92,13 @@ describe("读（scopeReader）", () => {
     expect(text).toContain("ghp_ab••••");
     expect(text).not.toContain("cdefghijklmnopqrstuvwxyz");
     expect(text).toContain("别外传");
+  });
+  it("标题和原作者里像密钥的值也遮掉：目录和读出来的都是", async () => {
+    const leaky: OwnerRows = { ...rows, sessions: [session("card", "c-deploy", "p-deploy", 20, { title: "用 sk-abcdefghijklmnop1234 部署", author: "ghp_abcdefghijklmnopqrstuvwxyz" })] };
+    const reader = scopeReader(source({ "session:card:c-deploy": "正文" }, leaky));
+    const entry = (await reader.catalog()).entries.find((item) => item.itemId === "session:card:c-deploy")!;
+    expect(entry).toMatchObject({ title: "用 sk-abc•••• 部署", author: "ghp_ab••••" });
+    expect((await reader.read("session:card:c-deploy"))!.title).toBe("用 sk-abc•••• 部署");
   });
   it("长的分段读", async () => {
     const reader = scopeReader(source({ "task:task-now": "字".repeat(50_000) }));
@@ -230,6 +236,14 @@ describe("从库里读（dbScopeSource）", { timeout: 60_000 }, () => {
       const inScratch = await topic(f, "随手查个东西", scratch);
 
       // 收起（A2）：只有负责人能改，别人 404；收起的项目连同 Task 挂在它上面时，Task 的约定和对表照出，交付条目的正文不出。
+      // 先有一版交付物、一张挂这件 Task 的卡，再挂到「私事」上（挂的时候版本和卡跟着记到「私事」）。
+      const versionId = randomUUID(), itemId = randomUUID();
+      await f.t.sql(`INSERT INTO deliverable_versions(id,task_id,mission_id,author_id,number,task_name,basis,criteria,statement)
+        VALUES($1,'task-open','mine',$2,1,'对话质量达标','acceptance','["有题库打分结果","有新人上手录屏"]','私事里的报告')`, [versionId, TEST_MEMBER.personId]);
+      await f.t.sql(`INSERT INTO deliverable_items(id,version_id,position,kind,name,storage_key,extracted_text,read) VALUES($1,$2,0,'file','报告.md','deliverables/x','报告正文','read')`,
+        [itemId, versionId]);
+      const onTask = await f.card("私事里挂 Task 的卡");
+      await f.t.sql("UPDATE tasks SET executor='claude_code' WHERE id=$1", [onTask]);
       const hidden = await project(f, "私事", "task-open");
       const inHidden = await looseCard(f, "私事的卡", hidden);
       expect((await f.call("PATCH", `/api/me/projects/${hidden}`, { hiddenFromColleagues: true }, await thirdCookie(f))).statusCode).toBe(404);
@@ -241,11 +255,6 @@ describe("从库里读（dbScopeSource）", { timeout: 60_000 }, () => {
       expect(listedProjects.find((entry) => entry.projectId === keep)).not.toHaveProperty("hiddenFromColleagues");
       const home = (await f.call("GET", "/api/me/work-home")).json().projects as { projectId: string; hiddenFromColleagues?: true }[];
       expect(home.find((entry) => entry.projectId === hidden)!.hiddenFromColleagues).toBe(true);
-      const versionId = randomUUID(), itemId = randomUUID();
-      await f.t.sql(`INSERT INTO deliverable_versions(id,task_id,mission_id,author_id,number,task_name,basis,criteria,statement,project_id)
-        VALUES($1,'task-open','mine',$2,1,'对话质量达标','acceptance','["有题库打分结果","有新人上手录屏"]','私事里的报告',$3)`, [versionId, TEST_MEMBER.personId, hidden]);
-      await f.t.sql(`INSERT INTO deliverable_items(id,version_id,position,kind,name,storage_key,extracted_text,read) VALUES($1,$2,0,'file','报告.md','deliverables/x','报告正文','read')`,
-        [itemId, versionId]);
 
       const read = reader(f);
       const listed = await ids(f);
@@ -262,10 +271,29 @@ describe("从库里读（dbScopeSource）", { timeout: 60_000 }, () => {
       expect(task).toContain("有题库打分结果");
       expect(task).not.toContain(itemId);
 
+      // Task 从「私事」取下来：那一版记的还是「私事」，条目照样不出。
+      expect((await f.call("DELETE", `/api/me/projects/${hidden}/goals/task-open`)).statusCode).toBe(204);
+      expect(await ids(f)).not.toContain(`deliverable:${itemId}`);
+      expect(await read.read(`deliverable:${itemId}`)).toBeNull();
+      // 取下来以后卡还在「私事」里，它验收过的产出进了新的一版（这一版没记项目）：按准备中记的出处，条目也不出。
+      const machine = await f.local();
+      const handback = await machine.handBack(onTask);
+      await f.t.app.cardAcceptance.idle();
+      const nextVersion = randomUUID(), nextItem = randomUUID();
+      await f.t.sql(`INSERT INTO deliverable_versions(id,task_id,mission_id,author_id,number,task_name,basis,criteria,statement)
+        VALUES($1,'task-open','mine',$2,2,'对话质量达标','acceptance','["有题库打分结果","有新人上手录屏"]','这一版纳入：私事里挂 Task 的卡')`, [nextVersion, TEST_MEMBER.personId]);
+      await f.t.sql(`INSERT INTO deliverable_items(id,version_id,position,kind,name,storage_key,extracted_text,read) VALUES($1,$2,0,'file','方案.md','deliverables/y','卡的方案正文','read')`,
+        [nextItem, nextVersion]);
+      await f.t.sql(`INSERT INTO deliverable_pending_items(id,plan_task_id,handback_id,added_by,version_id) VALUES($1,'task-open',$2,$3,$4)`,
+        [randomUUID(), handback, TEST_MEMBER.personId, nextVersion]);
+      expect(await ids(f)).toEqual(expect.arrayContaining(["task:task-open"]));
+      expect(await ids(f)).not.toContain(`deliverable:${nextItem}`);
+      expect(await read.read(`deliverable:${nextItem}`)).toBeNull();
+
       // 放开以后照常进来。
       expect((await f.call("PATCH", `/api/me/projects/${hidden}`, { hiddenFromColleagues: false })).json()).not.toHaveProperty("hiddenFromColleagues");
-      expect(await ids(f)).toEqual(expect.arrayContaining([`project:${hidden}`, `session:card:${inHidden}`, `deliverable:${itemId}`]));
-      expect((await read.read(`deliverable:${itemId}`))!.text).toBe("报告正文");
+      expect(await ids(f)).toEqual(expect.arrayContaining([`project:${hidden}`, `session:card:${inHidden}`, `deliverable:${nextItem}`]));
+      expect((await read.read(`deliverable:${nextItem}`))!.text).toBe("卡的方案正文");
     } finally { await f.close(); }
   });
 
@@ -316,8 +344,8 @@ describe("可搜的人从库里读（colleagueIndex）", { timeout: 60_000 }, ()
       await f.t.sql(`INSERT INTO roles(id,owner_id,name,family,kind,shared_with_colleagues,archived_at) VALUES($1,$2,'归档的技能','general','worker',true,now())`,
         [randomUUID(), TEST_CEO.personId]);
 
-      const colleagues = colleagueNames(loadPeople(PEOPLE_SEED));
-      const index = await colleagueIndex(q, colleagues, TEST_MEMBER.personId);
+      const directory = { searchPeople: () => loadPeople(PEOPLE_SEED) };
+      const index = await colleagueIndex(q, directory, TEST_MEMBER.personId);
       expect(index.map((entry) => entry.personId)).toEqual([TEST_CEO.personId]);
       expect(index[0]).toMatchObject({ name: "测试甲" });
       expect(index[0].labels).toEqual(expect.arrayContaining(["公开技能：部署验收", "负责能力域：研发", "负责战场：增长战场"]));
@@ -326,7 +354,7 @@ describe("可搜的人从库里读（colleagueIndex）", { timeout: 60_000 }, ()
       expect(matchColleagues(index, "个人复盘")).toEqual({ people: [], more: 0 });
       expect(matchColleagues(index, "部署验收").people).toEqual([{ personId: TEST_CEO.personId, name: "测试甲", matched: ["公开技能：部署验收"] }]);
       // 不在覆盖里的人自己来搜：一个也搜不到。
-      expect(await colleagueIndex(q, colleagues, THIRD.personId)).toEqual([]);
+      expect(await colleagueIndex(q, directory, THIRD.personId)).toEqual([]);
     } finally { await f.close(); }
   });
 });

@@ -1,6 +1,8 @@
 import type { TCardCriterionVerdict, TTaskCheckCriterion } from "@warmap/contracts";
 import { effectiveOutcome, type HandbackRow, type StoredAcceptance } from "./cardProjection.js";
 import type { Query } from "./meetingStore.js";
+import { colleagueAccess } from "./colleagueAccess.js";
+import type { PeopleDirectory } from "./peopleDirectory.js";
 import { locatePlanTask } from "./planTaskAccess.js";
 import type { PlanTaskSource } from "./planTasks.js";
 import { CARD_PROJECT } from "./projects.js";
@@ -84,14 +86,17 @@ export type ScopeReader = {
 export const CATALOG_MAX = 200;
 export const READ_CHARS = 24_000;
 
-/** 读：先读行、筛出范围，按 itemId 整串找；找到才拼正文，正文先遮密钥再按 offset、limit 切。 */
+/** 出去的条目：标题和原作者也遮一遍密钥（卡和专题的标题常是本人的原话，产出标题、文件名来自本机或上传）。 */
+const masked = (entry: ScopeEntry): ScopeEntry => ({ ...entry, title: maskSecrets(entry.title), ...(entry.author ? { author: maskSecrets(entry.author) } : {}) });
+
+/** 读：先读行、筛出范围，按 itemId 整串找；找到才拼正文，正文先遮密钥再按 offset、limit 切。目录和读出来的标题也遮。 */
 export function scopeReader(source: ScopeSource): ScopeReader {
   const person = source.owner;
   return {
     owner: person,
     async catalog() {
       const entries = scopeEntries(await source.rows());
-      return { person, entries: entries.slice(0, CATALOG_MAX), more: Math.max(0, entries.length - CATALOG_MAX) };
+      return { person, entries: entries.slice(0, CATALOG_MAX).map(masked), more: Math.max(0, entries.length - CATALOG_MAX) };
     },
     async read(itemId, offset = 0, limit = READ_CHARS) {
       const rows = await source.rows();
@@ -103,7 +108,7 @@ export function scopeReader(source: ScopeSource): ScopeReader {
       const start = Math.max(0, Math.floor(offset) || 0);
       const end = start + Math.min(READ_CHARS, Math.max(1, Math.floor(limit) || READ_CHARS));
       const rest = end < text.length;
-      return { person, itemId: entry.itemId, kind: entry.kind, title: entry.title, updatedAt: entry.updatedAt, text: text.slice(start, end), truncated: rest,
+      return { person, itemId: entry.itemId, kind: entry.kind, title: maskSecrets(entry.title), updatedAt: entry.updatedAt, text: text.slice(start, end), truncated: rest,
         nextOffset: rest ? end : null };
     },
   };
@@ -169,10 +174,16 @@ export function dbScopeSource(deps: ScopeDeps, ownerId: string): ScopeSource {
     const tree = await treeTasks(q, deps.planTasks, ownerId, deps.now);
     const carried = new Set(tree.missions.filter((mission) => mission.carried).map((mission) => mission.id));
     const tasks = tree.tasks.map((task) => ({ taskId: task.taskId, name: task.name, carried: carried.has(task.missionId) }));
-    // 每件 Task 最新一版的条目；Task 挂在收起的项目上时这些条目的正文不出（A2）。
+    // 每件 Task 最新一版的条目。条目正文不出（A2）的三种：Task 现在挂在收起的项目上；这一版记的项目收起了（取下 Task 时版本还记着原来的项目）；
+    // 这件 Task 进过版本的准备中各样（卡的交回、专题的一版）出自收起项目里的会话（沿用的条目是复制的，所以看全部进过版本的，不只最新一版）。
     const deliverables = tasks.length ? (await q(`SELECT i.id::text AS item_id,v.task_id,i.name,v.number,v.hidden FROM (
         SELECT DISTINCT ON (v.task_id) v.id,v.task_id,v.number,EXISTS (SELECT 1 FROM project_goals g JOIN projects p ON p.id=g.project_id
-          WHERE g.task_id=v.task_id AND p.hidden_from_colleagues) AS hidden
+            WHERE g.task_id=v.task_id AND p.hidden_from_colleagues)
+          OR EXISTS (SELECT 1 FROM projects p WHERE p.id=v.project_id AND p.hidden_from_colleagues)
+          OR EXISTS (SELECT 1 FROM deliverable_pending_items d LEFT JOIN card_handbacks h ON h.id=d.handback_id LEFT JOIN tasks t ON t.id=h.task_id
+              LEFT JOIN topic_versions tv ON tv.id=d.topic_version_id LEFT JOIN research_topics r ON r.id=tv.topic_id
+              JOIN projects p ON p.id=COALESCE(${CARD_PROJECT("t")},${TOPIC_PROJECT("r")}) AND p.hidden_from_colleagues
+            WHERE d.plan_task_id=v.task_id AND d.version_id IS NOT NULL) AS hidden
         FROM deliverable_versions v WHERE v.task_id=ANY($1::text[]) ORDER BY v.task_id,v.number DESC) v
       JOIN deliverable_items i ON i.version_id=v.id ORDER BY v.task_id,i.position`, [tasks.map((task) => task.taskId)])).rows as
       { item_id: string; task_id: string; name: string; number: number; hidden: boolean }[] : [];
@@ -306,12 +317,13 @@ export type ColleagueHit = { personId: string; name: string; matched: string[] }
 export const COLLEAGUE_HITS = 5;
 
 /**
- * 从库里读出可搜的人。names 是覆盖的人（colleagueAccess.ts 的 colleagueNames）：搜的人自己不在里面就一个也不给；
- * 给的是 names 里除了自己的每个人，标签取他负责的战场名、能力域名、他标了同事可用且没归档的技能名。不用 Mission 标题和项目名（A5）。
+ * 从库里读出可搜的人：人员目录里搜的人能读的那些（colleagueAccess 判 read，A1：都要是 DRI 或 CEO、不含自己），
+ * 标签取他负责的战场名、能力域名、他标了同事可用且没归档的技能名。不用 Mission 标题和项目名（A5）。
  */
-export async function colleagueIndex(q: Query, names: ReadonlyMap<string, string>, viewerId: string): Promise<ColleagueIndexEntry[]> {
-  if (!names.has(viewerId)) return [];
-  const people = [...names].filter(([personId]) => personId !== viewerId);
+export async function colleagueIndex(q: Query, directory: PeopleDirectory, viewerId: string): Promise<ColleagueIndexEntry[]> {
+  const people: [string, string][] = [];
+  for (const person of directory.searchPeople(undefined))
+    if ((await colleagueAccess(q, directory, viewerId, person.personId, "read")).allowed) people.push([person.personId, person.displayName]);
   if (!people.length) return [];
   const rows = (await q(`SELECT owner_id,label FROM (
       SELECT owner_id,'负责战场：'||name AS label,1 AS rank,sort_order,name FROM battlefield_config WHERE owner_id=ANY($1::text[])
