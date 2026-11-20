@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { AnswerInput, ColleagueAnswerAgent, PickInput } from "../src/colleagueAnswerAgent.js";
 import { dbScopeSource, scopeReader, type OwnerRows, type ScopeSource } from "../src/colleagueScope.js";
+import { createJobWorker } from "../src/jobs.js";
 import { answerForColleague } from "../src/teamBuddyAnswers.js";
 import { TEAM_BUDDY_ANSWER_JOB } from "../src/teamDeliveries.js";
 import { BOARD_NOW, BOARD_TASKS, boardFixture, THIRD } from "./boardFixture.js";
@@ -85,6 +86,27 @@ describe("同事来问，伙伴先答", { timeout: 60_000 }, () => {
       expect(await s.waiting()).not.toContain(`team-request:${sent.id}`);
       expect((await s.read(sent.id, s.third)).recipients[0]).toMatchObject({ buddy: { state: "answered" }, replies: [{ origin: "buddy" }] });
     } finally { await s.f.close(); }
+  });
+
+  it("入队就跑：首问、追问都不等轮询，发出时就把作业交给 runNow；作业照常排着兜底", async () => {
+    const s = await setup();
+    // 只用 runNow，不 start、不 tick：作业跑完就说明没等轮询。
+    const worker = createJobWorker({ pool: s.f.t.pool, handlers: s.f.t.app.teamBuddyAnswerJobs });
+    try {
+      const started: Promise<unknown>[] = [];
+      s.f.t.app.jobsNow.run = (jobId) => { const work = worker.runNow(jobId); started.push(work); return work; };
+      const sent = await s.ask();
+      expect(started).toHaveLength(1);
+      expect(await started[0]).toBe(true);
+      expect((await s.read(sent.id)).recipients[0]).toMatchObject({ buddy: { state: "answered" }, replies: [{ origin: "buddy" }] });
+      expect(await s.f.t.sql("SELECT status FROM jobs WHERE dedupe_key=$1", [`team.buddy-answer:${sent.id}:${THIRD.personId}:q`])).toEqual([{ status: "done" }]);
+      const followUp = await s.f.call("POST", `${base}/${sent.id}/replies`, { clientId: randomUUID(), status: "follow_up", recipientId: THIRD.personId, text: "那回滚怎么做" });
+      expect(followUp.statusCode, followUp.body).toBe(200);
+      expect(started).toHaveLength(2);
+      expect(await started[1]).toBe(true);
+      const replies = (await s.read(sent.id)).recipients[0].replies;
+      expect(replies.map((reply) => reply.origin ?? reply.status)).toEqual(["buddy", "follow_up", "buddy"]);
+    } finally { await worker.close(); await s.f.close(); }
   });
 
   it("给模型的只有范围里的材料和这次问答", async () => {
@@ -291,8 +313,20 @@ describe("一次代答（answerForColleague，不碰库）", () => {
     fake.impl.pick = async () => ({ itemIds: ["note"] });
     expect(await run(fake.agent, source(rowsOf({ note: { updatedAt: day } }), { note: null }))).toEqual({ kind: "empty" });
     expect(fake.seen.answer).toHaveLength(0);
-    expect(fake.seen.pick[1]).toMatchObject({ owner: "晨星", asker: "测试乙", catalog: [{ itemId: "note", kind: "note", title: "说明", updatedAt: day }] });
-    expect(Object.keys(fake.seen.pick[1].catalog[0]).sort()).toEqual(["itemId", "kind", "title", "updatedAt"]);
+    expect(fake.seen.pick[1]).toMatchObject({ owner: "晨星", asker: "测试乙", catalog: [{ itemId: "note", kind: "note", title: "说明", updatedAt: day, under: null }] });
+    expect(Object.keys(fake.seen.pick[1].catalog[0]).sort()).toEqual(["itemId", "kind", "title", "under", "updatedAt"]);
+  });
+
+  it("挑材料时目录带上一级：同名会话分得清在哪个项目", async () => {
+    const fake = fakeAgent();
+    const project = (id: string, name: string) => ({ id, name, scratch: false, archived: false, hidden: false, updatedAt: day });
+    const session = (id: string, projectId: string) => ({ kind: "card" as const, id, title: "部署", projectId, trashed: false, archived: false, line: "停着" as const,
+      updatedAt: day, author: null });
+    await run(fake.agent, source(rowsOf({ note: { updatedAt: day }, projects: [project("pa", "天枢"), project("pb", "官网")],
+      sessions: [session("sa", "pa"), session("sb", "pb")] }), { note: "说明" }));
+    const sessions = fake.seen.pick[0].catalog.filter((entry) => entry.kind === "session");
+    expect(sessions).toEqual([expect.objectContaining({ itemId: "session:card:sa", title: "部署", under: "project:pa" }),
+      expect.objectContaining({ itemId: "session:card:sb", title: "部署", under: "project:pb" })]);
   });
 
   it("出处由天枢拼：只认材料里有的 itemId，写成「标题（月/日）」", async () => {

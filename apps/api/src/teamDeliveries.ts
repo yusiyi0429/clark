@@ -17,7 +17,9 @@ import { answeringLate, BUDDY_NOT_ANSWERED, latestReply, readTeamDelivery } from
 export { listPendingTeamRequests, listTeamDeliveries, readTeamDelivery } from "./teamDeliveryInbox.js";
 
 /** people：人员目录里真人的名字；directory：整份人员目录（能不能问同事的伙伴由 colleagueAccess 按它判）。 */
-export type TeamDeliveryDeps = { q: Query; pool: Pool; storageDir: string; now: () => Date; people: ReadonlyMap<string, string>; directory: PeopleDirectory };
+/** dispatchNow：jobs 的 runNow，代答入队后立即跑；不给就只等轮询。 */
+export type TeamDeliveryDeps = { q: Query; pool: Pool; storageDir: string; now: () => Date; people: ReadonlyMap<string, string>; directory: PeopleDirectory;
+  dispatchNow?: (jobId: string) => Promise<unknown> };
 type Upload = { filename: string; buffer: Buffer };
 type Source = { id: string; sha256: string };
 type FileInfo = { fileName: string; mimeType: string; size: number; sha256: string };
@@ -119,6 +121,18 @@ export type BuddyAnswerTrigger = { requestId: string; recipientId: string; trigg
 export const buddyAnswerKey = (trigger: BuddyAnswerTrigger) =>
   `${TEAM_BUDDY_ANSWER_JOB}:${trigger.requestId}:${trigger.recipientId}:${trigger.triggerId ?? "q"}`;
 
+/**
+ * 代答不等每 5 秒一轮的轮询（轮询里一条一条串着跑）：事务提交后，给了 dispatchNow 就把这一单还没被领的代答作业立即派出去，不等它跑完。
+ * 作业照常排着兜底：派之前进程退出，轮询照样领到；直派和轮询只有一方领得到（jobs.ts runNow）。
+ */
+async function dispatchBuddy(deps: TeamDeliveryDeps, requestId: string) {
+  if (!deps.dispatchNow) return;
+  const jobs = (await deps.q("SELECT id::text FROM jobs WHERE kind=$1 AND status='pending' AND dedupe_key LIKE $2",
+    [TEAM_BUDDY_ANSWER_JOB, `${TEAM_BUDDY_ANSWER_JOB}:${requestId}:%`])).rows as { id: string }[];
+  for (const job of jobs)
+    void deps.dispatchNow(job.id).catch((error: Error) => console.warn(`team buddy answer dispatch failed, left to jobs: ${error.message}`));
+}
+
 async function startBuddy(q: Query, trigger: BuddyAnswerTrigger, dedupeKey: string, now: Date) {
   await q("UPDATE request_recipients SET buddy_state='answering',buddy_note=NULL,buddy_asked_at=$3,buddy_asked_owner=false WHERE request_id=$1 AND person_id=$2",
     [trigger.requestId, trigger.recipientId, now]);
@@ -198,6 +212,7 @@ export async function sendTeamDelivery(deps: TeamDeliveryDeps, actor: string, in
     await setRequestStatus(q, requestId);
     return requestId;
   });
+  await dispatchBuddy(deps, id);
   return projectWritten(deps, actor, id);
 }
 
@@ -263,6 +278,7 @@ export async function replyTeamDelivery(deps: TeamDeliveryDeps, actor: string, i
     if (input.status === "follow_up" && !(await askBuddy(q, deps.directory, actor, { requestId: id, recipientId: recipient, triggerId: replyId }, at))) throw unavailable();
     await setRequestStatus(q, id);
   });
+  if (input.status === "follow_up") await dispatchBuddy(deps, id);
   return projectWritten(deps, actor, id);
 }
 
@@ -292,6 +308,7 @@ export async function retryTeamBuddy(deps: TeamDeliveryDeps, actor: string, id: 
     const trigger = { requestId: id, recipientId: personId, triggerId: (latest?.id as string | undefined) ?? null };
     await startBuddy(q, trigger, `${buddyAnswerKey(trigger)}:retry-${now.getTime()}`, now);
   });
+  await dispatchBuddy(deps, id);
   return projectWritten(deps, actor, id);
 }
 

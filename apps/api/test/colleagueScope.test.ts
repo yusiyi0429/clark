@@ -13,8 +13,10 @@ import { TEST_CEO, TEST_MEMBER } from "./helpers.js";
 const at = (minute: number) => new Date(Date.UTC(2026, 10, 5, 1, minute)).toISOString();
 const session = (kind: "card" | "topic", id: string, projectId: string | null, minute: number, extra: Partial<OwnerRows["sessions"][number]> = {}):
   OwnerRows["sessions"][number] => ({ kind, id, title: `会话 ${id}`, projectId, trashed: false, archived: false, line: "停着", updatedAt: at(minute), author: null, ...extra });
-const output = (id: string, sessionKind: "card" | "topic", sessionId: string): OwnerRows["outputs"][number] =>
-  ({ id, sessionKind, sessionId, title: `产出 ${id}`, createdAt: at(30) });
+const output = (id: string, sessionKind: "card" | "topic", sessionId: string, hasText = true): OwnerRows["outputs"][number] =>
+  ({ id, sessionKind, sessionId, title: `产出 ${id}`, createdAt: at(30), hasText });
+const proj = (id: string, name: string, minute: number, extra: Partial<OwnerRows["projects"][number]> = {}): OwnerRows["projects"][number] =>
+  ({ id, name, scratch: false, archived: false, hidden: false, updatedAt: at(minute), ...extra });
 
 const rows: OwnerRows = {
   note: { updatedAt: at(1) },
@@ -26,15 +28,16 @@ const rows: OwnerRows = {
   ],
   tasks: [{ taskId: "task-now", name: "本月的", carried: false }, { taskId: "task-old", name: "往月带过来的", carried: true }],
   deliverables: [
-    { itemId: "d-now", taskId: "task-now", name: "方案.md", versionNumber: 2, hidden: false },
-    { itemId: "d-hidden", taskId: "task-now", name: "收起项目里的报告.md", versionNumber: 2, hidden: true },
-    { itemId: "d-old", taskId: "task-old", name: "旧方案.md", versionNumber: 1, hidden: false },
+    { itemId: "d-now", taskId: "task-now", name: "方案.md", versionNumber: 2, hidden: false, hasText: true },
+    { itemId: "d-hidden", taskId: "task-now", name: "收起项目里的报告.md", versionNumber: 2, hidden: true, hasText: true },
+    { itemId: "d-old", taskId: "task-old", name: "旧方案.md", versionNumber: 1, hidden: false, hasText: true },
+    { itemId: "d-image", taskId: "task-now", name: "截图.png", versionNumber: 2, hidden: false, hasText: false },
   ],
   projects: [
-    { id: "p-deploy", name: "天枢部署", scratch: false, archived: false, hidden: false },
-    { id: "p-scratch", name: "随手", scratch: true, archived: false, hidden: false },
-    { id: "p-old", name: "旧官网", scratch: false, archived: true, hidden: false },
-    { id: "p-hidden", name: "私事", scratch: false, archived: false, hidden: true },
+    proj("p-deploy", "天枢部署", 0),
+    proj("p-scratch", "随手", 0, { scratch: true }),
+    proj("p-old", "旧官网", 0, { archived: true }),
+    proj("p-hidden", "私事", 0, { hidden: true }),
   ],
   sessions: [
     session("card", "c-handed", "p-deploy", 10, { author: "丙" }),
@@ -46,7 +49,8 @@ const rows: OwnerRows = {
     session("card", "c-loose", null, 25),
     session("card", "c-hidden", "p-hidden", 26),
   ],
-  outputs: [output("o-deploy", "card", "c-deploy"), output("o-scratch", "topic", "t-scratch"), output("o-hidden", "card", "c-hidden")],
+  outputs: [output("o-deploy", "card", "c-deploy"), output("o-blank", "card", "c-deploy", false), output("o-scratch", "topic", "t-scratch"),
+    output("o-hidden", "card", "c-hidden")],
 };
 
 describe("范围判定（纯函数）", () => {
@@ -66,6 +70,17 @@ describe("范围判定（纯函数）", () => {
       under: "project:p-deploy" });
     expect(byId.get("session:card:c-handed")).toMatchObject({ under: "project:p-deploy", author: "丙" });
     expect(byId.get("output:o-deploy")).toMatchObject({ kind: "output", title: "产出 o-deploy", under: "session:card:c-deploy" });
+  });
+  it("读不出字的不进目录：图片交付物、没抽出文字的产出", () => {
+    const listed = scopeEntries(rows).map((entry) => entry.itemId);
+    expect(listed).not.toContain("deliverable:d-image");
+    expect(listed).not.toContain("output:o-blank");
+  });
+  it("项目按最近动静排，新的在前：项目自己改过或它的会话动过都算", () => {
+    const projects = [proj("p-a", "早建的", 1), proj("p-b", "项目改过名", 40), proj("p-c", "会话刚动过", 2)];
+    const sessions = [session("card", "a1", "p-a", 3), session("card", "b1", "p-b", 4), session("card", "c1", "p-c", 50)];
+    const order = scopeEntries({ ...rows, projects, sessions, outputs: [] }).filter((entry) => entry.kind === "project").map((entry) => entry.itemId);
+    expect(order).toEqual(["project:p-c", "project:p-b", "project:p-a"]);
   });
 });
 
@@ -118,6 +133,19 @@ describe("读（scopeReader）", () => {
     expect(catalog.entries).toHaveLength(CATALOG_MAX);
     expect(catalog.more).toBe(total - CATALOG_MAX);
     expect(catalog.entries[0].itemId).toBe("note");
+  });
+  it("目录超过上限时截掉的是最老的项目，最近的留着", async () => {
+    // 老项目先建，会话都是早先的；新项目后建，会话是最近的。两个加起来超过 200 条。
+    const projects = [proj("p-early", "早先的项目", 1), proj("p-recent", "最近的项目", 2)];
+    const sessions = [...Array.from({ length: 150 }, (_, index) => session("card", `e-${index}`, "p-early", 5)),
+      ...Array.from({ length: 150 }, (_, index) => session("card", `r-${index}`, "p-recent", 50))];
+    const catalog = await scopeReader(source({}, { ...rows, projects, sessions, outputs: [] })).catalog();
+    const listed = catalog.entries.map((entry) => entry.itemId);
+    expect(listed).toHaveLength(CATALOG_MAX);
+    expect(listed).toContain("project:p-recent");
+    for (let index = 0; index < 150; index++) expect(listed, `r-${index}`).toContain(`session:card:r-${index}`);
+    expect(listed.indexOf("project:p-recent")).toBeLessThan(listed.indexOf("project:p-early"));
+    expect(catalog.more).toBeGreaterThan(0);
   });
 });
 
@@ -186,6 +214,10 @@ describe("从库里读（dbScopeSource）", { timeout: 60_000 }, () => {
       // 夹具的交回不报会话状态（停在 starting）：照真本机交完收工后的样子记成退出。
       await f.t.sql("UPDATE local_runs SET state='exited' WHERE task_id=$1", [cardId]);
       const [outputRow] = await f.t.sql("SELECT id::text FROM local_outputs WHERE task_id=$1 AND kind='artifact'", [cardId]);
+      // 同一个会话再交一份没抽出文字的（比如截图）：不进目录。
+      const blankOutput = randomUUID();
+      await f.t.sql(`INSERT INTO local_outputs(id,owner_id,device_id,run_id,task_id,kind,title,storage_key,client_id,created_at)
+        SELECT $1,owner_id,device_id,run_id,task_id,kind,'截图.png',storage_key,$2,created_at FROM local_outputs WHERE id=$3`, [blankOutput, randomUUID(), outputRow.id]);
 
       const read = reader(f);
       const catalog = await read.catalog();
@@ -195,6 +227,7 @@ describe("从库里读（dbScopeSource）", { timeout: 60_000 }, () => {
       expect(listed).toEqual(expect.arrayContaining(["note", `file:${fileId}`, `skill:${roleId}`, "task:task-open", `project:${deploy}`, `session:card:${cardId}`,
         `output:${outputRow.id}`, `project:${idle}`, `session:card:${fresh}`]));
       expect(listed).not.toContain("task:task-theirs");
+      expect(listed).not.toContain(`output:${blankOutput}`);
 
       expect((await read.read("note"))!.text).toBe("部署先看拆分手册");
       expect((await read.read(`file:${fileId}`))!.text).toContain("先做盘点表");
@@ -302,6 +335,24 @@ describe("从库里读（dbScopeSource）", { timeout: 60_000 }, () => {
       expect((await f.call("PATCH", `/api/me/projects/${hidden}`, { hiddenFromColleagues: false })).json()).not.toHaveProperty("hiddenFromColleagues");
       expect(await ids(f)).toEqual(expect.arrayContaining([`project:${hidden}`, `session:card:${inHidden}`, `deliverable:${nextItem}`]));
       expect((await read.read(`deliverable:${nextItem}`))!.text).toBe("卡的方案正文");
+    } finally { await f.close(); }
+  });
+
+  it("交付物里读不出字的不进目录：图片、还没读出文字的文件；链接和读出文字的照列", async () => {
+    const f = await boardFixture();
+    try {
+      const versionId = randomUUID();
+      await f.t.sql(`INSERT INTO deliverable_versions(id,task_id,mission_id,author_id,number,task_name,basis,criteria,statement)
+        VALUES($1,'task-open','mine',$2,1,'对话质量达标','acceptance','["有题库打分结果","有新人上手录屏"]','第一版')`, [versionId, TEST_MEMBER.personId]);
+      const [image, pending, file, link] = [randomUUID(), randomUUID(), randomUUID(), randomUUID()];
+      await f.t.sql(`INSERT INTO deliverable_items(id,version_id,position,kind,name,storage_key,url,extracted_text,read) VALUES
+        ($1,$5,0,'image','截图.png','deliverables/a',NULL,NULL,'unreadable'),($2,$5,1,'file','还在读.pdf','deliverables/b',NULL,NULL,'pending'),
+        ($3,$5,2,'file','方案.md','deliverables/c',NULL,'方案正文','read'),($4,$5,3,'link','评审记录',NULL,'https://example.com/review',NULL,'read')`,
+      [image, pending, file, link, versionId]);
+      const listed = await ids(f);
+      expect(listed).toEqual(expect.arrayContaining([`deliverable:${file}`, `deliverable:${link}`]));
+      expect(listed).not.toContain(`deliverable:${image}`);
+      expect(listed).not.toContain(`deliverable:${pending}`);
     } finally { await f.close(); }
   });
 
