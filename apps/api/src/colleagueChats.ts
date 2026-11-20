@@ -148,7 +148,7 @@ export async function listChats(deps: ChatDeps, viewer: string): Promise<TChatLi
 }
 
 /** 看的人是这段的问的人或主人、且还被覆盖；否则和没有这段一样。 */
-async function chatFor(deps: ChatDeps, viewer: string, chatId: string): Promise<Chat> {
+export async function chatFor(deps: ChatDeps, viewer: string, chatId: string): Promise<Chat> {
   const chat = (await deps.q("SELECT id,asker_id,owner_id FROM colleague_chats WHERE id=$1", [chatId])).rows[0] as Chat | undefined;
   if (!chat || (chat.asker_id !== viewer && chat.owner_id !== viewer) || !isCovered(deps.directory, viewer)) throw noChat();
   return chat;

@@ -287,12 +287,15 @@ export const HomeMonthMission = Type.Object({
  *   都是 POST /api/me/nexus-confirmations/{confirmation.id}/decision（手机上也能）。没有单独的页面，open 只是指回这一条。不属于 Task、项目。
  * needs_person（主循环第 61 条）：一张卡等你补（同子会话 waiting = needs_person）。title「等你补」，source 同 verdict（卡名 · Task 名），
  *   summary 是验收员那一句人话；answer = open，open 同 verdict 指到那张卡（框钉在子会话输入框上方）。
+ * colleague_chat（同事对话）：同事来问我的伙伴、有句要我本人表态的，一段一行、逐句结清。title 是最早一句还等我的问话，source 是它的原因（CHAT_WAIT_WORD），
+ *   person 是问的人，open 是这段对话，chat.pushAt 是要推飞书的那几种原因里最晚开始等的时间（没有为 null）。
+ * friend_request：同事加我好友、等我开放。title「{名字}想加你好友」，person 是对方，open 是这条请求。
  */
 export const WaitingKind = Type.Union([
   Type.Literal("approval"), Type.Literal("question"), Type.Literal("verdict"), Type.Literal("meeting"), Type.Literal("mission_card"), Type.Literal("role"),
   Type.Literal("merge"), Type.Literal("plan_start"), Type.Literal("acceptance"), Type.Literal("month"), Type.Literal("device"), Type.Literal("quota"),
   Type.Literal("transfer"), Type.Literal("goal_changed"), Type.Literal("auto_relay"), Type.Literal("nexus_confirmation"), Type.Literal("needs_person"),
-  Type.Literal("team_request"),
+  Type.Literal("team_request"), Type.Literal("colleague_chat"), Type.Literal("friend_request"),
 ]);
 
 /**
@@ -301,13 +304,15 @@ export const WaitingKind = Type.Union([
  * task_detail 是 Task 详情（别人的 Task 只读，id 是 Task id），month 是月份页（id 是 YYYY-MM），connections 是连接页（id 固定 "this_computer"），
  * transfer 是一份项目转交（id 是转交 id，GET /api/me/project-transfers/:id），
  * nexus_confirmation 是一条会后待定事项（id 同 WaitingItem.confirmation.id）：没有自己的页面，就在首页「等你」那一行处理，链接落在首页。
+ * colleague_chat 是同事来问我的那段对话、friend_request 是加我好友的请求，id 都是对方的 personId。
  * focus（设计 14.3）：子会话（卡、专题、规划员、验收员）的提问和批准由项目对话转达，kind = project 时带上是哪个框：sessionId 是那个本机会话，
  * requestId 是那次提问或批准（同 WaitingItem.question / permission 的 requestId；老版本本机程序没报时为 null，定位到那个会话最新的框）。
  * 网页落在项目对话的那个框上，焦点放在推荐的选项上。不在任何项目里的子会话照旧打开子会话（card / topic），不带 focus。
  */
 export const WaitingTarget = Type.Object({
   kind: Type.Union([Type.Literal("card"), Type.Literal("topic"), Type.Literal("project"), Type.Literal("meeting"), Type.Literal("mission_card"), Type.Literal("role"),
-    Type.Literal("task_detail"), Type.Literal("month"), Type.Literal("connections"), Type.Literal("transfer"), Type.Literal("nexus_confirmation"), Type.Literal("team_request")]),
+    Type.Literal("task_detail"), Type.Literal("month"), Type.Literal("connections"), Type.Literal("transfer"), Type.Literal("nexus_confirmation"), Type.Literal("team_request"),
+    Type.Literal("colleague_chat"), Type.Literal("friend_request")]),
   id: Type.String({ minLength: 1 }),
   round: Type.Optional(Type.Boolean()),
   focus: Type.Optional(Type.Object({ sessionId: Type.String({ format: "uuid" }), requestId: Nullable(Type.String({ minLength: 1 })) }, strict)),
@@ -328,7 +333,7 @@ export const WaitingAnswer = Type.Union([Type.Literal("inline"), Type.Literal("i
  * taskId：属于哪件 Task，不属于为 null；projectId：属于哪个项目（项目行的「1 件等你」和项目对话里的提醒用），不属于为 null。
  * sessionId、deviceId、deviceName：子会话那几种（approval、question、merge）是哪个本机会话、在哪台电脑上；在这台电脑上的，网页就地批准、回答、合回（本机程序接口），别处的只能打开看。
  * dueAt：有截止时间的（Mission Card 本人确认截止、复盘窗口关闭）写上，网页离截止不到 24 小时换警告档；没有为 null。
- * person：acceptance 是请你认可的那个人（负责人），transfer 是交给你的那个人，别的为 null。month：只有 kind = month 有（step、period）。
+ * person：acceptance 是请你认可的那个人（负责人），transfer 是交给你的那个人，colleague_chat、friend_request 是对方，别的为 null。month：只有 kind = month 有（step、period）。
  * question、permission（新首页 9.6、5.4.4）：只有真在问、真在等批准才进「等你」，一轮做完停下的不进（卡照常交回进验收，子会话「已停下」）。
  *   question：kind = question 时本机报的原样提问（LocalQuestionRequestView），title 是第一个问题的原话；只有一个问题、单选、最多 3 个选项时就地答，
  *   在那台电脑上用本机程序 POST /v1/sessions/:sessionId/questions/:requestId 回答。
@@ -363,6 +368,8 @@ export const WaitingItem = Type.Object({
    * （那次交回的 headline）；question 是第一个问题的原文。别的种类、没有的为 null 或不带。
    */
   summary: Type.Optional(Nullable(Type.String())),
+  /** 只有 colleague_chat 带：pushAt 见 WaitingKind。 */
+  chat: Type.Optional(Type.Object({ pushAt: Nullable(Instant) }, strict)),
 }, strict);
 
 /**

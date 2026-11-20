@@ -1,6 +1,7 @@
 import { Type } from "@sinclair/typebox";
-import { ChatListResponse, ChatResponse, SendChatMessageRequest } from "@warmap/contracts";
+import { ChatListResponse, ChatResponse, CorrectChatMessageRequest, OwnerChatMessageRequest, SendChatMessageRequest } from "@warmap/contracts";
 import type { FastifyReply } from "fastify";
+import { correctChatMessage, retractChatMessage, sendOwnerMessage } from "../colleagueChatOwner.js";
 import { askChatOwner, ChatError, listChats, markChatRead, readChat, retryChatMessage, sendChatMessage, type ChatDeps } from "../colleagueChats.js";
 import { isRealPerson } from "../people.js";
 import type { AppInstance, Guard, RouteContext } from "./shared.js";
@@ -11,7 +12,7 @@ const personParams = Type.Object({ personId: Type.String({ minLength: 1, maxLeng
 const chatParams = Type.Object({ chatId: uuid });
 const messageParams = Type.Object({ chatId: uuid, messageId: uuid });
 
-/** 同事对话（契约 colleagueChatsOpenapi.ts）：发一句、列对话、读一段、读过、重试、问本人；工作模式登录，CEO 一样。 */
+/** 同事对话（契约 colleagueChatsOpenapi.ts）：发一句、列对话、读一段、读过、重试、问本人；主人回一句、改、收回。工作模式登录，CEO 一样。 */
 export function registerColleagueChatRoutes(app: AppInstance, ctx: RouteContext): void {
   const { q, pool, fail, requirePerson, peopleDirectory } = ctx;
   const deps = (): ChatDeps => ({ q, pool, now: ctx.now, directory: peopleDirectory, dispatchNow: app.jobsNow.run,
@@ -52,4 +53,11 @@ export function registerColleagueChatRoutes(app: AppInstance, ctx: RouteContext)
     handle(reply, async () => ({ chat: await retryChatMessage(deps(), req.person!.personId, req.params.chatId, req.params.messageId) })));
   app.post(`${C}/:chatId/messages/:messageId/ask-owner`, byMessage, async (req, reply) =>
     handle(reply, async () => ({ chat: await askChatOwner(deps(), req.person!.personId, req.params.chatId, req.params.messageId) })));
+  app.post(`${C}/:chatId/owner-messages`, { preHandler: requireMember, schema: { params: chatParams, body: OwnerChatMessageRequest, response: { 200: ChatResponse } } },
+    async (req, reply) => handle(reply, async () => ({ chat: await sendOwnerMessage(deps(), req.person!.personId, req.params.chatId, req.body) })));
+  app.post(`${C}/:chatId/messages/:messageId/correct`,
+    { preHandler: requireMember, schema: { params: messageParams, body: CorrectChatMessageRequest, response: { 200: ChatResponse } } }, async (req, reply) =>
+      handle(reply, async () => ({ chat: await correctChatMessage(deps(), req.person!.personId, req.params.chatId, req.params.messageId, req.body) })));
+  app.post(`${C}/:chatId/messages/:messageId/retract`, byMessage, async (req, reply) =>
+    handle(reply, async () => ({ chat: await retractChatMessage(deps(), req.person!.personId, req.params.chatId, req.params.messageId) })));
 }

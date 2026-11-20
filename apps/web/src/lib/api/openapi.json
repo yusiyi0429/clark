@@ -36643,6 +36643,14 @@
                                   {
                                     "const": "team_request",
                                     "type": "string"
+                                  },
+                                  {
+                                    "const": "colleague_chat",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "friend_request",
+                                    "type": "string"
                                   }
                                 ]
                               },
@@ -122436,6 +122444,14 @@
               {
                 "const": "team_request",
                 "type": "string"
+              },
+              {
+                "const": "colleague_chat",
+                "type": "string"
+              },
+              {
+                "const": "friend_request",
+                "type": "string"
               }
             ]
           },
@@ -122574,6 +122590,14 @@
               {
                 "const": "team_request",
                 "type": "string"
+              },
+              {
+                "const": "colleague_chat",
+                "type": "string"
+              },
+              {
+                "const": "friend_request",
+                "type": "string"
               }
             ]
           },
@@ -122658,6 +122682,14 @@
                   },
                   {
                     "const": "team_request",
+                    "type": "string"
+                  },
+                  {
+                    "const": "colleague_chat",
+                    "type": "string"
+                  },
+                  {
+                    "const": "friend_request",
                     "type": "string"
                   }
                 ]
@@ -123028,6 +123060,26 @@
                 "type": "null"
               }
             ]
+          },
+          "chat": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "pushAt"
+            ],
+            "properties": {
+              "pushAt": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
           }
         }
       },
@@ -124850,6 +124902,14 @@
                     {
                       "const": "team_request",
                       "type": "string"
+                    },
+                    {
+                      "const": "colleague_chat",
+                      "type": "string"
+                    },
+                    {
+                      "const": "friend_request",
+                      "type": "string"
                     }
                   ]
                 },
@@ -124934,6 +124994,14 @@
                         },
                         {
                           "const": "team_request",
+                          "type": "string"
+                        },
+                        {
+                          "const": "colleague_chat",
+                          "type": "string"
+                        },
+                        {
+                          "const": "friend_request",
                           "type": "string"
                         }
                       ]
@@ -125304,6 +125372,26 @@
                       "type": "null"
                     }
                   ]
+                },
+                "chat": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "pushAt"
+                  ],
+                  "properties": {
+                    "pushAt": {
+                      "anyOf": [
+                        {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
                 }
               }
             }

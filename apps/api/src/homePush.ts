@@ -10,7 +10,8 @@ import { shanghaiLabel } from "./workdays.js";
 /**
  * 飞书推送（新首页设计 13.2）：把首页「等你」里急的几件推到本人和天枢机器人的单聊（「天枢伙伴」那条对话），发送走 feishu/notify.ts 的队列。
  * - 推：卡住正在跑的活、而本人 10 分钟内没在网页上打开天枢的（验收两次没过、额度用完要定、批准等了 10 分钟）；
- *   要本人确认、离截止不到 24 小时的 Mission Card；复盘预评做完出了「复盘 N 月」推一次，截止前不催。CEO 要拍板的是原有的 ceoFeishuNotices.ts，不在这里。
+ *   要本人确认、离截止不到 24 小时的 Mission Card；复盘预评做完出了「复盘 N 月」推一次，截止前不催；
+ *   同事对话里要本人表态、原因是要承诺、要批准、钱和对外、找你本人的，不在天枢时推，只写谁、什么原因，不带原话。CEO 要拍板的是原有的 ceoFeishuNotices.ts，不在这里。
  * - 同一件只推一次（feishu_pushes 记着）；离上一条不到 10 分钟的攒着，到 10 分钟合成一条；22:00 到 08:00 不推，08:00 把那时还在等的合成一条。
  * - 每件带一个打开天枢那一处的链接，不放批准、回答这类操作（云端不指挥本机）。
  * - 本人在「偏好」里关了飞书通知、或没关联飞书的，不推。
@@ -74,6 +75,8 @@ export function waitingPath(open: TWaitingTarget): string {
     case "connections": return "/me/work/settings/connections";
     case "meeting": return `/me/work/meetings/${id}`;
     case "team_request": return `/me/work/buddy#team-request-${id}`;
+    case "colleague_chat": return `/me/work/chats/from/${id}`;
+    case "friend_request": return `/me/work/chats/requests/${id}`;
     case "mission_card": return open.round ? "/me" : `/me/mission-cards/${id}`;
     case "role": return "/me/team";
     case "nexus_confirmation": return "/me/work";
@@ -93,21 +96,25 @@ export function pushable(item: TWaitingItem, away: boolean, now: Date): boolean 
     case "mission_card": return dueSoon(item, now);
     // 复盘：预评做完出了「复盘 N 月」就推一次（同一件只推一次），截止前不再催（本人 11/11 定）。
     case "month": return item.month?.step === "review";
+    // 同事对话：只推要承诺、要批准、钱和对外、找你本人这几种（pushAt 有值）。
+    case "colleague_chat": return away && !!item.chat?.pushAt;
     default: return false;
   }
 }
 
-/** 同一件只推一次：等的是同一件事（id），换了一轮（时间、截止变了）算新的一件。 */
-export const pushKey = (item: TWaitingItem) => `${item.id}|${item.at ?? ""}|${item.dueAt ?? ""}`;
+/** 同一件只推一次：等的是同一件事（id），换了一轮（时间、截止变了）算新的一件；同事对话同一段又有一句要推的算新的一件。 */
+export const pushKey = (item: TWaitingItem) => item.kind === "colleague_chat" ? `${item.id}|${item.chat?.pushAt}` : `${item.id}|${item.at ?? ""}|${item.dueAt ?? ""}`;
 
-const line = (item: TWaitingItem) => [item.title, item.source].filter(Boolean).join(" · ")
+/** 消息里的标题：同事对话不带原话，只写谁、什么原因。 */
+const pushTitle = (item: TWaitingItem) => item.kind === "colleague_chat" ? `${item.person?.name} · ${item.source}` : item.title;
+const line = (item: TWaitingItem) => [pushTitle(item), item.kind === "colleague_chat" ? null : item.source].filter(Boolean).join(" · ")
   + (item.dueAt && (item.kind === "mission_card" || item.kind === "month") ? `（${shanghaiLabel(new Date(item.dueAt))} 截止）` : "");
 
 /** 一条消息：一件时标题是那一件，几件时「N 件等你」，每件一行结论、一个链接。 */
 export function pushNotice(personId: string, items: TWaitingItem[]): FeishuNotice {
-  const links = items.slice(0, MAX_LINKS).map((item) => ({ label: items.length === 1 ? "打开天枢" : item.title.slice(0, 20), path: waitingPath(item.open) }));
+  const links = items.slice(0, MAX_LINKS).map((item) => ({ label: items.length === 1 ? "打开天枢" : pushTitle(item).slice(0, 20), path: waitingPath(item.open) }));
   if (items.length > MAX_LINKS) links.push({ label: "打开天枢", path: "/me/work" });
-  return items.length === 1 ? { personId, title: items[0].title, body: line(items[0]) || items[0].title, links }
+  return items.length === 1 ? { personId, title: pushTitle(items[0]), body: line(items[0]) || pushTitle(items[0]), links }
     : { personId, title: `${items.length} 件等你`, body: items.map(line).join("\n"), links };
 }
 

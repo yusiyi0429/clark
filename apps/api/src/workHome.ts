@@ -7,6 +7,7 @@ import { planTaskMissions, type MissionRow } from "./homePlan.js";
 import { failStreak, type HandbackRow } from "./cardProjection.js";
 import { askingQuestion, latestRuns, type RunAsk, type RunRow } from "./localDevices.js";
 import { UUID_PATTERN, type Query } from "./meetingStore.js";
+import type { PeopleDirectory } from "./peopleDirectory.js";
 import { companyPeriod } from "./monthlyPlans.js";
 import { readPlanTasks, type PlanTask, type PlanTaskSource } from "./planTasks.js";
 import { roleRef, rolesById } from "./roles.js";
@@ -103,6 +104,8 @@ export type WorkHomeDeps = {
   nexusConfirmations: (personId: string) => Promise<TNexusConfirmationItem[]>;
   /** 我看得到的 Mission Card 轮次（missionRounds.ts 的 listMissionRoundCards）。 */
   missionRounds: (person: MissionRoundPerson) => Promise<TCard[]>;
+  /** 人员目录（等你里加好友的请求按它判覆盖）。 */
+  directory: PeopleDirectory;
 };
 
 /**

@@ -8011,7 +8011,7 @@ export interface components {
                 /** @constant */
                 kind: "open";
                 target: {
-                    kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections" | "transfer" | "nexus_confirmation" | "team_request";
+                    kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections" | "transfer" | "nexus_confirmation" | "team_request" | "colleague_chat" | "friend_request";
                     id: string;
                     round?: boolean;
                     focus?: {
@@ -20342,7 +20342,7 @@ export interface components {
             }[];
         };
         WaitingTarget: {
-            kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections" | "transfer" | "nexus_confirmation" | "team_request";
+            kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections" | "transfer" | "nexus_confirmation" | "team_request" | "colleague_chat" | "friend_request";
             id: string;
             round?: boolean;
             focus?: {
@@ -20353,12 +20353,12 @@ export interface components {
         };
         WaitingItem: {
             id: string;
-            kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge" | "plan_start" | "acceptance" | "month" | "device" | "quota" | "transfer" | "goal_changed" | "auto_relay" | "nexus_confirmation" | "needs_person" | "team_request";
+            kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge" | "plan_start" | "acceptance" | "month" | "device" | "quota" | "transfer" | "goal_changed" | "auto_relay" | "nexus_confirmation" | "needs_person" | "team_request" | "colleague_chat" | "friend_request";
             title: string;
             source: string | null;
             at: string | null;
             open: {
-                kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections" | "transfer" | "nexus_confirmation" | "team_request";
+                kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections" | "transfer" | "nexus_confirmation" | "team_request" | "colleague_chat" | "friend_request";
                 id: string;
                 round?: boolean;
                 focus?: {
@@ -20413,6 +20413,9 @@ export interface components {
                 quote: string | null;
             };
             summary?: string | null;
+            chat?: {
+                pushAt: string | null;
+            };
         };
         WorkHomeResponse: {
             period: string;
@@ -20644,12 +20647,12 @@ export interface components {
             };
             waiting: {
                 id: string;
-                kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge" | "plan_start" | "acceptance" | "month" | "device" | "quota" | "transfer" | "goal_changed" | "auto_relay" | "nexus_confirmation" | "needs_person" | "team_request";
+                kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge" | "plan_start" | "acceptance" | "month" | "device" | "quota" | "transfer" | "goal_changed" | "auto_relay" | "nexus_confirmation" | "needs_person" | "team_request" | "colleague_chat" | "friend_request";
                 title: string;
                 source: string | null;
                 at: string | null;
                 open: {
-                    kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections" | "transfer" | "nexus_confirmation" | "team_request";
+                    kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections" | "transfer" | "nexus_confirmation" | "team_request" | "colleague_chat" | "friend_request";
                     id: string;
                     round?: boolean;
                     focus?: {
@@ -20704,6 +20707,9 @@ export interface components {
                     quote: string | null;
                 };
                 summary?: string | null;
+                chat?: {
+                    pushAt: string | null;
+                };
             }[];
             ignoredMeetings?: {
                 id: string;
