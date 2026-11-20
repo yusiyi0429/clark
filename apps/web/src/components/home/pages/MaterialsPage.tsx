@@ -112,6 +112,13 @@ export function MaterialsPage(_props: SecondaryPageProps): ReactNode {
     } catch (error) { setLoadFailed(failureOf(error, () => void load())); }
   }, []);
   useEffect(() => { void load(); }, [load]);
+  // 离开页面（后退、锁屏）时输入框不一定先失焦：卸载时说明和已存的不同就补存一次，结果没处可写，不提示。
+  const latest = useRef<{ note: string; saved: string | null }>({ note: "", saved: null });
+  useEffect(() => { latest.current = { note, saved: materials?.note ?? null }; });
+  useEffect(() => () => {
+    const { note: text, saved } = latest.current;
+    if (saved !== null && text !== saved) void saveNote(text).catch(() => undefined);
+  }, []);
 
   /** 一次动作：key 标在跑的那个，at 是出事时写在哪；像密钥的值写在原处，别的失败「失败 · 重试」。 */
   const run = async (key: string, at: string, action: () => Promise<void>, retry: () => void) => {
