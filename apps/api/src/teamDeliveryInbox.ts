@@ -5,7 +5,8 @@ type InboxDeps = { q: Query; people: ReadonlyMap<string, string>; now: () => Dat
 type DeliveryRow = { id: string; initiator_id: string; team_kind: TTeamDelivery["kind"]; body: string; team_source_url: string | null;
   team_due_at: Date | null; sent_at: Date };
 type Recipient = { request_id: string; person_id: string; status: "pending" | "done"; team_delivery_error: string | null;
-  buddy_state: TTeamDeliveryBuddy["state"] | null; buddy_note: string | null; buddy_asked_at: Date | null; buddy_asked_owner: boolean };
+  buddy_state: TTeamDeliveryBuddy["state"] | null; buddy_note: string | null; buddy_asked_at: Date | null; buddy_asked_owner: boolean;
+  latest_status: TTeamDeliveryReply["status"] | null };
 type Reply = { id: string; request_id: string; recipient_id: string; status: TTeamDeliveryReply["status"]; body: string; created_at: Date; origin: "person" | "buddy";
   reviewed_at: Date | null; corrects: string | null; correction_seen_at: Date | null };
 
@@ -17,12 +18,11 @@ const ASKED_OWNER = "同事请你本人回";
 export const answeringLate = (state: string | null, askedAt: Date | null, now: Date) =>
   state === "answering" && askedAt !== null && askedAt.getTime() < now.getTime() - ANSWERING_TIMEOUT_MS;
 /**
- * 被问的人更正 corrected 那条伙伴答复时，这段往来还没答完（更正只补旧答复、提醒问的人，不算答了，收件人和伙伴状态都不动）：
- * 最新一条非更正回复是问的人那边的（追问、补充说明）；或者是伙伴转本人的那条答复（buddy_state='handoff'），而改的不是它。
- * 改的正是转本人那条，算他亲自回了。服务端落更正和读卡算状态都用这一个判断。
+ * 这位收件人那段往来「最新一条」的唯一取法：更正不算（更正只补旧答复，不接住也不打断正在等的那一问）。
+ * request、recipient 是两个 SQL 表达式（参数或外层的列）。落更正、补充说明检查、重试、代答作业、等你、读卡都从这里取，不另写。
  */
-export const answerStillOpen = (latest: { id: string; status: string; origin: string } | undefined, buddyState: string | null, corrected: string) =>
-  latest?.status === "follow_up" || latest?.status === "clarification" || (latest?.origin === "buddy" && buddyState === "handoff" && latest.id !== corrected);
+export const latestReply = (request: string, recipient: string) => `SELECT lr.id,lr.status,lr.origin,lr.created_at FROM team_delivery_replies lr
+  WHERE lr.request_id=${request} AND lr.recipient_id=${recipient} AND lr.corrects IS NULL ORDER BY lr.seq DESC LIMIT 1`;
 type FileRow = { id: string; request_id: string; reply_id: string | null; file_name: string; size: number; sha256: string };
 
 // 列表和详情共用一条成员过滤规则。发起人看各人的回执，其他人只看自己的线程。
@@ -36,7 +36,8 @@ async function selectDeliveries({ q, people, now }: InboxDeps, viewer: string, b
   if (!heads.length) return [];
   const args = [heads.map(r => r.id),viewer];
   const [memberRows, replyRows, attachmentRows] = await Promise.all([
-    q(`SELECT rr.* FROM request_recipients rr JOIN requests r ON r.id=rr.request_id WHERE r.id=ANY($1::uuid[])
+    q(`SELECT rr.*,latest.status AS latest_status FROM request_recipients rr JOIN requests r ON r.id=rr.request_id
+        LEFT JOIN LATERAL (${latestReply("rr.request_id", "rr.person_id")}) latest ON true WHERE r.id=ANY($1::uuid[])
         AND (r.initiator_id=$2 OR (rr.person_id=$2 AND rr.team_delivery_error IS NULL)) ORDER BY rr.person_id`, args),
     q(`SELECT p.* FROM team_delivery_replies p JOIN requests r ON r.id=p.request_id JOIN request_recipients rr
         ON rr.request_id=r.id AND rr.person_id=p.recipient_id WHERE r.id=ANY($1::uuid[])
@@ -62,8 +63,10 @@ async function selectDeliveries({ q, people, now }: InboxDeps, viewer: string, b
   for (const m of memberRows.rows as Recipient[]) {
     const delivery = deliveries.get(m.request_id)!;
     const late = answeringLate(m.buddy_state, m.buddy_asked_at, now());
+    // 答没答完只认收件人行（落回复、落更正时写的，伙伴答的和没答完时落的更正都不改它，A8）；待回复里再分出「需补充」：最新一条是他的需要补充。
     const result: TTeamDeliveryRecipient = { personId:m.person_id, displayName:people.get(m.person_id) ?? m.person_id,
-      status:m.team_delivery_error ? "failed" : delivery.kind === "share" ? "delivered" : m.status === "done" ? "answered" : "pending",
+      status:m.team_delivery_error ? "failed" : delivery.kind === "share" ? "delivered" : m.status === "done" ? "answered"
+        : m.latest_status === "needs_info" ? "needs_info" : "pending",
       error:m.team_delivery_error, replies:[],
       ...(m.buddy_state && m.buddy_asked_at ? { buddy: { state: late ? "failed" : m.buddy_state,
         note: late ? BUDDY_NOT_ANSWERED : m.buddy_asked_owner && viewer === m.person_id ? ASKED_OWNER : m.buddy_note,
@@ -71,20 +74,12 @@ async function selectDeliveries({ q, people, now }: InboxDeps, viewer: string, b
     recipients.set(m.request_id + "/" + m.person_id,result);
     delivery.recipients.push(result);
   }
-  // 往来还没答完时落的更正不改收件人状态（answerStillOpen）。buddy 状态取库里原值。
-  const lastPlain = new Map<TTeamDeliveryRecipient, Reply>();
-  const buddyStates = new Map((memberRows.rows as Recipient[]).map((m) => [recipients.get(m.request_id + "/" + m.person_id)!, m.buddy_state]));
   for (const r of replyRows.rows as Reply[]) {
     const recipient = recipients.get(r.request_id + "/" + r.recipient_id);
     if (!recipient) continue;
     recipient.replies.push({ id:r.id, status:r.status, text:r.body, createdAt:r.created_at.toISOString(), attachments:files.get(r.id) ?? [],
       ...(r.origin === "buddy" ? { origin: "buddy" as const } : {}), ...(r.reviewed_at ? { reviewedAt: r.reviewed_at.toISOString() } : {}),
       ...(r.corrects ? { corrects: r.corrects } : {}), ...(r.correction_seen_at ? { correctionSeenAt: r.correction_seen_at.toISOString() } : {}) });
-    // 伙伴答的不算本人回复（A8）：收件人状态只看本人和发起人的往来。
-    const open = r.corrects !== null && answerStillOpen(lastPlain.get(recipient), buddyStates.get(recipient) ?? null, r.corrects);
-    if (r.corrects === null) lastPlain.set(recipient, r);
-    if (!recipient.error && r.origin !== "buddy" && !open)
-      recipient.status = r.status === "clarification" || r.status === "follow_up" ? "pending" : r.status;
   }
   return [...deliveries.values()];
 }
@@ -95,7 +90,8 @@ export async function readTeamDelivery(deps: InboxDeps, viewer: string, id: stri
 }
 
 /**
- * 「等你」：被问的人那一支只列没经过伙伴的和转本人的；伙伴在答、答了、没答上来、超上限的都不列（A7）。
+ * 「等你」：只看没答完的（收件人行待回复）。最新一条是被问的人的「需要补充」：在问的人的等你里，等他补充说明。
+ * 其余的在被问的人的等你里，但只列没经过伙伴的和转本人的；伙伴在答、答了、没答上来、超上限的都不列（A7），问的人在卡上追问、重试或问本人。
  * 发起人另有一支：被问的人改过伙伴的答复、发起人还没点「知道了」的，标题是「更正：原标题」（同一条已在等你里的不重复列）。
  */
 export async function listPendingTeamRequests(q: Query, viewer: string) {
@@ -103,8 +99,7 @@ export async function listPendingTeamRequests(q: Query, viewer: string) {
     CASE WHEN r.initiator_id=$1 THEN rr.person_id ELSE r.initiator_id END AS source,
     COALESCE(latest.created_at,r.sent_at) AS at
     FROM requests r JOIN request_recipients rr ON rr.request_id=r.id
-    LEFT JOIN LATERAL (SELECT p.status,p.created_at FROM team_delivery_replies p WHERE p.request_id=r.id
-      AND p.recipient_id=rr.person_id ORDER BY p.seq DESC LIMIT 1) latest ON true
+    LEFT JOIN LATERAL (${latestReply("r.id", "rr.person_id")}) latest ON true
     WHERE r.team_kind='question' AND rr.team_delivery_error IS NULL AND rr.status='pending'
       AND ((rr.person_id=$1 AND latest.status IS DISTINCT FROM 'needs_info' AND (rr.buddy_state IS NULL OR rr.buddy_state='handoff'))
         OR (r.initiator_id=$1 AND latest.status='needs_info'))

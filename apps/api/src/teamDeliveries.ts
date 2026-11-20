@@ -13,7 +13,7 @@ import { MAX_MATERIAL_FILE_BYTES, MaterialParseError, runWorker } from "./materi
 import type { Query } from "./meetingStore.js";
 import type { PeopleDirectory } from "./peopleDirectory.js";
 import { attachmentMimeType, listShareableSessionAttachments, readSessionAttachment } from "./sessionAttachments.js";
-import { answerStillOpen, answeringLate, BUDDY_NOT_ANSWERED, readTeamDelivery } from "./teamDeliveryInbox.js";
+import { answeringLate, BUDDY_NOT_ANSWERED, latestReply, readTeamDelivery } from "./teamDeliveryInbox.js";
 export { listPendingTeamRequests, listTeamDeliveries, readTeamDelivery } from "./teamDeliveryInbox.js";
 
 /** people：人员目录里真人的名字；directory：整份人员目录（能不能问同事的伙伴由 colleagueAccess 按它判）。 */
@@ -232,7 +232,7 @@ export async function replyTeamDelivery(deps: TeamDeliveryDeps, actor: string, i
   if (!recipient || (!fromAsker && input.recipientId && input.recipientId !== actor)) throw invalid("接收人无效");
   const fingerprint = sha(JSON.stringify([input.status, recipient, text, sources.map(s => [s.id, s.sha256]), fileFingerprint(files)]));
   await transact(deps.pool, async (q, createdFiles) => {
-    const row = (await q("SELECT r.initiator_id,r.team_kind FROM requests r JOIN request_recipients rr ON rr.request_id=r.id " +
+    const row = (await q("SELECT r.initiator_id,r.team_kind,rr.status,rr.buddy_state FROM requests r JOIN request_recipients rr ON rr.request_id=r.id " +
       "WHERE r.id=$1 AND r.team_kind IS NOT NULL AND rr.person_id=$3 AND rr.team_delivery_error IS NULL " +
       "AND (r.initiator_id=$2 OR rr.person_id=$2) FOR UPDATE OF r,rr", [id, actor, recipient])).rows[0];
     if (!row) throw absent();
@@ -242,9 +242,12 @@ export async function replyTeamDelivery(deps: TeamDeliveryDeps, actor: string, i
       [id, actor, input.clientId])).rows[0];
     if (existing) { sameOperation(existing.fingerprint, fingerprint); return; }
     if (input.status === "clarification") {
-      const latest = (await q("SELECT status FROM team_delivery_replies WHERE request_id=$1 AND recipient_id=$2 ORDER BY seq DESC LIMIT 1", [id, recipient])).rows[0];
+      const latest = (await q(latestReply("$1", "$2"), [id, recipient])).rows[0];
       if (latest?.status !== "needs_info") throw new TeamDeliveryError(409, "CLARIFICATION_NOT_REQUESTED", "该成员目前没有待澄清的问题");
     }
+    // 转给本人、他还没答完的：追问会把这条从他的等你里拿走、又交回伙伴，所以不收，等本人回（他要补充的走补充说明）。
+    if (input.status === "follow_up" && row.buddy_state === "handoff" && row.status === "pending")
+      throw new TeamDeliveryError(409, "BUDDY_HANDOFF", "这一条已经转给本人，等本人回复");
     if (input.status === "follow_up" && !(await q("SELECT 1 FROM team_delivery_replies WHERE request_id=$1 AND recipient_id=$2 AND origin='buddy' LIMIT 1",
       [id, recipient])).rowCount) throw new TeamDeliveryError(409, "FOLLOW_UP_NOT_AVAILABLE", "这位同事的伙伴还没答过这一条");
     const replyId = randomUUID();
@@ -274,8 +277,6 @@ async function buddyTarget(q: Query, actor: string, id: string, personId: string
 const notStuck = () => new TeamDeliveryError(409, "BUDDY_NOT_STUCK", "这一条现在不用重试或转本人");
 /** colleagueAccess 不让问了（问的人或被问的人不再被覆盖）：重试和追问都回这个。 */
 const unavailable = () => new TeamDeliveryError(409, "BUDDY_UNAVAILABLE", "这位同事的伙伴现在不能代答，可以直接问本人");
-/** 这位收件人那段往来最新一条（更正不算：更正是对旧答复的补充，不接住也不打断正在等的追问）。 */
-const LATEST_REPLY = "SELECT id,status,origin FROM team_delivery_replies WHERE request_id=$1 AND recipient_id=$2 AND corrects IS NULL ORDER BY seq DESC LIMIT 1";
 
 /** 「重试」：伙伴没答上来（含在答超过 2 分钟）时重新入队，不另占名额；在答还没超时的照旧（不重复入队）；超上限 409。 */
 export async function retryTeamBuddy(deps: TeamDeliveryDeps, actor: string, id: string, personId: string) {
@@ -287,7 +288,7 @@ export async function retryTeamBuddy(deps: TeamDeliveryDeps, actor: string, id: 
     if (row.buddy_state === "answering" && !late) return;
     if (row.buddy_state !== "failed" && !late) throw notStuck();
     if (!(await colleagueAccess(q, deps.directory, actor, personId, "ask")).allowed) throw unavailable();
-    const latest = (await q(LATEST_REPLY, [id, personId])).rows[0];
+    const latest = (await q(latestReply("$1", "$2"), [id, personId])).rows[0];
     const trigger = { requestId: id, recipientId: personId, triggerId: (latest?.id as string | undefined) ?? null };
     await startBuddy(q, trigger, `${buddyAnswerKey(trigger)}:retry-${now.getTime()}`, now);
   });
@@ -308,11 +309,20 @@ export async function askTeamOwner(deps: TeamDeliveryDeps, actor: string, id: st
 }
 
 const reviewed = () => new TeamDeliveryError(409, "ALREADY_REVIEWED", "这一条已经看过或改过了");
+/**
+ * 被问的人更正 corrected 那条伙伴答复时，这段往来还没答完（更正只补旧答复、提醒问的人，不算答了，收件人和伙伴的状态都不动）：
+ * 最新一条（latestReply，更正不算）是问的人的追问、补充说明（他在等回答）；或是被问的人的「需要补充」（他在等补充说明）；
+ * 或是伙伴转本人的那条答复（buddy_state='handoff'）而改的不是它。改的正是转本人那条，算他亲自回了。
+ * 只在落更正时判这一次，结果写在收件人行上；读卡和等你只读收件人行和最新一条，不再判。
+ */
+const answerStillOpen = (latest: { id: string; status: string; origin: string } | undefined, buddyState: string | null, corrected: string) =>
+  latest?.status === "follow_up" || latest?.status === "clarification" || latest?.status === "needs_info"
+  || (latest?.origin === "buddy" && buddyState === "handoff" && latest.id !== corrected);
 
 /**
  * 被问的人看伙伴替他答的那条（只限这条伙伴答复的被问的人，别的一律 404）。ok：标看过，看过或改过的 409；转本人时（伙伴判的或问的人转的）
  * 要本人亲自回，ok 409 BUDDY_HANDOFF。corrected：伙伴那条原话保留并标看过，另起一条本人的答复（corrects 指向它）进问的人的等你，收件人算已答；
- * 但这段往来还没答完时（answerStillOpen：有没答的追问、补充说明，或改的不是转本人的那条）只落这条更正，收件人和伙伴的状态不动。点过「没问题」也能改，一条最多改一次。
+ * 但这段往来还没答完时（answerStillOpen）只落这条更正，收件人和伙伴的状态不动。点过「没问题」也能改，一条最多改一次。
  * 按 clientId 幂等：一样的照旧 200，不一样的 409。
  */
 export async function reviewBuddyReply(deps: TeamDeliveryDeps, actor: string, id: string, replyId: string, input: TReviewBuddyReplyRequest) {
@@ -336,7 +346,7 @@ export async function reviewBuddyReply(deps: TeamDeliveryDeps, actor: string, id
       [id, actor, input.clientId])).rows[0];
     if (existing) { sameOperation(existing.fingerprint, fingerprint); return; }
     if ((await q("SELECT 1 FROM team_delivery_replies WHERE request_id=$1 AND corrects=$2", [id, replyId])).rowCount) throw reviewed();
-    const open = answerStillOpen((await q(LATEST_REPLY, [id, actor])).rows[0], target.buddy_state, replyId);
+    const open = answerStillOpen((await q(latestReply("$1", "$2"), [id, actor])).rows[0], target.buddy_state, replyId);
     await q("UPDATE team_delivery_replies SET reviewed_at=COALESCE(reviewed_at,$3) WHERE request_id=$1 AND id=$2", [id, replyId, at]);
     await q("INSERT INTO team_delivery_replies(id,request_id,recipient_id,author_id,client_id,fingerprint,status,body,created_at,corrects) " +
       "VALUES($1,$2,$3,$3,$4,$5,'answered',$6,$7,$8)", [randomUUID(), id, actor, input.clientId, fingerprint, text, at, replyId]);

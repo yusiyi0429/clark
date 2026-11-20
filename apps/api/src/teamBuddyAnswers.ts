@@ -6,7 +6,7 @@ import type { JobHandler } from "./jobs.js";
 import type { Query } from "./meetingStore.js";
 import { logEvent } from "./observability.js";
 import { buddyAnswerKey, TEAM_BUDDY_ANSWER_JOB, transact, type BuddyAnswerTrigger } from "./teamDeliveries.js";
-import { BUDDY_NOT_ANSWERED } from "./teamDeliveryInbox.js";
+import { BUDDY_NOT_ANSWERED, latestReply } from "./teamDeliveryInbox.js";
 import { shanghaiDate } from "./workdays.js";
 
 /**
@@ -70,9 +70,8 @@ const clientIdOf = (key: string) => {
  * 连着追问两次时，第一次的作业到这里就不是最新一条了，什么都不写；在答时被问的人更正了旧答复，照常答。
  */
 async function waiting(q: Query, trigger: BuddyAnswerTrigger, lock: boolean) {
-  const row = (await q(`SELECT r.initiator_id,r.body,r.sent_at,rr.buddy_asked_at,
-      (SELECT p.id FROM team_delivery_replies p WHERE p.request_id=r.id AND p.recipient_id=rr.person_id AND p.corrects IS NULL ORDER BY p.seq DESC LIMIT 1) AS latest
-    FROM requests r JOIN request_recipients rr ON rr.request_id=r.id
+  const row = (await q(`SELECT r.initiator_id,r.body,r.sent_at,rr.buddy_asked_at,latest.id AS latest
+    FROM requests r JOIN request_recipients rr ON rr.request_id=r.id LEFT JOIN LATERAL (${latestReply("r.id", "rr.person_id")}) latest ON true
     WHERE r.id=$1 AND r.team_kind='question' AND rr.person_id=$2 AND rr.team_delivery_error IS NULL AND rr.buddy_state='answering'
     ${lock ? "FOR UPDATE OF rr" : ""}`, [trigger.requestId, trigger.recipientId])).rows[0] as
     { initiator_id: string; body: string; sent_at: Date; buddy_asked_at: Date; latest: string | null } | undefined;

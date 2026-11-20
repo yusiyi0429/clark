@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AnswerInput, ColleagueAnswerAgent, PickInput } from "../src/colleagueAnswerAgent.js";
 import { loadPeopleDirectory } from "../src/peopleDirectory.js";
 import { askBuddy, replyTeamDelivery, retryTeamBuddy, TEAM_BUDDY_ANSWER_JOB } from "../src/teamDeliveries.js";
@@ -29,6 +29,7 @@ type Pick = Awaited<ReturnType<ColleagueAnswerAgent["pick"]>>;
 type Reply = { id: string; status: string; text: string; origin?: string; reviewedAt?: string; corrects?: string; correctionSeenAt?: string };
 type Recipient = { personId: string; status: string; buddy?: { state: string; note: string | null; askedAt: string; handoffBy?: string }; replies: Reply[] };
 type Delivery = { id: string; recipients: Recipient[] };
+const HANDOFF: Answer = { answer: "手册里没写谁值守", handoff: true, reason: "值守安排要测试丙本人定", sources: [] };
 
 function fakeAgent() {
   const seen = { pick: [] as PickInput[], answer: [] as AnswerInput[] };
@@ -203,6 +204,61 @@ describe("追问", { timeout: 60_000 }, () => {
   });
 });
 
+describe("转给本人还没回的不能追问", { timeout: 60_000 }, () => {
+  it("模型判的、问的人转的都 409：追问不落库、不占名额、不入队，仍在本人的等你；本人答了以后照旧能追问", async () => {
+    const s = await setup();
+    try {
+      const pick = s.fake.impl.pick, answer = s.fake.impl.answer;
+      const state = async (id: string) => ({ card: (await s.read(id)).recipients[0], asks: await s.asks(id), jobs: await s.jobKeys(id),
+        row: await s.f.t.sql("SELECT status,done_by,buddy_state,buddy_note,buddy_asked_at,buddy_asked_owner FROM request_recipients WHERE request_id=$1", [id]) });
+      const refused = async (id: string, handoffBy: "buddy" | "asker") => {
+        const before = await state(id);
+        expect(before.card).toMatchObject({ status: "pending", buddy: { state: "handoff", handoffBy } });
+        const res = await s.followUp(id, "那先按手册做行吗");
+        expect(res.statusCode, res.body).toBe(409);
+        expect(res.json()).toMatchObject({ code: "BUDDY_HANDOFF", message: "这一条已经转给本人，等本人回复" });
+        expect(await state(id)).toEqual(before);
+        expect(await s.waiting()).toContain(`team-request:${id}`);
+      };
+      // 模型判要本人定。
+      s.fake.impl.answer = async () => HANDOFF;
+      const judged = await s.answered();
+      await refused(judged.id, "buddy");
+      // 问的人主动转本人：追问没答上来后点了「问本人」。
+      s.fake.impl.answer = answer;
+      const asked = await s.answered();
+      const trigger = s.lastId((await s.followUp(asked.id, "那回滚怎么做")).json().delivery);
+      s.fake.impl.pick = async () => { throw new Error("模型挂了"); };
+      await s.run(asked.id, trigger);
+      expect((await s.action(asked.id, "ask-owner")).statusCode).toBe(200);
+      await refused(asked.id, "asker");
+      // 首问就没答上来、问的人转了本人：伙伴还没答过，回的也是这一句。
+      const first = await s.ask();
+      await s.run(first.id);
+      expect((await s.action(first.id, "ask-owner")).statusCode).toBe(200);
+      await refused(first.id, "asker");
+      // 转本人以后本人回了「需要补充」：还没答完，追问照旧不行，问的人补充说明，回到本人的等你。
+      const send = (id: string, body: object, cookie: string) => s.f.call("POST", `${base}/${id}/replies`, { clientId: randomUUID(), ...body }, cookie);
+      expect((await send(judged.id, { status: "needs_info", text: "哪个环境的值守" }, s.third)).statusCode).toBe(200);
+      const waitingInfo = await s.followUp(judged.id, "那先按手册做行吗");
+      expect(waitingInfo.statusCode).toBe(409);
+      expect(waitingInfo.json().code).toBe("BUDDY_HANDOFF");
+      expect((await send(judged.id, { status: "clarification", recipientId: THIRD.personId, text: "生产环境" }, s.f.member)).statusCode).toBe(200);
+      expect(await s.waiting()).toContain(`team-request:${judged.id}`);
+
+      // 本人答了以后（已回复）照旧能追问，交伙伴答；原来「问的人转的」不留着。
+      s.fake.impl.pick = pick;
+      expect((await send(asked.id, { status: "answered", text: "回滚按手册第五件" }, s.third)).statusCode).toBe(200);
+      expect((await s.read(asked.id)).recipients[0]).toMatchObject({ status: "answered", buddy: { state: "handoff", handoffBy: "asker" } });
+      const again = await s.followUp(asked.id, "回滚要停服吗");
+      expect(again.statusCode, again.body).toBe(200);
+      const recipient = (again.json().delivery as Delivery).recipients[0];
+      expect(recipient).toMatchObject({ status: "pending", buddy: { state: "answering" } });
+      expect(recipient.buddy).not.toHaveProperty("handoffBy");
+    } finally { await s.f.close(); }
+  });
+});
+
 describe("首问和追问共用的几处（T4 审查留下的）", { timeout: 60_000 }, () => {
   it("旧作业晚到：失败不盖掉问的人刚点的重试，答出来的也不落", async () => {
     const s = await setup();
@@ -293,11 +349,6 @@ describe("首问和追问共用的几处（T4 审查留下的）", { timeout: 60
       await s.run(judged.id);
       for (const cookie of [s.f.member, s.third])
         expect((await s.read(judged.id, cookie)).recipients[0].buddy).toMatchObject({ state: "handoff", note: "值守安排要测试丙本人定", handoffBy: "buddy" });
-      // 转本人后再追问：重新交伙伴答，原来的「问的人转的」不留着。
-      s.fake.impl.answer = async () => ({ answer: "按拆分手册拆四件", handoff: false, reason: null, sources: ["note"] });
-      const asked = (await s.followUp(judged.id, "那先按手册做行吗")).json().delivery as Delivery;
-      expect(asked.recipients[0].buddy).toMatchObject({ state: "answering" });
-      expect(asked.recipients[0].buddy).not.toHaveProperty("handoffBy");
     } finally { await s.f.close(); }
   });
 });
@@ -503,5 +554,155 @@ describe("被问的人看过和更正", { timeout: 60_000 }, () => {
       // 问的人转本人的那条：伙伴的答复上「没问题」也不适用。
       expect((await s.review(id, reply.id, { verdict: "ok" })).json().code).toBe("BUDDY_HANDOFF");
     } finally { await s.f.close(); }
+  });
+});
+
+/**
+ * 状态表：被问的人更正伙伴的旧答复，落在这段往来的每一种状态上。一行一格，共用一套夹具（每格一条新的征集）。
+ * 行 = 最新一条回复（更正不算）是谁的哪一种 × 伙伴状态 × 改的是最新那条伙伴答复还是更早的。
+ * 往来没答完（问的人在等回答，或被问的人在等补充说明）：更正只落那一条、提醒问的人，别的什么都不变，问题还在原来那个人手里。
+ * 往来已答完：算被问的人本人答了。首问那一行不在表里：还没有伙伴的答复，没有东西可改。
+ */
+type Step = "伙伴答" | "伙伴转本人" | "伙伴没答上来" | "追问" | "追问超上限" | "在答超时" | "问本人" | "本人答复" | "需要补充" | "补充说明" | "改最新";
+type Act = "重试" | "问本人" | "补充说明" | "追问";
+type Cell = {
+  /** 最新一条回复（更正不算）；卡上的伙伴状态；到这一格的走法（首问之后）；改哪条伙伴答复。 */
+  latest: "伙伴答复" | "追问" | "补充说明" | "本人答复" | "需要补充"; buddy: string | null; path: Step[]; fix: "最新" | "更早";
+  /** 改之前：卡上的收件人状态；在不在被问的人的等你；问的人的等你里是哪一条。 */
+  status: "pending" | "needs_info" | "answered"; owner: boolean; asker: null | "需要补充" | "更正";
+  /** false：往来没答完，除了多一条更正什么都不变。答完的：改之后的伙伴状态。 */
+  closes: false | { buddy: string | null };
+  /** 改之后问的人点了会被拒（409）、什么都不变的（转给本人还没回的不能追问）；接着哪一步证明问题还在（答完的是问的人点知道了）。 */
+  refused: Act[]; next: "作业" | "重试" | "问本人" | "补充说明" | "本人答复" | "知道了";
+};
+/** 只剩追问能点。 */
+const ONLY_FOLLOW_UP: Act[] = ["重试", "问本人", "补充说明"];
+const CELLS: Cell[] = [
+  // 最新一条是伙伴的答复，伙伴答了：往来已答完，改哪条都算本人答了，本人接手。
+  { latest: "伙伴答复", buddy: "answered", path: ["伙伴答"], fix: "最新", status: "pending", owner: false, asker: null, closes: { buddy: null }, refused: ONLY_FOLLOW_UP, next: "知道了" },
+  { latest: "伙伴答复", buddy: "answered", path: ["伙伴答", "追问", "伙伴答"], fix: "最新", status: "pending", owner: false, asker: null, closes: { buddy: null }, refused: ONLY_FOLLOW_UP, next: "知道了" },
+  { latest: "伙伴答复", buddy: "answered", path: ["伙伴答", "追问", "伙伴答"], fix: "更早", status: "pending", owner: false, asker: null, closes: { buddy: null }, refused: ONLY_FOLLOW_UP, next: "知道了" },
+  // 最新一条是伙伴转本人的那条：改的正是它，算本人亲自回了；改更早的，那一问还在他的等你里。
+  { latest: "伙伴答复", buddy: "handoff", path: ["伙伴转本人"], fix: "最新", status: "pending", owner: true, asker: null, closes: { buddy: "handoff" }, refused: ["重试", "补充说明"], next: "知道了" },
+  { latest: "伙伴答复", buddy: "handoff", path: ["伙伴答", "追问", "伙伴转本人"], fix: "最新", status: "pending", owner: true, asker: null, closes: { buddy: "handoff" }, refused: ["重试", "补充说明"], next: "知道了" },
+  { latest: "伙伴答复", buddy: "handoff", path: ["伙伴答", "追问", "伙伴转本人"], fix: "更早", status: "pending", owner: true, asker: null, closes: false, refused: ["重试", "补充说明", "追问"], next: "本人答复" },
+  // 最新一条是问的人的追问：他在等回答，伙伴在哪种状态都不算答了。
+  { latest: "追问", buddy: "answering", path: ["伙伴答", "追问"], fix: "最新", status: "pending", owner: false, asker: null, closes: false, refused: ["问本人", "补充说明"], next: "作业" },
+  { latest: "追问", buddy: "answering", path: ["伙伴答", "追问", "伙伴答", "追问"], fix: "更早", status: "pending", owner: false, asker: null, closes: false, refused: ["问本人", "补充说明"], next: "作业" },
+  { latest: "追问", buddy: "failed", path: ["伙伴答", "追问", "在答超时"], fix: "最新", status: "pending", owner: false, asker: null, closes: false, refused: ["补充说明"], next: "重试" },
+  { latest: "追问", buddy: "failed", path: ["伙伴答", "追问", "伙伴没答上来"], fix: "最新", status: "pending", owner: false, asker: null, closes: false, refused: ["补充说明"], next: "重试" },
+  { latest: "追问", buddy: "limited", path: ["伙伴答", "追问超上限"], fix: "最新", status: "pending", owner: false, asker: null, closes: false, refused: ["重试", "补充说明"], next: "问本人" },
+  { latest: "追问", buddy: "handoff", path: ["伙伴答", "追问", "伙伴没答上来", "问本人"], fix: "最新", status: "pending", owner: true, asker: null, closes: false, refused: ["重试", "补充说明", "追问"], next: "本人答复" },
+  // 最新一条是被问的人的「需要补充」：他在等补充说明，这条在问的人的等你里，问的人还能补充。
+  { latest: "需要补充", buddy: null, path: ["伙伴答", "需要补充"], fix: "最新", status: "needs_info", owner: false, asker: "需要补充", closes: false, refused: ["重试", "问本人"], next: "补充说明" },
+  { latest: "需要补充", buddy: null, path: ["伙伴答", "追问", "伙伴没答上来", "需要补充"], fix: "最新", status: "needs_info", owner: false, asker: "需要补充", closes: false, refused: ["重试", "问本人"], next: "补充说明" },
+  { latest: "需要补充", buddy: "handoff", path: ["伙伴转本人", "需要补充"], fix: "最新", status: "needs_info", owner: false, asker: "需要补充", closes: false, refused: ["重试", "追问"], next: "补充说明" },
+  { latest: "需要补充", buddy: "handoff", path: ["伙伴答", "追问", "伙伴转本人", "需要补充"], fix: "最新", status: "needs_info", owner: false, asker: "需要补充", closes: false, refused: ["重试", "追问"], next: "补充说明" },
+  { latest: "需要补充", buddy: "handoff", path: ["伙伴答", "追问", "伙伴转本人", "需要补充"], fix: "更早", status: "needs_info", owner: false, asker: "需要补充", closes: false, refused: ["重试", "追问"], next: "补充说明" },
+  // 最新一条是问的人的补充说明：他在等回答，这条在被问的人的等你里。
+  { latest: "补充说明", buddy: null, path: ["伙伴答", "需要补充", "补充说明"], fix: "最新", status: "pending", owner: true, asker: null, closes: false, refused: ONLY_FOLLOW_UP, next: "本人答复" },
+  { latest: "补充说明", buddy: "handoff", path: ["伙伴答", "追问", "伙伴转本人", "需要补充", "补充说明"], fix: "最新", status: "pending", owner: true, asker: null, closes: false, refused: ["重试", "补充说明", "追问"], next: "本人答复" },
+  { latest: "补充说明", buddy: "handoff", path: ["伙伴答", "追问", "伙伴转本人", "需要补充", "补充说明"], fix: "更早", status: "pending", owner: true, asker: null, closes: false, refused: ["重试", "补充说明", "追问"], next: "本人答复" },
+  // 已经答完的（本人答过，或前一条更正把往来答完了）：再改别的照旧是已答。
+  { latest: "本人答复", buddy: null, path: ["伙伴答", "本人答复"], fix: "最新", status: "answered", owner: false, asker: null, closes: { buddy: null }, refused: ONLY_FOLLOW_UP, next: "知道了" },
+  { latest: "本人答复", buddy: "handoff", path: ["伙伴转本人", "本人答复"], fix: "最新", status: "answered", owner: false, asker: null, closes: { buddy: "handoff" }, refused: ["重试", "补充说明"], next: "知道了" },
+  { latest: "伙伴答复", buddy: null, path: ["伙伴答", "追问", "伙伴答", "改最新"], fix: "更早", status: "answered", owner: false, asker: "更正", closes: { buddy: null }, refused: ONLY_FOLLOW_UP, next: "知道了" },
+  { latest: "伙伴答复", buddy: "handoff", path: ["伙伴答", "追问", "伙伴转本人", "改最新"], fix: "更早", status: "answered", owner: false, asker: "更正", closes: { buddy: "handoff" }, refused: ["重试", "补充说明"], next: "知道了" },
+];
+
+describe("更正落在往来的每一种状态上（状态表）", { timeout: 60_000 }, () => {
+  const TITLE = "部署怎么拆";
+  let s: Awaited<ReturnType<typeof setup>>;
+  beforeAll(async () => { s = await setup(); }, 60_000);
+  afterAll(async () => { await s.f.close(); });
+
+  for (const cell of CELLS) it(`${cell.latest} × ${cell.buddy ?? "没有伙伴状态"} × 改${cell.fix}的（${cell.path.join("、")}）`, async () => {
+    // 每格重新数名额。
+    await s.f.t.sql("DELETE FROM team_buddy_asks");
+    const { id } = await s.ask();
+    const key = `team-request:${id}`;
+    let trigger: string | null = null;
+    const card = async (cookie = s.f.member) => (await s.read(id, cookie)).recipients[0];
+    const buddies = async () => (await card()).replies.filter((reply) => reply.origin === "buddy");
+    const send = (body: object, cookie: string) => s.f.call("POST", `${base}/${id}/replies`, { clientId: randomUUID(), ...body }, cookie);
+    const ok = async (res: Promise<{ statusCode: number; body: string }>) => { const done = await res; expect(done.statusCode, done.body).toBe(200); };
+    const correct = (replyId: string) => ok(s.review(id, replyId, { clientId: randomUUID(), verdict: "corrected", text: "要拆五件" }));
+    const job = async (answer: Answer | null) => {
+      const { pick, answer: normal } = s.fake.impl;
+      if (answer) s.fake.impl.answer = async () => answer;
+      else s.fake.impl.pick = async () => { throw new Error("模型挂了"); };
+      try { await s.run(id, trigger); } finally { s.fake.impl.pick = pick; s.fake.impl.answer = normal; }
+    };
+    const acts: Record<Act, () => Promise<{ statusCode: number; body: string }>> = {
+      重试: () => s.action(id, "retry"), 问本人: () => s.action(id, "ask-owner"),
+      补充说明: () => send({ status: "clarification", recipientId: THIRD.personId, text: "按生产环境" }, s.f.member),
+      追问: () => s.followUp(id, "那回滚怎么做"),
+    };
+    const walk: Record<Step, () => Promise<void>> = {
+      伙伴答: () => job({ answer: "按拆分手册拆四件", handoff: false, reason: null, sources: ["note"] }),
+      伙伴转本人: () => job(HANDOFF),
+      伙伴没答上来: () => job(null),
+      追问: async () => { const res = await acts.追问(); expect(res.statusCode, res.body).toBe(200); trigger = s.lastId(JSON.parse(res.body).delivery); },
+      追问超上限: async () => { await s.used(id, 19); await walk.追问(); },
+      在答超时: async () => { await s.f.t.sql("UPDATE request_recipients SET buddy_asked_at=$2::timestamptz - interval '3 minutes' WHERE request_id=$1", [id, BOARD_NOW]); },
+      问本人: () => ok(acts.问本人()),
+      本人答复: () => ok(send({ status: "answered", text: "我来答：先拆部署" }, s.third)),
+      需要补充: () => ok(send({ status: "needs_info", text: "要按哪个环境拆" }, s.third)),
+      补充说明: () => ok(acts.补充说明()),
+      改最新: async () => correct((await buddies()).at(-1)!.id),
+    };
+    /** 这条现在的样子：卡上两边看到的、几条回复、占了几个名额、库里收件人那一行、在谁的等你里。 */
+    const look = async () => {
+      const mine = await card();
+      const [row] = await s.f.t.sql(`SELECT rr.status,rr.done_by,rr.done_at,rr.buddy_state,rr.buddy_note,rr.buddy_asked_at,rr.buddy_asked_owner,r.status AS request
+        FROM request_recipients rr JOIN requests r ON r.id=rr.request_id WHERE rr.request_id=$1`, [id]);
+      const listed = (await s.waitingItems(s.f.member)).find((item) => item.id === key)?.title;
+      expect([undefined, TITLE, "更正：" + TITLE]).toContain(listed);
+      return { status: mine.status, theirs: (await card(s.third)).status, buddy: mine.buddy?.state ?? null, replies: mine.replies.length, asks: await s.asks(id),
+        row, owner: (await s.waiting()).includes(key),
+        asker: listed === undefined ? null : listed === TITLE ? "需要补充" as const : "更正" as const };
+    };
+
+    for (const step of cell.path) await walk[step]();
+    const before = await look();
+    expect(before, "改之前").toMatchObject({ status: cell.status, theirs: cell.status, buddy: cell.buddy, owner: cell.owner, asker: cell.asker });
+    const answers = await buddies();
+    if (cell.fix === "更早") expect(answers.length).toBeGreaterThan(1);
+    const target = cell.fix === "最新" ? answers.at(-1)! : answers[0];
+    await correct(target.id);
+
+    const after = await look();
+    const corrections = (await card()).replies.filter((reply) => reply.corrects);
+    expect(corrections.at(-1)).toMatchObject({ corrects: target.id, status: "answered", text: "要拆五件" });
+    if (cell.closes) expect(after, "改之后").toMatchObject({ status: "answered", theirs: "answered", buddy: cell.closes.buddy, owner: false, asker: "更正",
+      row: { status: "done", done_by: THIRD.personId, request: "done" } });
+    // 没答完：除了问的人多一条「更正：」提醒（已经因为需要补充在他等你里的不重复列），别的一样都不变。
+    else expect(after, "改之后").toEqual({ ...before, replies: before.replies + 1, asker: before.asker ?? "更正" });
+    // 没被答完的，要么在被问的人的等你里，要么问的人那边有事可做（补充说明；伙伴在答、答了、没答上来、超上限时卡上的追问、重试、问本人）。
+    expect(after.status === "answered" || after.owner || after.asker === "需要补充" || ["answering", "answered", "failed", "limited"].includes(after.buddy ?? ""),
+      "没答完的问题得在谁手里").toBe(true);
+    for (const act of cell.refused) expect((await acts[act]()).statusCode, act).toBe(409);
+    expect(await look(), "被拒的不留痕迹").toEqual(after);
+
+    if (cell.next === "作业" || cell.next === "重试") {
+      if (cell.next === "重试") { await ok(acts.重试()); expect((await card()).buddy?.state).toBe("answering"); }
+      await walk.伙伴答();
+      expect(await buddies()).toHaveLength(answers.length + 1);
+      expect(await card()).toMatchObject({ status: "pending", buddy: { state: "answered" } });
+    } else if (cell.next === "问本人") {
+      await walk.问本人();
+      expect(await look()).toMatchObject({ status: "pending", buddy: "handoff", owner: true });
+    } else if (cell.next === "补充说明") {
+      await walk.补充说明();
+      expect(await look()).toMatchObject({ status: "pending", theirs: "pending", owner: true, asker: "更正" });
+      await walk.本人答复();
+      expect(await look()).toMatchObject({ status: "answered", owner: false });
+    } else if (cell.next === "本人答复") {
+      await walk.本人答复();
+      expect(await look()).toMatchObject({ status: "answered", theirs: "answered", owner: false, row: { status: "done" } });
+    } else {
+      for (const reply of corrections) await ok(s.seen(id, reply.id));
+      expect((await look()).asker).toBeNull();
+    }
   });
 });
