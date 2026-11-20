@@ -19,7 +19,8 @@ const MATERIAL_CHARS = 12_000;
 const MATERIALS_CHARS = 48_000;
 /** 一次代答（挑材料加作答）整体限时。 */
 const ANSWER_TIMEOUT_MS = 90_000;
-const NO_MATERIALS = "没有可读的资料";
+/** 挑不出能答的材料时自动转本人，卡上和他的等你里写的原因（本人 11/20：资料里没有就自动转本人）。 */
+const NO_MATERIALS = "放出来的资料里没有能答的";
 
 /** 「标题（月/日）」，日期按公司时区；没有更新时间的只写标题。 */
 const cite = (item: { title: string; updatedAt: string | null }) => {
@@ -104,14 +105,15 @@ async function within<T>(ms: number, work: (signal: AbortSignal) => Promise<T>):
 }
 
 /**
- * team.buddy-answer 的处理：人和关系从库里重读，不信载荷以外的东西。模型出错、超时、挑不出材料都由这里落「没答上来」（不进被问的人的等你，
- * 问的人可以重试或问本人），不靠作业的退避重试。答出来的在一个事务里重查条件再落。
- * 落「没答上来」和落答复都比对作业开始时的 buddy_asked_at：问的人在这期间点了重试（换了一轮），旧作业什么都不写。
+ * team.buddy-answer 的处理：人和关系从库里重读，不信载荷以外的东西。模型出错、超时由这里落「没答上来」（不进被问的人的等你，
+ * 问的人可以重试或问本人），不靠作业的退避重试；挑不出能答的材料直接转本人（进他的等你）。答出来的在一个事务里重查条件再落。
+ * 落「没答上来」、转本人和落答复都比对作业开始时的 buddy_asked_at：问的人在这期间点了重试（换了一轮），旧作业什么都不写。
  */
 export function teamBuddyAnswerJobs(deps: BuddyAnswerDeps): Record<string, JobHandler> {
   const q: Query = deps.pool.query.bind(deps.pool);
-  const fail = (trigger: BuddyAnswerTrigger, askedAt: Date, note: string) => q("UPDATE request_recipients SET buddy_state='failed',buddy_note=$3 " +
-    "WHERE request_id=$1 AND person_id=$2 AND buddy_state='answering' AND buddy_asked_at=$4", [trigger.requestId, trigger.recipientId, note, askedAt]);
+  const settle = (trigger: BuddyAnswerTrigger, askedAt: Date, state: "failed" | "handoff", note: string) => q("UPDATE request_recipients " +
+    "SET buddy_state=$3,buddy_note=$4 WHERE request_id=$1 AND person_id=$2 AND buddy_state='answering' AND buddy_asked_at=$5",
+  [trigger.requestId, trigger.recipientId, state, note, askedAt]);
   return {
     [TEAM_BUDDY_ANSWER_JOB]: async (payload) => {
       if (!isTrigger(payload)) return;
@@ -127,10 +129,10 @@ export function teamBuddyAnswerJobs(deps: BuddyAnswerDeps): Record<string, JobHa
           asker: names.get(start.initiator_id) ?? start.initiator_id, today: shanghaiDate(deps.now()), thread, ref: trigger.requestId, signal }));
       } catch (cause) {
         logEvent({ event: "team.buddy_answer_failed", requestId: trigger.requestId, error: cause instanceof Error ? cause.message : String(cause) });
-        await fail(trigger, askedAt, BUDDY_NOT_ANSWERED);
+        await settle(trigger, askedAt, "failed", BUDDY_NOT_ANSWERED);
         return;
       }
-      if (result.kind === "empty") { await fail(trigger, askedAt, NO_MATERIALS); return; }
+      if (result.kind === "empty") { await settle(trigger, askedAt, "handoff", NO_MATERIALS); return; }
       const { text, handoff } = result;
       await transact(deps.pool, async (tq) => {
         const still = await waiting(tq, trigger, true);

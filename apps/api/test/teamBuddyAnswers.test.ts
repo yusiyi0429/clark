@@ -142,21 +142,31 @@ describe("同事来问，伙伴先答", { timeout: 60_000 }, () => {
     } finally { await s.f.close(); }
   });
 
-  it("没答上来不丢问题：模型出错、挑不出材料都不进被问的人的等你，问的人卡上有原因，能重试、能问本人", async () => {
+  it("资料里挑不出能答的：不调作答模型，自动转本人，进他的等你，卡上带原因", async () => {
+    const s = await setup();
+    try {
+      s.fake.impl.pick = async () => ({ itemIds: [] });
+      const sent = await s.ask();
+      await s.run(sent.id);
+      expect((await s.read(sent.id)).recipients[0]).toMatchObject({ status: "pending",
+        buddy: { state: "handoff", handoffBy: "buddy", note: "放出来的资料里没有能答的" }, replies: [] });
+      expect(s.fake.seen.answer).toHaveLength(0);
+      expect(await s.waiting()).toContain(`team-request:${sent.id}`);
+      expect((await s.action(sent.id, "retry")).statusCode).toBe(409);
+    } finally { await s.f.close(); }
+  });
+
+  it("没答上来不丢问题：模型出错不进被问的人的等你，问的人卡上有原因，能重试、能问本人", async () => {
     const s = await setup();
     try {
       s.fake.impl.pick = async () => { throw new Error("模型挂了"); };
       const broken = await s.ask();
       await s.run(broken.id);
       expect((await s.read(broken.id)).recipients[0]).toMatchObject({ status: "pending", buddy: { state: "failed", note: "伙伴没答上来" }, replies: [] });
-
-      s.fake.impl.pick = async () => ({ itemIds: [] });
-      const empty = await s.ask();
-      await s.run(empty.id);
-      expect((await s.read(empty.id)).recipients[0]).toMatchObject({ buddy: { state: "failed", note: "没有可读的资料" }, replies: [] });
-      expect(s.fake.seen.answer).toHaveLength(0);
+      const stuck = await s.ask();
+      await s.run(stuck.id);
       expect(await s.waiting()).not.toContain(`team-request:${broken.id}`);
-      expect(await s.waiting()).not.toContain(`team-request:${empty.id}`);
+      expect(await s.waiting()).not.toContain(`team-request:${stuck.id}`);
 
       // 只有问的人能点；重试重新入队，不重复占名额。
       expect((await s.action(broken.id, "retry", s.third)).statusCode).toBe(404);
@@ -173,13 +183,13 @@ describe("同事来问，伙伴先答", { timeout: 60_000 }, () => {
       expect((await s.action(broken.id, "retry")).statusCode).toBe(409);
 
       // 问本人：变成普通征集，进被问的人的等你。
-      const asked = await s.action(empty.id, "ask-owner");
+      const asked = await s.action(stuck.id, "ask-owner");
       expect(asked.statusCode, asked.body).toBe(200);
-      expect(asked.json().delivery.recipients[0]).toMatchObject({ status: "pending", buddy: { state: "handoff", note: "没有可读的资料" } });
-      expect(await s.waiting()).toContain(`team-request:${empty.id}`);
-      expect((await s.action(empty.id, "ask-owner")).statusCode).toBe(200);
-      await s.run(empty.id);
-      expect(await s.buddyRows(empty.id)).toEqual([]);
+      expect(asked.json().delivery.recipients[0]).toMatchObject({ status: "pending", buddy: { state: "handoff", handoffBy: "asker", note: "伙伴没答上来" } });
+      expect(await s.waiting()).toContain(`team-request:${stuck.id}`);
+      expect((await s.action(stuck.id, "ask-owner")).statusCode).toBe(200);
+      await s.run(stuck.id);
+      expect(await s.buddyRows(stuck.id)).toEqual([]);
     } finally { await s.f.close(); }
   });
 
