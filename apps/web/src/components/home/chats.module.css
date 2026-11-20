@@ -28,3 +28,32 @@
 
 .edit { display: grid; gap: var(--space-1); width: min(560px, 100%); }
 .field { box-sizing: border-box; width: 100%; min-height: 72px; padding: var(--space-2) var(--space-3); border: 1px solid var(--field-border); border-radius: var(--r-inset); background: var(--field-bg); color: var(--field-ink); font: inherit; resize: vertical; }
+
+/* 左栏「项目 | 对话」滑块：两格，按下的那格是白底。 */
+.tabs { display: grid; grid-template-columns: 1fr 1fr; flex: 1; gap: 2px; min-width: 0; margin-right: var(--space-1); padding: 2px; border-radius: 999px; background: var(--default-soft); }
+.tabs button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 24px; padding: 0 var(--space-2); border: 0; border-radius: 999px; background: none; color: var(--ink-faint); font: inherit; cursor: pointer; }
+.tabs button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: inset 0 0 0 1px var(--hairline); }
+.tabs button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+/* 左栏对话行：头像、名字和最近一句、行尾一颗点；最近一句不折行，右端渐隐。 */
+.chatList { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.chatRow { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; column-gap: var(--space-2); width: 100%; padding: 6px var(--space-2); border: 0; border-radius: var(--r-control); background: none; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.chatRow:hover { background: var(--default-soft); }
+.chatRow[aria-current="page"] { background: var(--default-soft-hover); }
+.chatRow:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.chatText { display: grid; min-width: 0; }
+.chatName { overflow-wrap: anywhere; }
+.preview { overflow: hidden; white-space: nowrap; color: var(--ink-faint); -webkit-mask-image: linear-gradient(90deg, #000 76%, transparent); mask-image: linear-gradient(90deg, #000 76%, transparent); }
+
+/* 找人：搜索框，下面一行一个人（头像、名字和命中原因、行尾关系和按钮）。 */
+.find { display: grid; gap: var(--space-1); }
+.search { box-sizing: border-box; width: 100%; min-height: 40px; padding: 0 var(--space-3); border: 1px solid var(--field-border); border-radius: var(--r-control); background: var(--field-bg); color: var(--field-ink); font: inherit; }
+.search:focus-visible { border-color: var(--field-border-focus); outline: 0; }
+.person { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); padding: var(--space-2); border-radius: var(--r-control); }
+.person:hover { background: var(--default-soft); }
+.named { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.why, .relation, .more { color: var(--ink-faint); }
+.why { display: block; }
+.person .acts { align-items: center; margin-left: auto; }
+.relation { padding: 0 var(--space-2); }
+.more { margin: 0; padding: var(--space-2); }

@@ -58,6 +58,8 @@ import { ForeignTaskInfo, TaskInfo } from "./TaskInfo";
 import { MissionInfo } from "./MissionInfo";
 import { MeetingView } from "./MeetingView";
 import { ChatView } from "./ChatView";
+import { ChatFind } from "./ChatFind";
+import { useColleagueChats } from "./useColleagueChats";
 import { MeetingsPage, meetingSections, nextMeetingTrail } from "./MeetingsPage";
 import { ProjectInfo } from "./ProjectInfo";
 import { ProjectTrail } from "./ProjectParts";
@@ -223,6 +225,8 @@ function HomeFrame({ account }: { account: Account }) {
     if (effect.kind === "refresh" && effect.what.some((what) => what === "work_home" || what === "project" || what === "sub_session")) void api.refresh();
   });
   useSessionStops(local, here);
+  // 左栏「对话」那边的两组。
+  const chats = useColleagueChats();
   useSessionCommands(local, here);
   // 左栏宽度（24 条）：本人拖过的写在根上的 --home-left，没拖过照 CSS 的 clamp。右边的面板同理（--home-right），放文件时另记一个宽（--home-file）。
   const leftWidth = useLeftWidth();
@@ -619,6 +623,7 @@ function HomeFrame({ account }: { account: Account }) {
       case "meetings": return <MeetingsPage meeting={meeting} go={go} />;
       case "meeting": return <MeetingView key={current.id} id={current.id} go={go} />;
       case "chat": return <ChatView key={`${current.side}:${current.personId}`} side={current.side} personId={current.personId} buddy={buddy} go={go} />;
+      case "chatFind": return <SecondaryFrame key="chatFind" title="找人" go={go}><ChatFind go={go} /></SecondaryFrame>;
       case "buddy": return <BuddyView buddy={buddy} outbox={outbox} consume={consume} onSpeaking={setSpeaking} waiting={data.waiting} go={go} context={buddyContext} onClearContext={() => setBuddyContext(null)}
         subs={subs} projects={projects.all} waitingFolder={waitingFolder} scratchFolder={scratchFolder} />;
       case "mission": {
@@ -686,7 +691,7 @@ function HomeFrame({ account }: { account: Account }) {
         // 项目建好了、文件夹没绑上：照样进项目页，提示一句，文件夹在详情里再加。
         if (folderIds.length) await projects.actions.setFolders(id, folderIds, name).catch(() => showWorkspaceToast({ text: "文件夹没绑上" }));
         return id;
-      }} working={working} seen={seenMarks} onOpen={markSeen}
+      }} working={working} seen={seenMarks} onOpen={markSeen} chats={chats}
       meetingSlot={<MeetingControl meeting={meeting} />}
       today={todayLabel(work.plan?.today ?? null)} machine={machineDot} trail={handheld ? backgroundButton : null}
       waitingCount={waitingCount} meetingsTrail={meetingsTrail} monthTrail={monthTrail}

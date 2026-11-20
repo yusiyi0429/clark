@@ -1,4 +1,4 @@
-import type { TChatView, TCorrectChatMessageRequest, TMainLine, TOwnerChatMessageRequest, TSendChatMessageRequest } from "@warmap/contracts";
+import type { TChatListResponse, TChatView, TColleagueSearchResponse, TCorrectChatMessageRequest, TFriendView, TMainLine, TOwnerChatMessageRequest, TSendChatMessageRequest } from "@warmap/contracts";
 import { browserApi } from "@/lib/api/client";
 
 /** 同事对话变了（发了一句、伙伴替本人问了）：读对话的地方跟着重读。 */
@@ -63,4 +63,21 @@ export async function retractMessage(chatId: string, messageId: string): Promise
 export async function listMainLines(signal?: AbortSignal): Promise<TMainLine[]> {
   const { data, response, error } = await browserApi.GET("/api/me/colleague-chats/main-lines", { signal, cache: "no-store" });
   return result(data, response, error, "没有读到同事对话").items;
+}
+
+/** 左栏对话两组：mine 我去问过的，inbound 来问我伙伴的，requests 想加我好友的。 */
+export async function listChats(signal?: AbortSignal): Promise<TChatListResponse> {
+  const { data, response, error } = await browserApi.GET("/api/me/colleague-chats", { signal, cache: "no-store" });
+  return result(data, response, error, "没有读到同事对话");
+}
+
+/** 找人：按名字或做什么搜，带命中原因和关系。 */
+export async function searchColleagues(query: string, signal?: AbortSignal): Promise<TColleagueSearchResponse> {
+  const { data, response, error } = await browserApi.GET("/api/me/colleagues", { params: { query: { query } }, signal, cache: "no-store" });
+  return result(data, response, error, "没有搜到，请重试");
+}
+
+export async function requestFriend(personId: string): Promise<TFriendView> {
+  const { data, response, error } = await browserApi.POST("/api/me/friends/{personId}/request", { params: { path: { personId } } });
+  return result(data, response, error, "没有加上，请重试");
 }
