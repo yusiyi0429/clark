@@ -40,11 +40,12 @@ export async function relationOf(q: Query, viewer: string, other: string): Promi
   return toRelation(viewer, await pairRow(q, viewer, other));
 }
 
-/** 别人加了 viewer、等 viewer 点开放的。 */
-export async function listFriendRequests(q: Query, viewer: string): Promise<{ personId: string; at: string }[]> {
+/** 别人加了 viewer、等 viewer 点开放的；加的人已不被覆盖的不列。 */
+export async function listFriendRequests(q: Query, directory: PeopleDirectory, viewer: string): Promise<{ personId: string; at: string }[]> {
   const rows = (await q(`SELECT requested_by,requested_at FROM colleague_friendships
     WHERE status='pending' AND requested_by<>$1 AND (low_id=$1 OR high_id=$1) ORDER BY requested_at`, [viewer])).rows;
-  return rows.map((row) => ({ personId: row.requested_by as string, at: (row.requested_at as Date).toISOString() }));
+  return rows.filter((row) => isCovered(directory, row.requested_by))
+    .map((row) => ({ personId: row.requested_by as string, at: (row.requested_at as Date).toISOString() }));
 }
 
 const grantOf = async (q: Query, grantor: string, grantee: string): Promise<TFriendGrant | null> => {
@@ -63,9 +64,9 @@ const befriend = async (q: Query, viewer: string, other: string, mine: TFriendGr
 
 export type FriendDeps = { q: Query; pool: Pool; directory: PeopleDirectory; now: () => Date };
 
-/** 自己或不被覆盖的人：和没有这个人一样。 */
+/** 自己、对方或本人不被覆盖：和没有这个人一样。 */
 function checkPerson(deps: FriendDeps, viewer: string, other: string) {
-  if (viewer === other || !isCovered(deps.directory, other)) throw new FriendError(404, "PERSON_NOT_FOUND", "人员目录里没有这个人");
+  if (viewer === other || !isCovered(deps.directory, other) || !isCovered(deps.directory, viewer)) throw new FriendError(404, "PERSON_NOT_FOUND", "人员目录里没有这个人");
 }
 
 export async function readFriend(deps: FriendDeps, viewer: string, other: string): Promise<TFriendView> {

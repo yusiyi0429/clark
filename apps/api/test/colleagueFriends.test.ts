@@ -3,8 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { colleagueAccess, type ColleagueAccessKind } from "../src/colleagueAccess.js";
+import { listFriendRequests } from "../src/colleagueFriends.js";
 import type { Query } from "../src/meetingStore.js";
 import { loadPeopleDirectory } from "../src/peopleDirectory.js";
+import { hashSecret } from "../src/session.js";
 import { boardFixture, THIRD } from "./boardFixture.js";
 import { TEST_CEO, TEST_MEMBER } from "./helpers.js";
 
@@ -34,7 +36,7 @@ async function setup() {
   const q: Query = (sql, params) => f.t.pool.query(sql, params);
   const directory = loadPeopleDirectory({ companyPeopleSeed });
   const access = (asker: string, owner: string, kind: ColleagueAccessKind) => colleagueAccess(q, directory, asker, owner, kind);
-  return { f, third, get, post, put, del, access };
+  return { f, third, get, post, put, del, q, directory, access };
 }
 const F = (id: string) => "/api/me/friends/" + id;
 
@@ -69,6 +71,24 @@ describe("好友、设置、授权、找人", { timeout: 60_000 }, () => {
       expect(await find("丙")).toEqual({ people: [], more: 0 });
       expect((await find("测试丁")).people).toEqual([]);
       expect((await find("测试丙")).people).toEqual([{ personId: 丙, displayName: "测试丙", matched: ["名字"], relation: "none" }]);
+    } finally { await f.close(); }
+  });
+
+  it("不被覆盖的人：加谁都和没有这个人一样，不留行；不被覆盖的人发过的请求不列", async () => {
+    const { f, third, put, q, directory } = await setup();
+    try {
+      await put("/api/me/friend-settings", { admission: "approve", defaults: { agentAsk: true } }, third);
+      await f.t.sql("INSERT INTO member_access (person_id, login_id, passcode_hash, must_change) VALUES ($1, 'ceshid', $2, FALSE)", [丁, hashSecret("8642")]);
+      const fourth = String((await f.call("POST", "/api/auth/login", { loginId: "ceshid", passcode: "8642" })).headers["set-cookie"]).split(";")[0];
+      const res = await f.call("POST", F(丙) + "/request", undefined, fourth);
+      expect([res.statusCode, res.json().code]).toEqual([404, "PERSON_NOT_FOUND"]);
+      expect(await f.t.sql("SELECT * FROM colleague_friendships")).toEqual([]);
+      expect((await f.call("GET", "/api/me/colleagues?query=" + encodeURIComponent("测试丙"), undefined, fourth)).json()).toEqual({ people: [], more: 0 });
+      // 丁当初被覆盖时加了丙，后来不被覆盖了：丙的请求里只列乙。
+      await f.t.sql(`INSERT INTO colleague_friendships (low_id,high_id,status,requested_by,requested_at)
+        VALUES (least($1::text,$2::text),greatest($1::text,$2::text),'pending',$1,now())`, [丁, 丙]);
+      expect((await f.call("POST", F(丙) + "/request")).statusCode).toBe(200);
+      expect((await listFriendRequests(q, directory, 丙)).map((request) => request.personId)).toEqual([乙]);
     } finally { await f.close(); }
   });
 });
