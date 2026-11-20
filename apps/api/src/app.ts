@@ -156,6 +156,7 @@ import { ownerSpoke } from "./projectTransfers.js";
 import { resetAutoRelay } from "./autoRelay.js";
 import { registerPartnerMeetingRoutes } from "./routes/partnerMeetings.js";
 import { registerTeamDeliveryRoutes } from "./routes/teamDeliveries.js";
+import { registerColleagueMaterialRoutes } from "./routes/colleagueMaterials.js";
 import { registerMeetingWorkHandoffRoutes } from "./routes/meetingWorkHandoffs.js";
 import { registerSessionStartRoutes } from "./routes/sessionStarts.js";
 import { registerTaskPipelineRoutes } from "./routes/taskPipelines.js";
@@ -1024,6 +1025,7 @@ export async function buildApp({
   registerWorkIntakeRoutes(app, ctx);
   registerPartnerMeetingRoutes(app, ctx);
   registerTeamDeliveryRoutes(app, ctx);
+  registerColleagueMaterialRoutes(app, ctx);
   registerMeetingWorkHandoffRoutes(app, ctx);
   registerSessionStartRoutes(app, ctx);
   registerTaskPipelineRoutes(app, ctx);

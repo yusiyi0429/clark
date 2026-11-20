@@ -19909,7 +19909,7 @@
     "/api/me/roles/{id}": {
       "patch": {
         "operationId": "patchRole",
-        "summary": "改岗位（本人）：版本不一致 409；保存后版本 +1、留一条修改记录，下一张卡就按新的来",
+        "summary": "改岗位（本人）：版本不一致 409；保存后版本 +1、留一条修改记录，下一张卡就按新的来；标了同事可用时改进像密钥的值 422，不改",
         "parameters": [
           {
             "name": "id",
@@ -19980,6 +19980,16 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "有像密钥的值",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SecretInMaterialResponse"
+                }
+              }
+            }
           }
         }
       },
@@ -20016,6 +20026,84 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/roles/{id}/sharing": {
+      "put": {
+        "operationId": "setRoleSharing",
+        "summary": "技能的「同事可用」开、关（本人）：打开时职责、做法、验收口径里有像密钥的值 422 SECRET_IN_MATERIAL，不改",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetRoleSharingRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "改好的技能",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoleView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "有像密钥的值",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SecretInMaterialResponse"
                 }
               }
             }
@@ -20126,7 +20214,7 @@
     "/api/me/role-proposals/{id}/accept": {
       "post": {
         "operationId": "acceptRoleProposal",
-        "summary": "采纳：改后的整段写回岗位，版本 +1、留记录；岗位在这之后改过时 409 ROLE_CHANGED",
+        "summary": "采纳：改后的整段写回岗位，版本 +1、留记录；岗位在这之后改过时 409 ROLE_CHANGED；标了同事可用时改后有像密钥的值 422，不改",
         "parameters": [
           {
             "name": "id",
@@ -20174,6 +20262,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "有像密钥的值",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SecretInMaterialResponse"
                 }
               }
             }
@@ -26219,6 +26317,227 @@
             }
           },
           "422": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/colleague-materials": {
+      "get": {
+        "operationId": "readColleagueMaterials",
+        "summary": "本人放给同事的伙伴读的资料：说明和文件",
+        "responses": {
+          "200": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ColleagueMaterials"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/colleague-materials/note": {
+      "put": {
+        "operationId": "saveColleagueNote",
+        "summary": "存说明；去掉首尾空白后为空就清空。有像密钥的值 422，不存",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveColleagueNoteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ColleagueMaterials"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "有像密钥的值",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SecretInMaterialResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/colleague-materials/files": {
+      "post": {
+        "operationId": "addColleagueFile",
+        "summary": "传一份文件（.md、.pdf、.docx），只存抽出的文字；最多 20 份。有像密钥的值 422，不存",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ColleagueMaterials"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "有像密钥的值，或抽不出文字",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/SecretInMaterialResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ApiError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/colleague-materials/files/{id}": {
+      "delete": {
+        "operationId": "removeColleagueFile",
+        "summary": "删掉本人的一份文件",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "已删"
+          },
+          "401": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
             "description": "结果",
             "content": {
               "application/json": {
@@ -113783,6 +114102,10 @@
                 "type": "null"
               }
             ]
+          },
+          "shared": {
+            "const": true,
+            "type": "boolean"
           }
         }
       },
@@ -114071,6 +114394,10 @@
                       "type": "null"
                     }
                   ]
+                },
+                "shared": {
+                  "const": true,
+                  "type": "boolean"
                 }
               }
             }
@@ -143309,6 +143636,192 @@
             "type": "string"
           },
           "truncated": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ColleagueFile": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "fileName",
+          "size",
+          "chars",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "fileName": {
+            "minLength": 1,
+            "maxLength": 255,
+            "type": "string"
+          },
+          "size": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "chars": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        }
+      },
+      "ColleagueMaterials": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "note",
+          "noteUpdatedAt",
+          "files"
+        ],
+        "properties": {
+          "note": {
+            "maxLength": 20000,
+            "type": "string"
+          },
+          "noteUpdatedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "files": {
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "fileName",
+                "size",
+                "chars",
+                "createdAt"
+              ],
+              "properties": {
+                "id": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "fileName": {
+                  "minLength": 1,
+                  "maxLength": 255,
+                  "type": "string"
+                },
+                "size": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "chars": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "createdAt": {
+                  "format": "date-time",
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "SaveColleagueNoteRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "note"
+        ],
+        "properties": {
+          "note": {
+            "maxLength": 20000,
+            "type": "string"
+          }
+        }
+      },
+      "SecretFinding": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "where",
+          "line",
+          "sample"
+        ],
+        "properties": {
+          "where": {
+            "type": "string"
+          },
+          "line": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "sample": {
+            "type": "string"
+          }
+        }
+      },
+      "SecretInMaterialResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "code",
+          "message",
+          "findings"
+        ],
+        "properties": {
+          "code": {
+            "const": "SECRET_IN_MATERIAL",
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "findings": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "where",
+                "line",
+                "sample"
+              ],
+              "properties": {
+                "where": {
+                  "type": "string"
+                },
+                "line": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "sample": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "SetRoleSharingRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "shared"
+        ],
+        "properties": {
+          "shared": {
             "type": "boolean"
           }
         }
