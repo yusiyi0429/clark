@@ -153,6 +153,8 @@ function tool(name: string, args: Args): ToolReply {
       return ok(name, "读了这个项目", { ...detail(project), feed: { items: FEEDS[project.projectId] ?? [] }, subSessions: project.subSessions });
     }
     case "find_people": return ok(name, "人员目录里没有这个名字", { people: [] });
+    case "read_colleague_catalog": return ok(name, "人员目录里没有对得上的人", { people: [], more: 0 });
+    case "read_colleague_item": return fail("NOT_FOUND", "这位同事没有放出这一份，读不到");
     case "read_partner_inbox": return ok(name, "读了本人的伙伴收件记录", { items: [], total: 0, nextOffset: null });
     case "open_page": return ok(name, "打开了");
     case "update_plan": return ok(name, (args.entries as unknown[]).length < 2 ? "少于两步，不出清单" : "清单更新了");

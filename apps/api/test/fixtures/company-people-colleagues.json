@@ -1,0 +1,9 @@
+{
+  "schemaVersion": "company-people.v1",
+  "people": [
+    { "personId": "person-fixture-001", "displayName": "测试甲", "roles": ["ceo"] },
+    { "personId": "person-fixture-002", "displayName": "测试乙", "roles": ["dri", "participant"] },
+    { "personId": "person-fixture-003", "displayName": "测试丙", "roles": ["dri", "participant"] },
+    { "personId": "person-fixture-004", "displayName": "测试丁", "roles": ["participant"] }
+  ]
+}
