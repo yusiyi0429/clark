@@ -1,5 +1,5 @@
 import type { Pool } from "pg";
-import type { TNotificationSettings, TWaitingItem, TWaitingTarget, TWorkHomeResponse, TAppearanceSettings } from "@warmap/contracts";
+import { CHAT_WAIT_WORD, type TNotificationSettings, type TWaitingItem, type TWaitingTarget, type TWorkHomeResponse, type TAppearanceSettings } from "@warmap/contracts";
 import { inTransaction } from "./collector.js";
 import { FEISHU_NOTIFY_KIND, type FeishuNotice } from "./feishu/notify.js";
 import { enqueueJob, type JobHandler, type RecurringJob } from "./jobs.js";
@@ -105,8 +105,9 @@ export function pushable(item: TWaitingItem, away: boolean, now: Date): boolean 
 /** 同一件只推一次：等的是同一件事（id），换了一轮（时间、截止变了）算新的一件；同事对话同一段又有一句要推的算新的一件。 */
 export const pushKey = (item: TWaitingItem) => item.kind === "colleague_chat" ? `${item.id}|${item.chat?.pushAt}` : `${item.id}|${item.at ?? ""}|${item.dueAt ?? ""}`;
 
-/** 消息里的标题：同事对话不带原话，只写谁、什么原因。 */
-const pushTitle = (item: TWaitingItem) => item.kind === "colleague_chat" ? `${item.person?.name} · ${item.source}` : item.title;
+/** 消息里的标题：同事对话不带原话，只写谁、要推的那句的原因（等你那一行的 source 是最早一句的原因，可能不推）。 */
+const pushTitle = (item: TWaitingItem) => item.kind === "colleague_chat"
+  ? `${item.person?.name} · ${item.chat?.pushReason ? CHAT_WAIT_WORD[item.chat.pushReason] : item.source}` : item.title;
 const line = (item: TWaitingItem) => [pushTitle(item), item.kind === "colleague_chat" ? null : item.source].filter(Boolean).join(" · ")
   + (item.dueAt && (item.kind === "mission_card" || item.kind === "month") ? `（${shanghaiLabel(new Date(item.dueAt))} 截止）` : "");
 

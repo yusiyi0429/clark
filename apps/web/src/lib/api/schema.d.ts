@@ -20415,6 +20415,7 @@ export interface components {
             summary?: string | null;
             chat?: {
                 pushAt: string | null;
+                pushReason: ("commit" | "approve" | "money_external" | "asked_owner" | "no_basis" | "unsure") | null;
             };
         };
         WorkHomeResponse: {
@@ -20709,6 +20710,7 @@ export interface components {
                 summary?: string | null;
                 chat?: {
                     pushAt: string | null;
+                    pushReason: ("commit" | "approve" | "money_external" | "asked_owner" | "no_basis" | "unsure") | null;
                 };
             }[];
             ignoredMeetings?: {

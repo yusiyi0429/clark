@@ -103,7 +103,7 @@ describe("飞书推送（新首页 13.2）", () => {
     const T0 = "2026-11-07T02:00:00.000Z"; // 上海 10:00
     const 乙 = TEST_MEMBER.personId;
     const row = (pushAt: string | null, source: string) => item({ id: "colleague-chat:c1", kind: "colleague_chat", title: "报价单在 sk-abc 那台机器上", source, at: T0,
-      person: { personId: "p", name: "孙铭泽" }, open: { kind: "colleague_chat", id: "p" }, chat: { pushAt } });
+      person: { personId: "p", name: "孙铭泽" }, open: { kind: "colleague_chat", id: "p" }, chat: { pushAt, pushReason: pushAt ? "commit" : null } });
     const waiting = new Map<string, TWaitingItem[]>();
     const push = pusher(waiting);
     waiting.set(乙, [row(null, "资料里没有")]);

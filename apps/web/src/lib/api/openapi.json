@@ -123065,7 +123065,8 @@
             "additionalProperties": false,
             "type": "object",
             "required": [
-              "pushAt"
+              "pushAt",
+              "pushReason"
             ],
             "properties": {
               "pushAt": {
@@ -123073,6 +123074,41 @@
                   {
                     "format": "date-time",
                     "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "pushReason": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "const": "commit",
+                        "type": "string"
+                      },
+                      {
+                        "const": "approve",
+                        "type": "string"
+                      },
+                      {
+                        "const": "money_external",
+                        "type": "string"
+                      },
+                      {
+                        "const": "asked_owner",
+                        "type": "string"
+                      },
+                      {
+                        "const": "no_basis",
+                        "type": "string"
+                      },
+                      {
+                        "const": "unsure",
+                        "type": "string"
+                      }
+                    ]
                   },
                   {
                     "type": "null"
@@ -125377,7 +125413,8 @@
                   "additionalProperties": false,
                   "type": "object",
                   "required": [
-                    "pushAt"
+                    "pushAt",
+                    "pushReason"
                   ],
                   "properties": {
                     "pushAt": {
@@ -125385,6 +125422,41 @@
                         {
                           "format": "date-time",
                           "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "pushReason": {
+                      "anyOf": [
+                        {
+                          "anyOf": [
+                            {
+                              "const": "commit",
+                              "type": "string"
+                            },
+                            {
+                              "const": "approve",
+                              "type": "string"
+                            },
+                            {
+                              "const": "money_external",
+                              "type": "string"
+                            },
+                            {
+                              "const": "asked_owner",
+                              "type": "string"
+                            },
+                            {
+                              "const": "no_basis",
+                              "type": "string"
+                            },
+                            {
+                              "const": "unsure",
+                              "type": "string"
+                            }
+                          ]
                         },
                         {
                           "type": "null"

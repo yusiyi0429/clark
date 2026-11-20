@@ -1,5 +1,6 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
 import { CardHandbackBrief, CardSourceWordIssue } from "./taskCardView.js";
+import { ChatWaitReason } from "./colleagueChats.js";
 import { Budget } from "./budget.js";
 import { LocalPermissionBrief, LocalPermissionDecisionRequest, LocalPermissionMode, LocalQuestionAnswerRequest, LocalQuestionRequestView, LocalStopReason } from "./localRunner.js";
 import { PersonRef, ProjectTransfer } from "./projectTransfers.js";
@@ -288,7 +289,7 @@ export const HomeMonthMission = Type.Object({
  * needs_person（主循环第 61 条）：一张卡等你补（同子会话 waiting = needs_person）。title「等你补」，source 同 verdict（卡名 · Task 名），
  *   summary 是验收员那一句人话；answer = open，open 同 verdict 指到那张卡（框钉在子会话输入框上方）。
  * colleague_chat（同事对话）：同事来问我的伙伴、有句要我本人表态的，一段一行、逐句结清。title 是最早一句还等我的问话，source 是它的原因（CHAT_WAIT_WORD），
- *   person 是问的人，open 是这段对话，chat.pushAt 是要推飞书的那几种原因里最晚开始等的时间（没有为 null）。
+ *   person 是问的人，open 是这段对话，chat.pushAt 是要推飞书的那几种原因里最晚开始等的时间，chat.pushReason 是那一句的原因（飞书只写它；没有都为 null）。
  * friend_request：同事加我好友、等我开放。title「{名字}想加你好友」，person 是对方，open 是这条请求。
  */
 export const WaitingKind = Type.Union([
@@ -368,8 +369,8 @@ export const WaitingItem = Type.Object({
    * （那次交回的 headline）；question 是第一个问题的原文。别的种类、没有的为 null 或不带。
    */
   summary: Type.Optional(Nullable(Type.String())),
-  /** 只有 colleague_chat 带：pushAt 见 WaitingKind。 */
-  chat: Type.Optional(Type.Object({ pushAt: Nullable(Instant) }, strict)),
+  /** 只有 colleague_chat 带：pushAt、pushReason 见 WaitingKind。 */
+  chat: Type.Optional(Type.Object({ pushAt: Nullable(Instant), pushReason: Nullable(ChatWaitReason) }, strict)),
 }, strict);
 
 /**

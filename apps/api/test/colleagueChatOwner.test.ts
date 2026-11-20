@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import type { TChatView, TWaitingItem } from "@warmap/contracts";
 import { HANDOFF_CATEGORIES, type AnswerCategory, type AnswerInput, type ColleagueAnswerAgent, type PickInput } from "../src/colleagueAnswerAgent.js";
 import { CHAT_ANSWER_JOB } from "../src/colleagueChats.js";
+import { pushNotice } from "../src/homePush.js";
 import { boardFixture, THIRD } from "./boardFixture.js";
 import { TEST_CEO, TEST_MEMBER } from "./helpers.js";
 
@@ -110,6 +111,17 @@ describe("主人那边", { timeout: 60_000 }, () => {
       expect(await s.waiting()).toMatchObject([{ title: "排期谁来定", source: "要承诺" }]);
       await s.reply("我定", plan.ask);
       expect(await s.waiting()).toEqual([]);
+    } finally { await s.f.close(); }
+  });
+
+  it("飞书写要推的那个原因：先一句资料里没有、再一句要承诺，等你写资料里没有，飞书写要承诺", async () => {
+    const s = await setup();
+    try {
+      await s.answered("报价单在哪", "no_basis");
+      await s.answered("排期谁来定", "commit");
+      const rows = await s.waiting();
+      expect(rows).toMatchObject([{ title: "报价单在哪", source: "资料里没有", chat: { pushReason: "commit" } }]);
+      expect(pushNotice(丙, rows)).toMatchObject({ title: "测试乙 · 要承诺", body: "测试乙 · 要承诺" });
     } finally { await s.f.close(); }
   });
 

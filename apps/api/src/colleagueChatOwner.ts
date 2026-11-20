@@ -81,16 +81,17 @@ export const retractChatMessage = (deps: ChatDeps, viewer: string, chatId: strin
   });
 
 /**
- * 主人的等你：一段一行。title、reason、at 取最早一句还等他的问句；pushAt 是还等着、原因要推飞书的问句里最晚开始等的时间（没有为 null）。
+ * 主人的等你：一段一行。title、reason、at 取最早一句还等他的问句；pushAt、pushReason 取还等着、原因要推飞书的问句里最晚开始等的那句（没有为 null）。
  */
 export async function listChatWaiting(q: Query, ownerId: string):
-  Promise<{ chatId: string; askerId: string; title: string; reason: TChatWaitReason; at: string; pushAt: string | null }[]> {
-  const rows = (await q(`SELECT c.id,c.asker_id,first.body,first.wait_reason,first.wait_at,
-      (SELECT max(m.wait_at) FROM colleague_chat_messages m WHERE m.chat_id=c.id AND m.wait_closed_at IS NULL AND m.wait_reason=ANY($2::text[])) AS push_at
+  Promise<{ chatId: string; askerId: string; title: string; reason: TChatWaitReason; at: string; pushAt: string | null; pushReason: TChatWaitReason | null }[]> {
+  const rows = (await q(`SELECT c.id,c.asker_id,first.body,first.wait_reason,first.wait_at,push.wait_at AS push_at,push.wait_reason AS push_reason
     FROM colleague_chats c JOIN LATERAL (SELECT body,wait_reason,wait_at FROM colleague_chat_messages m
       WHERE m.chat_id=c.id AND m.wait_reason IS NOT NULL AND m.wait_closed_at IS NULL ORDER BY m.seq LIMIT 1) first ON true
+    LEFT JOIN LATERAL (SELECT wait_at,wait_reason FROM colleague_chat_messages m
+      WHERE m.chat_id=c.id AND m.wait_closed_at IS NULL AND m.wait_reason=ANY($2::text[]) ORDER BY m.wait_at DESC,m.seq DESC LIMIT 1) push ON true
     WHERE c.owner_id=$1 ORDER BY first.wait_at,c.id`, [ownerId, CHAT_PUSH_REASONS])).rows as
-    { id: string; asker_id: string; body: string; wait_reason: TChatWaitReason; wait_at: Date; push_at: Date | null }[];
+    { id: string; asker_id: string; body: string; wait_reason: TChatWaitReason; wait_at: Date; push_at: Date | null; push_reason: TChatWaitReason | null }[];
   return rows.map((row) => ({ chatId: row.id, askerId: row.asker_id, title: row.body, reason: row.wait_reason, at: row.wait_at.toISOString(),
-    pushAt: row.push_at?.toISOString() ?? null }));
+    pushAt: row.push_at?.toISOString() ?? null, pushReason: row.push_reason }));
 }

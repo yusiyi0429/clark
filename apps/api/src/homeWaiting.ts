@@ -236,7 +236,7 @@ export async function assembleWaiting(input: WaitingInput): Promise<TWaitingItem
     const name = deps.names.get(chat.askerId);
     if (name === undefined) continue;
     add({ id: `colleague-chat:${chat.chatId}`, kind: "colleague_chat", title: chat.title, source: CHAT_WAIT_WORD[chat.reason], at: chat.at,
-      person: { personId: chat.askerId, name }, open: { kind: "colleague_chat", id: chat.askerId }, answer: "open", chat: { pushAt: chat.pushAt } });
+      person: { personId: chat.askerId, name }, open: { kind: "colleague_chat", id: chat.askerId }, answer: "open", chat: { pushAt: chat.pushAt, pushReason: chat.pushReason } });
   }
   // 同事加我好友、等我开放的。
   for (const request of await listFriendRequests(q, deps.directory, ownerId)) {
