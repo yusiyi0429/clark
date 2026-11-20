@@ -5,12 +5,15 @@ type InboxDeps = { q: Query; people: ReadonlyMap<string, string>; now: () => Dat
 type DeliveryRow = { id: string; initiator_id: string; team_kind: TTeamDelivery["kind"]; body: string; team_source_url: string | null;
   team_due_at: Date | null; sent_at: Date };
 type Recipient = { request_id: string; person_id: string; status: "pending" | "done"; team_delivery_error: string | null;
-  buddy_state: TTeamDeliveryBuddy["state"] | null; buddy_note: string | null; buddy_asked_at: Date | null };
-type Reply = { id: string; request_id: string; recipient_id: string; status: TTeamDeliveryReply["status"]; body: string; created_at: Date; origin: "person" | "buddy" };
+  buddy_state: TTeamDeliveryBuddy["state"] | null; buddy_note: string | null; buddy_asked_at: Date | null; buddy_asked_owner: boolean };
+type Reply = { id: string; request_id: string; recipient_id: string; status: TTeamDeliveryReply["status"]; body: string; created_at: Date; origin: "person" | "buddy";
+  reviewed_at: Date | null; corrects: string | null; correction_seen_at: Date | null };
 
 /** 伙伴在答超过这么久还没结果，算没答上来（补充条款 A7）：问的人卡上显示原因，可以重试或问本人；不进被问的人的等你。 */
 export const ANSWERING_TIMEOUT_MS = 2 * 60_000;
 export const BUDDY_NOT_ANSWERED = "伙伴没答上来";
+/** 问的人点了「问本人」以后，被问的人看到的原因（问的人那边照旧是当时没答上来的原因）。 */
+const ASKED_OWNER = "同事请你本人回";
 export const answeringLate = (state: string | null, askedAt: Date | null, now: Date) =>
   state === "answering" && askedAt !== null && askedAt.getTime() < now.getTime() - ANSWERING_TIMEOUT_MS;
 type FileRow = { id: string; request_id: string; reply_id: string | null; file_name: string; size: number; sha256: string };
@@ -55,8 +58,9 @@ async function selectDeliveries({ q, people, now }: InboxDeps, viewer: string, b
     const result: TTeamDeliveryRecipient = { personId:m.person_id, displayName:people.get(m.person_id) ?? m.person_id,
       status:m.team_delivery_error ? "failed" : delivery.kind === "share" ? "delivered" : m.status === "done" ? "answered" : "pending",
       error:m.team_delivery_error, replies:[],
-      ...(m.buddy_state && m.buddy_asked_at ? { buddy: { state: late ? "failed" : m.buddy_state, note: late ? BUDDY_NOT_ANSWERED : m.buddy_note,
-        askedAt: m.buddy_asked_at.toISOString() } } : {}) };
+      ...(m.buddy_state && m.buddy_asked_at ? { buddy: { state: late ? "failed" : m.buddy_state,
+        note: late ? BUDDY_NOT_ANSWERED : m.buddy_asked_owner && viewer === m.person_id ? ASKED_OWNER : m.buddy_note,
+        askedAt: m.buddy_asked_at.toISOString(), ...(m.buddy_state === "handoff" ? { handoffBy: m.buddy_asked_owner ? "asker" as const : "buddy" as const } : {}) } } : {}) };
     recipients.set(m.request_id + "/" + m.person_id,result);
     delivery.recipients.push(result);
   }
@@ -64,9 +68,10 @@ async function selectDeliveries({ q, people, now }: InboxDeps, viewer: string, b
     const recipient = recipients.get(r.request_id + "/" + r.recipient_id);
     if (!recipient) continue;
     recipient.replies.push({ id:r.id, status:r.status, text:r.body, createdAt:r.created_at.toISOString(), attachments:files.get(r.id) ?? [],
-      ...(r.origin === "buddy" ? { origin: "buddy" as const } : {}) });
+      ...(r.origin === "buddy" ? { origin: "buddy" as const } : {}), ...(r.reviewed_at ? { reviewedAt: r.reviewed_at.toISOString() } : {}),
+      ...(r.corrects ? { corrects: r.corrects } : {}), ...(r.correction_seen_at ? { correctionSeenAt: r.correction_seen_at.toISOString() } : {}) });
     // 伙伴答的不算本人回复（A8）：收件人状态只看本人和发起人的往来。
-    if (!recipient.error && r.origin !== "buddy") recipient.status = r.status === "clarification" ? "pending" : r.status;
+    if (!recipient.error && r.origin !== "buddy") recipient.status = r.status === "clarification" || r.status === "follow_up" ? "pending" : r.status;
   }
   return [...deliveries.values()];
 }
@@ -76,7 +81,10 @@ export async function readTeamDelivery(deps: InboxDeps, viewer: string, id: stri
   return (await selectDeliveries(deps,viewer,null,id))[0] ?? null;
 }
 
-/** 「等你」：被问的人那一支只列没经过伙伴的和转本人的；伙伴在答、答了、没答上来、超上限的都不列（A7）。 */
+/**
+ * 「等你」：被问的人那一支只列没经过伙伴的和转本人的；伙伴在答、答了、没答上来、超上限的都不列（A7）。
+ * 发起人另有一支：被问的人改过伙伴的答复、发起人还没点「知道了」的，标题是「更正：原标题」（同一条已在等你里的不重复列）。
+ */
 export async function listPendingTeamRequests(q: Query, viewer: string) {
   const result = await q(`SELECT DISTINCT ON (r.id) r.id,r.title,
     CASE WHEN r.initiator_id=$1 THEN rr.person_id ELSE r.initiator_id END AS source,
@@ -88,5 +96,11 @@ export async function listPendingTeamRequests(q: Query, viewer: string) {
       AND ((rr.person_id=$1 AND latest.status IS DISTINCT FROM 'needs_info' AND (rr.buddy_state IS NULL OR rr.buddy_state='handoff'))
         OR (r.initiator_id=$1 AND latest.status='needs_info'))
     ORDER BY r.id,at DESC,rr.person_id`, [viewer]);
-  return result.rows.map(row => ({id:row.id as string,title:row.title as string,source:row.source as string,at:(row.at as Date).toISOString()}));
+  const corrections = await q(`SELECT DISTINCT ON (r.id) r.id,r.title,p.recipient_id AS source,p.created_at AS at
+    FROM requests r JOIN team_delivery_replies p ON p.request_id=r.id JOIN request_recipients rr ON rr.request_id=r.id AND rr.person_id=p.recipient_id
+    WHERE r.initiator_id=$1 AND r.team_kind='question' AND rr.team_delivery_error IS NULL AND p.corrects IS NOT NULL AND p.correction_seen_at IS NULL
+    ORDER BY r.id,p.created_at DESC,p.recipient_id`, [viewer]);
+  const listed = new Set(result.rows.map(row => row.id as string));
+  return [...result.rows, ...corrections.rows.filter(row => !listed.has(row.id)).map(row => ({ ...row, title: "更正：" + row.title }))]
+    .map(row => ({id:row.id as string,title:row.title as string,source:row.source as string,at:(row.at as Date).toISOString()}));
 }

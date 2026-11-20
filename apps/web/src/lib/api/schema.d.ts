@@ -6194,6 +6194,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/team-deliveries/{id}/replies/{replyId}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 被问的人看伙伴替他答的这条：没问题，或改一下（另起一条更正，提醒问的人） */
+        post: operations["reviewBuddyReply"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/team-deliveries/{id}/replies/{replyId}/seen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 问的人知道了这条更正（从等你里消掉） */
+        post: operations["markCorrectionSeen"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/team-deliveries/{id}/recipients/{personId}/retry": {
         parameters: {
             query?: never;
@@ -23304,7 +23338,7 @@ export interface components {
         ReplyTeamDeliveryRequest: {
             /** Format: uuid */
             clientId: string;
-            status: "answered" | "needs_info" | "clarification";
+            status: "answered" | "needs_info" | "clarification" | "follow_up";
             recipientId?: string;
             text?: string;
             sourceAttachments?: {
@@ -23312,6 +23346,16 @@ export interface components {
                 id: string;
                 sha256: string;
             }[];
+        };
+        ReviewBuddyReplyRequest: {
+            /** Format: uuid */
+            clientId: string;
+            /** @constant */
+            verdict: "corrected";
+            text: string;
+        } | {
+            /** @constant */
+            verdict: "ok";
         };
         SendTeamDeliveryRequest: {
             /** Format: uuid */
@@ -23357,7 +23401,7 @@ export interface components {
                 replies: {
                     /** Format: uuid */
                     id: string;
-                    status: "answered" | "needs_info" | "clarification";
+                    status: "answered" | "needs_info" | "clarification" | "follow_up";
                     text: string;
                     /** Format: date-time */
                     createdAt: string;
@@ -23371,12 +23415,19 @@ export interface components {
                     }[];
                     /** @constant */
                     origin?: "buddy";
+                    /** Format: date-time */
+                    reviewedAt?: string;
+                    /** Format: uuid */
+                    corrects?: string;
+                    /** Format: date-time */
+                    correctionSeenAt?: string;
                 }[];
                 buddy?: {
                     state: "answering" | "answered" | "handoff" | "failed" | "limited";
                     note: string | null;
                     /** Format: date-time */
                     askedAt: string;
+                    handoffBy?: "buddy" | "asker";
                 };
             }[];
         };
@@ -23393,6 +23444,7 @@ export interface components {
             note: string | null;
             /** Format: date-time */
             askedAt: string;
+            handoffBy?: "buddy" | "asker";
         };
         TeamDeliveryListQuery: {
             box: "received" | "sent";
@@ -23427,7 +23479,7 @@ export interface components {
                     replies: {
                         /** Format: uuid */
                         id: string;
-                        status: "answered" | "needs_info" | "clarification";
+                        status: "answered" | "needs_info" | "clarification" | "follow_up";
                         text: string;
                         /** Format: date-time */
                         createdAt: string;
@@ -23441,12 +23493,19 @@ export interface components {
                         }[];
                         /** @constant */
                         origin?: "buddy";
+                        /** Format: date-time */
+                        reviewedAt?: string;
+                        /** Format: uuid */
+                        corrects?: string;
+                        /** Format: date-time */
+                        correctionSeenAt?: string;
                     }[];
                     buddy?: {
                         state: "answering" | "answered" | "handoff" | "failed" | "limited";
                         note: string | null;
                         /** Format: date-time */
                         askedAt: string;
+                        handoffBy?: "buddy" | "asker";
                     };
                 }[];
             }[];
@@ -23459,7 +23518,7 @@ export interface components {
             replies: {
                 /** Format: uuid */
                 id: string;
-                status: "answered" | "needs_info" | "clarification";
+                status: "answered" | "needs_info" | "clarification" | "follow_up";
                 text: string;
                 /** Format: date-time */
                 createdAt: string;
@@ -23473,18 +23532,25 @@ export interface components {
                 }[];
                 /** @constant */
                 origin?: "buddy";
+                /** Format: date-time */
+                reviewedAt?: string;
+                /** Format: uuid */
+                corrects?: string;
+                /** Format: date-time */
+                correctionSeenAt?: string;
             }[];
             buddy?: {
                 state: "answering" | "answered" | "handoff" | "failed" | "limited";
                 note: string | null;
                 /** Format: date-time */
                 askedAt: string;
+                handoffBy?: "buddy" | "asker";
             };
         };
         TeamDeliveryReply: {
             /** Format: uuid */
             id: string;
-            status: "answered" | "needs_info" | "clarification";
+            status: "answered" | "needs_info" | "clarification" | "follow_up";
             text: string;
             /** Format: date-time */
             createdAt: string;
@@ -23498,6 +23564,12 @@ export interface components {
             }[];
             /** @constant */
             origin?: "buddy";
+            /** Format: date-time */
+            reviewedAt?: string;
+            /** Format: uuid */
+            corrects?: string;
+            /** Format: date-time */
+            correctionSeenAt?: string;
         };
         TeamDeliveryResponse: {
             delivery: {
@@ -23529,7 +23601,7 @@ export interface components {
                     replies: {
                         /** Format: uuid */
                         id: string;
-                        status: "answered" | "needs_info" | "clarification";
+                        status: "answered" | "needs_info" | "clarification" | "follow_up";
                         text: string;
                         /** Format: date-time */
                         createdAt: string;
@@ -23543,12 +23615,19 @@ export interface components {
                         }[];
                         /** @constant */
                         origin?: "buddy";
+                        /** Format: date-time */
+                        reviewedAt?: string;
+                        /** Format: uuid */
+                        corrects?: string;
+                        /** Format: date-time */
+                        correctionSeenAt?: string;
                     }[];
                     buddy?: {
                         state: "answering" | "answered" | "handoff" | "failed" | "limited";
                         note: string | null;
                         /** Format: date-time */
                         askedAt: string;
+                        handoffBy?: "buddy" | "asker";
                     };
                 }[];
             };
@@ -45369,6 +45448,119 @@ export interface operations {
             };
             /** @description 结果 */
             415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    reviewBuddyReply: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                replyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewBuddyReplyRequest"];
+            };
+        };
+        responses: {
+            /** @description 结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamDeliveryResponse"];
+                };
+            };
+            /** @description 结果 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    markCorrectionSeen: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                replyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamDeliveryResponse"];
+                };
+            };
+            /** @description 结果 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

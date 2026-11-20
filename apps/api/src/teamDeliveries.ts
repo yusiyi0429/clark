@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Pool } from "pg";
 import {
-  ATTACHMENT_MAX_BYTES, ATTACHMENT_MAX_COUNT, attachmentKind, type TReplyTeamDeliveryRequest, type TSendTeamDeliveryRequest,
+  ATTACHMENT_MAX_BYTES, ATTACHMENT_MAX_COUNT, attachmentKind, type TReplyTeamDeliveryRequest, type TReviewBuddyReplyRequest, type TSendTeamDeliveryRequest,
 } from "@warmap/contracts";
 import { colleagueAccess } from "./colleagueAccess.js";
 import { enqueueJob } from "./jobs.js";
@@ -120,7 +120,7 @@ export const buddyAnswerKey = (trigger: BuddyAnswerTrigger) =>
   `${TEAM_BUDDY_ANSWER_JOB}:${trigger.requestId}:${trigger.recipientId}:${trigger.triggerId ?? "q"}`;
 
 async function startBuddy(q: Query, trigger: BuddyAnswerTrigger, dedupeKey: string, now: Date) {
-  await q("UPDATE request_recipients SET buddy_state='answering',buddy_note=NULL,buddy_asked_at=$3 WHERE request_id=$1 AND person_id=$2",
+  await q("UPDATE request_recipients SET buddy_state='answering',buddy_note=NULL,buddy_asked_at=$3,buddy_asked_owner=false WHERE request_id=$1 AND person_id=$2",
     [trigger.requestId, trigger.recipientId, now]);
   await enqueueJob(q, { kind: TEAM_BUDDY_ANSWER_JOB, dedupeKey, payload: trigger });
 }
@@ -128,19 +128,21 @@ async function startBuddy(q: Query, trigger: BuddyAnswerTrigger, dedupeKey: stri
 /**
  * 在调用方的事务里：先问 colleagueAccess(ask)；不可以就什么都不做、回 false（这位收件人照没有伙伴的老路走）。
  * 可以：当天名额满了标「超上限」（不入队，不进被问的人的等你，问的人只能问本人）；没满就占一个名额、标「伙伴在答」并入队。都回 true。
- * 去重键 team.buddy-answer:<requestId>:<recipientId>:<triggerId 或 q>；名额按同一个触发记一行，重放不另占。
+ * 去重键 team.buddy-answer:<requestId>:<recipientId>:<triggerId 或 q>；名额按同一个触发记一行。同一个触发已经记过账的直接回 true（不另占、不重置状态）。
  */
 export async function askBuddy(q: Query, directory: PeopleDirectory, asker: string, trigger: BuddyAnswerTrigger, now: Date): Promise<boolean> {
   if (!(await colleagueAccess(q, directory, asker, trigger.recipientId, "ask")).allowed) return false;
   // 同一个被问的人的名额串行数，事务结束释放。
   await q("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", ["team-buddy-asks/" + trigger.recipientId]);
+  if ((await q("SELECT 1 FROM team_buddy_asks WHERE request_id=$1 AND recipient_id=$2 AND trigger_key=$3",
+    [trigger.requestId, trigger.recipientId, trigger.triggerId ?? "q"])).rowCount) return true;
   const used = (await q(`SELECT count(*)::int AS total,count(*) FILTER (WHERE asker_id=$3)::int AS mine FROM team_buddy_asks WHERE recipient_id=$1
     AND date_trunc('day',asked_at AT TIME ZONE 'Asia/Shanghai')=date_trunc('day',$2::timestamptz AT TIME ZONE 'Asia/Shanghai')`,
   [trigger.recipientId, now, asker])).rows[0] as { total: number; mine: number };
   const full = used.total >= BUDDY_DAILY_ANSWERS ? `今天伙伴代答已到 ${BUDDY_DAILY_ANSWERS} 次`
     : used.mine >= BUDDY_DAILY_PER_ASKER ? `今天问这位同事的伙伴已到 ${BUDDY_DAILY_PER_ASKER} 次` : null;
   if (full) {
-    await q("UPDATE request_recipients SET buddy_state='limited',buddy_note=$3,buddy_asked_at=$4 WHERE request_id=$1 AND person_id=$2",
+    await q("UPDATE request_recipients SET buddy_state='limited',buddy_note=$3,buddy_asked_at=$4,buddy_asked_owner=false WHERE request_id=$1 AND person_id=$2",
       [trigger.requestId, trigger.recipientId, full, now]);
     return true;
   }
@@ -212,13 +214,19 @@ export async function retryTeamRecipient(deps: TeamDeliveryDeps, actor: string, 
   return projectWritten(deps, actor, id);
 }
 
+/** 被问的人自己回了（含更正）：伙伴在答、没答上来、超上限的标记不再有用（作业见他不在「伙伴在答」就不落）。 */
+const clearBuddyWait = (q: Query, id: string, person: string) => q("UPDATE request_recipients SET buddy_state=NULL,buddy_note=NULL,buddy_asked_at=NULL " +
+  "WHERE request_id=$1 AND person_id=$2 AND buddy_state IN ('answering','failed','limited')", [id, person]);
+
 export async function replyTeamDelivery(deps: TeamDeliveryDeps, actor: string, id: string, input: TReplyTeamDeliveryRequest, uploads: Upload[] = []) {
   const text = input.text?.trim() ?? "";
   const sources = input.sourceAttachments ?? [];
   const files = prepareFiles(uploads, sources);
   if (!text && !sources.length && !files.length) throw invalid("请写回复或添加文件");
-  const recipient = input.status === "clarification" ? input.recipientId : actor;
-  if (!recipient || (input.status !== "clarification" && input.recipientId && input.recipientId !== actor)) throw invalid("接收人无效");
+  // 补充说明和追问是发起人发给指定接收人的。
+  const fromAsker = input.status === "clarification" || input.status === "follow_up";
+  const recipient = fromAsker ? input.recipientId : actor;
+  if (!recipient || (!fromAsker && input.recipientId && input.recipientId !== actor)) throw invalid("接收人无效");
   const fingerprint = sha(JSON.stringify([input.status, recipient, text, sources.map(s => [s.id, s.sha256]), fileFingerprint(files)]));
   await transact(deps.pool, async (q, createdFiles) => {
     const row = (await q("SELECT r.initiator_id,r.team_kind FROM requests r JOIN request_recipients rr ON rr.request_id=r.id " +
@@ -226,15 +234,16 @@ export async function replyTeamDelivery(deps: TeamDeliveryDeps, actor: string, i
       "AND (r.initiator_id=$2 OR rr.person_id=$2) FOR UPDATE OF r,rr", [id, actor, recipient])).rows[0];
     if (!row) throw absent();
     if (row.team_kind !== "question") throw new TeamDeliveryError(409, "NOT_A_QUESTION", "只有临时问题可以回复");
-    const clarifying = input.status === "clarification";
-    if (clarifying !== (row.initiator_id === actor)) throw new TeamDeliveryError(403, "FORBIDDEN", "只能处理本人这次征集的回复");
+    if (fromAsker !== (row.initiator_id === actor)) throw new TeamDeliveryError(403, "FORBIDDEN", "只能处理本人这次征集的回复");
     const existing = (await q("SELECT fingerprint FROM team_delivery_replies WHERE request_id=$1 AND author_id=$2 AND client_id=$3",
       [id, actor, input.clientId])).rows[0];
     if (existing) { sameOperation(existing.fingerprint, fingerprint); return; }
-    if (clarifying) {
+    if (input.status === "clarification") {
       const latest = (await q("SELECT status FROM team_delivery_replies WHERE request_id=$1 AND recipient_id=$2 ORDER BY seq DESC LIMIT 1", [id, recipient])).rows[0];
       if (latest?.status !== "needs_info") throw new TeamDeliveryError(409, "CLARIFICATION_NOT_REQUESTED", "该成员目前没有待澄清的问题");
     }
+    if (input.status === "follow_up" && !(await q("SELECT 1 FROM team_delivery_replies WHERE request_id=$1 AND recipient_id=$2 AND origin='buddy' LIMIT 1",
+      [id, recipient])).rowCount) throw new TeamDeliveryError(409, "FOLLOW_UP_NOT_AVAILABLE", "这位同事的伙伴还没答过这一条");
     const replyId = randomUUID();
     const at = deps.now();
     await q("INSERT INTO team_delivery_replies(id,request_id,recipient_id,author_id,client_id,fingerprint,status,body,created_at) " +
@@ -243,9 +252,9 @@ export async function replyTeamDelivery(deps: TeamDeliveryDeps, actor: string, i
     const answered = input.status === "answered";
     await q("UPDATE request_recipients SET status=$3,done_by=$4,done_at=$5 WHERE request_id=$1 AND person_id=$2",
       [id, recipient, answered ? "done" : "pending", answered ? actor : null, answered ? at : null]);
-    // 被问的人自己回了：伙伴在答、没答上来、超上限的标记不再有用（作业见他不在「伙伴在答」就不落）。
-    if (!clarifying) await q("UPDATE request_recipients SET buddy_state=NULL,buddy_note=NULL,buddy_asked_at=NULL WHERE request_id=$1 AND person_id=$2 " +
-      "AND buddy_state IN ('answering','failed','limited')", [id, recipient]);
+    if (!fromAsker) await clearBuddyWait(q, id, recipient);
+    // 追问：收件人回到待回复，交他的伙伴带着整段往来再答（占名额同首问）。
+    if (input.status === "follow_up") await askBuddy(q, deps.directory, actor, { requestId: id, recipientId: recipient, triggerId: replyId }, at);
     await setRequestStatus(q, id);
   });
   return projectWritten(deps, actor, id);
@@ -270,6 +279,8 @@ export async function retryTeamBuddy(deps: TeamDeliveryDeps, actor: string, id: 
     if (row.buddy_state === "limited") throw new TeamDeliveryError(409, "BUDDY_LIMIT", "今天的代答次数满了，可以直接问本人");
     if (row.buddy_state === "answering" && !late) return;
     if (row.buddy_state !== "failed" && !late) throw notStuck();
+    if (!(await colleagueAccess(q, deps.directory, actor, personId, "ask")).allowed)
+      throw new TeamDeliveryError(409, "BUDDY_UNAVAILABLE", "这位同事的伙伴现在不能代答，可以直接问本人");
     const latest = (await q("SELECT id FROM team_delivery_replies WHERE request_id=$1 AND recipient_id=$2 ORDER BY seq DESC LIMIT 1", [id, personId])).rows[0];
     const trigger = { requestId: id, recipientId: personId, triggerId: (latest?.id as string | undefined) ?? null };
     await startBuddy(q, trigger, `${buddyAnswerKey(trigger)}:retry-${now.getTime()}`, now);
@@ -284,9 +295,55 @@ export async function askTeamOwner(deps: TeamDeliveryDeps, actor: string, id: st
     if (row.buddy_state === "handoff") return;
     const late = answeringLate(row.buddy_state, row.buddy_asked_at, deps.now());
     if (row.buddy_state !== "failed" && row.buddy_state !== "limited" && !late) throw notStuck();
-    await q("UPDATE request_recipients SET buddy_state='handoff',buddy_note=$3 WHERE request_id=$1 AND person_id=$2",
+    await q("UPDATE request_recipients SET buddy_state='handoff',buddy_note=$3,buddy_asked_owner=true WHERE request_id=$1 AND person_id=$2",
       [id, personId, late ? BUDDY_NOT_ANSWERED : row.buddy_note]);
   });
+  return projectWritten(deps, actor, id);
+}
+
+const reviewed = () => new TeamDeliveryError(409, "ALREADY_REVIEWED", "这一条已经看过或改过了");
+
+/**
+ * 被问的人看伙伴替他答的那条（只限这条伙伴答复的被问的人，别的一律 404）。ok：标看过，看过或改过的 409。
+ * corrected：伙伴那条原话保留并标看过，另起一条本人的答复（corrects 指向它）进问的人的等你，收件人算已答；
+ * 点过「没问题」也能改，一条最多改一次。按 clientId 幂等：一样的照旧 200，不一样的 409。
+ */
+export async function reviewBuddyReply(deps: TeamDeliveryDeps, actor: string, id: string, replyId: string, input: TReviewBuddyReplyRequest) {
+  const text = input.verdict === "corrected" ? input.text.trim() : "";
+  if (input.verdict === "corrected" && !text) throw invalid("请写更正的内容");
+  await transact(deps.pool, async q => {
+    const target = (await q(`SELECT p.reviewed_at FROM team_delivery_replies p JOIN requests r ON r.id=p.request_id
+      JOIN request_recipients rr ON rr.request_id=p.request_id AND rr.person_id=p.recipient_id
+      WHERE p.request_id=$1 AND p.id=$2 AND p.recipient_id=$3 AND p.origin='buddy' AND r.team_kind='question' AND rr.team_delivery_error IS NULL
+      FOR UPDATE OF p,rr`, [id, replyId, actor])).rows[0] as { reviewed_at: Date | null } | undefined;
+    if (!target) throw absent();
+    const at = deps.now();
+    if (input.verdict === "ok") {
+      if (target.reviewed_at) throw reviewed();
+      await q("UPDATE team_delivery_replies SET reviewed_at=$3 WHERE request_id=$1 AND id=$2", [id, replyId, at]);
+      return;
+    }
+    const fingerprint = sha(JSON.stringify(["corrected", replyId, text]));
+    const existing = (await q("SELECT fingerprint FROM team_delivery_replies WHERE request_id=$1 AND author_id=$2 AND client_id=$3",
+      [id, actor, input.clientId])).rows[0];
+    if (existing) { sameOperation(existing.fingerprint, fingerprint); return; }
+    if ((await q("SELECT 1 FROM team_delivery_replies WHERE request_id=$1 AND corrects=$2", [id, replyId])).rowCount) throw reviewed();
+    await q("UPDATE team_delivery_replies SET reviewed_at=COALESCE(reviewed_at,$3) WHERE request_id=$1 AND id=$2", [id, replyId, at]);
+    await q("INSERT INTO team_delivery_replies(id,request_id,recipient_id,author_id,client_id,fingerprint,status,body,created_at,corrects) " +
+      "VALUES($1,$2,$3,$3,$4,$5,'answered',$6,$7,$8)", [randomUUID(), id, actor, input.clientId, fingerprint, text, at, replyId]);
+    await q("UPDATE request_recipients SET status='done',done_by=$2,done_at=$3 WHERE request_id=$1 AND person_id=$2", [id, actor, at]);
+    await clearBuddyWait(q, id, actor);
+    await setRequestStatus(q, id);
+  });
+  return projectWritten(deps, actor, id);
+}
+
+/** 问的人「知道了」这条更正：只有发起人，只限更正；已经点过的照旧 200。 */
+export async function markCorrectionSeen(deps: TeamDeliveryDeps, actor: string, id: string, replyId: string) {
+  const seen = await deps.q(`UPDATE team_delivery_replies p SET correction_seen_at=COALESCE(p.correction_seen_at,$3) FROM requests r
+    WHERE r.id=p.request_id AND p.request_id=$1 AND p.id=$2 AND p.corrects IS NOT NULL AND r.initiator_id=$4 AND r.team_kind='question'`,
+  [id, replyId, deps.now(), actor]);
+  if (!seen.rowCount) throw absent();
   return projectWritten(deps, actor, id);
 }
 

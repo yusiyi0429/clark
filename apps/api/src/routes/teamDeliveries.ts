@@ -2,7 +2,7 @@ import { Type, type Static, type TSchema } from "@sinclair/typebox";
 import type { FastifyRequest } from "fastify";
 import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import {
-  ATTACHMENT_MAX_BYTES, ATTACHMENT_MAX_COUNT, attachmentKind, ReplyTeamDeliveryRequest, SendTeamDeliveryRequest, TeamDeliveryListQuery,
+  ATTACHMENT_MAX_BYTES, ATTACHMENT_MAX_COUNT, attachmentKind, ReplyTeamDeliveryRequest, ReviewBuddyReplyRequest, SendTeamDeliveryRequest, TeamDeliveryListQuery,
   TeamDeliveryListResponse, TeamDeliveryResponse, TeamDeliverySourcesResponse, TeamDeliveryTextResponse,
 } from "@warmap/contracts";
 import type { AppInstance, RouteContext } from "./shared.js";
@@ -14,6 +14,7 @@ const uuid = Type.String({ format: "uuid" });
 const id = Type.Object({ id: uuid });
 const fileId = Type.Object({ id: uuid, attachmentId: uuid });
 const recipientId = Type.Object({ id: uuid, personId: Type.String({ minLength: 1, maxLength: 100 }) });
+const replyId = Type.Object({ id: uuid, replyId: uuid });
 const metadataBytes = 160 * 1024;
 
 class TeamInputError extends Error {
@@ -95,6 +96,10 @@ export function registerTeamDeliveryRoutes(app: AppInstance, ctx: RouteContext):
       const { payload, files } = await inputWithFiles(req, ReplyTeamDeliveryRequest);
       return { delivery: await team.replyTeamDelivery(deps(), req.person!.personId, req.params.id, payload, files) };
     });
+    scoped.post("/api/me/team-deliveries/:id/replies/:replyId/review", { schema: { params: replyId, body: ReviewBuddyReplyRequest, response: { 200: TeamDeliveryResponse } } },
+      async (req) => ({ delivery: await team.reviewBuddyReply(deps(), req.person!.personId, req.params.id, req.params.replyId, req.body) }));
+    scoped.post("/api/me/team-deliveries/:id/replies/:replyId/seen", { schema: { params: replyId, response: { 200: TeamDeliveryResponse } } },
+      async (req) => ({ delivery: await team.markCorrectionSeen(deps(), req.person!.personId, req.params.id, req.params.replyId) }));
     scoped.post("/api/me/team-deliveries/:id/recipients/:personId/retry", { schema: { params: recipientId, response: { 200: TeamDeliveryResponse } } },
       async (req) => ({ delivery: await team.retryTeamRecipient(deps(), req.person!.personId, req.params.id, req.params.personId) }));
     scoped.post("/api/me/team-deliveries/:id/recipients/:personId/buddy/retry", { schema: { params: recipientId, response: { 200: TeamDeliveryResponse } } },

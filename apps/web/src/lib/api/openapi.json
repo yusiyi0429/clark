@@ -26070,6 +26070,158 @@
         }
       }
     },
+    "/api/me/team-deliveries/{id}/replies/{replyId}/review": {
+      "post": {
+        "operationId": "reviewBuddyReply",
+        "summary": "被问的人看伙伴替他答的这条：没问题，或改一下（另起一条更正，提醒问的人）",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "replyId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewBuddyReplyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamDeliveryResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/team-deliveries/{id}/replies/{replyId}/seen": {
+      "post": {
+        "operationId": "markCorrectionSeen",
+        "summary": "问的人知道了这条更正（从等你里消掉）",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "replyId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamDeliveryResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/team-deliveries/{id}/recipients/{personId}/retry": {
       "post": {
         "operationId": "retryTeamDeliveryRecipient",
@@ -142534,6 +142686,10 @@
               {
                 "const": "clarification",
                 "type": "string"
+              },
+              {
+                "const": "follow_up",
+                "type": "string"
               }
             ]
           },
@@ -142570,6 +142726,47 @@
             }
           }
         }
+      },
+      "ReviewBuddyReplyRequest": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "clientId",
+              "verdict",
+              "text"
+            ],
+            "properties": {
+              "clientId": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "verdict": {
+                "const": "corrected",
+                "type": "string"
+              },
+              "text": {
+                "minLength": 1,
+                "maxLength": 20000,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "verdict"
+            ],
+            "properties": {
+              "verdict": {
+                "const": "ok",
+                "type": "string"
+              }
+            }
+          }
+        ]
       },
       "SendTeamDeliveryRequest": {
         "additionalProperties": false,
@@ -142849,6 +143046,10 @@
                           {
                             "const": "clarification",
                             "type": "string"
+                          },
+                          {
+                            "const": "follow_up",
+                            "type": "string"
                           }
                         ]
                       },
@@ -142900,6 +143101,18 @@
                       "origin": {
                         "const": "buddy",
                         "type": "string"
+                      },
+                      "reviewedAt": {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      "corrects": {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      "correctionSeenAt": {
+                        "format": "date-time",
+                        "type": "string"
                       }
                     }
                   }
@@ -142950,6 +143163,18 @@
                     "askedAt": {
                       "format": "date-time",
                       "type": "string"
+                    },
+                    "handoffBy": {
+                      "anyOf": [
+                        {
+                          "const": "buddy",
+                          "type": "string"
+                        },
+                        {
+                          "const": "asker",
+                          "type": "string"
+                        }
+                      ]
                     }
                   }
                 }
@@ -143038,6 +143263,18 @@
           "askedAt": {
             "format": "date-time",
             "type": "string"
+          },
+          "handoffBy": {
+            "anyOf": [
+              {
+                "const": "buddy",
+                "type": "string"
+              },
+              {
+                "const": "asker",
+                "type": "string"
+              }
+            ]
           }
         }
       },
@@ -143274,6 +143511,10 @@
                                 {
                                   "const": "clarification",
                                   "type": "string"
+                                },
+                                {
+                                  "const": "follow_up",
+                                  "type": "string"
                                 }
                               ]
                             },
@@ -143325,6 +143566,18 @@
                             "origin": {
                               "const": "buddy",
                               "type": "string"
+                            },
+                            "reviewedAt": {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            "corrects": {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            "correctionSeenAt": {
+                              "format": "date-time",
+                              "type": "string"
                             }
                           }
                         }
@@ -143375,6 +143628,18 @@
                           "askedAt": {
                             "format": "date-time",
                             "type": "string"
+                          },
+                          "handoffBy": {
+                            "anyOf": [
+                              {
+                                "const": "buddy",
+                                "type": "string"
+                              },
+                              {
+                                "const": "asker",
+                                "type": "string"
+                              }
+                            ]
                           }
                         }
                       }
@@ -143469,6 +143734,10 @@
                     {
                       "const": "clarification",
                       "type": "string"
+                    },
+                    {
+                      "const": "follow_up",
+                      "type": "string"
                     }
                   ]
                 },
@@ -143520,6 +143789,18 @@
                 "origin": {
                   "const": "buddy",
                   "type": "string"
+                },
+                "reviewedAt": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "corrects": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "correctionSeenAt": {
+                  "format": "date-time",
+                  "type": "string"
                 }
               }
             }
@@ -143570,6 +143851,18 @@
               "askedAt": {
                 "format": "date-time",
                 "type": "string"
+              },
+              "handoffBy": {
+                "anyOf": [
+                  {
+                    "const": "buddy",
+                    "type": "string"
+                  },
+                  {
+                    "const": "asker",
+                    "type": "string"
+                  }
+                ]
               }
             }
           }
@@ -143602,6 +143895,10 @@
               },
               {
                 "const": "clarification",
+                "type": "string"
+              },
+              {
+                "const": "follow_up",
                 "type": "string"
               }
             ]
@@ -143653,6 +143950,18 @@
           },
           "origin": {
             "const": "buddy",
+            "type": "string"
+          },
+          "reviewedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "corrects": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "correctionSeenAt": {
+            "format": "date-time",
             "type": "string"
           }
         }
@@ -143867,6 +144176,10 @@
                               {
                                 "const": "clarification",
                                 "type": "string"
+                              },
+                              {
+                                "const": "follow_up",
+                                "type": "string"
                               }
                             ]
                           },
@@ -143918,6 +144231,18 @@
                           "origin": {
                             "const": "buddy",
                             "type": "string"
+                          },
+                          "reviewedAt": {
+                            "format": "date-time",
+                            "type": "string"
+                          },
+                          "corrects": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
+                          "correctionSeenAt": {
+                            "format": "date-time",
+                            "type": "string"
                           }
                         }
                       }
@@ -143968,6 +144293,18 @@
                         "askedAt": {
                           "format": "date-time",
                           "type": "string"
+                        },
+                        "handoffBy": {
+                          "anyOf": [
+                            {
+                              "const": "buddy",
+                              "type": "string"
+                            },
+                            {
+                              "const": "asker",
+                              "type": "string"
+                            }
+                          ]
                         }
                       }
                     }

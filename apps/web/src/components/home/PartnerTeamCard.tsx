@@ -12,7 +12,7 @@ import s from "./partnerTeam.module.css";
 
 export type TeamForward = { text: string; sourceUrl?: string; recipientIds?: string[] };
 const STATUS: Record<TTeamDeliveryRecipient["status"], string> = { pending: "已送达 · 待回复", delivered: "已送达", needs_info: "需补充", answered: "已回复", failed: "送达失败" };
-const REPLY_LABEL: Record<TTeamDeliveryReply["status"], string> = { needs_info: "需要补充或澄清", answered: "回复", clarification: "补充说明" };
+const REPLY_LABEL: Record<TTeamDeliveryReply["status"], string> = { needs_info: "需要补充或澄清", answered: "回复", clarification: "补充说明", follow_up: "追问" };
 export const teamAnchor = (id: string) => "team-request-" + id;
 
 function Clock({ at }: { at: string }) {

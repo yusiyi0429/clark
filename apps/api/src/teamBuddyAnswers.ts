@@ -65,15 +65,27 @@ const clientIdOf = (key: string) => {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 };
 
-/** 这位收件人还在等伙伴答这一次：是征集、他是收件人、在「伙伴在答」、他那段往来最新一条正是触发的那条（首问是还没有回复）。 */
+/**
+ * 这位收件人还在等伙伴答这一次：是征集、他是收件人、在「伙伴在答」、他那段往来最新一条正是触发的那条（首问是还没有回复）。
+ * 连着追问两次时，第一次的作业到这里就不是最新一条了，什么都不写。
+ */
 async function waiting(q: Query, trigger: BuddyAnswerTrigger, lock: boolean) {
-  const row = (await q(`SELECT r.initiator_id,r.body,r.sent_at,
+  const row = (await q(`SELECT r.initiator_id,r.body,r.sent_at,rr.buddy_asked_at,
       (SELECT p.id FROM team_delivery_replies p WHERE p.request_id=r.id AND p.recipient_id=rr.person_id ORDER BY p.seq DESC LIMIT 1) AS latest
     FROM requests r JOIN request_recipients rr ON rr.request_id=r.id
     WHERE r.id=$1 AND r.team_kind='question' AND rr.person_id=$2 AND rr.team_delivery_error IS NULL AND rr.buddy_state='answering'
     ${lock ? "FOR UPDATE OF rr" : ""}`, [trigger.requestId, trigger.recipientId])).rows[0] as
-    { initiator_id: string; body: string; sent_at: Date; latest: string | null } | undefined;
+    { initiator_id: string; body: string; sent_at: Date; buddy_asked_at: Date; latest: string | null } | undefined;
   return row && row.latest === trigger.triggerId ? row : null;
+}
+
+/** 给模型的往来：原问题，之后这位收件人那段的每条回复按先后（追问、补充说明是问的人；伙伴答的是伙伴；其余是被问的人本人）。 */
+async function threadOf(q: Query, trigger: BuddyAnswerTrigger, start: { body: string; sent_at: Date }): Promise<Turn[]> {
+  const rows = (await q("SELECT status,origin,body,created_at FROM team_delivery_replies WHERE request_id=$1 AND recipient_id=$2 ORDER BY seq",
+    [trigger.requestId, trigger.recipientId])).rows as { status: string; origin: string; body: string; created_at: Date }[];
+  return [{ by: "asker", text: start.body, at: start.sent_at.toISOString() }, ...rows.map((row): Turn => ({
+    by: row.origin === "buddy" ? "buddy" : row.status === "follow_up" || row.status === "clarification" ? "asker" : "owner",
+    text: row.body, at: row.created_at.toISOString() }))];
 }
 
 const isTrigger = (payload: unknown): payload is BuddyAnswerTrigger => {
@@ -95,11 +107,12 @@ async function within<T>(ms: number, work: (signal: AbortSignal) => Promise<T>):
 /**
  * team.buddy-answer 的处理：人和关系从库里重读，不信载荷以外的东西。模型出错、超时、挑不出材料都由这里落「没答上来」（不进被问的人的等你，
  * 问的人可以重试或问本人），不靠作业的退避重试。答出来的在一个事务里重查条件再落。
+ * 落「没答上来」和落答复都比对作业开始时的 buddy_asked_at：问的人在这期间点了重试（换了一轮），旧作业什么都不写。
  */
 export function teamBuddyAnswerJobs(deps: BuddyAnswerDeps): Record<string, JobHandler> {
   const q: Query = deps.pool.query.bind(deps.pool);
-  const fail = (trigger: BuddyAnswerTrigger, note: string) => q("UPDATE request_recipients SET buddy_state='failed',buddy_note=$3 " +
-    "WHERE request_id=$1 AND person_id=$2 AND buddy_state='answering'", [trigger.requestId, trigger.recipientId, note]);
+  const fail = (trigger: BuddyAnswerTrigger, askedAt: Date, note: string) => q("UPDATE request_recipients SET buddy_state='failed',buddy_note=$3 " +
+    "WHERE request_id=$1 AND person_id=$2 AND buddy_state='answering' AND buddy_asked_at=$4", [trigger.requestId, trigger.recipientId, note, askedAt]);
   return {
     [TEAM_BUDDY_ANSWER_JOB]: async (payload) => {
       if (!isTrigger(payload)) return;
@@ -107,20 +120,22 @@ export function teamBuddyAnswerJobs(deps: BuddyAnswerDeps): Record<string, JobHa
       const start = await waiting(q, trigger, false);
       if (!start) return;
       const names = deps.people();
-      const thread: Turn[] = [{ by: "asker", text: start.body, at: start.sent_at.toISOString() }];
+      const askedAt = start.buddy_asked_at;
+      const thread = await threadOf(q, trigger, start);
       let result: Awaited<ReturnType<typeof answerForColleague>>;
       try {
         result = await within(ANSWER_TIMEOUT_MS, (signal) => answerForColleague({ agent: deps.agent, reader: deps.reader(trigger.recipientId),
           asker: names.get(start.initiator_id) ?? start.initiator_id, today: shanghaiDate(deps.now()), thread, ref: trigger.requestId, signal }));
       } catch (cause) {
         logEvent({ event: "team.buddy_answer_failed", requestId: trigger.requestId, error: cause instanceof Error ? cause.message : String(cause) });
-        await fail(trigger, BUDDY_NOT_ANSWERED);
+        await fail(trigger, askedAt, BUDDY_NOT_ANSWERED);
         return;
       }
-      if (result.kind === "empty") { await fail(trigger, NO_MATERIALS); return; }
+      if (result.kind === "empty") { await fail(trigger, askedAt, NO_MATERIALS); return; }
       const { text, handoff } = result;
       await transact(deps.pool, async (tq) => {
-        if (!(await waiting(tq, trigger, true))) return;
+        const still = await waiting(tq, trigger, true);
+        if (still?.buddy_asked_at.getTime() !== askedAt.getTime()) return;
         // fingerprint 照 replyTeamDelivery 的算法（没有附件）。
         const fingerprint = sha(JSON.stringify(["answered", trigger.recipientId, text, [], []]));
         const inserted = await tq(`INSERT INTO team_delivery_replies(id,request_id,recipient_id,author_id,client_id,fingerprint,status,body,created_at,origin)
