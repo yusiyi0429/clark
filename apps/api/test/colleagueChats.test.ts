@@ -107,12 +107,28 @@ describe("同事对话核心", { timeout: 60_000 }, () => {
     try {
       const other = randomUUID();
       await s.f.t.sql("INSERT INTO colleague_chats (id,asker_id,owner_id,created_at,last_message_at) VALUES ($1,$2,$3,$4,$4)", [other, 甲, 丙, BOARD_NOW]);
-      const fill = (n: number, at: Date) => s.f.t.sql(`INSERT INTO colleague_chat_messages (id,chat_id,author,body,client_id,created_at,answer_state)
-        SELECT gen_random_uuid(),$1,'asker','问',gen_random_uuid(),$2,'answered' FROM generate_series(1,$3)`, [other, at, n]);
+      const fill = (n: number, at: Date) => s.f.t.sql(`INSERT INTO colleague_chat_messages (id,chat_id,author,body,client_id,created_at,answer_state,answer_started_at)
+        SELECT gen_random_uuid(),$1,'asker','问',gen_random_uuid(),$2,'answered',$2 FROM generate_series(1,$3)`, [other, at, n]);
       await fill(19, BOARD_NOW);
       await fill(5, new Date(BOARD_NOW.getTime() - 24 * 3600_000));
       expect((await s.say("第一句")).messages[0].answer).toBe("answering");
       expect((await s.say("在吗")).messages[1].answer).toBe("limited");
+    } finally { await s.f.close(); }
+  });
+
+  it("问满那句点了问本人也不占名额：别人还能照常问", async () => {
+    const s = await setup();
+    try {
+      let chat!: TChatView;
+      for (let i = 1; i <= 11; i++) chat = await s.say("第 " + i + " 句");
+      const limited = chat.messages.at(-1)!;
+      expect((await s.post(M(chat, limited.id) + "/ask-owner")).chat.messages.at(-1).answer).toBe("asked_owner");
+      const other = randomUUID();
+      await s.f.t.sql("INSERT INTO colleague_chats (id,asker_id,owner_id,created_at,last_message_at) VALUES ($1,$2,$3,$4,$4)", [other, 甲, 丙, BOARD_NOW]);
+      await s.f.t.sql(`INSERT INTO colleague_chat_messages (id,chat_id,author,body,client_id,created_at,answer_state,answer_started_at)
+        SELECT gen_random_uuid(),$1,'asker','问',gen_random_uuid(),$2,'answered',$2 FROM generate_series(1,9)`, [other, BOARD_NOW]);
+      expect((await sendChatMessage(s.deps, 甲, 丙, { clientId: randomUUID(), text: "第二十句" })).state).toBe("answering");
+      expect((await sendChatMessage(s.deps, 甲, 丙, { clientId: randomUUID(), text: "第二十一句" })).state).toBe("limited");
     } finally { await s.f.close(); }
   });
 

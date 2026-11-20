@@ -59,7 +59,7 @@ export async function sendChatMessage(deps: ChatDeps, asker: string, ownerId: st
   if (!access.allowed) throw access.reason ? new ChatError(409, "NOT_OPENED", "他没开放这一项") : noPerson();
   const now = deps.now();
   const sent = await transact(deps.pool, async (q) => {
-    // 同一位被问的人的名额串行数，事务结束释放。
+    // 同一位被问的人的名额串行数，事务结束释放。占名额的是开始答过的句子（answer_started_at 有值）：问满那句不写它，点了问本人也不写，所以不占。
     await q("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", ["colleague-chat/" + ownerId]);
     await q(`INSERT INTO colleague_chats (id,asker_id,owner_id,created_at,last_message_at) VALUES ($1,$2,$3,$4,$4)
       ON CONFLICT (asker_id,owner_id) DO NOTHING`, [randomUUID(), asker, ownerId, now]);
@@ -68,7 +68,7 @@ export async function sendChatMessage(deps: ChatDeps, asker: string, ownerId: st
       [chatId, author, input.clientId])).rows[0];
     if (existing) return { chatId, messageId: existing.id as string, state: existing.answer_state === "limited" ? "limited" as const : "answering" as const, key: null };
     const used = (await q(`SELECT count(*)::int AS total,count(*) FILTER (WHERE m.chat_id=$3)::int AS pair FROM colleague_chat_messages m
-      JOIN colleague_chats c ON c.id=m.chat_id WHERE c.owner_id=$1 AND m.answer_state IS NOT NULL AND m.answer_state<>'limited'
+      JOIN colleague_chats c ON c.id=m.chat_id WHERE c.owner_id=$1 AND m.answer_started_at IS NOT NULL
       AND date_trunc('day',m.created_at AT TIME ZONE 'Asia/Shanghai')=date_trunc('day',$2::timestamptz AT TIME ZONE 'Asia/Shanghai')`,
     [ownerId, now, chatId])).rows[0] as { total: number; pair: number };
     const limited = used.pair >= CHAT_DAILY_PER_PAIR || used.total >= CHAT_DAILY_PER_OWNER;
