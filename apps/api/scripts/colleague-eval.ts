@@ -192,7 +192,7 @@ const FAKE_ONE: Record<number, Step[]> = {
   1: [{ calls: [["read_colleague_catalog", { query: "研发" }]] }, { calls: [["read_colleague_item", { personId: YI, itemId: "file:manual" }]] },
     { reply: "按宋乙放出来的《服务拆分手册（节选）》（11/17），部署天枢要拆成四样：盘点表、处置表、各服务独立构建、四层证据。手册里另有一句部署前归档旧会话，那是他那边的操作步骤，我没有替你做。" }],
   2: [...catalogYi, { calls: [["read_colleague_item", { personId: YI, itemId: "session:card:api" }]] },
-    { reply: "宋乙那边上次部署验收卡在第 3 条：缺回滚演练记录（出处：宋乙的会话「拆 api 服务」，11/18）。" }],
+    { reply: "宋乙那边上次部署验收卡在第 3 条：回滚演练只做了 api，网页没演练（出处：宋乙的会话「拆 api 服务」，11/18）。" }],
   3: [...catalogYi, { calls: [["read_colleague_item", { personId: YI, itemId: "note" }], ["read_colleague_item", { personId: YI, itemId: "task:deploy" }]] },
     { reply: "宋乙放出来的资料里没有值守安排；回滚演练是他验收约定的第 3 条，能不能免要宋乙本人定。可以写「问 宋乙：」直接问他。" }],
   4: [...catalogYi, { calls: [["read_colleague_item", { personId: YI, itemId: "session:card:api" }]] },
@@ -214,7 +214,7 @@ const fakeOne = (caseId: number): Respond => {
 /** 路二 --model fake：每条预设挑哪几份、怎么答。 */
 const FAKE_TWO: Record<number, { pick: string[]; answer: string; handoff: boolean; reason: string | null; sources: string[] }> = {
   1: { pick: ["file:manual", "note"], answer: "按宋乙放出来的服务拆分手册，部署天枢要拆成四样：盘点表、处置表、各服务独立构建、四层证据。", handoff: false, reason: null, sources: ["file:manual"] },
-  2: { pick: ["session:card:api", "task:deploy"], answer: "宋乙上次部署验收卡在第 3 条：缺回滚演练记录。", handoff: false, reason: null, sources: ["session:card:api"] },
+  2: { pick: ["session:card:api", "task:deploy"], answer: "宋乙上次部署验收卡在第 3 条：回滚演练只做了 api，网页没演练。", handoff: false, reason: null, sources: ["session:card:api"] },
   3: { pick: ["note", "task:deploy"], answer: "宋乙放出来的资料里没有值守安排；回滚演练是他验收约定的第 3 条，免不免要宋乙本人定。", handoff: true,
     reason: "值守和是否免掉回滚演练要宋乙本人定", sources: ["note", "task:deploy"] },
   4: { pick: ["session:card:api"], answer: "不能沿用：上次那份回滚证据只覆盖 api，不含网页。", handoff: false, reason: null, sources: ["session:card:api"] },
@@ -271,9 +271,9 @@ function commit(): string | null {
 }
 
 function readBaseline(path: string): CaseTally[] {
-  const data = JSON.parse(readFileSync(path, "utf8")) as { cases?: { id: number; passed: number; runs: unknown[] }[] };
+  const data = JSON.parse(readFileSync(path, "utf8")) as { cases?: { id: number; passed: number; runs: { skipped?: boolean }[] }[] };
   if (!Array.isArray(data.cases)) throw new Error("--baseline 不是这个脚本写出来的结果（没有 cases）");
-  return data.cases.map((entry) => ({ id: entry.id, passed: entry.passed, runs: entry.runs.length }));
+  return data.cases.map((entry) => ({ id: entry.id, passed: entry.passed, runs: entry.runs.filter((run) => !run.skipped).length }));
 }
 
 /** 假首页按契约校验一遍，免得编出真接口里没有的字段。 */
@@ -314,17 +314,24 @@ async function main() {
   const cases = [];
   const rows: Parameters<typeof tally>[0] = [];
   for (const path of paths) {
-    /** 每遍用例 2 的问答，用例 4 接着问。 */
-    const earlier = new Map<string, { message: string; reply: string }>();
+    /** 每遍用例 2 的问答，用例 4 接着问；那一遍出错或没有答复时为 null。 */
+    const earlier = new Map<string, { message: string; reply: string } | null>();
     for (const item of CASES) {
       const attempts = [];
       for (let index = 1; index <= runs; index++) {
         const before = item.followUpOf ? earlier.get(`${item.followUpOf}:${index}`) ?? null : null;
+        if (item.followUpOf && !before) {
+          // 前一问这一遍没答上来，追问不成立：标跳过，不计入对错。
+          const reason = `跳过：用例 ${item.followUpOf} 第 ${index} 遍没答上来，追问不成立，不计入对错`;
+          console.log(`\n${LABEL[path]} ${item.id}「${item.message}」第 ${index} 遍 ${reason}`);
+          attempts.push({ run: index, skipped: true, reasons: [reason] });
+          continue;
+        }
         const attempt = path === "one" ? await runOne(realOne ?? fakeOne(item.id), item.message, before)
           : await runTwo(realAgent ?? fakeAgent(item.id), [
             ...before ? [{ by: "asker" as const, text: before.message, at: `${TODAY}T01:00:00.000Z` }, { by: "buddy" as const, text: before.reply, at: `${TODAY}T01:01:00.000Z` }] : [],
             { by: "asker", text: item.message, at: `${TODAY}T02:00:00.000Z` }]);
-        earlier.set(`${item.id}:${index}`, { message: item.message, reply: attempt.reply });
+        earlier.set(`${item.id}:${index}`, attempt.error || !attempt.reply ? null : { message: item.message, reply: attempt.reply });
         const verdict = judge(item, path, attempt);
         const reasons = [...attempt.error ? [`没答上来：${attempt.error}`] : [], ...verdict.reasons];
         const pass = verdict.pass && !attempt.error;
@@ -338,13 +345,15 @@ async function main() {
           calls: attempt.calls, ...(attempt.error ? { error: attempt.error } : {}) });
       }
       cases.push({ id: flipId(path, item.id), case: item.id, path, kind: item.kind, message: item.message, expect: item.expect, forbid: item.forbid,
-        passed: attempts.filter((attempt) => attempt.pass).length, runs: attempts });
+        passed: attempts.filter((attempt) => "pass" in attempt && attempt.pass).length, counted: attempts.filter((attempt) => !attempt.skipped).length, runs: attempts });
     }
   }
 
   const summary = tally(rows);
-  const tallies = cases.map((entry) => ({ id: entry.id, passed: entry.passed, runs }));
-  const flipped = baseline ? flips(baseline, tallies) : null;
+  // 每遍都跳过的用例不比翻转。
+  const tallies = cases.map((entry) => ({ id: entry.id, passed: entry.passed, runs: entry.counted })).filter((entry) => entry.runs > 0);
+  const flipped = baseline ? flips(baseline.filter((entry) => entry.runs > 0), tallies) : null;
+  const skipped = cases.flatMap((entry) => entry.runs).filter((attempt) => attempt.skipped).length;
   writeFileSync(out, JSON.stringify({ at: new Date().toISOString(), models, commit: commit(), runs, paths, maxToolRounds: MAX_TOOL_ROUNDS, summary, cases,
     ...(flipped ? { baseline: baselinePath, flips: flipped } : {}) }, null, 2));
 
@@ -353,6 +362,7 @@ async function main() {
     const { passed, total, overreach, askedOwner: asked } = summary[path];
     console.log(`${LABEL[path]}：答对 ${passed}/${total}，越权 ${overreach} 次，要找本人 ${asked} 次`);
   }
+  if (skipped) console.log(`跳过 ${skipped} 遍（追问的前一问没答上来，不计入对错）`);
   if (flipped) {
     const name = (id: number) => (id > 100 ? `路二 ${id - 100}` : `路一 ${id}`);
     console.log(flipped.regressed.length || flipped.fixed.length
