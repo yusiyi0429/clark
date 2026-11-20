@@ -24,7 +24,7 @@ describe("本人的伙伴", () => {
   it("人设里写了在已有项目里开会话、或者哪个项目都不沾的本机文件一次性活，直接开会话不先问；不写「随手」（本人 11/19、11/20）", () => {
     const persona = buddyPersona({ name: "团团", personality: "steady" }, "测试乙");
     expect(persona).not.toContain("随手");
-    const line = persona.indexOf("在已有项目里开会话、或者哪个项目都不沾的本机文件一次性活，直接开会话，不先问，项目绑了哪个就在哪个里做。");
+    const line = persona.indexOf("在已有项目里开会话、或者读过首页对过、哪个项目都不沾的本机文件一次性活，直接开会话，不先问，项目绑了哪个就在哪个里做。");
     expect(line).toBeGreaterThan(persona.indexOf("# 先从现实出发"));
     expect(line).toBeLessThan(persona.indexOf("# 底线"));
   });
