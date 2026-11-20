@@ -49,7 +49,7 @@ describe("伙伴读同事放出来的资料", { timeout: 60_000 }, () => {
       await f.note(THIRD.personId, "部署先看拆分手册");
       const byName = await f.ok("read_colleague_catalog", { query: NAME });
       expect(byName).toMatchObject({ summary: `读了${NAME}放出来的资料目录`, auditId: null, undoable: false });
-      expect(byName.result).toMatchObject({ person: { personId: THIRD.personId, name: NAME },
+      expect(byName.result).toMatchObject({ frame: FRAME, person: { personId: THIRD.personId, name: NAME },
         entries: expect.arrayContaining([expect.objectContaining({ itemId: "note", kind: "note" })]) });
       const byId = await f.ok("read_colleague_catalog", { personId: THIRD.personId });
       expect(byId.result.entries).toEqual(byName.result.entries);
@@ -64,14 +64,14 @@ describe("伙伴读同事放出来的资料", { timeout: 60_000 }, () => {
     const f = await fixture();
     try {
       await f.role(THIRD.personId, "部署验收", true);
-      expect((await f.ok("read_colleague_catalog", { query: "部署验收" })).result).toMatchObject({ person: { personId: THIRD.personId } });
+      expect((await f.ok("read_colleague_catalog", { query: "部署验收" })).result).toMatchObject({ person: { personId: THIRD.personId }, frame: FRAME });
       await f.role(TEST_CEO.personId, "部署检查", true);
       const several = await f.ok("read_colleague_catalog", { query: "部署" });
       expect(several.summary).toBe("对上 2 个人，还没读谁的");
       expect(several.result).toEqual({ people: [
         { personId: TEST_CEO.personId, name: "测试甲", matched: ["公开技能：部署检查"] },
         { personId: THIRD.personId, name: NAME, matched: ["公开技能：部署验收"] },
-      ], more: 0 });
+      ], more: 0, frame: FRAME });
       expect(several.result).not.toHaveProperty("entries");
       const none = await f.ok("read_colleague_catalog", { query: "不存在的工种" });
       expect(none).toMatchObject({ summary: "人员目录里没有对得上的人", result: { people: [], more: 0 } });

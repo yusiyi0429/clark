@@ -406,11 +406,12 @@ const handlers: Handlers = {
     if (!personId) {
       const found = matchColleagues(await colleagues.index(call.personId), args.query!);
       if (!found.people.length) return { summary: "人员目录里没有对得上的人", result: { people: [], more: 0 } };
-      if (found.people.length > 1) return { summary: `对上 ${found.people.length + found.more} 个人，还没读谁的`, result: found };
+      if (found.people.length > 1) return { summary: `对上 ${found.people.length + found.more} 个人，还没读谁的`, result: { ...found, frame: COLLEAGUE_MATERIAL_FRAME } };
       personId = found.people[0].personId;
     }
     const reader = await colleagueReader(deps, colleagues, call, personId);
-    return { summary: `读了${reader.owner.name}放出来的资料目录`, result: await reader.catalog() };
+    // 目录里的标题（文件名、技能名、会话标题）和对上的技能名也是同事写的，同样带 frame（R12）。
+    return { summary: `读了${reader.owner.name}放出来的资料目录`, result: { ...await reader.catalog(), frame: COLLEAGUE_MATERIAL_FRAME } };
   },
   read_colleague_item: async (deps, call, args) => {
     const colleagues = await colleaguesOf(deps, call);
