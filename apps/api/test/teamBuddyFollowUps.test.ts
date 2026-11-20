@@ -472,6 +472,23 @@ describe("被问的人看过和更正", { timeout: 60_000 }, () => {
     } finally { await s.f.close(); }
   });
 
+  it("伙伴答完后被问的人自己回需要补充，问的人补充说明：进被问的人的等你，伙伴那条仍标伙伴答的", async () => {
+    const s = await setup();
+    try {
+      const { id, reply } = await s.answered();
+      const send = (body: object, cookie: string) => s.f.call("POST", `${base}/${id}/replies`, { clientId: randomUUID(), ...body }, cookie);
+      expect((await send({ status: "needs_info", text: "要按哪个环境拆" }, s.third)).statusCode).toBe(200);
+      expect((await send({ status: "clarification", recipientId: THIRD.personId, text: "按生产环境" }, s.f.member)).statusCode).toBe(200);
+      expect(await s.waiting()).toContain(`team-request:${id}`);
+      const recipient = (await s.read(id)).recipients[0];
+      expect(recipient.status).toBe("pending");
+      // 本人接手后伙伴状态清掉；卡上每条的来源照旧按回复自己的 origin。
+      expect(recipient).not.toHaveProperty("buddy");
+      expect(recipient.replies[0]).toMatchObject({ id: reply.id, origin: "buddy" });
+      for (const cookie of [s.f.member, s.third]) expect((await s.read(id, cookie)).recipients[0].replies.map((item) => item.origin ?? null)).toEqual(["buddy", null, null]);
+    } finally { await s.f.close(); }
+  });
+
   it("追问超上限时被问的人改了上一条：仍能问本人，进被问的人的等你", async () => {
     const s = await setup();
     try {

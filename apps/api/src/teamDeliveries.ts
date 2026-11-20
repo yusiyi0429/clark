@@ -214,9 +214,12 @@ export async function retryTeamRecipient(deps: TeamDeliveryDeps, actor: string, 
   return projectWritten(deps, actor, id);
 }
 
-/** 被问的人自己回了（含更正）：伙伴在答、没答上来、超上限的标记不再有用（作业见他不在「伙伴在答」就不落）。 */
+/**
+ * 被问的人亲自回了（答复、需要补充、把往来答完的更正）：本人接手，之后照普通征集走。伙伴在答、答了、没答上来、超上限的标记都清掉
+ * （作业见他不在「伙伴在答」就不落；回复各自的来源照旧）。转本人的不清。
+ */
 const clearBuddyWait = (q: Query, id: string, person: string) => q("UPDATE request_recipients SET buddy_state=NULL,buddy_note=NULL,buddy_asked_at=NULL " +
-  "WHERE request_id=$1 AND person_id=$2 AND buddy_state IN ('answering','failed','limited')", [id, person]);
+  "WHERE request_id=$1 AND person_id=$2 AND buddy_state IN ('answering','answered','failed','limited')", [id, person]);
 
 export async function replyTeamDelivery(deps: TeamDeliveryDeps, actor: string, id: string, input: TReplyTeamDeliveryRequest, uploads: Upload[] = []) {
   const text = input.text?.trim() ?? "";
