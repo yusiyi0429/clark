@@ -300,16 +300,25 @@ export const boardPaths: OpenAPIV3.Document["paths"] = {
   "/api/me/roles/{id}": {
     patch: {
       operationId: "patchRole",
-      summary: "改岗位（本人）：版本不一致 409；保存后版本 +1、留一条修改记录，下一张卡就按新的来",
+      summary: "改岗位（本人）：版本不一致 409；保存后版本 +1、留一条修改记录，下一张卡就按新的来；标了同事可用时改进像密钥的值 422，不改",
       parameters: path("id"),
       requestBody: body("PatchRoleRequest"),
-      responses: { "200": json("改好的岗位", "RoleView"), ...errors(400, 401, 404, 409) },
+      responses: { "200": json("改好的岗位", "RoleView"), "422": json("有像密钥的值", "SecretInMaterialResponse"), ...errors(400, 401, 404, 409) },
     },
     delete: {
       operationId: "archiveRole",
       summary: "归档岗位（本人）：卡上的快照不受影响",
       parameters: path("id"),
       responses: { "204": { description: "已归档" }, ...errors(401, 404) },
+    },
+  },
+  "/api/me/roles/{id}/sharing": {
+    put: {
+      operationId: "setRoleSharing",
+      summary: "技能的「同事可用」开、关（本人）：打开时职责、做法、验收口径里有像密钥的值 422 SECRET_IN_MATERIAL，不改",
+      parameters: path("id"),
+      requestBody: body("SetRoleSharingRequest"),
+      responses: { "200": json("改好的技能", "RoleView"), "422": json("有像密钥的值", "SecretInMaterialResponse"), ...errors(400, 401, 404) },
     },
   },
   "/api/me/roles/{id}/revisions": {
@@ -331,9 +340,9 @@ export const boardPaths: OpenAPIV3.Document["paths"] = {
   "/api/me/role-proposals/{id}/accept": {
     post: {
       operationId: "acceptRoleProposal",
-      summary: "采纳：改后的整段写回岗位，版本 +1、留记录；岗位在这之后改过时 409 ROLE_CHANGED",
+      summary: "采纳：改后的整段写回岗位，版本 +1、留记录；岗位在这之后改过时 409 ROLE_CHANGED；标了同事可用时改后有像密钥的值 422，不改",
       parameters: path("id"),
-      responses: { "200": json("改好的岗位", "RoleView"), ...errors(401, 404, 409) },
+      responses: { "200": json("改好的岗位", "RoleView"), "422": json("有像密钥的值", "SecretInMaterialResponse"), ...errors(401, 404, 409) },
     },
   },
   "/api/me/role-proposals/{id}/dismiss": {

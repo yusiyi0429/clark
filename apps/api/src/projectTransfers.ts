@@ -8,6 +8,7 @@ import { shanghaiDate } from "./workdays.js";
 import { CardError } from "./taskCards.js";
 import { settlementsOf } from "./taskContinuity.js";
 import { dueDatesOf } from "./taskDueDates.js";
+import { secretIn, secretSample } from "./secretPatterns.js";
 
 /**
  * 项目转交（契约 projectTransfers.ts，设计《新首页》16.7，迁移 246）。
@@ -122,14 +123,11 @@ async function draftNote(q: Query, row: Pick<TransferRow, "project_id" | "from_i
 /** 按 16.7 的段落顺序排（别的标题排在最后，原来的先后不变）。 */
 const ordered = (note: THandoverNote): THandoverNote => [...note].sort((a, b) => (ORDER.indexOf(a.title) + 1 || 99) - (ORDER.indexOf(b.title) + 1 || 99));
 
-/** 常见密钥样式（同网页 lib/home/transfer.ts）：只认长得像值的，变量名不算。 */
-const SECRET_PATTERNS: RegExp[] = [
-  /sk-[A-Za-z0-9_-]{16,}/, /ghp_[A-Za-z0-9]{20,}/, /github_pat_[A-Za-z0-9_]{20,}/, /AKIA[0-9A-Z]{16}/, /-----BEGIN [A-Z ]*PRIVATE KEY-----/, /xox[abprs]-[A-Za-z0-9-]{10,}/,
-];
+export { maskSecrets, secretLines } from "./secretPatterns.js";
 export function secretFindings(note: THandoverNote): THandoverSecretFinding[] {
   return note.flatMap((section) => section.lines.flatMap((text, index) => {
-    const match = SECRET_PATTERNS.map((pattern) => pattern.exec(text)?.[0]).find(Boolean);
-    return match ? [{ section: section.title, line: index + 1, sample: `${match.slice(0, 6)}••••` }] : [];
+    const match = secretIn(text);
+    return match ? [{ section: section.title, line: index + 1, sample: secretSample(match) }] : [];
   }));
 }
 export class SecretsInNote extends Error { constructor(readonly findings: THandoverSecretFinding[]) { super("交接说明里有像密钥的内容，改掉再发"); } }

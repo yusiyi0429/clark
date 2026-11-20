@@ -4836,8 +4836,25 @@ export interface paths {
         delete: operations["archiveRole"];
         options?: never;
         head?: never;
-        /** 改岗位（本人）：版本不一致 409；保存后版本 +1、留一条修改记录，下一张卡就按新的来 */
+        /** 改岗位（本人）：版本不一致 409；保存后版本 +1、留一条修改记录，下一张卡就按新的来；标了同事可用时改进像密钥的值 422，不改 */
         patch: operations["patchRole"];
+        trace?: never;
+    };
+    "/api/me/roles/{id}/sharing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 技能的「同事可用」开、关（本人）：打开时职责、做法、验收口径里有像密钥的值 422 SECRET_IN_MATERIAL，不改 */
+        put: operations["setRoleSharing"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/me/roles/{id}/revisions": {
@@ -4883,7 +4900,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 采纳：改后的整段写回岗位，版本 +1、留记录；岗位在这之后改过时 409 ROLE_CHANGED */
+        /** 采纳：改后的整段写回岗位，版本 +1、留记录；岗位在这之后改过时 409 ROLE_CHANGED；标了同事可用时改后有像密钥的值 422，不改 */
         post: operations["acceptRoleProposal"];
         delete?: never;
         options?: never;
@@ -6223,6 +6240,74 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/colleague-materials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 本人放给同事的伙伴读的资料：说明和文件 */
+        get: operations["readColleagueMaterials"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/colleague-materials/note": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 存说明；去掉首尾空白后为空就清空。有像密钥的值 422，不存 */
+        put: operations["saveColleagueNote"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/colleague-materials/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 传一份文件（.md、.pdf、.docx），只存抽出的文字；最多 20 份。有像密钥的值 422，不存 */
+        post: operations["addColleagueFile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/colleague-materials/files/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 删掉本人的一份文件 */
+        delete: operations["removeColleagueFile"];
         options?: never;
         head?: never;
         patch?: never;
@@ -19021,6 +19106,8 @@ export interface components {
                 personId: string;
                 name: string;
             } | null;
+            /** @constant */
+            shared?: true;
         };
         RolePresetView: {
             presetKey: string;
@@ -19054,6 +19141,8 @@ export interface components {
                     personId: string;
                     name: string;
                 } | null;
+                /** @constant */
+                shared?: true;
             }[];
             presets: {
                 presetKey: string;
@@ -23403,6 +23492,49 @@ export interface components {
             text: string;
             fileName: string;
             truncated: boolean;
+        };
+        ColleagueFile: {
+            /** Format: uuid */
+            id: string;
+            fileName: string;
+            size: number;
+            chars: number;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        ColleagueMaterials: {
+            note: string;
+            noteUpdatedAt: string | null;
+            files: {
+                /** Format: uuid */
+                id: string;
+                fileName: string;
+                size: number;
+                chars: number;
+                /** Format: date-time */
+                createdAt: string;
+            }[];
+        };
+        SaveColleagueNoteRequest: {
+            note: string;
+        };
+        SecretFinding: {
+            where: string;
+            line: number;
+            sample: string;
+        };
+        SecretInMaterialResponse: {
+            /** @constant */
+            code: "SECRET_IN_MATERIAL";
+            message: string;
+            findings: {
+                where: string;
+                line: number;
+                sample: string;
+            }[];
+        };
+        SetRoleSharingRequest: {
+            shared: boolean;
         };
         ContinueMeetingWork: {
             /** @constant */
@@ -40121,6 +40253,77 @@ export interface operations {
                     "application/json": components["schemas"]["ApiError"];
                 };
             };
+            /** @description 有像密钥的值 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecretInMaterialResponse"];
+                };
+            };
+        };
+    };
+    setRoleSharing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetRoleSharingRequest"];
+            };
+        };
+        responses: {
+            /** @description 改好的技能 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleView"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 有像密钥的值 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecretInMaterialResponse"];
+                };
+            };
         };
     };
     listRoleRevisions: {
@@ -40248,6 +40451,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 有像密钥的值 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecretInMaterialResponse"];
                 };
             };
         };
@@ -45276,6 +45488,196 @@ export interface operations {
             };
             /** @description 结果 */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    readColleagueMaterials: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ColleagueMaterials"];
+                };
+            };
+            /** @description 结果 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    saveColleagueNote: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveColleagueNoteRequest"];
+            };
+        };
+        responses: {
+            /** @description 结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ColleagueMaterials"];
+                };
+            };
+            /** @description 结果 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 有像密钥的值 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecretInMaterialResponse"];
+                };
+            };
+        };
+    };
+    addColleagueFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description 结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ColleagueMaterials"];
+                };
+            };
+            /** @description 结果 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 有像密钥的值，或抽不出文字 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecretInMaterialResponse"] | components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    removeColleagueFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已删 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 结果 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

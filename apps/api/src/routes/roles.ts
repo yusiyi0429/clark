@@ -1,8 +1,9 @@
 import { Type } from "@sinclair/typebox";
 import type { FastifyReply } from "fastify";
-import { CreateRoleRequest, PatchRoleRequest, RoleListResponse, RoleProposalList, RoleProposalView, RoleRevisionList, RoleView } from "@warmap/contracts";
+import { CreateRoleRequest, PatchRoleRequest, RoleListResponse, RoleProposalList, RoleProposalView, RoleRevisionList, RoleView, SetRoleSharingRequest } from "@warmap/contracts";
 import { personDisplayNames } from "../people.js";
-import { acceptProposal, archiveRole, createRole, dismissProposal, listProposals, listRevisions, listRoles, patchRole, readPresets, RoleError, syncRolePresets } from "../roles.js";
+import { acceptProposal, archiveRole, createRole, dismissProposal, listProposals, listRevisions, listRoles, patchRole, readPresets, RoleError, RoleSecrets,
+  setRoleSharing, syncRolePresets } from "../roles.js";
 import type { AppInstance, RouteContext } from "./shared.js";
 
 const idParams = Type.Object({ id: Type.String({ minLength: 1 }) });
@@ -22,6 +23,7 @@ export function registerRoleRoutes(app: AppInstance, ctx: RouteContext): void {
   const handle = async <T>(reply: FastifyReply, work: () => Promise<T>) => {
     try { return await work(); } catch (cause) {
       if (cause instanceof RoleError) return fail(reply, cause.status, cause.code, cause.message);
+      if (cause instanceof RoleSecrets) return reply.status(422).send({ code: "SECRET_IN_MATERIAL", message: cause.message, findings: cause.findings });
       throw cause;
     }
   };
@@ -33,6 +35,9 @@ export function registerRoleRoutes(app: AppInstance, ctx: RouteContext): void {
 
   app.patch("/api/me/roles/:id", { preHandler: requirePerson, schema: { params: idParams, body: PatchRoleRequest, response: { 200: RoleView } } }, async (req, reply) =>
     handle(reply, () => patchRole(pool, req.person!.personId, req.params.id, req.body, names(), ctx.now())));
+
+  app.put("/api/me/roles/:id/sharing", { preHandler: requirePerson, schema: { params: idParams, body: SetRoleSharingRequest, response: { 200: RoleView } } },
+    async (req, reply) => handle(reply, () => setRoleSharing(q, req.person!.personId, req.params.id, req.body.shared, names(), ctx.now())));
 
   app.delete("/api/me/roles/:id", { preHandler: requirePerson, schema: { params: idParams } }, async (req, reply) => handle(reply, async () => {
     await archiveRole(q, req.person!.personId, req.params.id, ctx.now());
