@@ -162,7 +162,7 @@ export function BuddyView({ buddy, outbox, consume, onSpeaking, waiting, go, con
 }) {
   const data = useConversation("global");
   const chrome = useViewChrome();
-  const team = usePartnerTeam();
+  const team = usePartnerTeam(go);
   const side = useSideDetail();
   const openRight = useMemo(() => rightOpener(side, subs), [side, subs]);
   const scratchId = projects.find((project) => project.scratch)?.id ?? null;

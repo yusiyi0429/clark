@@ -8025,7 +8025,7 @@ export interface components {
             } | {
                 /** @constant */
                 kind: "refresh";
-                what: ("work_home" | "project" | "sub_session" | "settings" | "trash")[];
+                what: ("work_home" | "project" | "sub_session" | "settings" | "trash" | "colleague_chats")[];
                 id?: string;
             };
         } | {

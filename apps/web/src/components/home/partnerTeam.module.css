@@ -55,6 +55,8 @@
 .replyHead, .personHeading, .rowTools, .fileTools { flex-wrap: wrap; }
 .replies { border-left: 2px solid var(--hairline-strong); margin-block: var(--space-1); padding-left: var(--space-3); }
 .replies li { display: grid; gap: var(--space-1); }
+/* 主线里伙伴替本人问出去的原文，挂在那一行下面。 */
+.mainQuote { margin: 0 0 var(--space-2); padding-left: var(--space-3); border-left: 2px solid var(--hairline-strong); color: var(--ink-muted); white-space: pre-wrap; overflow-wrap: anywhere; }
 .replyHead b { font-size: var(--text-xs); color: var(--ink-muted); font-weight: 600; }
 .status[data-failed], .card .error, .dialog .error, .feedError { color: var(--danger); font-size: var(--text-xs); }
 .feedError, .linkButton, .icon, .secondary, .primary, .modes button { font: inherit; cursor: pointer; }

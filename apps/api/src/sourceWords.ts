@@ -103,3 +103,13 @@ export async function recentOwnerWords(q: Query, history: ProjectHistory, ownerI
   return messages.filter((message) => message.role === "user" && (!since || message.running || new Date(message.createdAt) > since) && message.content.trim())
     .map((message) => message.content.trim()).slice(-SOURCE_TURNS);
 }
+
+/** 本人这一轮说的话（Miles 替你问只准原样带它）：伙伴主线里还在跑的那一轮本人的话。 */
+export type TurnWords = (ownerId: string, runId: string) => Promise<string[]>;
+export function turnWordsReader(deps: { q: Query; chat?: ChatService; conversationTurnTimeoutMs: number }): TurnWords {
+  return async (ownerId, runId) => {
+    const history = deps.chat ? await deps.chat.history(pipelineViewer(ownerId), runId) as TConversationHistory
+      : await getConversationHistory(deps.q, ownerId, "global", deps.conversationTurnTimeoutMs);
+    return history.messages.filter((message) => message.role === "user" && message.running && message.content.trim()).map((message) => message.content.trim());
+  };
+}

@@ -179,6 +179,8 @@ export const BuddyActionParams = {
   }, strict),
   tell_session: Type.Object({ ...SubSessionRef, text: Type.String({ minLength: 1, maxLength: 4000 }) }, strict),
   send_message: Type.Object({ toPersonIds: Type.Array(Type.String({ minLength: 1 }), { minItems: 1, maxItems: 5 }), text: Type.String({ minLength: 1, maxLength: 2000 }) }, strict),
+  /** Miles 替本人问一位同事的伙伴：text 只能原样摘本人这一轮说的话。 */
+  ask_colleague_buddy: Type.Object({ personId: Type.String({ minLength: 1, maxLength: 100 }), text: Type.String({ minLength: 1, maxLength: 2000 }) }, strict),
   update_plan: Type.Object({
     /** 整张清单（每次都交全部，后一次取代前一次）。少于 2 条不出。 */
     entries: Type.Array(LocalPlanEntry, { maxItems: 20 }),
@@ -194,7 +196,7 @@ export const BuddyActionParams = {
   update_card: UpdateCardActionParams,
 } as const;
 /** 只在伙伴主线能用的动作。 */
-export const MAIN_ONLY_ACTIONS = ["open_session", "tell_session", "read_colleague_catalog", "read_colleague_item"] as const;
+export const MAIN_ONLY_ACTIONS = ["open_session", "tell_session", "read_colleague_catalog", "read_colleague_item", "ask_colleague_buddy"] as const;
 /** 只在项目对话里能用的动作（18 节第 10 条；update_card 是主循环第 60 条）。 */
 export const PROJECT_ONLY_ACTIONS = ["sub_session_tell", "sub_session_stop", "sub_session_rename", "sub_session_link", "sub_session_restart", "sub_session_answer", "sub_session_approve", "update_card"] as const;
 
@@ -296,13 +298,13 @@ export const TrashListResponse = Type.Object({ items: Type.Array(TrashItem) }, s
  * 界面上的效果（conversations.ts 的 ui 事件，天枢在动作做完时插进这一轮的流）：
  * - appearance：外观换了，网页立刻照它换（不用再读）；
  * - open：让网页打开某一处（target 同 open_page 的参数）；
- * - refresh：哪几块要重读（work_home 首页、project 某个项目、sub_session 某个子会话、settings 偏好、trash 回收站）。
+ * - refresh：哪几块要重读（work_home 首页、project 某个项目、sub_session 某个子会话、settings 偏好、trash 回收站、colleague_chats 同事对话）。
  */
 export const BuddyUiEffect = Type.Union([
   Type.Object({ kind: Type.Literal("appearance"), appearance: AppearanceSettings.properties.appearance }, strict),
   Type.Object({ kind: Type.Literal("open"), target: BuddyActionParams.open_page.properties.target }, strict),
   Type.Object({ kind: Type.Literal("refresh"), what: Type.Array(Type.Union([Type.Literal("work_home"), Type.Literal("project"), Type.Literal("sub_session"),
-    Type.Literal("settings"), Type.Literal("trash")]), { minItems: 1 }), id: Type.Optional(Type.String({ minLength: 1 })) }, strict),
+    Type.Literal("settings"), Type.Literal("trash"), Type.Literal("colleague_chats")]), { minItems: 1 }), id: Type.Optional(Type.String({ minLength: 1 })) }, strict),
 ]);
 
 /**

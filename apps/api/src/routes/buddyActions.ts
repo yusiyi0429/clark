@@ -13,7 +13,8 @@ import type { FeishuClient } from "../feishu/client.js";
 import { sendFeishuText } from "../feishu/messages.js";
 import { colleagueIndex, dbScopeSource, scopeReader } from "../colleagueScope.js";
 import { isRealPerson, personDisplayNames } from "../people.js";
-import { projectHistoryReader } from "../sourceWords.js";
+import { projectHistoryReader, turnWordsReader } from "../sourceWords.js";
+import { colleagueChatDeps } from "./colleagueChats.js";
 import { idParams, type AppInstance, type Guard, type RouteContext } from "./shared.js";
 
 /**
@@ -30,7 +31,10 @@ export function registerBuddyActionRoutes(app: AppInstance, ctx: RouteContext, o
       directory: peopleDirectory,
       reader: (ownerId) => scopeReader(dbScopeSource({ q, planTasks: ctx.planTasks, names: people(), now: ctx.now() }, ownerId)),
       index: async (viewerId) => (await colleagueIndex(q, peopleDirectory, viewerId)).filter((entry) => isRealPerson({ personId: entry.personId, displayName: entry.name })),
-    } };
+    },
+    // 每次用时现取：jobs 的 runNow 在 server.ts 启动后才挂上。
+    get chats() { return colleagueChatDeps(app, ctx); },
+    turnWords: ctx.turnWords ?? turnWordsReader(ctx) };
   const requireMember: Guard = async (req, reply) => {
     await requirePerson(req, reply);
     if (reply.sent) return reply;

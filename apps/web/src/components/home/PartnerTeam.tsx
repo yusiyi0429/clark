@@ -2,11 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Users } from "lucide-react";
-import type { TRequestListItem, TRequestPerson, TTeamDelivery } from "@warmap/contracts";
+import type { TBuddyUiEffect, TMainLine, TRequestListItem, TRequestPerson, TTeamDelivery } from "@warmap/contracts";
 import type { TimedBlock } from "@/components/work/WorkTimeline";
 import { useWorkspace } from "@/components/shell/WorkspaceContext";
+import { useBuddy } from "@/components/buddy/useBuddy";
 import { REQUESTS_CHANGED } from "@/components/requests/requestApi";
 import { chooseAnswerOption } from "@/conversation/answerOptions";
+import { BUDDY_UI_EVENT } from "@/lib/buddy/uiEvent";
+import { chatHref, COLLEAGUE_CHATS_CHANGED, listMainLines, sendChatMessage } from "@/lib/home/colleagueChats";
 import { teamIntent, resolveTeamNames } from "@/lib/home/teamIntent";
 import { listCollectionRounds, listTeamDeliveries, listTeamPeople, readTeamDelivery, sendTeamDelivery, TEAM_DELIVERY_CHANGED, teamError, type TeamBox } from "@/lib/home/teamDelivery";
 import { CollectionRoundCard, TeamDeliveryCard, teamAnchor, type TeamForward } from "./PartnerTeamCard";
@@ -17,8 +20,8 @@ import s from "./partnerTeam.module.css";
 export { isTeamDraft } from "@/lib/home/teamIntent";
 export { teamAnchor } from "./PartnerTeamCard";
 
-type TeamFeed = { received: TTeamDelivery[]; sent: TTeamDelivery[]; fixedReceived: TRequestListItem[]; fixedSent: TRequestListItem[] };
-const emptyFeed: TeamFeed = { received: [], sent: [], fixedReceived: [], fixedSent: [] };
+type TeamFeed = { received: TTeamDelivery[]; sent: TTeamDelivery[]; fixedReceived: TRequestListItem[]; fixedSent: TRequestListItem[]; mainLines: TMainLine[] };
+const emptyFeed: TeamFeed = { received: [], sent: [], fixedReceived: [], fixedSent: [], mainLines: [] };
 const FREQUENCY = 20_000;
 /** 有伙伴在答时的刷新间隔。 */
 export const FAST_FREQUENCY = 3_000;
@@ -33,7 +36,7 @@ export function feedInterval(feed: { received: TTeamDelivery[]; sent: TTeamDeliv
   return [...feed.received, ...feed.sent].some((item) => item.recipients.some((person) => person.buddy?.state === "answering")) ? FAST_FREQUENCY : FREQUENCY;
 }
 
-/** 来件与发件是当前登录人的云端投影。轮次沿用原请求；单个来源暂时失败时，其余卡仍能使用。 */
+/** 来件与发件是当前登录人的云端投影，主线发出的同事对话留痕跟着一起刷。轮次沿用原请求；单个来源暂时失败时，其余卡仍能使用。 */
 function useTeamFeed(viewerId: string | null) {
   const [feed, setFeed] = useState<TeamFeed>(emptyFeed);
   const [error, setError] = useState("");
@@ -67,23 +70,31 @@ function useTeamFeed(viewerId: string | null) {
       if (document.visibilityState === "hidden") return;
       const current = ++sequence;
       const results = await Promise.allSettled([listTeamDeliveries("received", controller.signal), listTeamDeliveries("sent", controller.signal),
-        listCollectionRounds("inbox", controller.signal), listCollectionRounds("sent", controller.signal)] as const);
+        listCollectionRounds("inbox", controller.signal), listCollectionRounds("sent", controller.signal), listMainLines(controller.signal)] as const);
       if (controller.signal.aborted || current !== sequence) return;
-      const [received, sent, fixedReceived, fixedSent] = results;
+      const [received, sent, fixedReceived, fixedSent, mainLines] = results;
       setFeed((previous) => ({
         received: received.status === "fulfilled" ? received.value : previous.received, sent: sent.status === "fulfilled" ? sent.value : previous.sent,
         fixedReceived: fixedReceived.status === "fulfilled" ? fixedReceived.value : previous.fixedReceived, fixedSent: fixedSent.status === "fulfilled" ? fixedSent.value : previous.fixedSent,
+        mainLines: mainLines.status === "fulfilled" ? mainLines.value : previous.mainLines,
       }));
       const failed = results.find((result) => result.status === "rejected");
       setError(failed?.status === "rejected" ? teamError(failed.reason, "同事收发记录暂时未更新") : "");
     };
-    const events = ["focus", TEAM_DELIVERY_CHANGED, REQUESTS_CHANGED];
+    const events = ["focus", TEAM_DELIVERY_CHANGED, REQUESTS_CHANGED, COLLEAGUE_CHATS_CHANGED];
+    // 伙伴替本人问了同事的伙伴：动作做完要重读同事对话。
+    const onBuddy = (event: Event) => {
+      const effect = (event as CustomEvent<TBuddyUiEffect>).detail;
+      if (effect.kind === "refresh" && effect.what.includes("colleague_chats")) void load();
+    };
     const timer = window.setInterval(load, interval);
     events.forEach((event) => window.addEventListener(event, load));
+    window.addEventListener(BUDDY_UI_EVENT, onBuddy);
     document.addEventListener("visibilitychange", load);
     void load();
     return () => {
       controller.abort(); window.clearInterval(timer); events.forEach((event) => window.removeEventListener(event, load)); document.removeEventListener("visibilitychange", load);
+      window.removeEventListener(BUDDY_UI_EVENT, onBuddy);
     };
   }, [viewerId, retry, interval]);
 
@@ -111,9 +122,13 @@ function useTeamFeed(viewerId: string | null) {
   return { items, update, reload, error: anchorError || error };
 }
 
-/** 仅挂在伙伴主对话。输入明确点名且原文已给时直接投递，其他团队输入保留在本人可改的预览里。 */
-export function usePartnerTeam() {
+/**
+ * 仅挂在伙伴主对话。输入明确点名且原文已给时直接投递，其他团队输入保留在本人可改的预览里。
+ * 只问一个人、没有附件、链接和截止的问句发进和他伙伴的那段对话，主线只留一行（他不在覆盖里时照旧征集）；go 打开那段对话。
+ */
+export function usePartnerTeam(go: (href: string) => void) {
   const { viewerId } = useWorkspace();
+  const buddyName = useBuddy().buddy?.name?.trim() || "伙伴";
   const { items, update, error: feedError, reload } = useTeamFeed(viewerId);
   const [draft, setDraft] = useState<TeamDraft | null>(null);
   const composingDraft = draft !== null;
@@ -141,8 +156,18 @@ export function usePartnerTeam() {
     const body = draftPayload(value);
     if (!body || sending.current) return;
     sending.current = true; setBusy(true);
-    try { const item = await sendTeamDelivery(body, value.files); update("sent", item); setDraft(null); }
-    catch (cause) { setDraft({ ...value, error: teamError(cause, "未能确认送达，请重试") }); }
+    try {
+      if (body.kind === "question" && body.text && body.recipientIds.length === 1 && !body.dueAt && !body.sourceUrl && !body.sourceAttachments && !value.files.length) {
+        try {
+          await sendChatMessage(body.recipientIds[0], { clientId: body.clientId, text: body.text, via: "main" });
+          window.dispatchEvent(new Event(COLLEAGUE_CHATS_CHANGED)); setDraft(null);
+          return;
+        } catch (cause) {
+          if ((cause as { code?: string }).code !== "PERSON_NOT_FOUND") throw cause;
+        }
+      }
+      const item = await sendTeamDelivery(body, value.files); update("sent", item); setDraft(null);
+    } catch (cause) { setDraft({ ...value, error: teamError(cause, "未能确认送达，请重试") }); }
     finally { sending.current = false; setBusy(false); }
   }, [update]);
 
@@ -173,8 +198,16 @@ export function usePartnerTeam() {
         entries.push({ key: "collection-round:" + item.id, at: item.sentAt ?? item.createdAt, node: <CollectionRoundCard item={item} sent={sent} /> });
       }
     }
+    for (const line of items.mainLines) {
+      const open = () => go(chatHref("with", line.peer.personId));
+      const words = line.author === "asker" ? `已发给${line.peer.displayName}的伙伴` : `${buddyName}替你问${line.peer.displayName}的伙伴`;
+      entries.push({ key: "colleague-chat:" + line.messageId, at: line.at, node: <div>
+        <div className={h.line}><button type="button" className={h.lineLink} onClick={open}>{words}</button></div>
+        {line.author === "asker_buddy" && line.text ? <p className={s.mainQuote}>{line.text}</p> : null}
+      </div> });
+    }
     return entries;
-  }, [items, update, begin]);
+  }, [items, update, begin, go, buddyName]);
 
   return {
     blocks, intercept, composing: composingDraft || busy,

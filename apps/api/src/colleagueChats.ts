@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
-import type { TChatListResponse, TChatMessage, TChatPerson, TChatRow, TChatView } from "@warmap/contracts";
+import type { TChatListResponse, TChatMessage, TChatPerson, TChatRow, TChatView, TMainLine } from "@warmap/contracts";
 import { colleagueAccess, isCovered, type ColleagueAccess } from "./colleagueAccess.js";
 import { listFriendRequests, relationOf } from "./colleagueFriends.js";
 import { readBuddy } from "./buddy.js";
@@ -145,6 +145,16 @@ export async function listChats(deps: ChatDeps, viewer: string): Promise<TChatLi
   inbound.sort((a, b) => Number(b.waiting > 0) - Number(a.waiting > 0));
   const requests = (await listFriendRequests(deps.q, deps.directory, viewer)).map((request) => ({ person: personOf(deps, request.personId), at: request.at }));
   return { mine, inbound, requests };
+}
+
+/** 主线留痕：本人从伙伴主线发出的问句最近 50 条，旧的在前；本人自己问的不带原文（主线只留一行），伙伴替他问的带发出去的原文。 */
+export async function listMainLines(deps: ChatDeps, viewer: string): Promise<TMainLine[]> {
+  if (!isCovered(deps.directory, viewer)) return [];
+  const rows = (await deps.q(`SELECT m.id,m.chat_id,c.owner_id,m.author,m.body,m.created_at FROM colleague_chat_messages m JOIN colleague_chats c ON c.id=m.chat_id
+    WHERE c.asker_id=$1 AND m.via='main' AND m.author IN ('asker','asker_buddy') ORDER BY m.seq DESC LIMIT 50`, [viewer])).rows as
+    { id: string; chat_id: string; owner_id: string; author: TMainLine["author"]; body: string; created_at: Date }[];
+  return rows.reverse().map((row) => ({ chatId: row.chat_id, messageId: row.id, peer: personOf(deps, row.owner_id), author: row.author,
+    text: row.author === "asker_buddy" ? row.body : null, at: row.created_at.toISOString() }));
 }
 
 /** 看的人是这段的问的人或主人、且还被覆盖；否则和没有这段一样。 */

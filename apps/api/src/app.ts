@@ -9,6 +9,7 @@ import multipart from "@fastify/multipart";
 import { loadPeopleDirectory, type PeopleDirectoryEnv } from "./peopleDirectory.js";
 import { createCompanyContext, type CompanyContextEnv } from "./companyContext.js";
 import type { CompanyReader } from "./company.js";
+import type { TurnWords } from "./sourceWords.js";
 import { createPersonalMemory } from "./personalMemory.js";
 import { createMemoryRecall, memoryRecallModels, type MemoryRecall } from "./personalMemoryRecall.js";
 import { createPersonalDistillation } from "./personalDistillation.js";
@@ -435,6 +436,7 @@ export async function buildApp({
   colleagueAnswerAgent,
   boardAgents,
   companyReader,
+  turnWords,
   conversationTurnTimeoutMs = CONVERSATION_TURN_TIMEOUT_MS,
   conversationStallTimeoutMs = CONVERSATION_STALL_TIMEOUT_MS,
   conversationHeartbeatMs = CONVERSATION_HEARTBEAT_MS,
@@ -524,6 +526,8 @@ export async function buildApp({
   boardAgents?: Partial<BoardAgents>;
   /** 本体公司事实的读取（测试注入假实现）；缺省按 env 读本体（company.ts）。 */
   companyReader?: CompanyReader;
+  /** 本人这一轮说的话（测试注入假实现）；缺省读伙伴主线里还在跑的那一轮。 */
+  turnWords?: TurnWords;
   conversationTurnTimeoutMs?: number;
   conversationStallTimeoutMs?: number;
   conversationHeartbeatMs?: number;
@@ -927,6 +931,7 @@ export async function buildApp({
     materialStorageDir,
     conversationAttachmentStorageDir,
     conversationTurnTimeoutMs,
+    turnWords,
     conversationStallTimeoutMs,
     conversationHeartbeatMs,
     conversationCompaction,

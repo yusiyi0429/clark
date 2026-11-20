@@ -36749,6 +36749,10 @@
                             {
                               "const": "trash",
                               "type": "string"
+                            },
+                            {
+                              "const": "colleague_chats",
+                              "type": "string"
                             }
                           ]
                         }
