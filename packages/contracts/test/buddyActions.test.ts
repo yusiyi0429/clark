@@ -1,7 +1,7 @@
 import { FormatRegistry } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import { beforeAll, describe, expect, it } from "vitest";
-import { BUDDY_ACTION_NAMES, BuddyActionParams, BuddyAuthority, BuddyMessageDraft, BuddyPlan, BuddyUiEffect, ClaimSessionStopsResponse, ConversationSseEvent } from "../src/index.js";
+import { BUDDY_ACTION_NAMES, BuddyActionParams, MAIN_ONLY_ACTIONS, BuddyAuthority, BuddyMessageDraft, BuddyPlan, BuddyUiEffect, ClaimSessionStopsResponse, ConversationSseEvent } from "../src/index.js";
 
 const uuid = "11111111-1111-4111-8111-111111111111";
 const at = "2026-11-08T02:00:00.000Z";
@@ -44,5 +44,13 @@ describe("伙伴代本人做事（17.4）", () => {
     expect(Value.Check(ConversationSseEvent, { ...noRun, type: "receipt", state: "delivered", messageId: "m1" })).toBe(true);
     expect(Value.Check(ConversationSseEvent, { ...base, type: "receipt", state: "read" })).toBe(false);
     expect(Value.Check(ConversationSseEvent, { ...noRun, type: "error", code: "TURN_IN_PROGRESS", message: "上一轮停不下来" })).toBe(true);
+  });
+
+  it("读同事资料的两个动作：参数和只在主线用", () => {
+    expect(Value.Check(BuddyActionParams.read_colleague_catalog, { query: "研发" })).toBe(true);
+    expect(Value.Check(BuddyActionParams.read_colleague_catalog, { query: "研" })).toBe(false);
+    expect(Value.Check(BuddyActionParams.read_colleague_item, { personId: "p-2", itemId: "task:a:b" })).toBe(true);
+    expect(Value.Check(BuddyActionParams.read_colleague_item, { personId: "p-2" })).toBe(false);
+    expect(MAIN_ONLY_ACTIONS).toEqual(["open_session", "tell_session", "read_colleague_catalog", "read_colleague_item"]);
   });
 });
