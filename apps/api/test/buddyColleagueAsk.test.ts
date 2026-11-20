@@ -99,6 +99,9 @@ describe("Miles 替你问", { timeout: 120_000 }, () => {
       expect(await s.asked("切换那天几点开始，库是 postgres://app:hunter2@db/x")).toMatchObject({ sent, answer: "按拆分手册拆四件", needsOwner: null });
       expect(await s.f.t.sql("SELECT author,via,body FROM colleague_chat_messages ORDER BY seq LIMIT 1")).toEqual([{ author: "asker_buddy", via: "main", body: sent }]);
       expect((await s.get(C + "/main-lines")).items).toMatchObject([{ author: "asker_buddy", text: sent }]);
+      const audit = await s.f.t.sql("SELECT args FROM buddy_actions WHERE action='ask_colleague_buddy'");
+      expect(audit).toEqual([{ args: { personId: 丙, text: "切换那天几点开始，库是 postgres://app:••••@db/x" } }]);
+      expect(JSON.stringify(audit)).not.toContain("hunter2");
     } finally { await s.f.close(); }
   });
 

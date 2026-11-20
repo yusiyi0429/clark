@@ -32,6 +32,7 @@ import { matchColleagues, type ColleagueIndexEntry, type ScopeReader } from "./c
 import { isRealPerson } from "./people.js";
 import type { PeopleDirectory } from "./peopleDirectory.js";
 import { ChatError, sendChatMessage, type ChatDeps } from "./colleagueChats.js";
+import { maskSecrets } from "./secretPatterns.js";
 
 /**
  * 伙伴代本人做事（新首页 17.4，契约 buddyActions.ts）。Chat 每轮读动作清单（actionList），模型调哪个就按名字执行（runAction）。
@@ -863,10 +864,11 @@ export async function runAction(deps: BuddyDeps, call: Call, name: string, args:
     throw new BuddyError(403, "BUDDY_NOT_AUTHORIZED", "本人还没同意让伙伴代为操作，这件事请本人自己做，或先在偏好里打开");
   const outcome = await (handlers[action] as (deps: BuddyDeps, call: Call, args: unknown) => Promise<Outcome>)(deps, call, input);
   let auditId: string | null = null;
+  // 审计里的参数逐个字符串值遮密钥再存（本人原话、转达的话可能带着凭据）；args 没有别处读回。
   if (kind === "write") {
     auditId = randomUUID();
     await deps.q(`INSERT INTO buddy_actions(id,owner_id,action,args,summary,undo,conversation_id,run_id,at) VALUES($1,$2,$3,$4::jsonb,$5,$6::jsonb,$7,$8,$9)`,
-      [auditId, call.personId, action, JSON.stringify(input), outcome.summary, outcome.undo ? JSON.stringify(outcome.undo) : null, call.conversationId, call.runId, deps.now()]);
+      [auditId, call.personId, action, JSON.stringify(input, (_key, value: unknown) => typeof value === "string" ? maskSecrets(value) : value), outcome.summary, outcome.undo ? JSON.stringify(outcome.undo) : null, call.conversationId, call.runId, deps.now()]);
   }
   if (call.runId && deps.stream) {
     for (const ui of outcome.ui ?? []) deps.stream(call.runId, { type: "ui", ui });
