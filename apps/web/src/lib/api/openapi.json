@@ -26854,6 +26854,1330 @@
         }
       }
     },
+    "/api/me/colleague-chats": {
+      "get": {
+        "operationId": "listColleagueChats",
+        "summary": "本人的同事对话：我去问的、来问我的、加好友的请求",
+        "responses": {
+          "200": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/colleague-chats/main-lines": {
+      "get": {
+        "operationId": "listColleagueChatMainLines",
+        "summary": "主对话里要出现的同事来问的话",
+        "responses": {
+          "200": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MainLinesResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/colleague-chats/{chatId}/read": {
+      "post": {
+        "operationId": "readColleagueChat",
+        "summary": "这段对话读到最新",
+        "parameters": [
+          {
+            "name": "chatId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "已读"
+          },
+          "400": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/colleague-chats/with/{personId}": {
+      "get": {
+        "operationId": "readColleagueChatWith",
+        "summary": "我和这位同事的伙伴的对话",
+        "parameters": [
+          {
+            "name": "personId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/colleague-chats/from/{personId}": {
+      "get": {
+        "operationId": "readColleagueChatFrom",
+        "summary": "这位同事来问我的伙伴的对话",
+        "parameters": [
+          {
+            "name": "personId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/colleague-chats/with/{personId}/messages": {
+      "post": {
+        "operationId": "sendColleagueChatMessage",
+        "summary": "对这位同事的伙伴说一句",
+        "parameters": [
+          {
+            "name": "personId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendChatMessageRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/colleague-chats/{chatId}/messages/{messageId}/retry": {
+      "post": {
+        "operationId": "retryColleagueChatMessage",
+        "summary": "伙伴没答上来的这句再答一次",
+        "parameters": [
+          {
+            "name": "chatId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "messageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/colleague-chats/{chatId}/messages/{messageId}/ask-owner": {
+      "post": {
+        "operationId": "askColleagueChatOwner",
+        "summary": "这句请他本人回",
+        "parameters": [
+          {
+            "name": "chatId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "messageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/colleague-chats/{chatId}/messages/{messageId}/retract": {
+      "post": {
+        "operationId": "retractColleagueChatMessage",
+        "summary": "收回我的伙伴答的这句",
+        "parameters": [
+          {
+            "name": "chatId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "messageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/colleague-chats/{chatId}/messages/{messageId}/correct": {
+      "post": {
+        "operationId": "correctColleagueChatMessage",
+        "summary": "改我的伙伴答的这句",
+        "parameters": [
+          {
+            "name": "chatId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "messageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CorrectChatMessageRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/colleague-chats/{chatId}/owner-messages": {
+      "post": {
+        "operationId": "sendColleagueChatOwnerMessage",
+        "summary": "本人在来问我的对话里说一句",
+        "parameters": [
+          {
+            "name": "chatId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OwnerChatMessageRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/colleagues": {
+      "get": {
+        "operationId": "searchColleagues",
+        "summary": "找同事",
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ColleagueSearchResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/friend-settings": {
+      "get": {
+        "operationId": "readFriendSettings",
+        "summary": "本人的加好友设置",
+        "responses": {
+          "200": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FriendSettings"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "saveFriendSettings",
+        "summary": "改本人的加好友设置",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FriendSettings"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FriendSettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/friends/{personId}": {
+      "get": {
+        "operationId": "readFriend",
+        "summary": "我和这位同事的好友关系",
+        "parameters": [
+          {
+            "name": "personId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FriendView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "removeFriend",
+        "summary": "删好友",
+        "parameters": [
+          {
+            "name": "personId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FriendView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/friends/{personId}/request": {
+      "post": {
+        "operationId": "requestFriend",
+        "summary": "加这位同事为好友",
+        "parameters": [
+          {
+            "name": "personId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FriendView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/friends/{personId}/accept": {
+      "post": {
+        "operationId": "acceptFriend",
+        "summary": "同意这位同事的好友请求",
+        "parameters": [
+          {
+            "name": "personId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FriendGrant"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FriendView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/friends/{personId}/grant": {
+      "put": {
+        "operationId": "saveFriendGrant",
+        "summary": "改给这位好友的授权",
+        "parameters": [
+          {
+            "name": "personId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FriendGrant"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FriendView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/meeting-work-handoffs": {
       "get": {
         "operationId": "listMeetingWorkHandoffs",
@@ -144600,6 +145924,1768 @@
         "properties": {
           "shared": {
             "type": "boolean"
+          }
+        }
+      },
+      "ChatListResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "mine",
+          "inbound",
+          "requests"
+        ],
+        "properties": {
+          "mine": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "peer",
+                "peerBuddy",
+                "last",
+                "unread",
+                "waiting"
+              ],
+              "properties": {
+                "id": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "peer": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "personId",
+                    "displayName",
+                    "left"
+                  ],
+                  "properties": {
+                    "personId": {
+                      "minLength": 1,
+                      "maxLength": 100,
+                      "type": "string"
+                    },
+                    "displayName": {
+                      "type": "string"
+                    },
+                    "left": {
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "peerBuddy": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "name",
+                        "form"
+                      ],
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "form": {
+                          "anyOf": [
+                            {
+                              "const": "classic",
+                              "type": "string"
+                            },
+                            {
+                              "const": "alive",
+                              "type": "string"
+                            },
+                            {
+                              "const": "panda",
+                              "type": "string"
+                            },
+                            {
+                              "const": "miles",
+                              "type": "string"
+                            },
+                            {
+                              "const": "cmei",
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "last": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "author",
+                    "text",
+                    "at"
+                  ],
+                  "properties": {
+                    "author": {
+                      "anyOf": [
+                        {
+                          "const": "asker",
+                          "type": "string"
+                        },
+                        {
+                          "const": "asker_buddy",
+                          "type": "string"
+                        },
+                        {
+                          "const": "buddy",
+                          "type": "string"
+                        },
+                        {
+                          "const": "owner",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "text": {
+                      "type": "string"
+                    },
+                    "at": {
+                      "format": "date-time",
+                      "type": "string"
+                    }
+                  }
+                },
+                "unread": {
+                  "type": "boolean"
+                },
+                "waiting": {
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "inbound": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "peer",
+                "peerBuddy",
+                "last",
+                "unread",
+                "waiting"
+              ],
+              "properties": {
+                "id": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "peer": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "personId",
+                    "displayName",
+                    "left"
+                  ],
+                  "properties": {
+                    "personId": {
+                      "minLength": 1,
+                      "maxLength": 100,
+                      "type": "string"
+                    },
+                    "displayName": {
+                      "type": "string"
+                    },
+                    "left": {
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "peerBuddy": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "name",
+                        "form"
+                      ],
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "form": {
+                          "anyOf": [
+                            {
+                              "const": "classic",
+                              "type": "string"
+                            },
+                            {
+                              "const": "alive",
+                              "type": "string"
+                            },
+                            {
+                              "const": "panda",
+                              "type": "string"
+                            },
+                            {
+                              "const": "miles",
+                              "type": "string"
+                            },
+                            {
+                              "const": "cmei",
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "last": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "author",
+                    "text",
+                    "at"
+                  ],
+                  "properties": {
+                    "author": {
+                      "anyOf": [
+                        {
+                          "const": "asker",
+                          "type": "string"
+                        },
+                        {
+                          "const": "asker_buddy",
+                          "type": "string"
+                        },
+                        {
+                          "const": "buddy",
+                          "type": "string"
+                        },
+                        {
+                          "const": "owner",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "text": {
+                      "type": "string"
+                    },
+                    "at": {
+                      "format": "date-time",
+                      "type": "string"
+                    }
+                  }
+                },
+                "unread": {
+                  "type": "boolean"
+                },
+                "waiting": {
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "requests": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "person",
+                "at"
+              ],
+              "properties": {
+                "person": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "personId",
+                    "displayName",
+                    "left"
+                  ],
+                  "properties": {
+                    "personId": {
+                      "minLength": 1,
+                      "maxLength": 100,
+                      "type": "string"
+                    },
+                    "displayName": {
+                      "type": "string"
+                    },
+                    "left": {
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "at": {
+                  "format": "date-time",
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ChatMessage": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "author",
+          "text",
+          "at",
+          "replyTo",
+          "sources",
+          "answer",
+          "wait",
+          "seen",
+          "retracted",
+          "correction"
+        ],
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "author": {
+            "anyOf": [
+              {
+                "const": "asker",
+                "type": "string"
+              },
+              {
+                "const": "asker_buddy",
+                "type": "string"
+              },
+              {
+                "const": "buddy",
+                "type": "string"
+              },
+              {
+                "const": "owner",
+                "type": "string"
+              }
+            ]
+          },
+          "text": {
+            "type": "string"
+          },
+          "at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "replyTo": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "answer": {
+            "anyOf": [
+              {
+                "const": "answering",
+                "type": "string"
+              },
+              {
+                "const": "answered",
+                "type": "string"
+              },
+              {
+                "const": "failed",
+                "type": "string"
+              },
+              {
+                "const": "limited",
+                "type": "string"
+              },
+              {
+                "const": "asked_owner",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "wait": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "reason",
+                  "at",
+                  "closed"
+                ],
+                "properties": {
+                  "reason": {
+                    "anyOf": [
+                      {
+                        "const": "commit",
+                        "type": "string"
+                      },
+                      {
+                        "const": "approve",
+                        "type": "string"
+                      },
+                      {
+                        "const": "money_external",
+                        "type": "string"
+                      },
+                      {
+                        "const": "asked_owner",
+                        "type": "string"
+                      },
+                      {
+                        "const": "no_basis",
+                        "type": "string"
+                      },
+                      {
+                        "const": "unsure",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "at": {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  "closed": {
+                    "type": "boolean"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "seen": {
+            "type": "boolean"
+          },
+          "retracted": {
+            "type": "boolean"
+          },
+          "correction": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "id",
+                  "text",
+                  "at"
+                ],
+                "properties": {
+                  "id": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "text": {
+                    "type": "string"
+                  },
+                  "at": {
+                    "format": "date-time",
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "ChatPerson": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "personId",
+          "displayName",
+          "left"
+        ],
+        "properties": {
+          "personId": {
+            "minLength": 1,
+            "maxLength": 100,
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "left": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ChatResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "chat"
+        ],
+        "properties": {
+          "chat": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "id",
+              "side",
+              "peer",
+              "peerBuddy",
+              "relation",
+              "messages",
+              "firstWaiting"
+            ],
+            "properties": {
+              "id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "side": {
+                "anyOf": [
+                  {
+                    "const": "with",
+                    "type": "string"
+                  },
+                  {
+                    "const": "from",
+                    "type": "string"
+                  }
+                ]
+              },
+              "peer": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "personId",
+                  "displayName",
+                  "left"
+                ],
+                "properties": {
+                  "personId": {
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "type": "string"
+                  },
+                  "displayName": {
+                    "type": "string"
+                  },
+                  "left": {
+                    "type": "boolean"
+                  }
+                }
+              },
+              "peerBuddy": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "name",
+                      "form"
+                    ],
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "form": {
+                        "anyOf": [
+                          {
+                            "const": "classic",
+                            "type": "string"
+                          },
+                          {
+                            "const": "alive",
+                            "type": "string"
+                          },
+                          {
+                            "const": "panda",
+                            "type": "string"
+                          },
+                          {
+                            "const": "miles",
+                            "type": "string"
+                          },
+                          {
+                            "const": "cmei",
+                            "type": "string"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "relation": {
+                "anyOf": [
+                  {
+                    "const": "none",
+                    "type": "string"
+                  },
+                  {
+                    "const": "pending_out",
+                    "type": "string"
+                  },
+                  {
+                    "const": "pending_in",
+                    "type": "string"
+                  },
+                  {
+                    "const": "friends",
+                    "type": "string"
+                  }
+                ]
+              },
+              "messages": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "author",
+                    "text",
+                    "at",
+                    "replyTo",
+                    "sources",
+                    "answer",
+                    "wait",
+                    "seen",
+                    "retracted",
+                    "correction"
+                  ],
+                  "properties": {
+                    "id": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "author": {
+                      "anyOf": [
+                        {
+                          "const": "asker",
+                          "type": "string"
+                        },
+                        {
+                          "const": "asker_buddy",
+                          "type": "string"
+                        },
+                        {
+                          "const": "buddy",
+                          "type": "string"
+                        },
+                        {
+                          "const": "owner",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "text": {
+                      "type": "string"
+                    },
+                    "at": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "replyTo": {
+                      "anyOf": [
+                        {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "sources": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "answer": {
+                      "anyOf": [
+                        {
+                          "const": "answering",
+                          "type": "string"
+                        },
+                        {
+                          "const": "answered",
+                          "type": "string"
+                        },
+                        {
+                          "const": "failed",
+                          "type": "string"
+                        },
+                        {
+                          "const": "limited",
+                          "type": "string"
+                        },
+                        {
+                          "const": "asked_owner",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "wait": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "reason",
+                            "at",
+                            "closed"
+                          ],
+                          "properties": {
+                            "reason": {
+                              "anyOf": [
+                                {
+                                  "const": "commit",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "approve",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "money_external",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "asked_owner",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "no_basis",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "unsure",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "at": {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            "closed": {
+                              "type": "boolean"
+                            }
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "seen": {
+                      "type": "boolean"
+                    },
+                    "retracted": {
+                      "type": "boolean"
+                    },
+                    "correction": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "id",
+                            "text",
+                            "at"
+                          ],
+                          "properties": {
+                            "id": {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            "text": {
+                              "type": "string"
+                            },
+                            "at": {
+                              "format": "date-time",
+                              "type": "string"
+                            }
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
+                }
+              },
+              "firstWaiting": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "ChatRow": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "peer",
+          "peerBuddy",
+          "last",
+          "unread",
+          "waiting"
+        ],
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "peer": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "personId",
+              "displayName",
+              "left"
+            ],
+            "properties": {
+              "personId": {
+                "minLength": 1,
+                "maxLength": 100,
+                "type": "string"
+              },
+              "displayName": {
+                "type": "string"
+              },
+              "left": {
+                "type": "boolean"
+              }
+            }
+          },
+          "peerBuddy": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "name",
+                  "form"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "form": {
+                    "anyOf": [
+                      {
+                        "const": "classic",
+                        "type": "string"
+                      },
+                      {
+                        "const": "alive",
+                        "type": "string"
+                      },
+                      {
+                        "const": "panda",
+                        "type": "string"
+                      },
+                      {
+                        "const": "miles",
+                        "type": "string"
+                      },
+                      {
+                        "const": "cmei",
+                        "type": "string"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "author",
+              "text",
+              "at"
+            ],
+            "properties": {
+              "author": {
+                "anyOf": [
+                  {
+                    "const": "asker",
+                    "type": "string"
+                  },
+                  {
+                    "const": "asker_buddy",
+                    "type": "string"
+                  },
+                  {
+                    "const": "buddy",
+                    "type": "string"
+                  },
+                  {
+                    "const": "owner",
+                    "type": "string"
+                  }
+                ]
+              },
+              "text": {
+                "type": "string"
+              },
+              "at": {
+                "format": "date-time",
+                "type": "string"
+              }
+            }
+          },
+          "unread": {
+            "type": "boolean"
+          },
+          "waiting": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        }
+      },
+      "ChatView": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "side",
+          "peer",
+          "peerBuddy",
+          "relation",
+          "messages",
+          "firstWaiting"
+        ],
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "side": {
+            "anyOf": [
+              {
+                "const": "with",
+                "type": "string"
+              },
+              {
+                "const": "from",
+                "type": "string"
+              }
+            ]
+          },
+          "peer": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "personId",
+              "displayName",
+              "left"
+            ],
+            "properties": {
+              "personId": {
+                "minLength": 1,
+                "maxLength": 100,
+                "type": "string"
+              },
+              "displayName": {
+                "type": "string"
+              },
+              "left": {
+                "type": "boolean"
+              }
+            }
+          },
+          "peerBuddy": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "name",
+                  "form"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "form": {
+                    "anyOf": [
+                      {
+                        "const": "classic",
+                        "type": "string"
+                      },
+                      {
+                        "const": "alive",
+                        "type": "string"
+                      },
+                      {
+                        "const": "panda",
+                        "type": "string"
+                      },
+                      {
+                        "const": "miles",
+                        "type": "string"
+                      },
+                      {
+                        "const": "cmei",
+                        "type": "string"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "relation": {
+            "anyOf": [
+              {
+                "const": "none",
+                "type": "string"
+              },
+              {
+                "const": "pending_out",
+                "type": "string"
+              },
+              {
+                "const": "pending_in",
+                "type": "string"
+              },
+              {
+                "const": "friends",
+                "type": "string"
+              }
+            ]
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "author",
+                "text",
+                "at",
+                "replyTo",
+                "sources",
+                "answer",
+                "wait",
+                "seen",
+                "retracted",
+                "correction"
+              ],
+              "properties": {
+                "id": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "author": {
+                  "anyOf": [
+                    {
+                      "const": "asker",
+                      "type": "string"
+                    },
+                    {
+                      "const": "asker_buddy",
+                      "type": "string"
+                    },
+                    {
+                      "const": "buddy",
+                      "type": "string"
+                    },
+                    {
+                      "const": "owner",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "text": {
+                  "type": "string"
+                },
+                "at": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "replyTo": {
+                  "anyOf": [
+                    {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "sources": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "answer": {
+                  "anyOf": [
+                    {
+                      "const": "answering",
+                      "type": "string"
+                    },
+                    {
+                      "const": "answered",
+                      "type": "string"
+                    },
+                    {
+                      "const": "failed",
+                      "type": "string"
+                    },
+                    {
+                      "const": "limited",
+                      "type": "string"
+                    },
+                    {
+                      "const": "asked_owner",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "wait": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "reason",
+                        "at",
+                        "closed"
+                      ],
+                      "properties": {
+                        "reason": {
+                          "anyOf": [
+                            {
+                              "const": "commit",
+                              "type": "string"
+                            },
+                            {
+                              "const": "approve",
+                              "type": "string"
+                            },
+                            {
+                              "const": "money_external",
+                              "type": "string"
+                            },
+                            {
+                              "const": "asked_owner",
+                              "type": "string"
+                            },
+                            {
+                              "const": "no_basis",
+                              "type": "string"
+                            },
+                            {
+                              "const": "unsure",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "at": {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        "closed": {
+                          "type": "boolean"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "seen": {
+                  "type": "boolean"
+                },
+                "retracted": {
+                  "type": "boolean"
+                },
+                "correction": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "text",
+                        "at"
+                      ],
+                      "properties": {
+                        "id": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "text": {
+                          "type": "string"
+                        },
+                        "at": {
+                          "format": "date-time",
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "firstWaiting": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "ChatWaitReason": {
+        "anyOf": [
+          {
+            "const": "commit",
+            "type": "string"
+          },
+          {
+            "const": "approve",
+            "type": "string"
+          },
+          {
+            "const": "money_external",
+            "type": "string"
+          },
+          {
+            "const": "asked_owner",
+            "type": "string"
+          },
+          {
+            "const": "no_basis",
+            "type": "string"
+          },
+          {
+            "const": "unsure",
+            "type": "string"
+          }
+        ]
+      },
+      "ColleagueSearchResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "people",
+          "more"
+        ],
+        "properties": {
+          "people": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "personId",
+                "displayName",
+                "matched",
+                "relation"
+              ],
+              "properties": {
+                "personId": {
+                  "minLength": 1,
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                "displayName": {
+                  "type": "string"
+                },
+                "matched": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "relation": {
+                  "anyOf": [
+                    {
+                      "const": "none",
+                      "type": "string"
+                    },
+                    {
+                      "const": "pending_out",
+                      "type": "string"
+                    },
+                    {
+                      "const": "pending_in",
+                      "type": "string"
+                    },
+                    {
+                      "const": "friends",
+                      "type": "string"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "more": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        }
+      },
+      "CorrectChatMessageRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "clientId",
+          "text"
+        ],
+        "properties": {
+          "clientId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "text": {
+            "minLength": 1,
+            "maxLength": 2000,
+            "type": "string"
+          }
+        }
+      },
+      "FriendGrant": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "agentAsk"
+        ],
+        "properties": {
+          "agentAsk": {
+            "type": "boolean"
+          }
+        }
+      },
+      "FriendRelation": {
+        "anyOf": [
+          {
+            "const": "none",
+            "type": "string"
+          },
+          {
+            "const": "pending_out",
+            "type": "string"
+          },
+          {
+            "const": "pending_in",
+            "type": "string"
+          },
+          {
+            "const": "friends",
+            "type": "string"
+          }
+        ]
+      },
+      "FriendSettings": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "admission",
+          "defaults"
+        ],
+        "properties": {
+          "admission": {
+            "anyOf": [
+              {
+                "const": "auto",
+                "type": "string"
+              },
+              {
+                "const": "approve",
+                "type": "string"
+              }
+            ]
+          },
+          "defaults": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "agentAsk"
+            ],
+            "properties": {
+              "agentAsk": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "FriendView": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "person",
+          "relation",
+          "theirs",
+          "mine"
+        ],
+        "properties": {
+          "person": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "personId",
+              "displayName",
+              "left"
+            ],
+            "properties": {
+              "personId": {
+                "minLength": 1,
+                "maxLength": 100,
+                "type": "string"
+              },
+              "displayName": {
+                "type": "string"
+              },
+              "left": {
+                "type": "boolean"
+              }
+            }
+          },
+          "relation": {
+            "anyOf": [
+              {
+                "const": "none",
+                "type": "string"
+              },
+              {
+                "const": "pending_out",
+                "type": "string"
+              },
+              {
+                "const": "pending_in",
+                "type": "string"
+              },
+              {
+                "const": "friends",
+                "type": "string"
+              }
+            ]
+          },
+          "theirs": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "agentAsk"
+                ],
+                "properties": {
+                  "agentAsk": {
+                    "type": "boolean"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mine": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "agentAsk"
+                ],
+                "properties": {
+                  "agentAsk": {
+                    "type": "boolean"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "MainLine": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "chatId",
+          "messageId",
+          "peer",
+          "author",
+          "text",
+          "at"
+        ],
+        "properties": {
+          "chatId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "messageId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "peer": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "personId",
+              "displayName",
+              "left"
+            ],
+            "properties": {
+              "personId": {
+                "minLength": 1,
+                "maxLength": 100,
+                "type": "string"
+              },
+              "displayName": {
+                "type": "string"
+              },
+              "left": {
+                "type": "boolean"
+              }
+            }
+          },
+          "author": {
+            "anyOf": [
+              {
+                "const": "asker",
+                "type": "string"
+              },
+              {
+                "const": "asker_buddy",
+                "type": "string"
+              }
+            ]
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "at": {
+            "format": "date-time",
+            "type": "string"
+          }
+        }
+      },
+      "MainLinesResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "chatId",
+                "messageId",
+                "peer",
+                "author",
+                "text",
+                "at"
+              ],
+              "properties": {
+                "chatId": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "messageId": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "peer": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "personId",
+                    "displayName",
+                    "left"
+                  ],
+                  "properties": {
+                    "personId": {
+                      "minLength": 1,
+                      "maxLength": 100,
+                      "type": "string"
+                    },
+                    "displayName": {
+                      "type": "string"
+                    },
+                    "left": {
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "author": {
+                  "anyOf": [
+                    {
+                      "const": "asker",
+                      "type": "string"
+                    },
+                    {
+                      "const": "asker_buddy",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "text": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "at": {
+                  "format": "date-time",
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "OwnerChatMessageRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "clientId",
+          "text"
+        ],
+        "properties": {
+          "clientId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "text": {
+            "minLength": 1,
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "replyTo": {
+            "format": "uuid",
+            "type": "string"
+          }
+        }
+      },
+      "SendChatMessageRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "clientId",
+          "text"
+        ],
+        "properties": {
+          "clientId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "text": {
+            "minLength": 1,
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "via": {
+            "const": "main",
+            "type": "string"
           }
         }
       },

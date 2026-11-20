@@ -8,6 +8,7 @@ import { workIntakePaths, workIntakeSchemas } from "./workIntakeOpenapi.js";
 import { partnerMeetingPaths, partnerMeetingSchemas } from "./partnerMeetingsOpenapi.js";
 import { teamDeliveryPaths, teamDeliverySchemas } from "./teamDeliveriesOpenapi.js";
 import { colleagueMaterialPaths, colleagueMaterialSchemas } from "./colleagueMaterialsOpenapi.js";
+import { colleagueChatPaths, colleagueChatSchemas } from "./colleagueChatsOpenapi.js";
 import { meetingWorkHandoffPaths, meetingWorkHandoffSchemas } from "./meetingWorkHandoffsOpenapi.js";
 import { AcceptIssueDraftRequest, IssueDraftResponse } from "./issueDrafts.js";
 import {
@@ -3257,6 +3258,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
       ...partnerMeetingPaths,
       ...teamDeliveryPaths,
       ...colleagueMaterialPaths,
+      ...colleagueChatPaths,
       ...meetingWorkHandoffPaths,
     },
     components: {
@@ -3635,6 +3637,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         ...partnerMeetingSchemas,
         ...teamDeliverySchemas,
         ...colleagueMaterialSchemas,
+        ...colleagueChatSchemas,
         ...meetingWorkHandoffSchemas,
       },
     },
