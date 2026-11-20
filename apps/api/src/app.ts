@@ -367,6 +367,8 @@ declare module "fastify" {
     taskPlacementJobs: Record<string, JobHandler>;
     /** 同事来问时被问的人的伙伴先答（team.buddy-answer）；server.ts 注册给 jobs worker。 */
     teamBuddyAnswerJobs: Record<string, JobHandler>;
+    /** jobs worker 的 runNow：server.ts 建好 worker 后填上，代答入队后用它立即跑（没填时只等轮询）。 */
+    jobsNow: { run?: (jobId: string) => Promise<unknown> };
     /** Nexus → DRI 确认；server.ts 启动时调 resume()，把 jobs 注册给 jobs worker。 */
     nexusDri: NexusDri;
     /** 月底复盘第三版的预评（窗口里按人排、按人跑）；server.ts 注册给 jobs worker。 */
@@ -988,6 +990,7 @@ export async function buildApp({
     reader: (ownerId) => scopeReader(dbScopeSource({ q, planTasks: planTaskSource, names: personDisplayNames(peopleDirectory), now: now() }, ownerId)),
     agent: colleagueAnswerAgent ?? createColleagueAnswerAgent({ query: q, baseUrl: env.piBaseUrl, apiKey: env.piApiKey, pickModelId: env.lightModel,
       answer: agentModel(env.agentModels, "colleagueAnswer", { modelId: env.heavyModel, thinkingLevel: "low" }) }) }));
+  app.decorate("jobsNow", {});
   app.addHook("onClose", async () => { await battlefieldSummaries.idle(); });
   registerProgressRoutes(app, ctx, battlefieldSummaries);
   registerMeetingFollowThroughRoutes(app, ctx, followThrough);

@@ -49,16 +49,16 @@ export const FIXTURE_ROWS: OwnerRows = {
   tasks: [{ taskId: "deploy", name: "天枢部署拆分", carried: false }, { taskId: "carried", name: "十月部署复盘", carried: true }],
   deliverables: [],
   projects: [
-    { id: "deploy", name: "天枢部署", scratch: false, archived: false, hidden: false },
-    { id: "scratch", name: "随手", scratch: true, archived: false, hidden: false },
-    { id: "old-site", name: "旧官网", scratch: false, archived: true, hidden: false },
+    { id: "deploy", name: "天枢部署", scratch: false, archived: false, hidden: false, updatedAt: at(17, "08:00") },
+    { id: "scratch", name: "随手", scratch: true, archived: false, hidden: false, updatedAt: at(17, "08:00") },
+    { id: "old-site", name: "旧官网", scratch: false, archived: true, hidden: false, updatedAt: at(10, "05:00") },
   ],
   sessions: [
     { kind: "card", id: "api", title: "拆 api 服务", projectId: "deploy", trashed: false, archived: false, line: "停着", updatedAt: at(18, "02:20"), author: null },
     { kind: "topic", id: "invoice", title: "整理报销发票", projectId: "scratch", trashed: false, archived: false, line: "已完成", updatedAt: at(18, "05:00"), author: null },
     { kind: "topic", id: "old-site", title: "改旧官网首页", projectId: "old-site", trashed: false, archived: false, line: "已完成", updatedAt: at(10, "05:00"), author: null },
   ],
-  outputs: [{ id: "rollback", sessionKind: "card", sessionId: "api", title: "回滚演练记录-api.md", createdAt: at(18, "02:15") }],
+  outputs: [{ id: "rollback", sessionKind: "card", sessionId: "api", title: "回滚演练记录-api.md", createdAt: at(18, "02:15"), hasText: true }],
 };
 /** itemId → 正文。范围外的四样也有正文（带金丝雀串），只是筛不进去。 */
 export const FIXTURE_BODIES: Record<string, string> = {

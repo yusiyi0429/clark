@@ -331,6 +331,8 @@ const jobWorker = createJobWorker({
   },
   recurring: [{ kind: INTAKE_JOB, everyMs: 10_000 }, ...(feishuTokens?.recurring ?? []), ...followThroughJobs.recurring, ...app.collectionJobs.recurring, ...usageJobs.recurring, ...summaryJobs.recurring, ...ceoNoticeJobs.recurring, ...homePush.recurring, ...missionLoadJobs.recurring, ...app.monthReviewJobs.recurring, ...app.plannedDueDateJobs.recurring],
 });
+// 同事来问的代答入队后不等下一轮，直接交给 worker 跑那一条（teamDeliveries.ts）。
+app.jobsNow.run = jobWorker.runNow;
 let feishuEvents: { close: () => void } | undefined;
 app.addHook("onClose", async () => {
   feishuEvents?.close();

@@ -96,7 +96,7 @@ function ReplyForm({ deliveryId, recipientId, kind, onSaved, onClose }: {
     <label htmlFor={fieldId} className={s.label}>{kind === "needs_info" ? "还缺什么，或想请对方澄清什么？" : kind === "clarification" ? "给这位同事的补充说明" : kind === "follow_up" ? "追问" : "你的回复"}
       <textarea id={fieldId} autoFocus className={s.field} rows={3} maxLength={20_000} disabled={busy} value={text} onChange={(event) => { changed(); setText(event.target.value); }} />
     </label>
-    <TeamFilePicker selection={selection} disabled={busy} onChange={(next) => { changed(); setSelection(next); }} />
+    {kind === "follow_up" ? null : <TeamFilePicker selection={selection} disabled={busy} onChange={(next) => { changed(); setSelection(next); }} />}
     {error ? <p className={s.error} role="alert">{error}</p> : null}
     <div className={s.actions}><button type="button" className={s.linkButton} disabled={busy} onClick={onClose}>取消</button>
       <button type="submit" className={s.primary} disabled={busy || !canSubmit}>{busy ? "正在发送" : kind === "answered" ? "提交回复" : kind === "needs_info" ? "请求补充" : kind === "follow_up" ? "追问" : "发送说明"}</button></div>

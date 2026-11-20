@@ -35,7 +35,7 @@ export async function answerForColleague(input: { agent: ColleagueAnswerAgent; r
   const owner = reader.owner.name;
   const { entries } = await reader.catalog();
   if (!entries.length) return { kind: "empty" };
-  const catalog = entries.map(({ itemId, kind, title, updatedAt }) => ({ itemId, kind, title, updatedAt }));
+  const catalog = entries.map(({ itemId, kind, title, updatedAt, under }) => ({ itemId, kind, title, updatedAt, under }));
   const known = new Set(catalog.map((entry) => entry.itemId));
   const picked = [...new Set((await agent.pick({ owner, asker, today, thread, catalog }, ref, signal)).itemIds)].filter((id) => known.has(id)).slice(0, PICK_MAX);
   const materials: AnswerInput["materials"] = [];

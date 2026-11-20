@@ -25,25 +25,27 @@ export type SessionLine = "没开工" | "在跑" | "停着" | "已完成";
 /**
  * 按人读出来、还没筛的行。只有这几样；长期记忆、对话原文、本机文件不在里面。
  * deliverables.hidden：这件 Task 挂在收起的项目上（A2），交付条目的正文不出。sessions：被读的人现在负责的项目里的会话，不管当初记在谁名下（A4），
- * author 是原作者的名字（不是被读的人、名字查得到时才有）。
+ * author 是原作者的名字（不是被读的人、名字查得到时才有）。projects.updatedAt：项目自己的更新时间。
+ * deliverables.hasText、outputs.hasText：读得出字（链接、抽出了文字的文件、有文字或链接的证据），图片和没抽出文字的为 false。
  */
 export type OwnerRows = {
   note: { updatedAt: string } | null;
   files: { id: string; fileName: string; createdAt: string }[];
   roles: { id: string; name: string; shared: boolean; archived: boolean; updatedAt: string }[];
   tasks: { taskId: string; name: string; carried: boolean }[];
-  deliverables: { itemId: string; taskId: string; name: string; versionNumber: number; hidden: boolean }[];
-  projects: { id: string; name: string; scratch: boolean; archived: boolean; hidden: boolean }[];
+  deliverables: { itemId: string; taskId: string; name: string; versionNumber: number; hidden: boolean; hasText: boolean }[];
+  projects: { id: string; name: string; scratch: boolean; archived: boolean; hidden: boolean; updatedAt: string }[];
   sessions: { kind: "card" | "topic"; id: string; title: string; projectId: string | null; trashed: boolean; archived: boolean; line: SessionLine; updatedAt: string;
     author: string | null }[];
-  outputs: { id: string; sessionKind: "card" | "topic"; sessionId: string; title: string; createdAt: string }[];
+  outputs: { id: string; sessionKind: "card" | "topic"; sessionId: string; title: string; createdAt: string; hasText: boolean }[];
 };
 
 /**
  * 范围判定，纯函数。itemId：note、file:<id>、skill:<id>、task:<taskId>、deliverable:<条目 id>、project:<id>、session:<kind>:<id>、output:<id>。
  * 技能要同事可用、没归档；Task 不是往月带过来的；交付条目要它的 Task 在范围里、没收起；项目没归档、不是「随手」、没收起；
- * 会话在留下的项目里、没删、没归档；产出要它的会话在范围里。
- * 顺序：说明、文件、技能、Task（各自跟着它的交付条目）、项目（跟着它的会话，新的在前；会话跟着它的产出）。
+ * 会话在留下的项目里、没删、没归档；产出要它的会话在范围里。读不出字的交付条目和产出不进来（读了也没有正文）。
+ * 顺序：说明、文件、技能、Task（各自跟着它的交付条目）、项目（最近动静新的在前：项目自己的更新时间和它留下的会话的更新时间取最晚；
+ * 跟着它的会话，新的在前；会话跟着它的产出）。目录封顶时从末尾截，截掉的是最老的项目。
  */
 export function scopeEntries(rows: OwnerRows): ScopeEntry[] {
   const entries: ScopeEntry[] = [];
@@ -54,19 +56,23 @@ export function scopeEntries(rows: OwnerRows): ScopeEntry[] {
   for (const task of rows.tasks.filter((row) => !row.carried)) {
     const taskItem = `task:${task.taskId}`;
     entries.push({ itemId: taskItem, kind: "task", title: task.name, updatedAt: null, under: null });
-    for (const item of rows.deliverables.filter((row) => row.taskId === task.taskId && !row.hidden))
+    for (const item of rows.deliverables.filter((row) => row.taskId === task.taskId && !row.hidden && row.hasText))
       entries.push({ itemId: `deliverable:${item.itemId}`, kind: "deliverable", title: item.name, updatedAt: null, under: taskItem });
   }
-  for (const project of rows.projects.filter((row) => !row.scratch && !row.archived && !row.hidden)) {
-    const projectItem = `project:${project.id}`;
-    entries.push({ itemId: projectItem, kind: "project", title: project.name, updatedAt: null, under: null });
+  const projects = rows.projects.filter((row) => !row.scratch && !row.archived && !row.hidden).map((project) => {
     const sessions = rows.sessions.filter((row) => row.projectId === project.id && !row.trashed && !row.archived)
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id));
+    const latest = sessions[0] && sessions[0].updatedAt > project.updatedAt ? sessions[0].updatedAt : project.updatedAt;
+    return { project, sessions, latest };
+  }).sort((a, b) => b.latest.localeCompare(a.latest) || a.project.id.localeCompare(b.project.id));
+  for (const { project, sessions } of projects) {
+    const projectItem = `project:${project.id}`;
+    entries.push({ itemId: projectItem, kind: "project", title: project.name, updatedAt: null, under: null });
     for (const session of sessions) {
       const sessionItem = `session:${session.kind}:${session.id}`;
       entries.push({ itemId: sessionItem, kind: "session", title: session.title, updatedAt: session.updatedAt, under: projectItem,
         ...(session.author ? { author: session.author } : {}) });
-      for (const output of rows.outputs.filter((row) => row.sessionKind === session.kind && row.sessionId === session.id))
+      for (const output of rows.outputs.filter((row) => row.sessionKind === session.kind && row.sessionId === session.id && row.hasText))
         entries.push({ itemId: `output:${output.id}`, kind: "output", title: output.title, updatedAt: output.createdAt, under: sessionItem });
     }
   }
@@ -149,8 +155,8 @@ export function dbScopeSource(deps: ScopeDeps, ownerId: string): ScopeSource {
       { id: string; file_name: string; created_at: Date }[];
     const roles = (await q(`SELECT id::text,name,shared_with_colleagues AS shared,archived_at IS NOT NULL AS archived,updated_at FROM roles WHERE owner_id=$1
       ORDER BY created_at,id`, [ownerId])).rows as { id: string; name: string; shared: boolean; archived: boolean; updated_at: Date }[];
-    const projects = (await q(`SELECT id::text,name,scratch,archived_at IS NOT NULL AS archived,hidden_from_colleagues AS hidden FROM projects WHERE owner_id=$1
-      ORDER BY created_at,id`, [ownerId])).rows as OwnerRows["projects"];
+    const projects = (await q(`SELECT id::text,name,scratch,archived_at IS NOT NULL AS archived,hidden_from_colleagues AS hidden,updated_at FROM projects
+      WHERE owner_id=$1 ORDER BY created_at,id`, [ownerId])).rows as (Omit<OwnerRows["projects"][number], "updatedAt"> & { updated_at: Date })[];
     const projectIds = projects.map((project) => project.id);
     // 会话按项目归集（A4）：被读的人现在负责的项目里的卡和专题，不管记在谁名下。
     const sessions = projectIds.length ? (await q(`SELECT * FROM (
@@ -169,14 +175,18 @@ export function dbScopeSource(deps: ScopeDeps, ownerId: string): ScopeSource {
     const cardIds = sessions.filter((row) => row.kind === "card").map((row) => row.id);
     const topicIds = sessions.filter((row) => row.kind === "topic").map((row) => row.id);
     const outputs = sessions.length ? (await q(`SELECT id::text,CASE WHEN task_id IS NOT NULL THEN 'card' ELSE 'topic' END AS session_kind,
-        COALESCE(task_id,topic_id)::text AS session_id,title,created_at FROM local_outputs WHERE task_id=ANY($1::uuid[]) OR topic_id=ANY($2::uuid[])
-        ORDER BY created_at,id`, [cardIds, topicIds])).rows as { id: string; session_kind: "card" | "topic"; session_id: string; title: string; created_at: Date }[] : [];
+        COALESCE(task_id,topic_id)::text AS session_id,title,created_at,
+        CASE WHEN kind='artifact' THEN btrim(COALESCE(extracted_text,''))<>'' ELSE COALESCE(text,'')<>'' OR COALESCE(url,'')<>'' END AS has_text
+        FROM local_outputs WHERE task_id=ANY($1::uuid[]) OR topic_id=ANY($2::uuid[])
+        ORDER BY created_at,id`, [cardIds, topicIds])).rows as { id: string; session_kind: "card" | "topic"; session_id: string; title: string; created_at: Date;
+        has_text: boolean }[] : [];
     const tree = await treeTasks(q, deps.planTasks, ownerId, deps.now);
     const carried = new Set(tree.missions.filter((mission) => mission.carried).map((mission) => mission.id));
     const tasks = tree.tasks.map((task) => ({ taskId: task.taskId, name: task.name, carried: carried.has(task.missionId) }));
     // 每件 Task 最新一版的条目。条目正文不出（A2）的三种：Task 现在挂在收起的项目上；这件 Task 的任何一版记的项目收起了（取下 Task 时版本还记着原来的项目，新版本不记项目、又会沿用上一版的条目）；
     // 这件 Task 进过版本的准备中各样（卡的交回、专题的一版）出自收起项目里的会话（沿用的条目是复制的，所以看全部进过版本的，不只最新一版）。
-    const deliverables = tasks.length ? (await q(`SELECT i.id::text AS item_id,v.task_id,i.name,v.number,v.hidden FROM (
+    const deliverables = tasks.length ? (await q(`SELECT i.id::text AS item_id,v.task_id,i.name,v.number,v.hidden,
+        i.kind='link' OR btrim(COALESCE(i.extracted_text,''))<>'' AS has_text FROM (
         SELECT DISTINCT ON (v.task_id) v.id,v.task_id,v.number,EXISTS (SELECT 1 FROM project_goals g JOIN projects p ON p.id=g.project_id
             WHERE g.task_id=v.task_id AND p.hidden_from_colleagues)
           OR EXISTS (SELECT 1 FROM deliverable_versions o JOIN projects p ON p.id=o.project_id WHERE o.task_id=v.task_id AND p.hidden_from_colleagues)
@@ -186,18 +196,20 @@ export function dbScopeSource(deps: ScopeDeps, ownerId: string): ScopeSource {
             WHERE d.plan_task_id=v.task_id AND d.version_id IS NOT NULL) AS hidden
         FROM deliverable_versions v WHERE v.task_id=ANY($1::text[]) ORDER BY v.task_id,v.number DESC) v
       JOIN deliverable_items i ON i.version_id=v.id ORDER BY v.task_id,i.position`, [tasks.map((task) => task.taskId)])).rows as
-      { item_id: string; task_id: string; name: string; number: number; hidden: boolean }[] : [];
+      { item_id: string; task_id: string; name: string; number: number; hidden: boolean; has_text: boolean }[] : [];
     return {
       note: note ? { updatedAt: iso(note.updated_at) } : null,
       files: files.map((file) => ({ id: file.id, fileName: file.file_name, createdAt: iso(file.created_at) })),
       roles: roles.map((role) => ({ id: role.id, name: role.name, shared: role.shared, archived: role.archived, updatedAt: iso(role.updated_at) })),
       tasks,
-      deliverables: deliverables.map((row) => ({ itemId: row.item_id, taskId: row.task_id, name: row.name, versionNumber: row.number, hidden: row.hidden })),
-      projects,
+      deliverables: deliverables.map((row) => ({ itemId: row.item_id, taskId: row.task_id, name: row.name, versionNumber: row.number, hidden: row.hidden,
+        hasText: row.has_text })),
+      projects: projects.map(({ updated_at, ...project }) => ({ ...project, updatedAt: iso(updated_at) })),
       sessions: sessions.map((row) => ({ kind: row.kind, id: row.id, title: row.title, projectId: row.project_id, trashed: row.trashed, archived: row.archived,
         line: lineOf(row.done, row.run_state), updatedAt: iso(later(row.updated_at, row.run_at)),
         author: row.owner_id !== ownerId ? names.get(row.owner_id) ?? null : null })),
-      outputs: outputs.map((row) => ({ id: row.id, sessionKind: row.session_kind, sessionId: row.session_id, title: row.title, createdAt: iso(row.created_at) })),
+      outputs: outputs.map((row) => ({ id: row.id, sessionKind: row.session_kind, sessionId: row.session_id, title: row.title, createdAt: iso(row.created_at),
+        hasText: row.has_text })),
     };
   }
 

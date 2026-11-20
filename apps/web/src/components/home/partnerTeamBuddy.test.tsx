@@ -132,6 +132,22 @@ describe("卡上的伙伴答复", () => {
     expect(api.reply).toHaveBeenCalledWith("q", { clientId: expect.any(String), status: "follow_up", recipientId: "lin", text: "那回滚怎么做" }, []);
   });
 
+  it("追问表单不放附件框（给代答的往来只有正文）；被问的人回复照旧能带附件", async () => {
+    const filePicker = (tree: ReactNode) => nodes(tree).find((node) => typeof node.type === "function" && "selection" in node.props);
+    const asker = row(answered, true);
+    await click(asker(), "追问");
+    const followUp = sub(asker(), "kind");
+    expect(followUp.props.kind).toBe("follow_up");
+    hooks.values = [];
+    expect(filePicker(renderSub(followUp))).toBeUndefined();
+    const owner = row(answered, false);
+    await click(owner(), "回复");
+    const reply = sub(owner(), "kind");
+    expect(reply.props.kind).toBe("answered");
+    hooks.values = [];
+    expect(filePicker(renderSub(reply))).toBeDefined();
+  });
+
   it("被问的人：最近一条伙伴答复带「没问题」「改一下」；看过的只剩「改一下」；改过的都没有；发起人那边没有", async () => {
     const render = row(answered, false);
     expect(button(render(), "没问题")).toBeDefined();

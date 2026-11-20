@@ -71,7 +71,7 @@ async function inputWithFiles<S extends TSchema>(req: FastifyRequest, schema: S)
 }
 
 export function registerTeamDeliveryRoutes(app: AppInstance, ctx: RouteContext): void {
-  const deps = () => ({ pool: ctx.pool, q: ctx.q, storageDir: ctx.materialStorageDir, now: ctx.now, directory: ctx.peopleDirectory,
+  const deps = () => ({ pool: ctx.pool, q: ctx.q, storageDir: ctx.materialStorageDir, now: ctx.now, directory: ctx.peopleDirectory, dispatchNow: app.jobsNow.run,
     people: new Map(ctx.peopleDirectory.searchPeople(undefined).filter(isRealPerson).map((p) => [p.personId, p.displayName])) });
   void app.register(async (server) => {
     const scoped = server.withTypeProvider<TypeBoxTypeProvider>();
