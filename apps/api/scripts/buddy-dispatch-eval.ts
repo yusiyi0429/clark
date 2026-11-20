@@ -7,7 +7,7 @@
  *   `--regrade <结果.json>` 不调模型：读那份结果里每条每遍的工具轨迹和回话，用现在的判定重判，写出同样格式的 JSON（遍数、模型名照原结果，
  *   commit 是现在判定代码的提交，另带 regradedFrom）；--out、--baseline 照常用，--runs、--model 不看。
  * - 工具 = actionList（完全授权、伙伴主线）的名字、说明、参数原样，加一个假的 web_search。
- * - 系统提示 = driSystemPrompt（同 scripts/buddy-persona-eval.ts 的取法）+ Chat 那段「# 代本人在天枢里做事」（下面 BUDDY_ACTION_RULES，照抄的）。
+ * - 系统提示 = driSystemPrompt（同 scripts/buddy-persona-eval.ts 的取法）+ Chat 那段「# 代本人在天枢里做事」（BUDDY_ACTION_RULES，照抄的，在 scripts/buddyActionRules.ts）。
  * - 13 句本人的话（用例和判定在 scripts/buddy-dispatch-judge.ts，测试 test/buddyDispatchJudge.test.ts），每句跑 --runs 遍（缺省 2），每遍单独判：
  *   模型一直调工具，直到给出最后回话或 8 轮工具来回用完。读的动作回写死的假首页和项目（形状照 read_work_home / read_project 的真实返回，
  *   启动时按契约校验）；写动作回成功，summary 照 api 的口径；照 api 原文回 409 的只有两处：对从没开过工的「登录页」卡 tell_session（NOT_STARTED），
@@ -35,21 +35,10 @@ import {
 } from "@warmap/contracts";
 import { actionList } from "../src/buddyActions.js";
 import { driSystemPrompt } from "../src/piConversationRuntime.js";
+import { BUDDY_ACTION_RULES } from "./buddyActionRules.js";
 import { CASES, IDS, flips, judge, type Attempt, type CaseTally, type ToolCall } from "./buddy-dispatch-judge.js";
 
 const OWNER = "孙铭泽";
-
-/**
- * 照抄自晨星的 Chat 仓库 csl-actions `src/prompt.ts:66-72`（BUDDY_ACTION_RULES，2026-11-18 抄，11-19 对过没变），只作评测用；
- * Chat 那边改了这里不会跟着变，跑之前对一眼。
- */
-const BUDDY_ACTION_RULES = `# 代本人在天枢里做事
-
-工具里来自天枢的动作（读首页和项目、打开页面、改外观和推送、开工或停掉子会话、建项目和转交、发消息等）由天枢按本人自己的权限执行，不受上面只读限制的约束。本人要你在天枢里做本人能做的事时，直接调用对应动作，不说做不到，也不让本人自己去点。动作做成后照返回的 summary 用一句话告诉本人做了什么；undoable=true 时可以顺带说能撤销。没有成功返回，不说已经做了。
-每一轮都要短：先用一句话回应本人，再去做。写代码、长调研这类要花时间的活，用 split_cards 或 start_sub_session 交给项目和子会话去做，不在一轮里自己长时间做；本人插话时，已经派出去的活照常跑。
-要做两步以上的事时，先用 update_plan 交一张完整清单，每做完一步再交一次整张清单（做完的标 completed，正在做的标 in_progress）；聊天和只做一步的事不交清单。
-用 send_message 给同事发消息时，天枢会先出一张卡让本人确认，本人点「发出」才发；回答里说已经起好、请本人看一眼再发，不说已经发出。
-本人没有授权时，动作里只有读和打开页面，只能帮本人看和打开；动作返回 BUDDY_NOT_AUTHORIZED、DAILY_LIMIT 或其他错误时，按返回的错误说明照实告诉本人没做成和原因，不换别的动作绕过。动作没有返回结果（如 NETWORK_ERROR、TOOL_FAILED）时，说这一步结果还没确认，请本人到天枢看一眼，不说做成也不说没做成，不重复调用同一个写动作。`;
 
 // ───────────────────────── 假首页 ─────────────────────────
 
