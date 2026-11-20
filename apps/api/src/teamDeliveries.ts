@@ -13,7 +13,7 @@ import { MAX_MATERIAL_FILE_BYTES, MaterialParseError, runWorker } from "./materi
 import type { Query } from "./meetingStore.js";
 import type { PeopleDirectory } from "./peopleDirectory.js";
 import { attachmentMimeType, listShareableSessionAttachments, readSessionAttachment } from "./sessionAttachments.js";
-import { answeringLate, BUDDY_NOT_ANSWERED, readTeamDelivery } from "./teamDeliveryInbox.js";
+import { answerStillOpen, answeringLate, BUDDY_NOT_ANSWERED, readTeamDelivery } from "./teamDeliveryInbox.js";
 export { listPendingTeamRequests, listTeamDeliveries, readTeamDelivery } from "./teamDeliveryInbox.js";
 
 /** people：人员目录里真人的名字；directory：整份人员目录（能不能问同事的伙伴由 colleagueAccess 按它判）。 */
@@ -272,7 +272,7 @@ const notStuck = () => new TeamDeliveryError(409, "BUDDY_NOT_STUCK", "这一条�
 /** colleagueAccess 不让问了（问的人或被问的人不再被覆盖）：重试和追问都回这个。 */
 const unavailable = () => new TeamDeliveryError(409, "BUDDY_UNAVAILABLE", "这位同事的伙伴现在不能代答，可以直接问本人");
 /** 这位收件人那段往来最新一条（更正不算：更正是对旧答复的补充，不接住也不打断正在等的追问）。 */
-const LATEST_REPLY = "SELECT id,status FROM team_delivery_replies WHERE request_id=$1 AND recipient_id=$2 AND corrects IS NULL ORDER BY seq DESC LIMIT 1";
+const LATEST_REPLY = "SELECT id,status,origin FROM team_delivery_replies WHERE request_id=$1 AND recipient_id=$2 AND corrects IS NULL ORDER BY seq DESC LIMIT 1";
 
 /** 「重试」：伙伴没答上来（含在答超过 2 分钟）时重新入队，不另占名额；在答还没超时的照旧（不重复入队）；超上限 409。 */
 export async function retryTeamBuddy(deps: TeamDeliveryDeps, actor: string, id: string, personId: string) {
@@ -309,7 +309,7 @@ const reviewed = () => new TeamDeliveryError(409, "ALREADY_REVIEWED", "这一条
 /**
  * 被问的人看伙伴替他答的那条（只限这条伙伴答复的被问的人，别的一律 404）。ok：标看过，看过或改过的 409；转本人时（伙伴判的或问的人转的）
  * 要本人亲自回，ok 409 BUDDY_HANDOFF。corrected：伙伴那条原话保留并标看过，另起一条本人的答复（corrects 指向它）进问的人的等你，收件人算已答；
- * 但还有没答的追问时只落这条更正，收件人和伙伴的状态不动（追问照旧等伙伴或本人答）。点过「没问题」也能改，一条最多改一次。
+ * 但这段往来还没答完时（answerStillOpen：有没答的追问、补充说明，或改的不是转本人的那条）只落这条更正，收件人和伙伴的状态不动。点过「没问题」也能改，一条最多改一次。
  * 按 clientId 幂等：一样的照旧 200，不一样的 409。
  */
 export async function reviewBuddyReply(deps: TeamDeliveryDeps, actor: string, id: string, replyId: string, input: TReviewBuddyReplyRequest) {
@@ -333,11 +333,11 @@ export async function reviewBuddyReply(deps: TeamDeliveryDeps, actor: string, id
       [id, actor, input.clientId])).rows[0];
     if (existing) { sameOperation(existing.fingerprint, fingerprint); return; }
     if ((await q("SELECT 1 FROM team_delivery_replies WHERE request_id=$1 AND corrects=$2", [id, replyId])).rowCount) throw reviewed();
-    const openFollowUp = (await q(LATEST_REPLY, [id, actor])).rows[0]?.status === "follow_up";
+    const open = answerStillOpen((await q(LATEST_REPLY, [id, actor])).rows[0], target.buddy_state, replyId);
     await q("UPDATE team_delivery_replies SET reviewed_at=COALESCE(reviewed_at,$3) WHERE request_id=$1 AND id=$2", [id, replyId, at]);
     await q("INSERT INTO team_delivery_replies(id,request_id,recipient_id,author_id,client_id,fingerprint,status,body,created_at,corrects) " +
       "VALUES($1,$2,$3,$3,$4,$5,'answered',$6,$7,$8)", [randomUUID(), id, actor, input.clientId, fingerprint, text, at, replyId]);
-    if (openFollowUp) return;
+    if (open) return;
     await q("UPDATE request_recipients SET status='done',done_by=$2,done_at=$3 WHERE request_id=$1 AND person_id=$2", [id, actor, at]);
     await clearBuddyWait(q, id, actor);
     await setRequestStatus(q, id);

@@ -16,6 +16,13 @@ export const BUDDY_NOT_ANSWERED = "伙伴没答上来";
 const ASKED_OWNER = "同事请你本人回";
 export const answeringLate = (state: string | null, askedAt: Date | null, now: Date) =>
   state === "answering" && askedAt !== null && askedAt.getTime() < now.getTime() - ANSWERING_TIMEOUT_MS;
+/**
+ * 被问的人更正 corrected 那条伙伴答复时，这段往来还没答完（更正只补旧答复、提醒问的人，不算答了，收件人和伙伴状态都不动）：
+ * 最新一条非更正回复是问的人那边的（追问、补充说明）；或者是伙伴转本人的那条答复（buddy_state='handoff'），而改的不是它。
+ * 改的正是转本人那条，算他亲自回了。服务端落更正和读卡算状态都用这一个判断。
+ */
+export const answerStillOpen = (latest: { id: string; status: string; origin: string } | undefined, buddyState: string | null, corrected: string) =>
+  latest?.status === "follow_up" || latest?.status === "clarification" || (latest?.origin === "buddy" && buddyState === "handoff" && latest.id !== corrected);
 type FileRow = { id: string; request_id: string; reply_id: string | null; file_name: string; size: number; sha256: string };
 
 // 列表和详情共用一条成员过滤规则。发起人看各人的回执，其他人只看自己的线程。
@@ -64,8 +71,9 @@ async function selectDeliveries({ q, people, now }: InboxDeps, viewer: string, b
     recipients.set(m.request_id + "/" + m.person_id,result);
     delivery.recipients.push(result);
   }
-  // 追问还没人接时落的更正不改收件人状态（更正只补旧答复，追问照旧等着）。
-  const openFollowUp = new Set<TTeamDeliveryRecipient>();
+  // 往来还没答完时落的更正不改收件人状态（answerStillOpen）。buddy 状态取库里原值。
+  const lastPlain = new Map<TTeamDeliveryRecipient, Reply>();
+  const buddyStates = new Map((memberRows.rows as Recipient[]).map((m) => [recipients.get(m.request_id + "/" + m.person_id)!, m.buddy_state]));
   for (const r of replyRows.rows as Reply[]) {
     const recipient = recipients.get(r.request_id + "/" + r.recipient_id);
     if (!recipient) continue;
@@ -73,8 +81,9 @@ async function selectDeliveries({ q, people, now }: InboxDeps, viewer: string, b
       ...(r.origin === "buddy" ? { origin: "buddy" as const } : {}), ...(r.reviewed_at ? { reviewedAt: r.reviewed_at.toISOString() } : {}),
       ...(r.corrects ? { corrects: r.corrects } : {}), ...(r.correction_seen_at ? { correctionSeenAt: r.correction_seen_at.toISOString() } : {}) });
     // 伙伴答的不算本人回复（A8）：收件人状态只看本人和发起人的往来。
-    if (!r.corrects) { if (r.status === "follow_up") openFollowUp.add(recipient); else openFollowUp.delete(recipient); }
-    if (!recipient.error && r.origin !== "buddy" && !(r.corrects && openFollowUp.has(recipient)))
+    const open = r.corrects !== null && answerStillOpen(lastPlain.get(recipient), buddyStates.get(recipient) ?? null, r.corrects);
+    if (r.corrects === null) lastPlain.set(recipient, r);
+    if (!recipient.error && r.origin !== "buddy" && !open)
       recipient.status = r.status === "clarification" || r.status === "follow_up" ? "pending" : r.status;
   }
   return [...deliveries.values()];

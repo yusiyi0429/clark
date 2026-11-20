@@ -428,6 +428,50 @@ describe("被问的人看过和更正", { timeout: 60_000 }, () => {
     } finally { await s.f.close(); }
   });
 
+  it("追问被伙伴转本人后，被问的人改的是更早那条：追问仍在他的等你，问的人卡上不显示已答", async () => {
+    const s = await setup();
+    try {
+      const { id, reply } = await s.answered();
+      const trigger = s.lastId((await s.followUp(id, "谁来值守")).json().delivery);
+      s.fake.impl.answer = async () => ({ answer: "手册里没写谁值守", handoff: true, reason: "值守安排要测试丙本人定", sources: [] });
+      await s.run(id, trigger);
+      expect(await s.waiting()).toContain(`team-request:${id}`);
+      expect((await s.review(id, reply.id, { clientId: randomUUID(), verdict: "corrected", text: "要拆五件" })).statusCode).toBe(200);
+      expect((await s.read(id)).recipients[0]).toMatchObject({ status: "pending", buddy: { state: "handoff", handoffBy: "buddy" } });
+      expect(await s.f.t.sql("SELECT status,done_by FROM request_recipients WHERE request_id=$1", [id])).toEqual([{ status: "pending", done_by: null }]);
+      expect(await s.waiting()).toContain(`team-request:${id}`);
+      expect(await s.waitingItems(s.f.member)).toContainEqual(expect.objectContaining({ id: `team-request:${id}`, title: "更正：部署怎么拆" }));
+    } finally { await s.f.close(); }
+  });
+
+  it("被问的人改的正是转本人的那条：算他亲自回了追问，已答，从他的等你里消掉", async () => {
+    const s = await setup();
+    try {
+      const { id } = await s.answered();
+      const trigger = s.lastId((await s.followUp(id, "谁来值守")).json().delivery);
+      s.fake.impl.answer = async () => ({ answer: "手册里没写谁值守", handoff: true, reason: "值守安排要测试丙本人定", sources: [] });
+      await s.run(id, trigger);
+      const handoff = (await s.read(id)).recipients[0].replies.at(-1)!;
+      expect(handoff).toMatchObject({ origin: "buddy", text: "手册里没写谁值守" });
+      expect((await s.review(id, handoff.id, { clientId: randomUUID(), verdict: "corrected", text: "我来值守" })).statusCode).toBe(200);
+      expect((await s.read(id)).recipients[0].status).toBe("answered");
+      expect(await s.waiting()).not.toContain(`team-request:${id}`);
+    } finally { await s.f.close(); }
+  });
+
+  it("问的人补充说明以后，被问的人改旧答复：不算答了这次补充说明", async () => {
+    const s = await setup();
+    try {
+      const { id, reply } = await s.answered();
+      const send = (body: object, cookie: string) => s.f.call("POST", `${base}/${id}/replies`, { clientId: randomUUID(), ...body }, cookie);
+      expect((await send({ status: "needs_info", text: "要按哪个环境拆" }, s.third)).statusCode).toBe(200);
+      expect((await send({ status: "clarification", recipientId: THIRD.personId, text: "按生产环境" }, s.f.member)).statusCode).toBe(200);
+      expect((await s.review(id, reply.id, { clientId: randomUUID(), verdict: "corrected", text: "要拆五件" })).statusCode).toBe(200);
+      expect((await s.read(id)).recipients[0].status).toBe("pending");
+      expect(await s.f.t.sql("SELECT status,done_by FROM request_recipients WHERE request_id=$1", [id])).toEqual([{ status: "pending", done_by: null }]);
+    } finally { await s.f.close(); }
+  });
+
   it("追问超上限时被问的人改了上一条：仍能问本人，进被问的人的等你", async () => {
     const s = await setup();
     try {
