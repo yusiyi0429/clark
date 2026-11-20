@@ -14,7 +14,7 @@ const data = {
     summary: { running: 0, waiting: 0, queued: 0, done: 1, doneToday: 0, needsYou: 0 }, pipeline: { conversationId: null, scope: "project:p1" }, planning: false, subSessions: [], items: [],
   }],
 } as unknown as WorkHomeData;
-const actions: RowActions = { renameProject: vi.fn(), archiveProject: vi.fn(), deleteProject: vi.fn(), renameSub: vi.fn(), archiveSub: vi.fn(), deleteSub: vi.fn() };
+const actions: RowActions = { renameProject: vi.fn(), archiveProject: vi.fn(), deleteProject: vi.fn(), hideProject: vi.fn(), renameSub: vi.fn(), archiveSub: vi.fn(), deleteSub: vi.fn() };
 const render = (extra: Partial<Parameters<typeof LeftColumn>[0]>) => renderToStaticMarkup(
   <LeftColumn data={data} view={{ kind: "card", id: sub.id }} buddy={null} go={() => undefined} phone={false}
     account={{ displayName: "孙铭泽", role: "member" }} today="11 月 9 日 周一"

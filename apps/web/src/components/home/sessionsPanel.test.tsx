@@ -85,7 +85,7 @@ const localState = (extra: Partial<LocalRunnerState> = {}) => ({
   runner: createMockRunner(), phase: "ready", version: null, status: { settings: { paused: false }, quota: [], tools: [] }, models: [], folders: [], sessions: [],
   pairing: null, error: null, refresh: vi.fn(), pair: vi.fn(), unpair: vi.fn(), pickFolder: vi.fn(), setIncludePersonal: vi.fn(), ...extra,
 }) as unknown as LocalRunnerState;
-const actions = (): RowActions => ({ renameProject: vi.fn(), archiveProject: vi.fn(), deleteProject: vi.fn(), renameSub: vi.fn(), archiveSub: vi.fn(), deleteSub: vi.fn() });
+const actions = (): RowActions => ({ renameProject: vi.fn(), archiveProject: vi.fn(), deleteProject: vi.fn(), hideProject: vi.fn(), renameSub: vi.fn(), archiveSub: vi.fn(), deleteSub: vi.fn() });
 
 type Props = Parameters<typeof SessionsPanel>[0];
 const render = (extra: Partial<Props> = {}, local: LocalRunnerState = localState()) => {

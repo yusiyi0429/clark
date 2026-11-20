@@ -59,6 +59,8 @@ export type Project = {
   transfer: Transfer | null;
   /** 本人的「随手」项目（契约 scratch）：收在幕后（本人 11/19），左栏、发给、挂到不列它，会话名前不写它的名字。 */
   scratch: boolean;
+  /** 不给同事读（契约 hiddenFromColleagues）；没收起的不带。 */
+  hiddenFromColleagues?: true;
 };
 
 /** 这台电脑上各项目绑的文件夹：项目 id → 文件夹名。 */
@@ -82,7 +84,7 @@ export function fromHome(project: HomeProject, data: Pick<WorkHomeData, "month" 
     subSessions: project.subSessions, items: project.items, scope: project.pipeline.scope,
     waiting: project.summary.needsYou, lastActivity: project.lastActivityAt,
     budget: project.budget ? { percent: project.budget.percent, state: project.budget.state } : null,
-    transfer: project.transfer, unseen: project.unseen, scratch: !!project.scratch,
+    transfer: project.transfer, unseen: project.unseen, scratch: !!project.scratch, ...(project.hiddenFromColleagues ? { hiddenFromColleagues: true } : {}),
   };
 }
 
