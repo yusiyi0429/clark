@@ -1,4 +1,4 @@
-import type { TReplyTeamDeliveryRequest, TRequestBox, TRequestListItem, TRequestPerson, TSendTeamDeliveryRequest, TTeamDelivery, TTeamDeliverySource } from "@warmap/contracts";
+import type { TReplyTeamDeliveryRequest, TRequestBox, TReviewBuddyReplyRequest, TRequestListItem, TRequestPerson, TSendTeamDeliveryRequest, TTeamDelivery, TTeamDeliverySource } from "@warmap/contracts";
 import { browserApi } from "@/lib/api/client";
 import type { components } from "@/lib/api/schema";
 import { fileNameOf } from "@/lib/home/attachments";
@@ -62,6 +62,30 @@ export async function replyTeamDelivery(id: string, body: TReplyTeamDeliveryRequ
 export async function retryRecipient(id: string, personId: string): Promise<TTeamDelivery> {
   const { data, response, error } = await browserApi.POST("/api/me/team-deliveries/{id}/recipients/{personId}/retry", { params: { path: { id, personId } } });
   return result(data, response, error, "这位同事的投递重试失败").delivery;
+}
+
+/** 被问的人看伙伴那条答复：「没问题」或「改一下」（更正，按 clientId 防重复）。 */
+export async function reviewBuddyReply(id: string, replyId: string, body: TReviewBuddyReplyRequest): Promise<TTeamDelivery> {
+  const { data, response, error } = await browserApi.POST("/api/me/team-deliveries/{id}/replies/{replyId}/review", { params: { path: { id, replyId } }, body });
+  return result(data, response, error, "没有提交上，请重试").delivery;
+}
+
+/** 发起人看过被问的人的更正：「知道了」。 */
+export async function markCorrectionSeen(id: string, replyId: string): Promise<TTeamDelivery> {
+  const { data, response, error } = await browserApi.POST("/api/me/team-deliveries/{id}/replies/{replyId}/seen", { params: { path: { id, replyId } } });
+  return result(data, response, error, "没有记上，请重试").delivery;
+}
+
+/** 伙伴没答上来：让这位同事的伙伴再答一次。 */
+export async function retryTeamBuddy(id: string, personId: string): Promise<TTeamDelivery> {
+  const { data, response, error } = await browserApi.POST("/api/me/team-deliveries/{id}/recipients/{personId}/buddy/retry", { params: { path: { id, personId } } });
+  return result(data, response, error, "重试没有成功，请再试一次").delivery;
+}
+
+/** 伙伴没答上来或超上限：转给这位同事本人。 */
+export async function askTeamOwner(id: string, personId: string): Promise<TTeamDelivery> {
+  const { data, response, error } = await browserApi.POST("/api/me/team-deliveries/{id}/recipients/{personId}/buddy/ask-owner", { params: { path: { id, personId } } });
+  return result(data, response, error, "没有转给本人，请重试").delivery;
 }
 
 export const teamError = (error: unknown, fallback: string) => error instanceof TypeError ? fallback : error instanceof Error ? error.message : fallback;

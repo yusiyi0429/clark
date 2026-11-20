@@ -28,6 +28,8 @@ export type RowActions = {
   renameProject: (id: string, name: string) => Promise<unknown>;
   archiveProject: (id: string, archived: boolean) => Promise<unknown>;
   deleteProject: (id: string) => Promise<unknown>;
+  /** 「不给同事读」：true 收起，false 放开。 */
+  hideProject: (id: string, hidden: boolean) => Promise<unknown>;
   renameSub: (kind: TSubSessionKind, id: string, title: string) => Promise<unknown>;
   archiveSub: (kind: TSubSessionKind, id: string, archived: boolean) => Promise<unknown>;
   deleteSub: (kind: TSubSessionKind, id: string) => Promise<unknown>;

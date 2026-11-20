@@ -132,7 +132,7 @@ describe("左栏：项目（16.2）", () => {
 
   it("项目行只有名字和点：没有箭头、没有「N 个子会话」、没有「+」", () => {
     const sub = (id: string, state: string, unseen = false) => ({ id, kind: "card", title: `卡${id}`, state, waiting: null, updatedAt: "a", queueReason: null, holdUntil: null, unseen });
-    const actions = { renameProject: vi.fn(), archiveProject: vi.fn(), deleteProject: vi.fn(), renameSub: vi.fn(), archiveSub: vi.fn(), deleteSub: vi.fn() };
+    const actions = { renameProject: vi.fn(), archiveProject: vi.fn(), deleteProject: vi.fn(), hideProject: vi.fn(), renameSub: vi.fn(), archiveSub: vi.fn(), deleteSub: vi.fn() };
     const html = render({ data: withTask([], { subSessions: [sub("1", "running"), sub("2", "done", true)] as never, unseen: true }), actions }).replace(/<!-- -->/g, "");
     expect(html).toContain("首页改版");
     expect(html).toContain('data-testid="project-unseen"');
