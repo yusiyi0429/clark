@@ -120610,6 +120610,10 @@
           "scratch": {
             "const": true,
             "type": "boolean"
+          },
+          "hiddenFromColleagues": {
+            "const": true,
+            "type": "boolean"
           }
         }
       },
@@ -122539,6 +122543,10 @@
                   "type": "boolean"
                 },
                 "scratch": {
+                  "const": true,
+                  "type": "boolean"
+                },
+                "hiddenFromColleagues": {
                   "const": true,
                   "type": "boolean"
                 }
@@ -126661,6 +126669,10 @@
           "scratch": {
             "const": true,
             "type": "boolean"
+          },
+          "hiddenFromColleagues": {
+            "const": true,
+            "type": "boolean"
           }
         }
       },
@@ -127177,6 +127189,10 @@
                 "scratch": {
                   "const": true,
                   "type": "boolean"
+                },
+                "hiddenFromColleagues": {
+                  "const": true,
+                  "type": "boolean"
                 }
               }
             }
@@ -127249,6 +127265,9 @@
                 "type": "null"
               }
             ]
+          },
+          "hiddenFromColleagues": {
+            "type": "boolean"
           }
         }
       },
@@ -127856,6 +127875,10 @@
                 ]
               },
               "scratch": {
+                "const": true,
+                "type": "boolean"
+              },
+              "hiddenFromColleagues": {
                 "const": true,
                 "type": "boolean"
               }

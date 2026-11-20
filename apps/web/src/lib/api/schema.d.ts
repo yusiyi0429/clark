@@ -19954,6 +19954,8 @@ export interface components {
             unseen: boolean;
             /** @constant */
             scratch?: true;
+            /** @constant */
+            hiddenFromColleagues?: true;
         };
         HomeMonthTask: {
             taskId: string;
@@ -20208,6 +20210,8 @@ export interface components {
                 unseen: boolean;
                 /** @constant */
                 scratch?: true;
+                /** @constant */
+                hiddenFromColleagues?: true;
             }[];
             archivedCount: number;
             month: {
@@ -20772,6 +20776,8 @@ export interface components {
             autoRelayLimit: number | null;
             /** @constant */
             scratch?: true;
+            /** @constant */
+            hiddenFromColleagues?: true;
         };
         ProjectListResponse: {
             projects: {
@@ -20846,6 +20852,8 @@ export interface components {
                 autoRelayLimit: number | null;
                 /** @constant */
                 scratch?: true;
+                /** @constant */
+                hiddenFromColleagues?: true;
             }[];
         };
         CreateProjectRequest: {
@@ -20857,6 +20865,7 @@ export interface components {
             archived?: boolean;
             permissionMode?: "auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions";
             autoRelayLimit?: number | null;
+            hiddenFromColleagues?: boolean;
         };
         ProjectGoal: {
             taskId: string;
@@ -20943,6 +20952,8 @@ export interface components {
                 autoRelayLimit: number | null;
                 /** @constant */
                 scratch?: true;
+                /** @constant */
+                hiddenFromColleagues?: true;
             };
             period: string;
             goals: {

@@ -50,6 +50,8 @@ export const Project = Type.Object({
   autoRelayLimit: Nullable(AutoRelayLimit),
   /** 本人的「随手」项目（一次性的活都开在它里面，本人 11/18）；别的项目不带。 */
   scratch: Type.Optional(Type.Literal(true)),
+  /** 本人把这个项目设成「不给同事读」（补充条款 A2）：它的会话、报告、产出不进同事可读范围；没设的不带。 */
+  hiddenFromColleagues: Type.Optional(Type.Literal(true)),
 }, strict);
 
 /** GET /api/me/projects（DRI 工作台）：本人全部项目（含交出去了的，算归档），没归档的在前，各自按最近动静从近到远。 */
@@ -61,12 +63,14 @@ export const ProjectListResponse = Type.Object({ projects: Type.Array(Project) }
  */
 export const CreateProjectRequest = Type.Object({ name: ProjectName, taskId: Type.Optional(Type.String({ minLength: 1 })) }, strict);
 
-/** PATCH /api/me/projects/:projectId：改名、归档（archived: true）、恢复（archived: false）。至少带一样。 */
+/** PATCH /api/me/projects/:projectId：改名、归档（archived: true）、恢复（archived: false）、不给同事读（hiddenFromColleagues）。至少带一样。 */
 export const UpdateProjectRequest = Type.Object({ name: Type.Optional(ProjectName), archived: Type.Optional(Type.Boolean()),
   /** 新开子会话的默认权限模式（Project.permissionMode）。 */
   permissionMode: Type.Optional(LocalPermissionMode),
   /** 自动接力的上限（Project.autoRelayLimit，null 不限）。 */
-  autoRelayLimit: Type.Optional(Nullable(AutoRelayLimit)) }, { ...strict, minProperties: 1 });
+  autoRelayLimit: Type.Optional(Nullable(AutoRelayLimit)),
+  /** 不给同事读（Project.hiddenFromColleagues）：true 收起，false 放开。 */
+  hiddenFromColleagues: Type.Optional(Type.Boolean()) }, { ...strict, minProperties: 1 });
 
 /**
  * 项目那一行的「…」菜单（17.2 第 35 条）：重命名、归档用 PATCH /api/me/projects/:projectId（UpdateProjectRequest）；标为已读 POST /api/me/work-seen（kind = project）；
