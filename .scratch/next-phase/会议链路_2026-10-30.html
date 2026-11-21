@@ -1,0 +1,446 @@
+<title>会议传导链路</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400&display=swap">
+<style>
+/* 版式：一栏，两张泳道图各配一张明细表；状态用框的颜色和虚实表达。 */
+:root{
+  --bg:#f5f6f9; --surface:#ffffff; --fg:#1c2230; --muted:#5b6476; --line:#7f889b; --grid:#dfe3ea;
+  --lane-a:#eef1f6; --lane-b:#f7f8fb; --accent:#3d6bd6;
+  --done:#2c8556; --done-bg:#e6f4ec; --part:#b0741c; --part-bg:#fbf0de;
+  --miss:#c2443b; --miss-bg:#fbebea; --pend:#686d8a; --pend-bg:#eceef5;
+  --sans:"Noto Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,"SFMono-Regular",Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#11151d; --surface:#181d28; --fg:#e4e8ef; --muted:#9aa3b4; --line:#8790a3; --grid:#283041;
+  --lane-a:#161b25; --lane-b:#12161e; --accent:#7ea4ff;
+  --done:#5cc58b; --done-bg:#16301f; --part:#e2a54d; --part-bg:#352914;
+  --miss:#ef7b70; --miss-bg:#361c1a; --pend:#a8acca; --pend-bg:#242838; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#11151d; --surface:#181d28; --fg:#e4e8ef; --muted:#9aa3b4; --line:#8790a3; --grid:#283041;
+  --lane-a:#161b25; --lane-b:#12161e; --accent:#7ea4ff;
+  --done:#5cc58b; --done-bg:#16301f; --part:#e2a54d; --part-bg:#352914;
+  --miss:#ef7b70; --miss-bg:#361c1a; --pend:#a8acca; --pend-bg:#242838; color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font-family:var(--sans);line-height:1.65}
+.page{max-width:1080px;margin:0 auto;padding-block:28px 56px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:28px}
+header{display:grid;gap:10px}
+h1{font-size:26px;line-height:1.3;margin:0;font-weight:700;text-wrap:balance}
+h2{font-size:20px;margin:0;font-weight:700;text-wrap:balance}
+h3{font-size:15px;margin:0;font-weight:700}
+p{margin:0;max-width:68ch}
+.meta{color:var(--muted);font-size:13px}
+nav{display:flex;flex-wrap:wrap;gap:8px}
+nav a{color:var(--accent);text-decoration:none;border:1px solid var(--grid);background:var(--surface);border-radius:999px;padding:4px 12px;font-size:13px}
+nav a:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.legend{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;font-size:13px;color:var(--muted)}
+.legend .sw{display:inline-flex;align-items:center;gap:6px}
+.legend i{display:inline-block;width:22px;height:14px;border-radius:4px;border:1.5px solid}
+.legend .l-done{border-color:var(--done);background:var(--done-bg)}
+.legend .l-part{border-color:var(--part);background:var(--part-bg)}
+.legend .l-miss{border-color:var(--miss);background:var(--miss-bg);border-style:dashed}
+.legend .l-pend{border-color:var(--pend);background:var(--pend-bg);border-style:dotted}
+.legend svg{width:34px;height:10px;overflow:visible}
+section{display:grid;gap:14px}
+.lead{color:var(--muted);font-size:14px}
+figure{margin:0;display:grid;gap:8px}
+.figwrap{overflow-x:auto;background:var(--surface);border:1px solid var(--grid);border-radius:12px;padding:8px}
+figcaption{font-size:13px;color:var(--muted);max-width:76ch}
+svg.flow{display:block;width:100%;min-width:880px;height:auto;font-family:var(--sans)}
+.lane-a{fill:var(--lane-a)} .lane-b{fill:var(--lane-b)}
+.lane-h{font-size:13px;font-weight:700;fill:var(--fg)}
+.lane-o{font-size:11px;fill:var(--muted)}
+.stage{font-size:13px;font-weight:700;fill:var(--muted)}
+.stage-line{stroke:var(--grid);stroke-width:1;stroke-dasharray:4 4}
+.box{stroke-width:1.6}
+.s-done{fill:var(--done-bg);stroke:var(--done)}
+.s-part{fill:var(--part-bg);stroke:var(--part)}
+.s-miss{fill:var(--miss-bg);stroke:var(--miss);stroke-dasharray:6 4}
+.s-pend{fill:var(--pend-bg);stroke:var(--pend);stroke-dasharray:2 4}
+.t1{font-size:13px;font-weight:700;fill:var(--fg)}
+.t2{font-size:11px;fill:var(--muted)}
+.ar{fill:none;stroke:var(--line);stroke-width:1.4}
+.ar.dashed{stroke-dasharray:5 4}
+.ah{fill:var(--line)}
+.lbl{font-size:11px;fill:var(--muted);paint-order:stroke;stroke:var(--surface);stroke-width:4px;stroke-linejoin:round}
+.todo{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr))}
+.todo div{background:var(--surface);border:1px solid var(--grid);border-radius:10px;padding:12px 14px;display:grid;gap:4px;min-width:0}
+.todo b{font-size:14px}
+.todo ul{margin:0;padding-left:18px;font-size:13.5px;color:var(--fg)}
+.todo li+li{margin-top:2px}
+.tablewrap{overflow-x:auto;border:1px solid var(--grid);border-radius:10px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;min-width:1040px;font-size:13px;table-layout:fixed}
+th,td{text-align:left;vertical-align:top;padding:9px 10px;border-bottom:1px solid var(--grid)}
+thead th{font-size:12px;color:var(--muted);font-weight:500;background:var(--lane-a);position:sticky;top:0}
+tbody th{font-weight:700}
+tbody tr:last-child th,tbody tr:last-child td{border-bottom:0}
+code{font-family:var(--mono);font-size:12px;background:var(--lane-a);padding:1px 4px;border-radius:4px;overflow-wrap:anywhere}
+.chip{display:inline-block;font-size:12px;padding:1px 8px;border-radius:999px;border:1px solid;white-space:nowrap}
+.c-done{color:var(--done);border-color:var(--done);background:var(--done-bg)}
+.c-part{color:var(--part);border-color:var(--part);background:var(--part-bg)}
+.c-miss{color:var(--miss);border-color:var(--miss);background:var(--miss-bg)}
+.c-pend{color:var(--pend);border-color:var(--pend);background:var(--pend-bg)}
+.diff{display:flex;flex-wrap:wrap;gap:8px}
+.diff span{font-size:13px;border:1px dashed var(--line);border-radius:999px;padding:2px 10px;color:var(--muted);text-decoration:line-through}
+footer{font-size:12.5px;color:var(--muted);display:grid;gap:4px;border-top:1px solid var(--grid);padding-top:14px}
+@media (prefers-reduced-motion: reduce){*{scroll-behavior:auto}}
+</style>
+<div class="page">
+<header>
+  <h1>会议传导链路</h1>
+  <p class="meta">一场会从约会到会后：每一步谁负责、按什么生成、存在哪、做到哪。2026-10-30，按天枢代码、今天两场「Inception 推动计划」和 10/29 分工会整理。</p>
+  <nav aria-label="两个版本"><a href="#ours">词元云集自用版</a><a href="#inception">Inception 王总版</a></nav>
+  <div class="legend" aria-label="图例">
+    <span class="sw"><i class="l-done"></i>已做</span>
+    <span class="sw"><i class="l-part"></i>部分</span>
+    <span class="sw"><i class="l-miss"></i>未做</span>
+    <span class="sw"><i class="l-pend"></i>待定</span>
+    <span class="sw"><svg viewBox="0 0 34 10" aria-hidden="true"><line x1="0" y1="5" x2="34" y2="5" stroke="var(--line)" stroke-width="1.6"/></svg>现在在跑</span>
+    <span class="sw"><svg viewBox="0 0 34 10" aria-hidden="true"><line x1="0" y1="5" x2="34" y2="5" stroke="var(--line)" stroke-width="1.6" stroke-dasharray="5 4"/></svg>定了，还没做</span>
+  </div>
+</header>
+
+<section id="ours" aria-labelledby="h-ours">
+  <h2 id="h-ours">词元云集自用版</h2>
+  <p class="lead">多人用，会后要判断改了谁的东西、推给谁。会后有两条：实线是天枢现在这条，正式环境在跑；虚线是 10/29 定的新分工，会后整条交给 Nexus，还没做。</p>
+  <figure>
+    <div class="figwrap"><svg class="flow" viewBox="0 0 1040 822" role="img" aria-label="词元云集自用版：一场会从约会到会后，现在天枢这条在跑，新分工里 Nexus 那条还没做">
+<defs><marker id="ours-ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="lane-a" x="80" y="8" width="190" height="808" rx="0"/>
+<text class="lane-h" x="175" y="27" text-anchor="middle">人</text>
+<text class="lane-o" x="175" y="44" text-anchor="middle">主持人·责任人</text>
+<rect class="lane-b" x="270" y="8" width="190" height="808" rx="0"/>
+<text class="lane-h" x="365" y="27" text-anchor="middle">天枢伙伴</text>
+<text class="lane-o" x="365" y="44" text-anchor="middle">我们</text>
+<rect class="lane-a" x="460" y="8" width="190" height="808" rx="0"/>
+<text class="lane-h" x="555" y="27" text-anchor="middle">飞书</text>
+<text class="lane-o" x="555" y="44" text-anchor="middle">日历·会议·妙记</text>
+<rect class="lane-b" x="650" y="8" width="190" height="808" rx="0"/>
+<text class="lane-h" x="745" y="27" text-anchor="middle">Nexus</text>
+<text class="lane-o" x="745" y="44" text-anchor="middle">溪南</text>
+<rect class="lane-a" x="840" y="8" width="190" height="808" rx="0"/>
+<text class="lane-h" x="935" y="27" text-anchor="middle">本体</text>
+<text class="lane-o" x="935" y="44" text-anchor="middle">斯一定规则</text>
+<text class="stage" x="38" y="143" text-anchor="middle">会前</text>
+<line class="stage-line" x1="0" y1="223" x2="1040" y2="223"/>
+<text class="stage" x="38" y="269" text-anchor="middle">会中</text>
+<line class="stage-line" x1="0" y1="307" x2="1040" y2="307"/>
+<text class="stage" x="38" y="521" text-anchor="middle">会后</text>
+<line class="stage-line" x1="0" y1="727" x2="1040" y2="727"/>
+<text class="stage" x="38" y="773" text-anchor="middle">平时</text>
+<path class="ar" d="M435,97 L485,97" marker-end="url(#ours-ah)"/>
+<text class="lbl" x="460" y="90" text-anchor="middle">建日程</text>
+<path class="ar" d="M365,124 L365,154" marker-end="url(#ours-ah)"/>
+<text class="lbl" x="371" y="143" text-anchor="start">建会后跑</text>
+<path class="ar dashed" d="M415,70 L415,60 L745,60 L745,154" marker-end="url(#ours-ah)"/>
+<text class="lbl" x="705" y="56" text-anchor="middle">约会时</text>
+<path class="ar" d="M555,124 L555,238" marker-end="url(#ours-ah)"/>
+<text class="lbl" x="561" y="185" text-anchor="start">到点开会</text>
+<path class="ar" d="M675,265 L625,265" marker-end="url(#ours-ah)"/>
+<text class="lbl" x="650" y="258" text-anchor="middle">进会</text>
+<path class="ar" d="M520,292 L520,349 L435,349" marker-end="url(#ours-ah)"/>
+<text class="lbl" x="514" y="311" text-anchor="end">妙记生成</text>
+<path class="ar dashed" d="M590,292 L590,349 L675,349" marker-end="url(#ours-ah)"/>
+<text class="lbl" x="596" y="311" text-anchor="start">录音·纪要</text>
+<path class="ar" d="M365,376 L365,406" marker-end="url(#ours-ah)"/>
+<text class="lbl" x="371" y="395" text-anchor="start">逐字稿</text>
+<path class="ar" d="M310,460 L310,511 L245,511" marker-end="url(#ours-ah)"/>
+<text class="lbl" x="304" y="479" text-anchor="end">通知栏</text>
+<path class="ar" d="M245,525 L365,525 L365,574" marker-end="url(#ours-ah)"/>
+<text class="lbl" x="371" y="563" text-anchor="start">确认版</text>
+<path class="ar" d="M175,544 L175,574" marker-end="url(#ours-ah)"/>
+<text class="lbl" x="181" y="563" text-anchor="start">行动项</text>
+<path class="ar" d="M435,601 L865,601" marker-end="url(#ours-ah)"/>
+<text class="lbl" x="555" y="594" text-anchor="middle">外部事件</text>
+<path class="ar dashed" d="M745,376 L745,406" marker-end="url(#ours-ah)"/>
+<text class="lbl" x="751" y="395" text-anchor="start">汇总</text>
+<path class="ar dashed" d="M815,433 L935,433 L935,574" marker-end="url(#ours-ah)"/>
+<text class="lbl" x="941" y="521" text-anchor="start">事件直写</text>
+<path class="ar dashed" d="M745,460 L745,490" marker-end="url(#ours-ah)"/>
+<text class="lbl" x="751" y="479" text-anchor="start">提取</text>
+<path class="ar dashed" d="M745,544 L745,685 L435,685" marker-end="url(#ours-ah)"/>
+<text class="lbl" x="751" y="647" text-anchor="start">交给伙伴</text>
+<path class="ar dashed" d="M295,685 L245,685" marker-end="url(#ours-ah)"/>
+<text class="lbl" x="270" y="678" text-anchor="middle">推送</text>
+<path class="ar" d="M935,628 L935,727 L400,727 L400,742" marker-end="url(#ours-ah)"/>
+<text class="lbl" x="575" y="722" text-anchor="middle">读确认过的会</text>
+<path class="ar dashed" d="M675,769 L435,769" marker-end="url(#ours-ah)"/>
+<text class="lbl" x="555" y="762" text-anchor="middle">接着记</text>
+<g><title>约会议（已做）</title>
+<rect class="box s-done" x="295" y="70" width="140" height="54" rx="8"/>
+<text class="t1" x="365" y="93" text-anchor="middle">约会议</text>
+<text class="t2" x="365" y="111" text-anchor="middle">建会·约飞书日程</text>
+</g>
+<g><title>飞书日程（已做）</title>
+<rect class="box s-done" x="485" y="70" width="140" height="54" rx="8"/>
+<text class="t1" x="555" y="93" text-anchor="middle">飞书日程</text>
+<text class="t2" x="555" y="111" text-anchor="middle">发邀请·开自动录制</text>
+</g>
+<g><title>会前预审（已做）</title>
+<rect class="box s-done" x="295" y="154" width="140" height="54" rx="8"/>
+<text class="t1" x="365" y="177" text-anchor="middle">会前预审</text>
+<text class="t2" x="365" y="195" text-anchor="middle">要定什么·核心判断</text>
+</g>
+<g><title>约会时拉进会（未做）</title>
+<rect class="box s-miss" x="675" y="154" width="140" height="54" rx="8"/>
+<text class="t1" x="745" y="177" text-anchor="middle">约会时拉进会</text>
+<text class="t2" x="745" y="195" text-anchor="middle">溪南 10/30 提议</text>
+</g>
+<g><title>视频会议（已做）</title>
+<rect class="box s-done" x="485" y="238" width="140" height="54" rx="8"/>
+<text class="t1" x="555" y="261" text-anchor="middle">视频会议</text>
+<text class="t2" x="555" y="279" text-anchor="middle">录音→妙记</text>
+</g>
+<g><title>会上听、答（部分）</title>
+<rect class="box s-part" x="675" y="238" width="140" height="54" rx="8"/>
+<text class="t1" x="745" y="261" text-anchor="middle">会上听、答</text>
+<text class="t2" x="745" y="279" text-anchor="middle">只读飞书文档</text>
+</g>
+<g><title>取妙记（已做）</title>
+<rect class="box s-done" x="295" y="322" width="140" height="54" rx="8"/>
+<text class="t1" x="365" y="345" text-anchor="middle">取妙记</text>
+<text class="t2" x="365" y="363" text-anchor="middle">妙记生成事件+轮询</text>
+</g>
+<g><title>会后总结（未做）</title>
+<rect class="box s-miss" x="675" y="322" width="140" height="54" rx="8"/>
+<text class="t1" x="745" y="345" text-anchor="middle">会后总结</text>
+<text class="t2" x="745" y="363" text-anchor="middle">不逐条确认</text>
+</g>
+<g><title>起草会议卡（已做）</title>
+<rect class="box s-done" x="295" y="406" width="140" height="54" rx="8"/>
+<text class="t1" x="365" y="429" text-anchor="middle">起草会议卡</text>
+<text class="t2" x="365" y="447" text-anchor="middle">决策·行动项·记录</text>
+</g>
+<g><title>直接写本体（未做）</title>
+<rect class="box s-miss" x="675" y="406" width="140" height="54" rx="8"/>
+<text class="t1" x="745" y="429" text-anchor="middle">直接写本体</text>
+<text class="t2" x="745" y="447" text-anchor="middle">冲突才升级</text>
+</g>
+<g><title>责任人逐条确认（已做）</title>
+<rect class="box s-done" x="105" y="490" width="140" height="54" rx="8"/>
+<text class="t1" x="175" y="513" text-anchor="middle">责任人逐条确认</text>
+<text class="t2" x="175" y="531" text-anchor="middle">满 48 小时自动定版</text>
+</g>
+<g><title>提取两类卡（未做）</title>
+<rect class="box s-miss" x="675" y="490" width="140" height="54" rx="8"/>
+<text class="t1" x="745" y="513" text-anchor="middle">提取两类卡</text>
+<text class="t2" x="745" y="531" text-anchor="middle">改动冲突·执行事项</text>
+</g>
+<g><title>定版写本体（已做）</title>
+<rect class="box s-done" x="295" y="574" width="140" height="54" rx="8"/>
+<text class="t1" x="365" y="597" text-anchor="middle">定版写本体</text>
+<text class="t2" x="365" y="615" text-anchor="middle">写完读回核对</text>
+</g>
+<g><title>会议事件（已做）</title>
+<rect class="box s-done" x="865" y="574" width="140" height="54" rx="8"/>
+<text class="t1" x="935" y="597" text-anchor="middle">会议事件</text>
+<text class="t2" x="935" y="615" text-anchor="middle">只含已确认的</text>
+</g>
+<g><title>接下行动项（已做）</title>
+<rect class="box s-done" x="105" y="574" width="140" height="54" rx="8"/>
+<text class="t1" x="175" y="597" text-anchor="middle">接下行动项</text>
+<text class="t2" x="175" y="615" text-anchor="middle">变成执行事项</text>
+</g>
+<g><title>推到负责人工作台（未做）</title>
+<rect class="box s-miss" x="295" y="658" width="140" height="54" rx="8"/>
+<text class="t1" x="365" y="681" text-anchor="middle">推到负责人工作台</text>
+<text class="t2" x="365" y="699" text-anchor="middle">伙伴推送</text>
+</g>
+<g><title>负责人处理（未做）</title>
+<rect class="box s-miss" x="105" y="658" width="140" height="54" rx="8"/>
+<text class="t1" x="175" y="681" text-anchor="middle">负责人处理</text>
+<text class="t2" x="175" y="699" text-anchor="middle">同意·接手·转给别人</text>
+</g>
+<g><title>对话里问得到（已做）</title>
+<rect class="box s-done" x="295" y="742" width="140" height="54" rx="8"/>
+<text class="t1" x="365" y="765" text-anchor="middle">对话里问得到</text>
+<text class="t2" x="365" y="783" text-anchor="middle">下次预审接上</text>
+</g>
+<g><title>议题记忆（未做）</title>
+<rect class="box s-miss" x="675" y="742" width="140" height="54" rx="8"/>
+<text class="t1" x="745" y="765" text-anchor="middle">议题记忆</text>
+<text class="t2" x="745" y="783" text-anchor="middle">同一件事接着记</text>
+</g>
+</svg></div>
+    <figcaption>往下是时间先后，按列看是谁负责。天枢现在这条（取妙记 → 起草会议卡 → 逐条确认 → 定版写本体）在 Nexus 那条上线之前留不留，等溪南回。</figcaption>
+  </figure>
+  <h3>没做完的，谁来做</h3>
+  <div class="todo">
+    <div><b>溪南（Nexus）</b><ul><li>会后总结、直接写本体、提取两类卡</li><li>约会时拉 Nexus 进会的接口</li><li>会上读 PDF 和图片（今天会上暴露的）</li></ul></div>
+    <div><b>我们（天枢）</b><ul><li>接两类卡，推到负责人工作台，回应交回 Nexus</li><li>约会时调 Nexus 的接口</li><li>天枢现在这条会后链路怎么收</li></ul></div>
+    <div><b>斯一</b><ul><li>Nexus 直写本体的规则，卡住越权和乱写</li></ul></div>
+    <div><b>你和溪南一起定</b><ul><li>Nexus 交给天枢的接口：推什么、带哪些字段、回应怎么交回</li><li>过渡的时间</li><li>议题记忆谁来做</li></ul></div>
+    <div><b>要核一次</b><ul><li>飞书自动约会在正式环境真约成功没有</li></ul></div>
+  </div>
+  <div class="tablewrap"><table>
+<colgroup><col style="width:120px"><col style="width:120px"><col><col style="width:130px"><col style="width:190px"><col style="width:64px"><col style="width:150px"></colgroup>
+<thead><tr><th>步骤</th><th>谁负责</th><th>按什么</th><th>生成什么</th><th>存在哪</th><th>状态</th><th>剩下谁来做</th></tr></thead>
+<tbody>
+<tr><th scope="row">约会议</th><td>天枢伙伴</td><td>本人在首页「约会议」，或在对话里的会议卡上点「约好」。建会、同步参会人，再在后台用建会人本人的飞书授权在他的主日历建日程：带飞书视频会议、开自动录制，给参会人发邀请。他没连飞书时先记「等授权」，连上后补约。</td><td>会议（预约中）、飞书日程</td><td><code>meetings</code>；飞书日历</td><td><span class="chip c-done">已做</span></td><td>代码注释记着 10/21 时建日程还没在真飞书上跑过，正式环境要核一次</td></tr>
+<tr><th scope="row">约会时拉 Nexus 进会</th><td>天枢 → Nexus</td><td>溪南今天的提议：从天枢约会时自动把 Nexus 拉进去（推动计划2 18:47）。</td><td>—</td><td>—</td><td><span class="chip c-miss">未做</span></td><td>溪南给接口，天枢约会时调用</td></tr>
+<tr><th scope="row">会前预审</th><td>天枢伙伴</td><td>建会后自动跑，输入变了标过期、可以重跑。重模型深度思考，最长约 8 分钟。预审提示词 v5（10/28）：先定档位（战略决策会、普通会、信息不足），读会前材料、群讨论、议题的历史决定、同战场近期的会、本体里的公司事实和挂点（长期目标、本月目标、Mission）；信息不足时只写缺什么。</td><td>要定什么、核心判断、要聊的问题、要拍板的事</td><td><code>meetings</code> 的预审字段</td><td><span class="chip c-done">已做</span></td><td>—</td></tr>
+<tr><th scope="row">视频会议、录音</th><td>飞书</td><td>日程开了自动录制；飞书「会议开始 / 会议结束」事件回给天枢，记实际起止。</td><td>录音、妙记</td><td>飞书</td><td><span class="chip c-done">已做</span></td><td>—</td></tr>
+<tr><th scope="row">会上听、被叫到就答</th><td>Nexus</td><td>溪南那边的产品，不在天枢代码里。今天会上它自己说：只能读会议关联的飞书文档，PDF、图片读不了；跨会议的连续理解没有。</td><td>会上的回答</td><td>Nexus 那边</td><td><span class="chip c-part">部分</span></td><td>溪南</td></tr>
+<tr><th scope="row">取妙记</th><td>天枢伙伴</td><td>订阅「妙记生成」事件，另有每 5 分钟一次轮询，刚开完的会每 30 秒找一次。先用主持人、再用建会人的飞书授权。等 2 小时还没有，退回手动上传。说话人按飞书参会名单对到人。</td><td>逐字稿</td><td><code>meetings</code></td><td><span class="chip c-done">已做</span></td><td>—</td></tr>
+<tr><th scope="row">起草会议卡</th><td>天枢伙伴</td><td>大模型抽取，再做确定性校验：引文必须连续出现在原话里；负责人只能是说「我来」的人或原话里点名的人；CEO 的判断只认 CEO 说的话。不合格的进提醒，不进卡。</td><td>决策、行动项、会议记录（草稿）</td><td><code>meeting_cards</code></td><td><span class="chip c-done">已做</span></td><td>—</td></tr>
+<tr><th scope="row">责任人逐条确认</th><td>人：每条决策、行动项的责任人</td><td>斯一 10/28 的规则：只由责任人本人在通知栏或会议页点，别人不能代点。没有责任人的决策，主持人先补归属（PR #63 已合进 main，跟人豪今天这轮一起上）。全都有了结果，或满 48 小时，自动定版。</td><td>确认版</td><td><code>meeting_card_confirmations</code></td><td><span class="chip c-done">已做</span></td><td>—</td></tr>
+<tr><th scope="row">定版写本体</th><td>天枢伙伴 → 本体</td><td>tkos-world 外部事件（会议类），带三项写入声明；幂等键 <code>tianshu-meeting:&lt;会议&gt;:v&lt;版本&gt;:event</code>；写完按挂点读回、核对摘要值。只放已确认的决策和行动项，不提交对象修改。</td><td>会议事件</td><td>本体 TK scope；回执在 <code>meeting_card_syncs</code></td><td><span class="chip c-done">已做</span></td><td>10/29 16:27 起正式写</td></tr>
+<tr><th scope="row">接下行动项</th><td>人点「接下」，天枢建</td><td>负责人是 CEO 的不建执行事项。</td><td>执行事项</td><td><code>tasks</code></td><td><span class="chip c-done">已做</span></td><td>新分工里改成「负责人处理」里的接手</td></tr>
+<tr><th scope="row">会后总结</th><td>Nexus</td><td>10/29 分工会定的：Nexus 固定做会后总结和写入，不让人逐条确认。</td><td>会后总结</td><td>—</td><td><span class="chip c-miss">未做</span></td><td>溪南</td></tr>
+<tr><th scope="row">直接写本体</th><td>Nexus → 本体</td><td>会议事件直接写；对象状态在对象层面更新、留版本历史；和以前的版本冲突时由 AI 判断、升级出来。斯一负责卡住越权和乱写。</td><td>会议事件、对象改动</td><td>本体</td><td><span class="chip c-miss">未做</span></td><td>溪南；写入规则和斯一对</td></tr>
+<tr><th scope="row">提取两类卡</th><td>Nexus</td><td>改动或冲突：给那个对象的负责人。执行事项：给对应的人。</td><td>两类卡</td><td>—</td><td><span class="chip c-miss">未做</span></td><td>溪南</td></tr>
+<tr><th scope="row">推到工作台、负责人处理</th><td>天枢伙伴推送，负责人处理</td><td>改动或冲突卡：同意、不同意（附一句理由）、改说法。执行事项卡：接手、转给别人、不接。处理结果交回 Nexus。没人处理时 3 个工作日提醒一次（我定的）。</td><td>卡片、本人的回应、执行事项</td><td>天枢通知栏、<code>tasks</code>；回应交回 Nexus</td><td><span class="chip c-miss">未做</span></td><td>卡片我们做；接口你和溪南定（spec 7.4 第 22 条）</td></tr>
+<tr><th scope="row">对话里问得到、下次预审接上</th><td>天枢伙伴（首页对话走人豪的 Chat）</td><td>Chat 经天枢的只读接口读确认过的会，逐字稿用提问人本人的飞书授权读。下一场会的预审读同战场近期的会和议题的历史决定。</td><td>回答、下一份预审</td><td>—</td><td><span class="chip c-done">已做</span></td><td>回答质量归人豪</td></tr>
+<tr><th scope="row">议题记忆</th><td>待定</td><td>同一件事一场接一场地记。Nexus 现在没有跨会议记忆；天枢是按战场、议题去找近期的会，没有单独的记忆。</td><td>—</td><td>—</td><td><span class="chip c-miss">未做</span></td><td>待定谁做</td></tr>
+</tbody></table></div>
+</section>
+
+<section id="inception" aria-labelledby="h-inc">
+  <h2 id="h-inc">Inception 王总版</h2>
+  <p class="lead">王总自己用，不需要多人联通，也不用 Agent 判断推给谁：会后的东西存进去就行。其余和自用版差不多，多了「预装」和「会外对话」。</p>
+  <div class="diff" aria-label="王总版不做"><span>逐条确认</span><span>推给负责人</span><span>建执行事项</span><span>多人联通</span></div>
+  <figure>
+    <div class="figwrap"><svg class="flow" viewBox="0 0 1040 654" role="img" aria-label="Inception 王总版：会前天枢出预审，会中 Nexus，会后只存不推，天枢接住后会外对话和下次预审接上">
+<defs><marker id="inc-ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="lane-a" x="80" y="8" width="190" height="640" rx="0"/>
+<text class="lane-h" x="175" y="27" text-anchor="middle">王总·身边的人</text>
+<text class="lane-o" x="175" y="44" text-anchor="middle">不改习惯</text>
+<rect class="lane-b" x="270" y="8" width="190" height="640" rx="0"/>
+<text class="lane-h" x="365" y="27" text-anchor="middle">天枢伙伴</text>
+<text class="lane-o" x="365" y="44" text-anchor="middle">王总的，我们做</text>
+<rect class="lane-a" x="460" y="8" width="190" height="640" rx="0"/>
+<text class="lane-h" x="555" y="27" text-anchor="middle">会议平台</text>
+<text class="lane-o" x="555" y="44" text-anchor="middle">用不用飞书待定</text>
+<rect class="lane-b" x="650" y="8" width="190" height="640" rx="0"/>
+<text class="lane-h" x="745" y="27" text-anchor="middle">Nexus</text>
+<text class="lane-o" x="745" y="44" text-anchor="middle">溪南</text>
+<rect class="lane-a" x="840" y="8" width="190" height="640" rx="0"/>
+<text class="lane-h" x="935" y="27" text-anchor="middle">存储</text>
+<text class="lane-o" x="935" y="44" text-anchor="middle">客户本体或议题记忆</text>
+<text class="stage" x="38" y="101" text-anchor="middle">预装</text>
+<line class="stage-line" x1="0" y1="139" x2="1040" y2="139"/>
+<text class="stage" x="38" y="185" text-anchor="middle">会前</text>
+<line class="stage-line" x1="0" y1="223" x2="1040" y2="223"/>
+<text class="stage" x="38" y="269" text-anchor="middle">会中</text>
+<line class="stage-line" x1="0" y1="307" x2="1040" y2="307"/>
+<text class="stage" x="38" y="395" text-anchor="middle">会后</text>
+<line class="stage-line" x1="0" y1="475" x2="1040" y2="475"/>
+<text class="stage" x="38" y="555" text-anchor="middle">会外</text>
+<text class="stage" x="38" y="571" text-anchor="middle">下次会前</text>
+<path class="ar" d="M865,97 L435,97" marker-end="url(#inc-ah)"/>
+<text class="lbl" x="555" y="90" text-anchor="middle">预载</text>
+<path class="ar" d="M365,124 L365,154" marker-end="url(#inc-ah)"/>
+<text class="lbl" x="371" y="143" text-anchor="start">预装的理解</text>
+<path class="ar" d="M295,181 L245,181" marker-end="url(#inc-ah)"/>
+<text class="lbl" x="270" y="174" text-anchor="middle">pad</text>
+<path class="ar" d="M175,208 L175,265 L485,265" marker-end="url(#inc-ah)"/>
+<text class="lbl" x="365" y="258" text-anchor="middle">开会、拉人进会</text>
+<path class="ar" d="M675,265 L625,265" marker-end="url(#inc-ah)"/>
+<text class="lbl" x="650" y="258" text-anchor="middle">进会</text>
+<path class="ar" d="M555,292 L555,349 L675,349" marker-end="url(#inc-ah)"/>
+<text class="lbl" x="561" y="311" text-anchor="start">录音·纪要</text>
+<path class="ar" d="M815,349 L865,349" marker-end="url(#inc-ah)"/>
+<text class="lbl" x="840" y="342" text-anchor="middle">写入</text>
+<path class="ar" d="M935,376 L935,433 L435,433" marker-end="url(#inc-ah)"/>
+<text class="lbl" x="555" y="426" text-anchor="middle">天枢读</text>
+<path class="ar" d="M365,460 L365,490" marker-end="url(#inc-ah)"/>
+<text class="lbl" x="371" y="479" text-anchor="start">议题记忆</text>
+<path class="ar" d="M245,517 L295,517" marker-end="url(#inc-ah)"/>
+<text class="lbl" x="270" y="510" text-anchor="middle">说一句</text>
+<path class="ar" d="M365,544 L365,574" marker-end="url(#inc-ah)"/>
+<text class="lbl" x="371" y="563" text-anchor="start">下一场会</text>
+<g><title>战略预装载（未做）</title>
+<rect class="box s-miss" x="865" y="70" width="140" height="54" rx="8"/>
+<text class="t1" x="935" y="93" text-anchor="middle">战略预装载</text>
+<text class="t2" x="935" y="111" text-anchor="middle">报告和假设</text>
+</g>
+<g><title>第一次见面（未做）</title>
+<rect class="box s-miss" x="295" y="70" width="140" height="54" rx="8"/>
+<text class="t1" x="365" y="93" text-anchor="middle">第一次见面</text>
+<text class="t2" x="365" y="111" text-anchor="middle">像认识新客户</text>
+</g>
+<g><title>看预审、拉人（待定）</title>
+<rect class="box s-pend" x="105" y="154" width="140" height="54" rx="8"/>
+<text class="t1" x="175" y="177" text-anchor="middle">看预审、拉人</text>
+<text class="t2" x="175" y="195" text-anchor="middle">王总和身边的人</text>
+</g>
+<g><title>议题预审（部分）</title>
+<rect class="box s-part" x="295" y="154" width="140" height="54" rx="8"/>
+<text class="t1" x="365" y="177" text-anchor="middle">议题预审</text>
+<text class="t2" x="365" y="195" text-anchor="middle">pad 上打开就看</text>
+</g>
+<g><title>线上会、录音（待定）</title>
+<rect class="box s-pend" x="485" y="238" width="140" height="54" rx="8"/>
+<text class="t1" x="555" y="261" text-anchor="middle">线上会、录音</text>
+<text class="t2" x="555" y="279" text-anchor="middle">平台待定</text>
+</g>
+<g><title>会上听、答（部分）</title>
+<rect class="box s-part" x="675" y="238" width="140" height="54" rx="8"/>
+<text class="t1" x="745" y="261" text-anchor="middle">会上听、答</text>
+<text class="t2" x="745" y="279" text-anchor="middle">读会议资料</text>
+</g>
+<g><title>会后总结（未做）</title>
+<rect class="box s-miss" x="675" y="322" width="140" height="54" rx="8"/>
+<text class="t1" x="745" y="345" text-anchor="middle">会后总结</text>
+<text class="t2" x="745" y="363" text-anchor="middle">只存不推</text>
+</g>
+<g><title>存进去（未做）</title>
+<rect class="box s-miss" x="865" y="322" width="140" height="54" rx="8"/>
+<text class="t1" x="935" y="345" text-anchor="middle">存进去</text>
+<text class="t2" x="935" y="363" text-anchor="middle">存哪待定</text>
+</g>
+<g><title>接住总结（未做）</title>
+<rect class="box s-miss" x="295" y="406" width="140" height="54" rx="8"/>
+<text class="t1" x="365" y="429" text-anchor="middle">接住总结</text>
+<text class="t2" x="365" y="447" text-anchor="middle">先人工喂纪要</text>
+</g>
+<g><title>想聊就聊（部分）</title>
+<rect class="box s-part" x="105" y="490" width="140" height="54" rx="8"/>
+<text class="t1" x="175" y="513" text-anchor="middle">想聊就聊</text>
+<text class="t2" x="175" y="531" text-anchor="middle">语音·点选项</text>
+</g>
+<g><title>会外对话（部分）</title>
+<rect class="box s-part" x="295" y="490" width="140" height="54" rx="8"/>
+<text class="t1" x="365" y="513" text-anchor="middle">会外对话</text>
+<text class="t2" x="365" y="531" text-anchor="middle">围绕一两个议题</text>
+</g>
+<g><title>下次预审接上（未做）</title>
+<rect class="box s-miss" x="295" y="574" width="140" height="54" rx="8"/>
+<text class="t1" x="365" y="597" text-anchor="middle">下次预审接上</text>
+<text class="t2" x="365" y="615" text-anchor="middle">读议题记忆</text>
+</g>
+</svg></div>
+    <figcaption>成功的样子在最后两格：王总在会议之外想聊就聊，天枢接得住上一场会。存哪（客户本体，还是预装载加议题记忆）今天会上前后有两种说法，要明华定。</figcaption>
+  </figure>
+  <h3>没做完的，谁来做</h3>
+  <div class="todo">
+    <div><b>先定</b><ul><li>存哪：客户本体，还是预装载文件加议题记忆</li><li>王总那边用不用飞书开会</li><li>约会、拉人进会，是身边的人做还是走天枢</li></ul></div>
+    <div><b>我们（天枢）</b><ul><li>战略预装载接进天枢，第一次见面的开场</li><li>议题预审加读议题记忆和 Nexus 的总结，pad 首屏</li><li>接住会后总结（先人工喂）、会外对话、下次预审接上</li><li>一个客户一份独立部署</li></ul></div>
+    <div><b>溪南（Nexus）</b><ul><li>会后总结，只存不推</li><li>和天枢接上（他说两三天先把会接上）</li></ul></div>
+    <div><b>其他人</b><ul><li>明华、田田：战略报告本身</li><li>斯一：走本体的话，客户本体初始化</li><li>人豪：回答质量</li></ul></div>
+  </div>
+  <div class="tablewrap"><table>
+<colgroup><col style="width:120px"><col style="width:120px"><col><col style="width:130px"><col style="width:190px"><col style="width:64px"><col style="width:150px"></colgroup>
+<thead><tr><th>步骤</th><th>谁负责</th><th>按什么</th><th>生成什么</th><th>存在哪</th><th>状态</th><th>剩下谁来做</th></tr></thead>
+<tbody>
+<tr><th scope="row">战略预装载</th><td>我们预装；报告是明华、田田那条线出的</td><td>把战略报告和里面的假设预载进天枢；报告改了，天枢的内容最好也跟着变（推动计划2 08:05）。</td><td>天枢对他公司的初步理解</td><td>待定：客户本体，或预装载文件加议题记忆</td><td><span class="chip c-miss">未做</span></td><td>先定存哪；走本体的话，谁来初始化（斯一？）</td></tr>
+<tr><th scope="row">第一次见面</th><td>天枢伙伴（王总的）</td><td>像认识一位新客户：说已经知道的，坦白不知道的，问一个问题；不知道就说不知道（推动计划 50:22–52:08）。</td><td>开场白</td><td>—</td><td><span class="chip c-miss">未做</span></td><td>我们</td></tr>
+<tr><th scope="row">看预审、拉人进会</th><td>王总和身边的人</td><td>王总什么都不用变。开会时身边的人把天枢、Nexus 拉进来；前两三轮有人陪（推动计划 54:25–56:34）。</td><td>—</td><td>—</td><td><span class="chip c-pend">待定</span></td><td>定约会走不走天枢</td></tr>
+<tr><th scope="row">议题预审</th><td>天枢伙伴</td><td>现在的预审能按会出、挂议题，读议题的历史决定和近期的会。王总版要加：读议题记忆、上次 Nexus 的会后总结、战略报告里相关的假设；pad 一打开就看到。</td><td>预审</td><td>天枢</td><td><span class="chip c-part">部分</span></td><td>我们</td></tr>
+<tr><th scope="row">线上会、录音</th><td>王总那边的会议平台</td><td>用不用飞书待定。不是飞书的话，天枢现在取妙记这条用不上。</td><td>录音或纪要</td><td>待定</td><td><span class="chip c-pend">待定</span></td><td>先问清王总那边用什么开会</td></tr>
+<tr><th scope="row">会上听、答</th><td>Nexus</td><td>同自用版。</td><td>会上的回答</td><td>Nexus 那边</td><td><span class="chip c-part">部分</span></td><td>溪南</td></tr>
+<tr><th scope="row">会后总结，只存不推</th><td>Nexus</td><td>王总版不逐条确认、不推给别人、不建执行事项，会后的东西存进去就行。</td><td>会后总结</td><td>待定：客户本体或议题记忆</td><td><span class="chip c-miss">未做</span></td><td>溪南；存哪待定</td></tr>
+<tr><th scope="row">接住总结</th><td>天枢伙伴</td><td>连好之前先人工把纪要喂进来（推动计划2 17:27）；溪南说花两三天先把会接上。</td><td>议题记忆</td><td>天枢</td><td><span class="chip c-miss">未做</span></td><td>我们和溪南</td></tr>
+<tr><th scope="row">会外对话</th><td>天枢伙伴，王总想聊就聊</td><td>围绕一两个议题。不让他打字：语音、点选项；短句、先回一句（spec 5.7）。</td><td>回答</td><td>天枢对话</td><td><span class="chip c-part">部分</span></td><td>对话我们做；回答质量归人豪</td></tr>
+<tr><th scope="row">下次预审接上</th><td>天枢伙伴</td><td>读议题记忆和上次的会后总结。</td><td>下一份预审</td><td>—</td><td><span class="chip c-miss">未做</span></td><td>我们</td></tr>
+<tr><th scope="row">部署</th><td>我们</td><td>一个客户一份独立部署；结构和自用版一样，四周后只迁一次数据（推动计划2 12:29–15:50）。要报风险，不卡现在。</td><td>—</td><td>独立的库、本体 scope、凭证</td><td><span class="chip c-miss">未做</span></td><td>我们</td></tr>
+</tbody></table></div>
+</section>
+
+<footer>
+  <span>天枢这边对过的代码：<code>meetings.ts</code>、<code>meetingFeishuEvent.ts</code>、<code>feishu/calendar.ts</code>、<code>meetingPreflight.ts</code> / <code>preflightAgent.ts</code>、<code>meetingMinutes.ts</code>、<code>outcome.ts</code>、<code>meetingCardConfirm.ts</code>、<code>worldMeetingEvent.ts</code>、<code>routes/internalMeetings.ts</code>。</span>
+  <span>会议里的 Nexus 不在天枢仓库里（<code>apps/m2</code> 里的 Nexus 是 M2 复盘讨论用的）。Nexus 那几步按今天的会和 10/29 分工会写，做到哪以溪南说的为准。</span>
+  <span>设计文档：<code>.scratch/next-phase/spec.md</code> 5.6、5.7；<code>.scratch/inception-ceo-buddy/spec.md</code>。</span>
+</footer>
+</div>

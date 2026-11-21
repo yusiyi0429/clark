@@ -99,7 +99,7 @@ export function createDocChangeService(deps: {
     await client.query("INSERT INTO request_recipients (request_id, person_id) VALUES ($1, $2)", [requestId, input.recipientId]);
     await insertNotification(client, { personId: input.recipientId, kind: "request_received", objectType: "request", objectId: requestId, actorId: input.initiatorId });
     if (deps.feishu) {
-      await feishuNotifier(client.query.bind(client))({ personId: input.recipientId, title: input.title.slice(0, 200), body: input.feishuBody,
+      await feishuNotifier(client.query.bind(client))({ personId: input.recipientId, source: "doc_change", title: input.title.slice(0, 200), body: input.feishuBody,
         links: [{ label: input.label, path: deps.pathFor(input.recipientId, requestId) }] }, input.dedupeKey);
     }
     return requestId;

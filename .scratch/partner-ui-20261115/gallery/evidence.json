@@ -1,0 +1,1661 @@
+{
+  "generatedAt": "2026-11-14T17:42:46.763Z",
+  "baselineRef": "a1f365a1",
+  "currentHead": "a1f365a16b25b5d06d07961c2df7907f81d692ca",
+  "fixtureTime": "2026-11-15T04:00:00.000Z",
+  "dependencyContext": {
+    "node": "v24.15.0",
+    "esbuild": "0.28.2",
+    "lockSha256": "b82e69e38f6eb284fdc927271688da8c26f96133093746c9c869d74ef748bb49",
+    "baselineDependencies": "Both source revisions use the currently installed, unchanged dependencies."
+  },
+  "process": "Actual React renderToStaticMarkup; esbuild local-css; original globals compiled with installed Tailwind/PostCSS. Fixture-only feed alias and initial fetched list seeds, no source file edits.",
+  "baseline": {
+    "fixtureInitializerEdits": [
+      "components/meeting/MeetingWorkHandoffs.tsx: useState<TMeetingWorkHandoffs[\"items\"]>([])",
+      "components/meeting/MeetingWorkHandoffs.tsx: useState<TMeetingWorkTargetOption[]>([])",
+      "components/home/WorkIntake.tsx: useState<TWorkIntakeEntry[]>([])"
+    ],
+    "facts": {
+      "sent": {
+        "bytes": 6220,
+        "buttons": 4,
+        "disclosures": 0,
+        "openDisclosures": 0,
+        "classNames": [
+          "partnerTeam_card",
+          "partnerTeam_cardHead",
+          "lucide",
+          "lucide-message-square",
+          "partnerTeam_body",
+          "partnerTeam_source",
+          "lucide-external-link",
+          "partnerTeam_fileList",
+          "partnerTeam_attachment",
+          "lucide-file-text",
+          "partnerTeam_note",
+          "partnerTeam_recipients",
+          "partnerTeam_person",
+          "partnerTeam_personHeading",
+          "partnerTeam_status",
+          "partnerTeam_replies",
+          "partnerTeam_replyHead",
+          "partnerTeam_linkButton",
+          "lucide-forward",
+          "partnerTeam_rowTools",
+          "partnerTeam_secondary",
+          "partnerTeam_error"
+        ]
+      },
+      "incoming": {
+        "bytes": 3539,
+        "buttons": 3,
+        "disclosures": 0,
+        "openDisclosures": 0,
+        "classNames": [
+          "partnerTeam_card",
+          "partnerTeam_cardHead",
+          "lucide",
+          "lucide-message-square",
+          "partnerTeam_body",
+          "partnerTeam_source",
+          "lucide-external-link",
+          "partnerTeam_linkButton",
+          "partnerTeam_fileList",
+          "partnerTeam_attachment",
+          "lucide-file-text",
+          "partnerTeam_note",
+          "partnerTeam_recipients",
+          "partnerTeam_person",
+          "partnerTeam_personHeading",
+          "partnerTeam_status",
+          "partnerTeam_replies",
+          "partnerTeam_replyHead",
+          "partnerTeam_rowTools",
+          "partnerTeam_secondary"
+        ]
+      },
+      "meetings": {
+        "bytes": 3321,
+        "buttons": 2,
+        "disclosures": 0,
+        "openDisclosures": 0,
+        "classNames": [
+          "partner_meetings_inbox",
+          "home_sectionTitle",
+          "partner_meetings_rows",
+          "partner_meetings_row",
+          "partner_meetings_rowBody",
+          "partner_meetings_subject",
+          "partner_meetings_title",
+          "partner_meetings_meta",
+          "partner_meetings_actions",
+          "partner_meetings_link",
+          "partner_meetings_preflight"
+        ]
+      },
+      "handoffs": {
+        "bytes": 3400,
+        "buttons": 5,
+        "disclosures": 3,
+        "openDisclosures": 0,
+        "classNames": [
+          "meeting_work_handoffs_panel",
+          "meeting_work_handoffs_entry",
+          "meeting_work_handoffs_value",
+          "meeting_work_handoffs_meta",
+          "meeting_work_handoffs_source",
+          "meeting_work_handoffs_receipts"
+        ]
+      },
+      "status": {
+        "bytes": 5696,
+        "buttons": 10,
+        "disclosures": 1,
+        "openDisclosures": 0,
+        "classNames": [
+          "sub_session_summary_root",
+          "sub_session_summary_toggle",
+          "lucide",
+          "lucide-chevron-right",
+          "sub_session_summary_chevron",
+          "sub_session_summary_count",
+          "sub_session_summary_attention",
+          "sub_session_summary_body",
+          "sub_session_summary_project",
+          "sub_session_summary_list",
+          "sub_session_summary_row",
+          "home_state",
+          "lucide-loader-circle",
+          "lucide-loader-2",
+          "home_letter",
+          "sub_session_summary_title",
+          "sub_session_summary_stage",
+          "lucide-check",
+          "lucide-circle",
+          "home_line",
+          "button",
+          "button--sm",
+          "button--ghost"
+        ]
+      }
+    },
+    "cssChecks": [
+      {
+        "scene": "sent",
+        "cssModuleClasses": 17,
+        "unmatched": []
+      },
+      {
+        "scene": "incoming",
+        "cssModuleClasses": 16,
+        "unmatched": []
+      },
+      {
+        "scene": "meetings",
+        "cssModuleClasses": 11,
+        "unmatched": []
+      },
+      {
+        "scene": "handoffs",
+        "cssModuleClasses": 6,
+        "unmatched": []
+      },
+      {
+        "scene": "status",
+        "cssModuleClasses": 14,
+        "unmatched": []
+      }
+    ],
+    "targetSourceFiles": [
+      "components/home/PartnerTeamCard.tsx",
+      "components/home/partnerTeam.module.css",
+      "components/home/PartnerMeetings.tsx",
+      "components/home/partner-meetings.module.css",
+      "components/meeting/MeetingWorkHandoffs.tsx",
+      "components/meeting/meeting-work-handoffs.module.css",
+      "components/home/WorkIntake.tsx",
+      "components/home/SubSessionSummary.tsx",
+      "styles/sub-session-summary.module.css",
+      "app/globals.css",
+      "app/heroui-tianshu.css",
+      "app/scheme-dark.css"
+    ],
+    "sourceHashes": {
+      "components/home/PartnerTeamCard.tsx": "624e2bbf6cbd77add90836b3050da021fa837ea6c9a3a064d093e1dce497d67c",
+      "components/home/partnerTeam.module.css": "12fc4926c0ffb63911af1b3c3a052c420f69c1e9f4b89ec3617ef6142070652e",
+      "components/home/PartnerMeetings.tsx": "faa2e43d46f2ef15c9aa51ca398dafa4f0c8a34d9797802622e17867b8d75efd",
+      "components/home/partner-meetings.module.css": "b6de2d9305461b85e33185229628a6668201b323601ffc85cbf8438406ae5e61",
+      "components/meeting/MeetingWorkHandoffs.tsx": "8eb9b906507f05fbf42b36765a8bf694a820ba23052e5ac139a66c0167163603",
+      "components/meeting/meeting-work-handoffs.module.css": "995cd14c9816c105f60bc66e130d9ff3577d62b283a94fec9e97fb617ed9748f",
+      "components/home/WorkIntake.tsx": "9db58129fbe48bfd50e5990e5d07797bf7ad08e8cf6d56f9d524b827baccf58b",
+      "components/home/SubSessionSummary.tsx": "0d728cc57fe8e5430bcfd7ea51e90ea5b68b4abfff590fbf88dfe72c6c551a65",
+      "styles/sub-session-summary.module.css": "604a802fea8d029b100e227c31b34393823ae361f41f47ee71ac4068953bfbc7",
+      "app/globals.css": "553ea2a25a8bc342732e1bf0456453166dff0fd55fc6793bd0b87d5ae18d384c",
+      "app/heroui-tianshu.css": "d34bcf4ca45eb4426e922fb7cf9615713e936027bc416ae2259b31853c607f2b",
+      "app/scheme-dark.css": "3fe3f9e4c2268b42de9f28f02ec88ae3e4aa98f24214627c66294cbea8733c2f"
+    },
+    "bundledSourceModules": {
+      "lib/companyTime.ts": {
+        "sha256": "6567d046b20f28e8165b165e80fcf4da8ac0c0eafa829584eb6f48a3bbd48216",
+        "retainedBytes": 1440
+      },
+      "lib/home/attachments.ts": {
+        "sha256": "2d70c09fad59bc22cf6947d4537344ae8295cbf97c0d205456f1275ec988da61",
+        "retainedBytes": 2120
+      },
+      "lib/home/teamIntent.ts": {
+        "sha256": "7a93450c58d23158e57dcc7db027ff1f9ffb4d6f09b6b59be06f522602b8ac7c",
+        "retainedBytes": 211
+      },
+      "lib/displayText.ts": {
+        "sha256": "b721d4948030b348735b758515c6d600be7db9bdc569f2faf96d748d442f4651",
+        "retainedBytes": 3091
+      },
+      "lib/api/client.ts": {
+        "sha256": "f7af750964aa876804640263ce5057042652ddf63f22b7282bfaed5feb58c968",
+        "retainedBytes": 1157
+      },
+      "lib/home/teamDelivery.ts": {
+        "sha256": "bb00b233b65547231305f345ea21bd4fe0fbdb01c651971ff43ed1bc087223ea",
+        "retainedBytes": 1866
+      },
+      "components/home/partnerTeam.module.css": {
+        "sha256": "12fc4926c0ffb63911af1b3c3a052c420f69c1e9f4b89ec3617ef6142070652e",
+        "retainedBytes": 9560
+      },
+      "components/home/PartnerTeamFiles.tsx": {
+        "sha256": "e7695acf6aab3be7a7c83e2fa845831a84efd72cc942ac2a5788eee9ae1f6456",
+        "retainedBytes": 7846
+      },
+      "components/home/PartnerTeamCard.tsx": {
+        "sha256": "624e2bbf6cbd77add90836b3050da021fa837ea6c9a3a064d093e1dce497d67c",
+        "retainedBytes": 15176
+      },
+      "components/HeroButton.tsx": {
+        "sha256": "5cf83e0822f07645857188567adcf07d14486c20691c4c92979a4b82fe0268b5",
+        "retainedBytes": 441
+      },
+      "lib/home/meeting.ts": {
+        "sha256": "0c73ef2fe286c64ad7e393df8176e57b069a665ee2e736ad24b33adc4701a477",
+        "retainedBytes": 1156
+      },
+      "lib/feishuLogin.ts": {
+        "sha256": "1d13cfce1df7fbb1991a2c35b9c20d6bbd26b8664ed2f60f373fe31b6f0861f6",
+        "retainedBytes": 393
+      },
+      "lib/toast.ts": {
+        "sha256": "d99a5f572a520615f4d87c1e0d22a4db68ca7f1cd13d059385db111a1ca587f2",
+        "retainedBytes": 356
+      },
+      "styles/material-tabs.module.css": {
+        "sha256": "0cd6caeb2f6a0e4d90aaab2e1cb3f653ae7a12ae823659bd824ca9ac1fdd6106",
+        "retainedBytes": 6591
+      },
+      "components/shell/MaterialTabs.tsx": {
+        "sha256": "e2a85f0b310f7509ba27df705b3ece06569d171097acdf3aef6284b280312bc8",
+        "retainedBytes": 219
+      },
+      "styles/header-capsule.module.css": {
+        "sha256": "e8647f3f5c6648d77f66ddbed5715ea262e01ad721e6d94a5bd7b520486eaae1",
+        "retainedBytes": 11117
+      },
+      "styles/detail-frame.module.css": {
+        "sha256": "a365346a8b15ebcc952fc1f38fcdbbf0deb59c255a8cf3d336053f1a955be9df",
+        "retainedBytes": 347
+      },
+      "components/shell/DetailFrame.tsx": {
+        "sha256": "ae886bf0263b5be48ddfd5f657ddc71cfe720866fb8c1661116436142386cbad",
+        "retainedBytes": 1767
+      },
+      "components/ui/useHandheld.ts": {
+        "sha256": "2c6fb9ed3d89ee2f0b1b43316d70bb1168266cabd50e92b6b1ca11bf0c0ce781",
+        "retainedBytes": 652
+      },
+      "components/ui/picker.module.css": {
+        "sha256": "4764098c6e52bce9729799467fcc97a840554c83c7f0d534803712c330f67c0b",
+        "retainedBytes": 10238
+      },
+      "components/ui/Select.tsx": {
+        "sha256": "67ac0e1c32a2a2554a1707c9a1b87a25cdd22e47962e177f9ae5062b3d1d841f",
+        "retainedBytes": 4701
+      },
+      "components/ui/pickerFormat.ts": {
+        "sha256": "9f702d8cb30321cb82b7ee9ae5d852aae41750d1652c0459d097156bb482469b",
+        "retainedBytes": 1063
+      },
+      "components/ui/DatePicker.tsx": {
+        "sha256": "d2329a3359aec5c75ec13957e61e6295be81c43515e5c9ae85cb5d7ed7e1a4b2",
+        "retainedBytes": 6639
+      },
+      "components/ui/side-panel.module.css": {
+        "sha256": "c0ff14770dc8ae134a02214a13809831a5360606a7621c13d005d0c2b3dcbf49",
+        "retainedBytes": 2134
+      },
+      "components/ui/SidePanel.tsx": {
+        "sha256": "9e4bfecb8694b8fd60a5ba91908ce846007cf2a7fcc694996ab0f205974fa786",
+        "retainedBytes": 664
+      },
+      "components/meeting/meetingDecisionApi.ts": {
+        "sha256": "3987b75525a249d0e77f755980bf0e2857ccacc86b8f65186378bcdca6d8d8d4",
+        "retainedBytes": 2430
+      },
+      "components/meeting/meeting-decisions.module.css": {
+        "sha256": "5dcb62763db5f2d23efd5ad7a5a0150b185c87705cc5374a58dff4c907e80108",
+        "retainedBytes": 12142
+      },
+      "components/meeting/WorldAnchorPicker.tsx": {
+        "sha256": "cf4a366fef74d3bd576013f26a658fa2485fb7d0f0cee43d028362d3de842d83",
+        "retainedBytes": 8003
+      },
+      "components/meeting/MeetingBookingSheet.tsx": {
+        "sha256": "7140228ff298aa792eefb12199deca059c81fff44dfdedbbc2214a7aec422f7f",
+        "retainedBytes": 21330
+      },
+      "components/coagent/presence.ts": {
+        "sha256": "33d6ad62554e19ecd15541cca1d77421a89289671955f38769d5927e65d0a246",
+        "retainedBytes": 315
+      },
+      "components/meeting/useMeetingRecorder.ts": {
+        "sha256": "ffffa8476722906fa9401a71baf1d29fbc0377e774224e5b4939595d8c230076",
+        "retainedBytes": 48
+      },
+      "styles/home.module.css": {
+        "sha256": "2f4a4b7ced73c378e02f47c35aea4d53319e416901146542ac7c334585a34fc6",
+        "retainedBytes": 77694
+      },
+      "components/home/StateIcon.tsx": {
+        "sha256": "8aaeace1aff1d7c47e449ff568e444c7c843b9c92bb8eeed5d071da172a27ef0",
+        "retainedBytes": 1216
+      },
+      "components/home/partner-meetings.module.css": {
+        "sha256": "b6de2d9305461b85e33185229628a6668201b323601ffc85cbf8438406ae5e61",
+        "retainedBytes": 5199
+      },
+      "components/home/MeetingControl.tsx": {
+        "sha256": "6666e86829ea2c63e0a43f309862620b16010ff59ee1a56bcce985ad1d38d757",
+        "retainedBytes": 107
+      },
+      "components/home/PartnerMeetings.tsx": {
+        "sha256": "faa2e43d46f2ef15c9aa51ca398dafa4f0c8a34d9797802622e17867b8d75efd",
+        "retainedBytes": 14596
+      },
+      "lib/board/cloud.ts": {
+        "sha256": "81aaa710b49386acdbd14e9a064a360b7b6d60e2474ba7de0b96f13a94e61d93",
+        "retainedBytes": 953
+      },
+      "components/home/pageKeys.ts": {
+        "sha256": "249405b790f3424168993c9536af91acb4fecbd91c4766c889ae9404a9423926",
+        "retainedBytes": 0
+      },
+      "lib/local/runModel.ts": {
+        "sha256": "7adca8239d44c231783c46d9a521fc4b046f5ea04b24a25b11889a2c54442649",
+        "retainedBytes": 0
+      },
+      "lib/local/modelPanel.ts": {
+        "sha256": "010cf59face56ae28ce9a7311d1b1e5e6c5cde0f844f97da9c202edeb67142d3",
+        "retainedBytes": 0
+      },
+      "lib/team/roles.ts": {
+        "sha256": "69434bc0c9d13bb853a7f68acd97d5bfb4a538ab09d2fa443443485a07917ba5",
+        "retainedBytes": 241
+      },
+      "lib/board/cards.ts": {
+        "sha256": "beb519fad81dad7e623134a4619fa5870c1201d16ef8fc6ba4130d62c982dcfb",
+        "retainedBytes": 0
+      },
+      "lib/home/quota.ts": {
+        "sha256": "e32075cd3ec95e1fd2898bd7f67cde473cb0448de010957684372f989b9764ea",
+        "retainedBytes": 310
+      },
+      "lib/work/workers.ts": {
+        "sha256": "2869ece955b54e79fe1a408e2582ecddf611f273c0448baa69b736ff113f8355",
+        "retainedBytes": 209
+      },
+      "lib/home/derive.ts": {
+        "sha256": "5a18ca2fb100c0b9c094dec882294cda18162300458c7b008e852d909fe9b8f7",
+        "retainedBytes": 1340
+      },
+      "components/meeting/meeting-work-handoffs.module.css": {
+        "sha256": "995cd14c9816c105f60bc66e130d9ff3577d62b283a94fec9e97fb617ed9748f",
+        "retainedBytes": 3224
+      },
+      "components/meeting/MeetingWorkHandoffs.tsx": {
+        "sha256": "8eb9b906507f05fbf42b36765a8bf694a820ba23052e5ac139a66c0167163603",
+        "retainedBytes": 18533
+      },
+      "components/memory/memoryModel.ts": {
+        "sha256": "2283e259867452064f27e4f089395e0be85ab1fa53cd80fd110c9e6b300d019c",
+        "retainedBytes": 240
+      },
+      "components/home/WorkIntake.tsx": {
+        "sha256": "9db58129fbe48bfd50e5990e5d07797bf7ad08e8cf6d56f9d524b827baccf58b",
+        "retainedBytes": 6679
+      },
+      "components/onboarding/SiriWave.tsx": {
+        "sha256": "030fd3b5bdcccb74de444d61fdf02aa03ee4cfd747a188e560d398ab017778dd",
+        "retainedBytes": 107
+      },
+      "components/coagent/cmeiArt.ts": {
+        "sha256": "cdff3a024e22edf3d2a24b73bfb3679ca139b711a118ae03fd34fd7c5ae64cdd",
+        "retainedBytes": 0
+      },
+      "components/coagent/milesArt.ts": {
+        "sha256": "7240465d176bde1f14e8b50b2a1ca2c3a17c77ad716d3631d36db2a008bd516b",
+        "retainedBytes": 0
+      },
+      "components/coagent/milesRig.ts": {
+        "sha256": "1867de5d81b789a0d96b14b8e5d5b15365862dc0e9e213a9dae42de2ca49c8c2",
+        "retainedBytes": 0
+      },
+      "styles/coagent-miles.module.css": {
+        "sha256": "076093626cef517153295d49b4390b8ad24b14f19a76cf2337c75df0d664fb38",
+        "retainedBytes": 1782
+      },
+      "components/coagent/MilesCapsule.tsx": {
+        "sha256": "5d6e3a535df08087b1722e0e7627c850f76d47eb514d545a308f518d792e5589",
+        "retainedBytes": 107
+      },
+      "components/coagent/skin.ts": {
+        "sha256": "986f3ff620e1ed73e135ebbfa7e60a356da65dffd2eecdc480efcf0b41ae8a98",
+        "retainedBytes": 229
+      },
+      "styles/coagent-capsule.module.css": {
+        "sha256": "e6af2ba282fdb46e94401548d4f52c93f71bcb550c721c276ec9b04a5596433e",
+        "retainedBytes": 8130
+      },
+      "components/coagent/PresenceCapsule.tsx": {
+        "sha256": "5c01bf1347deac6d697b8b4c4bccad065d3c4ea2852ec7158f2362b7e3702c79",
+        "retainedBytes": 107
+      },
+      "styles/coagent-skin-picker.module.css": {
+        "sha256": "e9b7819eb0a9b6f5d831ad43c7321be8812bd85ec8056639f1b5cf9b9f7444b6",
+        "retainedBytes": 1049
+      },
+      "components/coagent/SkinPicker.tsx": {
+        "sha256": "6f7cf30e6d6b613862bb34a01ed6ddac4d6490d3eadc9741b233240e172c5177",
+        "retainedBytes": 107
+      },
+      "styles/buddy-mark.module.css": {
+        "sha256": "d3540921e64b0120481b644c1f902317c71d0e64e32c0e6eb451021fcb1db1f9",
+        "retainedBytes": 2957
+      },
+      "components/buddy/BuddyMark.tsx": {
+        "sha256": "db6a00b2f57b55e6e1f55b8f870e94d8f868126f5b3ca67843068d60a5d5e1cb",
+        "retainedBytes": 59
+      },
+      "lib/home/transfer.ts": {
+        "sha256": "6735b84f9a1d1d3b1bf0e639d5182c1c523419c21b9eabf5f614752a0041bfb3",
+        "retainedBytes": 0
+      },
+      "lib/home/projects.ts": {
+        "sha256": "28b2be10f006d99976ca73e7a383e11d9539d1965fd78e4c46d9fc6bbaa9d095",
+        "retainedBytes": 0
+      },
+      "styles/person-avatar.module.css": {
+        "sha256": "6a67c4046001ced5efcf1a7e2bf18a03a6b89f31a7ba21991d40eeb8ebd116f4",
+        "retainedBytes": 121
+      },
+      "components/avatar/PersonAvatar.tsx": {
+        "sha256": "28ef57cdf8edff4bd86a634a3ec4fc125b0c9c7478e1604bda17e91ef7dfdf06",
+        "retainedBytes": 107
+      },
+      "conversation/dictationSignal.ts": {
+        "sha256": "0cbacbf0951ac7c0875e64386780ad1d9494df0655f64129150549127eac98d4",
+        "retainedBytes": 48
+      },
+      "lib/logout.ts": {
+        "sha256": "b4a5cc3f0faef906780bc4749abdb47c557dbfe4f3dde13dc0467f47067fa6ef",
+        "retainedBytes": 0
+      },
+      "components/member/useVoiceprintEnrollment.ts": {
+        "sha256": "81f520c8289113428de10b54b1e37b79c3a1170bbb7a61e907f2cc8686997e32",
+        "retainedBytes": 48
+      },
+      "styles/voiceprint.module.css": {
+        "sha256": "d85b71947cb5579dd11e76294caab52758bf9bf3d2e15e1b18d4811a9685a4df",
+        "retainedBytes": 1620
+      },
+      "components/member/VoiceprintCard.tsx": {
+        "sha256": "15c594a1cfd7c75d3834297cbf4ad7a400d051226f92cbc9d716650c4cc61116",
+        "retainedBytes": 59
+      },
+      "components/radar/personalRadar.ts": {
+        "sha256": "368e94c6d533dbfd81df31582b3b8d8de09a768199ced34c69d01befd4f62e7a",
+        "retainedBytes": 0
+      },
+      "components/onboarding/foundation.module.css": {
+        "sha256": "935bd7593e3c2413747545bc0a915a30abc9535f29d9ddf41ed33ca434c077a8",
+        "retainedBytes": 12085
+      },
+      "styles/radar-settings.module.css": {
+        "sha256": "4dc81ea52809e0d84669d4fb33a9e53fa827a20fcc608a42c3fcc976286e6340",
+        "retainedBytes": 14465
+      },
+      "components/radar/RadarSettingsForm.tsx": {
+        "sha256": "13e82bfd0dcf469c6df009b401f47d05fcfc58c49089ffffaaec2586e8b3b393",
+        "retainedBytes": 113
+      },
+      "components/radar/RadarSettingsEditor.tsx": {
+        "sha256": "66ad1de363b8b13f100196c965ed6a04305bc070f93135d6b545c60771989c5c",
+        "retainedBytes": 163
+      },
+      "styles/account-menu.module.css": {
+        "sha256": "59da22be7e7cd6d0db18c8f4f5b094ab90bf9adcc32d1ea5177733c4d977ccb1",
+        "retainedBytes": 9967
+      },
+      "styles/confirm-dialog.module.css": {
+        "sha256": "cf18986c3e84b09b5ce8bd37d4814907923fad796403cb958cb3edc76ce630d0",
+        "retainedBytes": 1541
+      },
+      "components/ConfirmDialog.tsx": {
+        "sha256": "10ff9fa8fa8b5f08c20993fa99ca927eba48d536098130381dac325da6bb66ed",
+        "retainedBytes": 107
+      },
+      "lib/connectionGuide.ts": {
+        "sha256": "fb78549a4a85951d376068044be4a09adfa387a9641556bf83965c50c5a04b74",
+        "retainedBytes": 0
+      },
+      "styles/connection-dialog.module.css": {
+        "sha256": "abedbdf00dfd98822c713ab83dc4b80e3cff41363d11a3ea75b1672ebf531f2e",
+        "retainedBytes": 9142
+      },
+      "components/TianshuMark.tsx": {
+        "sha256": "844b0fd9d5225649e48e6b15c0976324e382a63d36787079a7dc07b9ea1ee39c",
+        "retainedBytes": 107
+      },
+      "components/agent-pair.module.css": {
+        "sha256": "9715fce926873ce15b92e06fafef4181e24e971041538f6de84193ba95731eea",
+        "retainedBytes": 1909
+      },
+      "components/AgentPair.tsx": {
+        "sha256": "da8f35b6e2a69fd780039c199a79fa3068f25e93d6ef8723e5531b2f3de9b2ac",
+        "retainedBytes": 59
+      },
+      "components/OAuthConnectForm.tsx": {
+        "sha256": "8649e8b04c812ce577ac1ccfca2e47b6ae46397383bbd285fd5b0fe8b62a6fe4",
+        "retainedBytes": 162
+      },
+      "components/ConnectAgentForm.tsx": {
+        "sha256": "221ee66e935254cfd12d779f8fdc2b2a306831724e152d9a9fd8dc67f7235c89",
+        "retainedBytes": 162
+      },
+      "components/ConnectionDialog.tsx": {
+        "sha256": "1c2cf2abc9a31db5fc121419fccfadc88934c549fefd6385139e1164d8d603b2",
+        "retainedBytes": 107
+      },
+      "styles/buddy-personality.module.css": {
+        "sha256": "e55f2cd8e21d90605f0e8ed979e7237ec31fcaea0abff67cbed5aa505436527d",
+        "retainedBytes": 1272
+      },
+      "components/buddy/PersonalityPicker.tsx": {
+        "sha256": "afae0ad208c1573cc0336ff3e68421aa0bbb8d8a493941108e932c96e9d3fd93",
+        "retainedBytes": 59
+      },
+      "app/access/lastLogin.ts": {
+        "sha256": "c38da711d4667f84bd49075947ab9ba2b4eb26f6bafd4423930bc5344ae4909d",
+        "retainedBytes": 59
+      },
+      "components/buddy/useBuddy.ts": {
+        "sha256": "14f7921f0edb9ece5eb96f8099c431ca479a91d81855e9354a66686dc79315fc",
+        "retainedBytes": 48
+      },
+      "styles/buddy-picker.module.css": {
+        "sha256": "0e6db605041c1ef170ec07150fd06af77ecdce0fe9a6d15b5dce311774321a73",
+        "retainedBytes": 504
+      },
+      "components/buddy/BuddyPicker.tsx": {
+        "sha256": "565cd52915c46762f730fabcb00440d7006280135d8800ecb8768e3994422501",
+        "retainedBytes": 107
+      },
+      "components/buddy/BuddySettings.tsx": {
+        "sha256": "b0b39b917026d4a51bd871f061709e56c8a8cf97634843ae2c5fa703a90c669f",
+        "retainedBytes": 107
+      },
+      "components/railBackground/useRailBackground.ts": {
+        "sha256": "029def24eb7206d170ffe482a50749e2888aa8e5f4f482c71e06ccef11b9e5c1",
+        "retainedBytes": 48
+      },
+      "styles/rail-background.module.css": {
+        "sha256": "bf760c662f4bd484c41f466cbe30a6a28182b25ecb1e962c530f86db0d7228cb",
+        "retainedBytes": 4482
+      },
+      "components/railBackground/RailBackgroundSettings.tsx": {
+        "sha256": "861e8b48c25842a6b75df6b81a283724da789d65cbf13c9e0499bc76879f5728",
+        "retainedBytes": 107
+      },
+      "styles/avatar-editor.module.css": {
+        "sha256": "15ec408f0edad2b89964e165a863a5ea1ef53ddbd970d8d4429ced550264c4fe",
+        "retainedBytes": 923
+      },
+      "components/avatar/AvatarEditor.tsx": {
+        "sha256": "f60eb1e2400407ba4fa57bee89cbc25e6d58bc742bcdd18ef38c15d74d6bd5f9",
+        "retainedBytes": 107
+      },
+      "conversation/stableCallback.ts": {
+        "sha256": "c16b9e59ef2c28c5b275daecd3bf888fac8d6f3d3d18948734d7db29ddd0e740",
+        "retainedBytes": 48
+      },
+      "conversation/voiceKeys.ts": {
+        "sha256": "063dabdf73717c524352040bd3a123a12172a8d7c54f2a87335c0936dd6b6417",
+        "retainedBytes": 0
+      },
+      "styles/voice-keys.module.css": {
+        "sha256": "858e939d9158e8b00fc56190f6c569f49ffcff7570abfd21e3f5586689b3af92",
+        "retainedBytes": 6865
+      },
+      "conversation/VoiceKeysDialog.tsx": {
+        "sha256": "558d7a247a98604fc93a7929d29f08d7a50ad904100f90dee3f28e6e39aaca43",
+        "retainedBytes": 107
+      },
+      "components/onboarding/setup.module.css": {
+        "sha256": "7e0210e00203adff0651ef5b3252a09c9cd290c728ac8945371d2d28285e9672",
+        "retainedBytes": 4283
+      },
+      "components/CollectorUninstall.tsx": {
+        "sha256": "31d0d87b3b0ec4ab7aa23a416891f5a2b82d8fd970683fb02341962030eed170",
+        "retainedBytes": 107
+      },
+      "components/task-quality/taskQualityStatus.ts": {
+        "sha256": "a114416f538ad29191bdb07ff0182f979645865a7074cfb5ccff6b361136972f",
+        "retainedBytes": 0
+      },
+      "components/PersonalProfileForm.tsx": {
+        "sha256": "5dd9d20b87290c75ea6d633bf4092a460bcf2f05283d12da95d64e3ef58523be",
+        "retainedBytes": 107
+      },
+      "components/WechatConnect.tsx": {
+        "sha256": "b95c9440f20d69a2cb350e999c931a6f3217896efade8149ed2cf9ed60fc44e6",
+        "retainedBytes": 107
+      },
+      "components/AccountMenu.tsx": {
+        "sha256": "87f56195001c81aa6555cfc9e5addf50ae0b3b4226528367d47459999c173c61",
+        "retainedBytes": 107
+      },
+      "components/home/view.ts": {
+        "sha256": "ebbdd3293612be303c5465a69538408d7835cddf812fce0a8a42e35a1891dd6d",
+        "retainedBytes": 130
+      },
+      "components/home/PersonMenu.tsx": {
+        "sha256": "d989effeb145cc7b0acfe5aeac201ee631fc7fe9cd061e7a57936b99e79ea24a",
+        "retainedBytes": 107
+      },
+      "styles/decision-box.module.css": {
+        "sha256": "ee1ccd835ca0a9e007fa027e55214373c560e5fe80aaded94a1b52076dd387f2",
+        "retainedBytes": 9423
+      },
+      "components/work/DecisionBox.tsx": {
+        "sha256": "89979bf4bce99028274720c4ef5de69fd432adc1ea497d784d534b657cde0d2e",
+        "retainedBytes": 170
+      },
+      "lib/local/runner.ts": {
+        "sha256": "50912ca3f4a3dc546e4e2a2f9af2b02679cc6dee386c36aa598dd8200dbc20ea",
+        "retainedBytes": 0
+      },
+      "lib/local/routes.ts": {
+        "sha256": "84473effe04c230d497c48e991311a6f898f60aba3189c65f7d829e09085c606",
+        "retainedBytes": 0
+      },
+      "lib/local/client.ts": {
+        "sha256": "625fd59315aa65a3dd8767aa71457c00ca3c0a754c43c410adef0c2b2b5ea42e",
+        "retainedBytes": 0
+      },
+      "lib/local/fileChanges.fixture.ts": {
+        "sha256": "2d85edeb7a85bbf786839a2ffc8ad7a5a2f688829ca6492a08ffcacab25f1db2",
+        "retainedBytes": 2125
+      },
+      "lib/local/mockChanges.ts": {
+        "sha256": "81b46ee25aa139b4b9e11f1cf805fc1db12f1b9fc03eac881a1073f61d579af0",
+        "retainedBytes": 1514
+      },
+      "lib/local/mock.ts": {
+        "sha256": "203bf2c59c9500691be37e05acb4d7f14ad6a843d2c19da6599137e1d16facaf",
+        "retainedBytes": 4404
+      },
+      "lib/local/connection.ts": {
+        "sha256": "1a40c29588be7202d5699ca6e84502111ba30fa1c72006ad93d35617bf421fc4",
+        "retainedBytes": 0
+      },
+      "lib/local/link.ts": {
+        "sha256": "40c391bf3c74fb60d0d6c5c1dcaaf3c6d9916f133dc04a7a78d5af9a4eddfbc1",
+        "retainedBytes": 0
+      },
+      "lib/local/LocalRunnerProvider.tsx": {
+        "sha256": "f1475159092800e49b13041793354fcfe8ac1311af4fe480ec4b26156d1c716a",
+        "retainedBytes": 168
+      },
+      "components/home/NewProjectDialog.tsx": {
+        "sha256": "2f4cf793360cd574423a9f06b565f837335369638396bf2e835b9ec415ba32ee",
+        "retainedBytes": 107
+      },
+      "components/home/NameTip.tsx": {
+        "sha256": "7747815f9070dc4051eccb42f2e3b47a0c9aef86f3464d736cbb8ccf2e4b5de9",
+        "retainedBytes": 107
+      },
+      "lib/local/sessionView.ts": {
+        "sha256": "14bdcfd1237142d245e66dee8844dc4a65f61c54a843d75e2bfb284e75922d99",
+        "retainedBytes": 0
+      },
+      "lib/home/seen.ts": {
+        "sha256": "45d279605957c3bbbb7b59a3254e1e48ce95ebd2349c8252df765d955d23c547",
+        "retainedBytes": 0
+      },
+      "components/home/RowMenu.tsx": {
+        "sha256": "e7719a478d451bb6a57c01b0fa7364016edf3588a07b6e1c4fbb8c8d43746e38",
+        "retainedBytes": 107
+      },
+      "components/home/LeftColumn.tsx": {
+        "sha256": "3ac27044e3eececa99e9f1f7cb3722644515613dd271bcc50332377c248eeb78",
+        "retainedBytes": 1689
+      },
+      "lib/local/permissionModes.ts": {
+        "sha256": "0bf7af25ac9271a0bd2030fbdbffe1178e67bc8c3116aee97b9dbcaaec1adb4d",
+        "retainedBytes": 0
+      },
+      "components/cards/PermissionMode.tsx": {
+        "sha256": "111b4d09aa5cfb6ac5a787e3a20a132271dedcd75b45dcd0e3a970420ebc40f3",
+        "retainedBytes": 174
+      },
+      "styles/entry-cards.module.css": {
+        "sha256": "0fe8c966879d3c4d73ef347c6d80e33bd42a7afb865e73f818e4f609517ac193",
+        "retainedBytes": 5547
+      },
+      "styles/ask-panel.module.css": {
+        "sha256": "ae91b61091db94bc8eaa9877bb2073976358142936b2403121972eb33023485a",
+        "retainedBytes": 7065
+      },
+      "conversation/AskPanel.tsx": {
+        "sha256": "33650ece11edd9ec9c3ad3a1c04ba88f6c37ca382c2e5fa2a2ff05a67c73bc19",
+        "retainedBytes": 166
+      },
+      "components/work/decisions.tsx": {
+        "sha256": "ce832da00f853566b73d09c2a3e4a47514f3d828bcb5470e853529d12202d185",
+        "retainedBytes": 107
+      },
+      "styles/segmented-switch.module.css": {
+        "sha256": "b76b65cb924e8681a8d3081c5cde8d0f71e1b1342cb10be3e45bb09c391aefbc",
+        "retainedBytes": 1899
+      },
+      "components/SegmentedSwitch.tsx": {
+        "sha256": "a3eb691140d79ed7c998eec5ae30536668d495c82f9016ffdf63cc5c2a3de50e",
+        "retainedBytes": 59
+      },
+      "lib/work/actions.ts": {
+        "sha256": "3527c8b65a7b7290e0891e69c406fd61f45742166a43a31f6da8a6e9256678c8",
+        "retainedBytes": 0
+      },
+      "styles/v2-work.module.css": {
+        "sha256": "c65979b839ef27e5544b131e24aade41308c86e181ec342791aca511c28f0055",
+        "retainedBytes": 476
+      },
+      "components/work/Slots.tsx": {
+        "sha256": "eba7b039a3fe14f61745ae65037b8d6a4db83ac44098cc51d86407fef684fa59",
+        "retainedBytes": 59
+      },
+      "lib/local/useSessionEvents.ts": {
+        "sha256": "c4220fdc319acee5d50ebaa43e02b3f98fb98bc541de468f500acde12a5f58d1",
+        "retainedBytes": 48
+      },
+      "lib/local/modelWords.ts": {
+        "sha256": "f58f73c8f1868fc619a57fb9979747eaf5fd2a8a8d11bfc634126bc2760124ed",
+        "retainedBytes": 0
+      },
+      "lib/local/start.ts": {
+        "sha256": "df52d9d3a944e9b505cdcfd9b152de4ecdbd008ed955077ac0ad8bf793b6a50e",
+        "retainedBytes": 0
+      },
+      "lib/work/queue.ts": {
+        "sha256": "d17f78203a7aca2f5fa810f9e3f058c26ea83441bcc28f71d67246424cf73c4b",
+        "retainedBytes": 0
+      },
+      "components/cards/SourceWords.tsx": {
+        "sha256": "0edb58dad13cbf1a68e8c0ebb19bf655b1950c24d66284af1d11b40b97f7b16d",
+        "retainedBytes": 59
+      },
+      "components/home/FolderAsk.tsx": {
+        "sha256": "762d838aaf83e9ab0a89c58933ea363ceebc21904a5959b27802e8dfdc3bbc85",
+        "retainedBytes": 107
+      },
+      "components/home/InputFooter.tsx": {
+        "sha256": "860fdd0fdddf776ba1d8f84c5ae30d14b57af4611ff609de17c6ca724dea21c8",
+        "retainedBytes": 107
+      },
+      "components/home/PlanDecision.tsx": {
+        "sha256": "ea8c6b143d5882d970d596cb5798b2e7eaa7b643ee8a436c50833d863f67efef",
+        "retainedBytes": 885
+      },
+      "styles/sub-session-summary.module.css": {
+        "sha256": "604a802fea8d029b100e227c31b34393823ae361f41f47ee71ac4068953bfbc7",
+        "retainedBytes": 3032
+      },
+      "components/home/SubSessionSummary.tsx": {
+        "sha256": "0d728cc57fe8e5430bcfd7ea51e90ea5b68b4abfff590fbf88dfe72c6c551a65",
+        "retainedBytes": 3548
+      }
+    },
+    "integrationModuleCoverage": {
+      "conversation/Transcript.tsx": {
+        "sha256": "0732b92ccf347a722339c0d8eca2711f454aba47a3d4b4ce83d41795f2494d76",
+        "importedByGallery": false,
+        "retainedBytes": 0,
+        "fullSurfaceRendered": false,
+        "scope": "Outside gallery target modules; not imported or rendered. Hash records final source provenance only."
+      },
+      "components/work/WorkTimeline.tsx": {
+        "sha256": "87787f4c71f89a9aed301e49a86cf95f9505b59499bf985fa74c04ab27aabb19",
+        "importedByGallery": false,
+        "retainedBytes": 0,
+        "fullSurfaceRendered": false,
+        "scope": "Outside gallery target modules; not imported or rendered. Hash records final source provenance only."
+      }
+    }
+  },
+  "current": {
+    "fixtureInitializerEdits": [
+      "components/meeting/MeetingWorkHandoffs.tsx: useState<TMeetingWorkHandoffs[\"items\"]>([])",
+      "components/meeting/MeetingWorkHandoffs.tsx: useState<TMeetingWorkTargetOption[]>([])",
+      "components/home/WorkIntake.tsx: useState<TWorkIntakeEntry[]>([])"
+    ],
+    "facts": {
+      "sent": {
+        "bytes": 6694,
+        "buttons": 4,
+        "disclosures": 3,
+        "openDisclosures": 0,
+        "classNames": [
+          "partnerTeam_card",
+          "partnerTeam_cardHead",
+          "lucide",
+          "lucide-message-square",
+          "partnerTeam_body",
+          "partnerTeam_source",
+          "lucide-external-link",
+          "partnerTeam_history",
+          "partnerTeam_historySummary",
+          "partnerTeam_fileList",
+          "partnerTeam_attachment",
+          "lucide-file-text",
+          "partnerTeam_note",
+          "partnerTeam_recipients",
+          "partnerTeam_person",
+          "partnerTeam_personHeading",
+          "partnerTeam_status",
+          "partnerTeam_rowTools",
+          "partnerTeam_replies",
+          "partnerTeam_replyHead",
+          "partnerTeam_linkButton",
+          "lucide-forward",
+          "partnerTeam_secondary",
+          "partnerTeam_error"
+        ]
+      },
+      "incoming": {
+        "bytes": 3853,
+        "buttons": 3,
+        "disclosures": 2,
+        "openDisclosures": 0,
+        "classNames": [
+          "partnerTeam_card",
+          "partnerTeam_cardHead",
+          "lucide",
+          "lucide-message-square",
+          "partnerTeam_body",
+          "partnerTeam_source",
+          "lucide-external-link",
+          "partnerTeam_linkButton",
+          "partnerTeam_history",
+          "partnerTeam_historySummary",
+          "partnerTeam_fileList",
+          "partnerTeam_attachment",
+          "lucide-file-text",
+          "partnerTeam_note",
+          "partnerTeam_recipients",
+          "partnerTeam_person",
+          "partnerTeam_personHeading",
+          "partnerTeam_status",
+          "partnerTeam_rowTools",
+          "partnerTeam_secondary",
+          "partnerTeam_replies",
+          "partnerTeam_replyHead"
+        ]
+      },
+      "meetings": {
+        "bytes": 5530,
+        "buttons": 2,
+        "disclosures": 6,
+        "openDisclosures": 0,
+        "classNames": [
+          "partner_meetings_inbox",
+          "home_sectionTitle",
+          "partner_meetings_later",
+          "partner_meetings_rows",
+          "partner_meetings_row",
+          "partner_meetings_rowBody",
+          "partner_meetings_subject",
+          "partner_meetings_title",
+          "partner_meetings_meta",
+          "partner_meetings_status",
+          "partner_meetings_actions",
+          "partner_meetings_link",
+          "partner_meetings_primary",
+          "partner_meetings_sources",
+          "partner_meetings_sourceBody",
+          "partner_meetings_event",
+          "partner_meetings_preflight"
+        ]
+      },
+      "handoffs": {
+        "bytes": 6399,
+        "buttons": 5,
+        "disclosures": 5,
+        "openDisclosures": 1,
+        "classNames": [
+          "meeting_work_handoffs_panel",
+          "meeting_work_handoffs_entry",
+          "meeting_work_handoffs_header",
+          "meeting_work_handoffs_title",
+          "meeting_work_handoffs_value",
+          "meeting_work_handoffs_progress",
+          "meeting_work_handoffs_next",
+          "meeting_work_handoffs_receiptDetails",
+          "meeting_work_handoffs_receipts",
+          "meeting_work_handoffs_receiptBody",
+          "meeting_work_handoffs_meta",
+          "meeting_work_handoffs_primary",
+          "meeting_work_handoffs_failure",
+          "meeting_work_handoffs_actions",
+          "meeting_work_handoffs_source"
+        ]
+      },
+      "status": {
+        "bytes": 8292,
+        "buttons": 10,
+        "disclosures": 6,
+        "openDisclosures": 1,
+        "classNames": [
+          "sub_session_summary_root",
+          "sub_session_summary_toggle",
+          "lucide",
+          "lucide-chevron-right",
+          "sub_session_summary_chevron",
+          "sub_session_summary_count",
+          "sub_session_summary_attention",
+          "sub_session_summary_body",
+          "sub_session_summary_project",
+          "sub_session_summary_list",
+          "sub_session_summary_row",
+          "home_state",
+          "lucide-loader-circle",
+          "lucide-loader-2",
+          "home_letter",
+          "sub_session_summary_title",
+          "sub_session_summary_stage",
+          "lucide-check",
+          "lucide-circle",
+          "work_intake_root",
+          "work_intake_queue",
+          "work_intake_summary",
+          "work_intake_chevron",
+          "work_intake_counts",
+          "work_intake_failed",
+          "work_intake_list",
+          "work_intake_item",
+          "work_intake_state",
+          "work_intake_message",
+          "work_intake_preview",
+          "work_intake_more",
+          "work_intake_fullText",
+          "work_intake_failure",
+          "work_intake_actions",
+          "button",
+          "button--sm",
+          "button--secondary",
+          "work_intake_action",
+          "button--ghost"
+        ]
+      }
+    },
+    "cssChecks": [
+      {
+        "scene": "sent",
+        "cssModuleClasses": 19,
+        "unmatched": []
+      },
+      {
+        "scene": "incoming",
+        "cssModuleClasses": 18,
+        "unmatched": []
+      },
+      {
+        "scene": "meetings",
+        "cssModuleClasses": 17,
+        "unmatched": []
+      },
+      {
+        "scene": "handoffs",
+        "cssModuleClasses": 15,
+        "unmatched": []
+      },
+      {
+        "scene": "status",
+        "cssModuleClasses": 29,
+        "unmatched": []
+      }
+    ],
+    "targetSourceFiles": [
+      "components/home/PartnerTeamCard.tsx",
+      "components/home/partnerTeam.module.css",
+      "components/home/PartnerMeetings.tsx",
+      "components/home/partner-meetings.module.css",
+      "components/meeting/MeetingWorkHandoffs.tsx",
+      "components/meeting/meeting-work-handoffs.module.css",
+      "components/home/WorkIntake.tsx",
+      "components/home/work-intake.module.css",
+      "components/home/SubSessionSummary.tsx",
+      "styles/sub-session-summary.module.css",
+      "app/globals.css",
+      "app/heroui-tianshu.css",
+      "app/scheme-dark.css"
+    ],
+    "sourceHashes": {
+      "components/home/PartnerTeamCard.tsx": "0ddf3d45aef34a4cd4d8bebb94c23f4844f72bffcd2d888eba9536776c17ae0c",
+      "components/home/partnerTeam.module.css": "870630bf7be8d9e946810eca6f6eb381355ade2ebd60e13f39b916a166767c0c",
+      "components/home/PartnerMeetings.tsx": "726e609ec4bad39ae06d93778a3b4b1f09832caeb2febc12e366945a434c645b",
+      "components/home/partner-meetings.module.css": "1dbe3d022d5f0ecd5e1e20561378ea2524995d2a754f3ac932c1e5603d93e241",
+      "components/meeting/MeetingWorkHandoffs.tsx": "034afe16d0227284a092d75d981b85348b1e9d4bc7eb5083294926d4149c1fc3",
+      "components/meeting/meeting-work-handoffs.module.css": "435d6a5078aeba23f59f6e9d53c6d179bcc91bc2483c6f2bf3a18b8ffb0f71bf",
+      "components/home/WorkIntake.tsx": "36173cbad37e01801179a4f623d4048bf256946f1eba96ed0db7d0018400f58c",
+      "components/home/work-intake.module.css": "924a37b061dc6cf72a48ab202652510c985c9f82d920e194249fe3663f3a5db1",
+      "components/home/SubSessionSummary.tsx": "e01bd9a5abd99ee1778be3431eac98f3403111e37682d0e3f5ce8c0e15e6d296",
+      "styles/sub-session-summary.module.css": "ed161ce2d8e10740068cb2b88b45545e0f200086435f1e69d148603244442762",
+      "app/globals.css": "553ea2a25a8bc342732e1bf0456453166dff0fd55fc6793bd0b87d5ae18d384c",
+      "app/heroui-tianshu.css": "d34bcf4ca45eb4426e922fb7cf9615713e936027bc416ae2259b31853c607f2b",
+      "app/scheme-dark.css": "3fe3f9e4c2268b42de9f28f02ec88ae3e4aa98f24214627c66294cbea8733c2f"
+    },
+    "bundledSourceModules": {
+      "lib/companyTime.ts": {
+        "sha256": "6567d046b20f28e8165b165e80fcf4da8ac0c0eafa829584eb6f48a3bbd48216",
+        "retainedBytes": 1440
+      },
+      "lib/home/attachments.ts": {
+        "sha256": "2d70c09fad59bc22cf6947d4537344ae8295cbf97c0d205456f1275ec988da61",
+        "retainedBytes": 2120
+      },
+      "lib/home/teamIntent.ts": {
+        "sha256": "c370119cbbe718a93ece7a991c185e749e17db0dd1459c6df21b6cc53711ee2d",
+        "retainedBytes": 211
+      },
+      "lib/displayText.ts": {
+        "sha256": "b721d4948030b348735b758515c6d600be7db9bdc569f2faf96d748d442f4651",
+        "retainedBytes": 3091
+      },
+      "lib/api/client.ts": {
+        "sha256": "f7af750964aa876804640263ce5057042652ddf63f22b7282bfaed5feb58c968",
+        "retainedBytes": 1157
+      },
+      "lib/home/teamDelivery.ts": {
+        "sha256": "0b7d528a43dd10b6656980b3a5d2071ae47ead1471843ede0f384a201259c2f2",
+        "retainedBytes": 1866
+      },
+      "components/home/partnerTeam.module.css": {
+        "sha256": "870630bf7be8d9e946810eca6f6eb381355ade2ebd60e13f39b916a166767c0c",
+        "retainedBytes": 11371
+      },
+      "components/home/PartnerTeamFiles.tsx": {
+        "sha256": "1cf49f2852155c60393f8e1f5d8109081160d57b000efe9b9575f7e2a4c9fdb1",
+        "retainedBytes": 7846
+      },
+      "components/home/PartnerTeamCard.tsx": {
+        "sha256": "0ddf3d45aef34a4cd4d8bebb94c23f4844f72bffcd2d888eba9536776c17ae0c",
+        "retainedBytes": 17589
+      },
+      "components/HeroButton.tsx": {
+        "sha256": "5cf83e0822f07645857188567adcf07d14486c20691c4c92979a4b82fe0268b5",
+        "retainedBytes": 441
+      },
+      "lib/home/meeting.ts": {
+        "sha256": "0c73ef2fe286c64ad7e393df8176e57b069a665ee2e736ad24b33adc4701a477",
+        "retainedBytes": 1156
+      },
+      "lib/feishuLogin.ts": {
+        "sha256": "1d13cfce1df7fbb1991a2c35b9c20d6bbd26b8664ed2f60f373fe31b6f0861f6",
+        "retainedBytes": 393
+      },
+      "lib/toast.ts": {
+        "sha256": "d99a5f572a520615f4d87c1e0d22a4db68ca7f1cd13d059385db111a1ca587f2",
+        "retainedBytes": 356
+      },
+      "styles/material-tabs.module.css": {
+        "sha256": "0cd6caeb2f6a0e4d90aaab2e1cb3f653ae7a12ae823659bd824ca9ac1fdd6106",
+        "retainedBytes": 6591
+      },
+      "components/shell/MaterialTabs.tsx": {
+        "sha256": "e2a85f0b310f7509ba27df705b3ece06569d171097acdf3aef6284b280312bc8",
+        "retainedBytes": 219
+      },
+      "styles/header-capsule.module.css": {
+        "sha256": "e8647f3f5c6648d77f66ddbed5715ea262e01ad721e6d94a5bd7b520486eaae1",
+        "retainedBytes": 11117
+      },
+      "styles/detail-frame.module.css": {
+        "sha256": "a365346a8b15ebcc952fc1f38fcdbbf0deb59c255a8cf3d336053f1a955be9df",
+        "retainedBytes": 347
+      },
+      "components/shell/DetailFrame.tsx": {
+        "sha256": "ae886bf0263b5be48ddfd5f657ddc71cfe720866fb8c1661116436142386cbad",
+        "retainedBytes": 1767
+      },
+      "components/ui/useHandheld.ts": {
+        "sha256": "2c6fb9ed3d89ee2f0b1b43316d70bb1168266cabd50e92b6b1ca11bf0c0ce781",
+        "retainedBytes": 652
+      },
+      "components/ui/picker.module.css": {
+        "sha256": "4764098c6e52bce9729799467fcc97a840554c83c7f0d534803712c330f67c0b",
+        "retainedBytes": 10238
+      },
+      "components/ui/Select.tsx": {
+        "sha256": "67ac0e1c32a2a2554a1707c9a1b87a25cdd22e47962e177f9ae5062b3d1d841f",
+        "retainedBytes": 4701
+      },
+      "components/ui/pickerFormat.ts": {
+        "sha256": "9f702d8cb30321cb82b7ee9ae5d852aae41750d1652c0459d097156bb482469b",
+        "retainedBytes": 1063
+      },
+      "components/ui/DatePicker.tsx": {
+        "sha256": "d2329a3359aec5c75ec13957e61e6295be81c43515e5c9ae85cb5d7ed7e1a4b2",
+        "retainedBytes": 6639
+      },
+      "components/ui/side-panel.module.css": {
+        "sha256": "c0ff14770dc8ae134a02214a13809831a5360606a7621c13d005d0c2b3dcbf49",
+        "retainedBytes": 2134
+      },
+      "components/ui/SidePanel.tsx": {
+        "sha256": "9e4bfecb8694b8fd60a5ba91908ce846007cf2a7fcc694996ab0f205974fa786",
+        "retainedBytes": 664
+      },
+      "components/meeting/meetingDecisionApi.ts": {
+        "sha256": "3987b75525a249d0e77f755980bf0e2857ccacc86b8f65186378bcdca6d8d8d4",
+        "retainedBytes": 2430
+      },
+      "components/meeting/meeting-decisions.module.css": {
+        "sha256": "5dcb62763db5f2d23efd5ad7a5a0150b185c87705cc5374a58dff4c907e80108",
+        "retainedBytes": 12142
+      },
+      "components/meeting/WorldAnchorPicker.tsx": {
+        "sha256": "cf4a366fef74d3bd576013f26a658fa2485fb7d0f0cee43d028362d3de842d83",
+        "retainedBytes": 8003
+      },
+      "components/meeting/MeetingBookingSheet.tsx": {
+        "sha256": "7140228ff298aa792eefb12199deca059c81fff44dfdedbbc2214a7aec422f7f",
+        "retainedBytes": 21330
+      },
+      "components/coagent/presence.ts": {
+        "sha256": "33d6ad62554e19ecd15541cca1d77421a89289671955f38769d5927e65d0a246",
+        "retainedBytes": 315
+      },
+      "components/meeting/useMeetingRecorder.ts": {
+        "sha256": "ffffa8476722906fa9401a71baf1d29fbc0377e774224e5b4939595d8c230076",
+        "retainedBytes": 48
+      },
+      "styles/home.module.css": {
+        "sha256": "2f4a4b7ced73c378e02f47c35aea4d53319e416901146542ac7c334585a34fc6",
+        "retainedBytes": 77694
+      },
+      "components/home/StateIcon.tsx": {
+        "sha256": "8aaeace1aff1d7c47e449ff568e444c7c843b9c92bb8eeed5d071da172a27ef0",
+        "retainedBytes": 1216
+      },
+      "components/home/partner-meetings.module.css": {
+        "sha256": "1dbe3d022d5f0ecd5e1e20561378ea2524995d2a754f3ac932c1e5603d93e241",
+        "retainedBytes": 6902
+      },
+      "components/home/MeetingControl.tsx": {
+        "sha256": "6666e86829ea2c63e0a43f309862620b16010ff59ee1a56bcce985ad1d38d757",
+        "retainedBytes": 107
+      },
+      "components/home/PartnerMeetings.tsx": {
+        "sha256": "726e609ec4bad39ae06d93778a3b4b1f09832caeb2febc12e366945a434c645b",
+        "retainedBytes": 17595
+      },
+      "lib/board/cloud.ts": {
+        "sha256": "81aaa710b49386acdbd14e9a064a360b7b6d60e2474ba7de0b96f13a94e61d93",
+        "retainedBytes": 953
+      },
+      "components/home/pageKeys.ts": {
+        "sha256": "249405b790f3424168993c9536af91acb4fecbd91c4766c889ae9404a9423926",
+        "retainedBytes": 0
+      },
+      "lib/local/runModel.ts": {
+        "sha256": "7adca8239d44c231783c46d9a521fc4b046f5ea04b24a25b11889a2c54442649",
+        "retainedBytes": 0
+      },
+      "lib/local/modelPanel.ts": {
+        "sha256": "010cf59face56ae28ce9a7311d1b1e5e6c5cde0f844f97da9c202edeb67142d3",
+        "retainedBytes": 0
+      },
+      "lib/team/roles.ts": {
+        "sha256": "69434bc0c9d13bb853a7f68acd97d5bfb4a538ab09d2fa443443485a07917ba5",
+        "retainedBytes": 241
+      },
+      "lib/board/cards.ts": {
+        "sha256": "beb519fad81dad7e623134a4619fa5870c1201d16ef8fc6ba4130d62c982dcfb",
+        "retainedBytes": 0
+      },
+      "lib/home/quota.ts": {
+        "sha256": "e32075cd3ec95e1fd2898bd7f67cde473cb0448de010957684372f989b9764ea",
+        "retainedBytes": 310
+      },
+      "lib/work/workers.ts": {
+        "sha256": "2869ece955b54e79fe1a408e2582ecddf611f273c0448baa69b736ff113f8355",
+        "retainedBytes": 209
+      },
+      "lib/home/derive.ts": {
+        "sha256": "5a18ca2fb100c0b9c094dec882294cda18162300458c7b008e852d909fe9b8f7",
+        "retainedBytes": 1340
+      },
+      "components/meeting/meeting-work-handoffs.module.css": {
+        "sha256": "435d6a5078aeba23f59f6e9d53c6d179bcc91bc2483c6f2bf3a18b8ffb0f71bf",
+        "retainedBytes": 7489
+      },
+      "components/meeting/MeetingWorkHandoffs.tsx": {
+        "sha256": "034afe16d0227284a092d75d981b85348b1e9d4bc7eb5083294926d4149c1fc3",
+        "retainedBytes": 22564
+      },
+      "components/memory/memoryModel.ts": {
+        "sha256": "2283e259867452064f27e4f089395e0be85ab1fa53cd80fd110c9e6b300d019c",
+        "retainedBytes": 240
+      },
+      "components/home/work-intake.module.css": {
+        "sha256": "924a37b061dc6cf72a48ab202652510c985c9f82d920e194249fe3663f3a5db1",
+        "retainedBytes": 3231
+      },
+      "components/home/WorkIntake.tsx": {
+        "sha256": "36173cbad37e01801179a4f623d4048bf256946f1eba96ed0db7d0018400f58c",
+        "retainedBytes": 10241
+      },
+      "components/onboarding/SiriWave.tsx": {
+        "sha256": "030fd3b5bdcccb74de444d61fdf02aa03ee4cfd747a188e560d398ab017778dd",
+        "retainedBytes": 107
+      },
+      "components/coagent/cmeiArt.ts": {
+        "sha256": "cdff3a024e22edf3d2a24b73bfb3679ca139b711a118ae03fd34fd7c5ae64cdd",
+        "retainedBytes": 0
+      },
+      "components/coagent/milesArt.ts": {
+        "sha256": "7240465d176bde1f14e8b50b2a1ca2c3a17c77ad716d3631d36db2a008bd516b",
+        "retainedBytes": 0
+      },
+      "components/coagent/milesRig.ts": {
+        "sha256": "1867de5d81b789a0d96b14b8e5d5b15365862dc0e9e213a9dae42de2ca49c8c2",
+        "retainedBytes": 0
+      },
+      "styles/coagent-miles.module.css": {
+        "sha256": "076093626cef517153295d49b4390b8ad24b14f19a76cf2337c75df0d664fb38",
+        "retainedBytes": 1782
+      },
+      "components/coagent/MilesCapsule.tsx": {
+        "sha256": "5d6e3a535df08087b1722e0e7627c850f76d47eb514d545a308f518d792e5589",
+        "retainedBytes": 107
+      },
+      "components/coagent/skin.ts": {
+        "sha256": "986f3ff620e1ed73e135ebbfa7e60a356da65dffd2eecdc480efcf0b41ae8a98",
+        "retainedBytes": 229
+      },
+      "styles/coagent-capsule.module.css": {
+        "sha256": "e6af2ba282fdb46e94401548d4f52c93f71bcb550c721c276ec9b04a5596433e",
+        "retainedBytes": 8130
+      },
+      "components/coagent/PresenceCapsule.tsx": {
+        "sha256": "5c01bf1347deac6d697b8b4c4bccad065d3c4ea2852ec7158f2362b7e3702c79",
+        "retainedBytes": 107
+      },
+      "styles/coagent-skin-picker.module.css": {
+        "sha256": "e9b7819eb0a9b6f5d831ad43c7321be8812bd85ec8056639f1b5cf9b9f7444b6",
+        "retainedBytes": 1049
+      },
+      "components/coagent/SkinPicker.tsx": {
+        "sha256": "6f7cf30e6d6b613862bb34a01ed6ddac4d6490d3eadc9741b233240e172c5177",
+        "retainedBytes": 107
+      },
+      "styles/buddy-mark.module.css": {
+        "sha256": "d3540921e64b0120481b644c1f902317c71d0e64e32c0e6eb451021fcb1db1f9",
+        "retainedBytes": 2957
+      },
+      "components/buddy/BuddyMark.tsx": {
+        "sha256": "db6a00b2f57b55e6e1f55b8f870e94d8f868126f5b3ca67843068d60a5d5e1cb",
+        "retainedBytes": 59
+      },
+      "lib/home/transfer.ts": {
+        "sha256": "6735b84f9a1d1d3b1bf0e639d5182c1c523419c21b9eabf5f614752a0041bfb3",
+        "retainedBytes": 0
+      },
+      "lib/home/projects.ts": {
+        "sha256": "28b2be10f006d99976ca73e7a383e11d9539d1965fd78e4c46d9fc6bbaa9d095",
+        "retainedBytes": 0
+      },
+      "styles/person-avatar.module.css": {
+        "sha256": "6a67c4046001ced5efcf1a7e2bf18a03a6b89f31a7ba21991d40eeb8ebd116f4",
+        "retainedBytes": 121
+      },
+      "components/avatar/PersonAvatar.tsx": {
+        "sha256": "28ef57cdf8edff4bd86a634a3ec4fc125b0c9c7478e1604bda17e91ef7dfdf06",
+        "retainedBytes": 107
+      },
+      "conversation/dictationSignal.ts": {
+        "sha256": "0cbacbf0951ac7c0875e64386780ad1d9494df0655f64129150549127eac98d4",
+        "retainedBytes": 48
+      },
+      "lib/logout.ts": {
+        "sha256": "b4a5cc3f0faef906780bc4749abdb47c557dbfe4f3dde13dc0467f47067fa6ef",
+        "retainedBytes": 0
+      },
+      "components/member/useVoiceprintEnrollment.ts": {
+        "sha256": "81f520c8289113428de10b54b1e37b79c3a1170bbb7a61e907f2cc8686997e32",
+        "retainedBytes": 48
+      },
+      "styles/voiceprint.module.css": {
+        "sha256": "d85b71947cb5579dd11e76294caab52758bf9bf3d2e15e1b18d4811a9685a4df",
+        "retainedBytes": 1620
+      },
+      "components/member/VoiceprintCard.tsx": {
+        "sha256": "15c594a1cfd7c75d3834297cbf4ad7a400d051226f92cbc9d716650c4cc61116",
+        "retainedBytes": 59
+      },
+      "components/radar/personalRadar.ts": {
+        "sha256": "368e94c6d533dbfd81df31582b3b8d8de09a768199ced34c69d01befd4f62e7a",
+        "retainedBytes": 0
+      },
+      "components/onboarding/foundation.module.css": {
+        "sha256": "935bd7593e3c2413747545bc0a915a30abc9535f29d9ddf41ed33ca434c077a8",
+        "retainedBytes": 12085
+      },
+      "styles/radar-settings.module.css": {
+        "sha256": "4dc81ea52809e0d84669d4fb33a9e53fa827a20fcc608a42c3fcc976286e6340",
+        "retainedBytes": 14465
+      },
+      "components/radar/RadarSettingsForm.tsx": {
+        "sha256": "13e82bfd0dcf469c6df009b401f47d05fcfc58c49089ffffaaec2586e8b3b393",
+        "retainedBytes": 113
+      },
+      "components/radar/RadarSettingsEditor.tsx": {
+        "sha256": "66ad1de363b8b13f100196c965ed6a04305bc070f93135d6b545c60771989c5c",
+        "retainedBytes": 163
+      },
+      "styles/account-menu.module.css": {
+        "sha256": "59da22be7e7cd6d0db18c8f4f5b094ab90bf9adcc32d1ea5177733c4d977ccb1",
+        "retainedBytes": 9967
+      },
+      "styles/confirm-dialog.module.css": {
+        "sha256": "cf18986c3e84b09b5ce8bd37d4814907923fad796403cb958cb3edc76ce630d0",
+        "retainedBytes": 1541
+      },
+      "components/ConfirmDialog.tsx": {
+        "sha256": "10ff9fa8fa8b5f08c20993fa99ca927eba48d536098130381dac325da6bb66ed",
+        "retainedBytes": 107
+      },
+      "lib/connectionGuide.ts": {
+        "sha256": "fb78549a4a85951d376068044be4a09adfa387a9641556bf83965c50c5a04b74",
+        "retainedBytes": 0
+      },
+      "styles/connection-dialog.module.css": {
+        "sha256": "abedbdf00dfd98822c713ab83dc4b80e3cff41363d11a3ea75b1672ebf531f2e",
+        "retainedBytes": 9142
+      },
+      "components/TianshuMark.tsx": {
+        "sha256": "844b0fd9d5225649e48e6b15c0976324e382a63d36787079a7dc07b9ea1ee39c",
+        "retainedBytes": 107
+      },
+      "components/agent-pair.module.css": {
+        "sha256": "9715fce926873ce15b92e06fafef4181e24e971041538f6de84193ba95731eea",
+        "retainedBytes": 1909
+      },
+      "components/AgentPair.tsx": {
+        "sha256": "da8f35b6e2a69fd780039c199a79fa3068f25e93d6ef8723e5531b2f3de9b2ac",
+        "retainedBytes": 59
+      },
+      "components/OAuthConnectForm.tsx": {
+        "sha256": "8649e8b04c812ce577ac1ccfca2e47b6ae46397383bbd285fd5b0fe8b62a6fe4",
+        "retainedBytes": 162
+      },
+      "components/ConnectAgentForm.tsx": {
+        "sha256": "221ee66e935254cfd12d779f8fdc2b2a306831724e152d9a9fd8dc67f7235c89",
+        "retainedBytes": 162
+      },
+      "components/ConnectionDialog.tsx": {
+        "sha256": "1c2cf2abc9a31db5fc121419fccfadc88934c549fefd6385139e1164d8d603b2",
+        "retainedBytes": 107
+      },
+      "styles/buddy-personality.module.css": {
+        "sha256": "e55f2cd8e21d90605f0e8ed979e7237ec31fcaea0abff67cbed5aa505436527d",
+        "retainedBytes": 1272
+      },
+      "components/buddy/PersonalityPicker.tsx": {
+        "sha256": "afae0ad208c1573cc0336ff3e68421aa0bbb8d8a493941108e932c96e9d3fd93",
+        "retainedBytes": 59
+      },
+      "app/access/lastLogin.ts": {
+        "sha256": "c38da711d4667f84bd49075947ab9ba2b4eb26f6bafd4423930bc5344ae4909d",
+        "retainedBytes": 59
+      },
+      "components/buddy/useBuddy.ts": {
+        "sha256": "14f7921f0edb9ece5eb96f8099c431ca479a91d81855e9354a66686dc79315fc",
+        "retainedBytes": 48
+      },
+      "styles/buddy-picker.module.css": {
+        "sha256": "0e6db605041c1ef170ec07150fd06af77ecdce0fe9a6d15b5dce311774321a73",
+        "retainedBytes": 504
+      },
+      "components/buddy/BuddyPicker.tsx": {
+        "sha256": "565cd52915c46762f730fabcb00440d7006280135d8800ecb8768e3994422501",
+        "retainedBytes": 107
+      },
+      "components/buddy/BuddySettings.tsx": {
+        "sha256": "b0b39b917026d4a51bd871f061709e56c8a8cf97634843ae2c5fa703a90c669f",
+        "retainedBytes": 107
+      },
+      "components/railBackground/useRailBackground.ts": {
+        "sha256": "029def24eb7206d170ffe482a50749e2888aa8e5f4f482c71e06ccef11b9e5c1",
+        "retainedBytes": 48
+      },
+      "styles/rail-background.module.css": {
+        "sha256": "bf760c662f4bd484c41f466cbe30a6a28182b25ecb1e962c530f86db0d7228cb",
+        "retainedBytes": 4482
+      },
+      "components/railBackground/RailBackgroundSettings.tsx": {
+        "sha256": "861e8b48c25842a6b75df6b81a283724da789d65cbf13c9e0499bc76879f5728",
+        "retainedBytes": 107
+      },
+      "styles/avatar-editor.module.css": {
+        "sha256": "15ec408f0edad2b89964e165a863a5ea1ef53ddbd970d8d4429ced550264c4fe",
+        "retainedBytes": 923
+      },
+      "components/avatar/AvatarEditor.tsx": {
+        "sha256": "f60eb1e2400407ba4fa57bee89cbc25e6d58bc742bcdd18ef38c15d74d6bd5f9",
+        "retainedBytes": 107
+      },
+      "conversation/stableCallback.ts": {
+        "sha256": "c16b9e59ef2c28c5b275daecd3bf888fac8d6f3d3d18948734d7db29ddd0e740",
+        "retainedBytes": 48
+      },
+      "conversation/voiceKeys.ts": {
+        "sha256": "063dabdf73717c524352040bd3a123a12172a8d7c54f2a87335c0936dd6b6417",
+        "retainedBytes": 0
+      },
+      "styles/voice-keys.module.css": {
+        "sha256": "858e939d9158e8b00fc56190f6c569f49ffcff7570abfd21e3f5586689b3af92",
+        "retainedBytes": 6865
+      },
+      "conversation/VoiceKeysDialog.tsx": {
+        "sha256": "558d7a247a98604fc93a7929d29f08d7a50ad904100f90dee3f28e6e39aaca43",
+        "retainedBytes": 107
+      },
+      "components/onboarding/setup.module.css": {
+        "sha256": "7e0210e00203adff0651ef5b3252a09c9cd290c728ac8945371d2d28285e9672",
+        "retainedBytes": 4283
+      },
+      "components/CollectorUninstall.tsx": {
+        "sha256": "31d0d87b3b0ec4ab7aa23a416891f5a2b82d8fd970683fb02341962030eed170",
+        "retainedBytes": 107
+      },
+      "components/task-quality/taskQualityStatus.ts": {
+        "sha256": "a114416f538ad29191bdb07ff0182f979645865a7074cfb5ccff6b361136972f",
+        "retainedBytes": 0
+      },
+      "components/PersonalProfileForm.tsx": {
+        "sha256": "5dd9d20b87290c75ea6d633bf4092a460bcf2f05283d12da95d64e3ef58523be",
+        "retainedBytes": 107
+      },
+      "components/WechatConnect.tsx": {
+        "sha256": "b95c9440f20d69a2cb350e999c931a6f3217896efade8149ed2cf9ed60fc44e6",
+        "retainedBytes": 107
+      },
+      "components/AccountMenu.tsx": {
+        "sha256": "87f56195001c81aa6555cfc9e5addf50ae0b3b4226528367d47459999c173c61",
+        "retainedBytes": 107
+      },
+      "components/home/view.ts": {
+        "sha256": "ebbdd3293612be303c5465a69538408d7835cddf812fce0a8a42e35a1891dd6d",
+        "retainedBytes": 130
+      },
+      "components/home/PersonMenu.tsx": {
+        "sha256": "d989effeb145cc7b0acfe5aeac201ee631fc7fe9cd061e7a57936b99e79ea24a",
+        "retainedBytes": 107
+      },
+      "styles/decision-box.module.css": {
+        "sha256": "ee1ccd835ca0a9e007fa027e55214373c560e5fe80aaded94a1b52076dd387f2",
+        "retainedBytes": 9423
+      },
+      "components/work/DecisionBox.tsx": {
+        "sha256": "89979bf4bce99028274720c4ef5de69fd432adc1ea497d784d534b657cde0d2e",
+        "retainedBytes": 170
+      },
+      "lib/local/runner.ts": {
+        "sha256": "50912ca3f4a3dc546e4e2a2f9af2b02679cc6dee386c36aa598dd8200dbc20ea",
+        "retainedBytes": 0
+      },
+      "lib/local/routes.ts": {
+        "sha256": "84473effe04c230d497c48e991311a6f898f60aba3189c65f7d829e09085c606",
+        "retainedBytes": 0
+      },
+      "lib/local/client.ts": {
+        "sha256": "625fd59315aa65a3dd8767aa71457c00ca3c0a754c43c410adef0c2b2b5ea42e",
+        "retainedBytes": 0
+      },
+      "lib/local/fileChanges.fixture.ts": {
+        "sha256": "2d85edeb7a85bbf786839a2ffc8ad7a5a2f688829ca6492a08ffcacab25f1db2",
+        "retainedBytes": 2125
+      },
+      "lib/local/mockChanges.ts": {
+        "sha256": "81b46ee25aa139b4b9e11f1cf805fc1db12f1b9fc03eac881a1073f61d579af0",
+        "retainedBytes": 1514
+      },
+      "lib/local/mock.ts": {
+        "sha256": "203bf2c59c9500691be37e05acb4d7f14ad6a843d2c19da6599137e1d16facaf",
+        "retainedBytes": 4404
+      },
+      "lib/local/connection.ts": {
+        "sha256": "1a40c29588be7202d5699ca6e84502111ba30fa1c72006ad93d35617bf421fc4",
+        "retainedBytes": 0
+      },
+      "lib/local/link.ts": {
+        "sha256": "40c391bf3c74fb60d0d6c5c1dcaaf3c6d9916f133dc04a7a78d5af9a4eddfbc1",
+        "retainedBytes": 0
+      },
+      "lib/local/LocalRunnerProvider.tsx": {
+        "sha256": "f1475159092800e49b13041793354fcfe8ac1311af4fe480ec4b26156d1c716a",
+        "retainedBytes": 168
+      },
+      "components/home/NewProjectDialog.tsx": {
+        "sha256": "2f4cf793360cd574423a9f06b565f837335369638396bf2e835b9ec415ba32ee",
+        "retainedBytes": 107
+      },
+      "components/home/NameTip.tsx": {
+        "sha256": "7747815f9070dc4051eccb42f2e3b47a0c9aef86f3464d736cbb8ccf2e4b5de9",
+        "retainedBytes": 107
+      },
+      "lib/local/sessionView.ts": {
+        "sha256": "14bdcfd1237142d245e66dee8844dc4a65f61c54a843d75e2bfb284e75922d99",
+        "retainedBytes": 0
+      },
+      "lib/home/seen.ts": {
+        "sha256": "45d279605957c3bbbb7b59a3254e1e48ce95ebd2349c8252df765d955d23c547",
+        "retainedBytes": 0
+      },
+      "components/home/RowMenu.tsx": {
+        "sha256": "e7719a478d451bb6a57c01b0fa7364016edf3588a07b6e1c4fbb8c8d43746e38",
+        "retainedBytes": 107
+      },
+      "components/home/LeftColumn.tsx": {
+        "sha256": "3ac27044e3eececa99e9f1f7cb3722644515613dd271bcc50332377c248eeb78",
+        "retainedBytes": 1689
+      },
+      "lib/local/permissionModes.ts": {
+        "sha256": "0bf7af25ac9271a0bd2030fbdbffe1178e67bc8c3116aee97b9dbcaaec1adb4d",
+        "retainedBytes": 0
+      },
+      "components/cards/PermissionMode.tsx": {
+        "sha256": "111b4d09aa5cfb6ac5a787e3a20a132271dedcd75b45dcd0e3a970420ebc40f3",
+        "retainedBytes": 174
+      },
+      "styles/entry-cards.module.css": {
+        "sha256": "0fe8c966879d3c4d73ef347c6d80e33bd42a7afb865e73f818e4f609517ac193",
+        "retainedBytes": 5547
+      },
+      "styles/ask-panel.module.css": {
+        "sha256": "ae91b61091db94bc8eaa9877bb2073976358142936b2403121972eb33023485a",
+        "retainedBytes": 7065
+      },
+      "conversation/AskPanel.tsx": {
+        "sha256": "33650ece11edd9ec9c3ad3a1c04ba88f6c37ca382c2e5fa2a2ff05a67c73bc19",
+        "retainedBytes": 166
+      },
+      "components/work/decisions.tsx": {
+        "sha256": "ce832da00f853566b73d09c2a3e4a47514f3d828bcb5470e853529d12202d185",
+        "retainedBytes": 107
+      },
+      "styles/segmented-switch.module.css": {
+        "sha256": "b76b65cb924e8681a8d3081c5cde8d0f71e1b1342cb10be3e45bb09c391aefbc",
+        "retainedBytes": 1899
+      },
+      "components/SegmentedSwitch.tsx": {
+        "sha256": "a3eb691140d79ed7c998eec5ae30536668d495c82f9016ffdf63cc5c2a3de50e",
+        "retainedBytes": 59
+      },
+      "lib/work/actions.ts": {
+        "sha256": "3527c8b65a7b7290e0891e69c406fd61f45742166a43a31f6da8a6e9256678c8",
+        "retainedBytes": 0
+      },
+      "styles/v2-work.module.css": {
+        "sha256": "c65979b839ef27e5544b131e24aade41308c86e181ec342791aca511c28f0055",
+        "retainedBytes": 476
+      },
+      "components/work/Slots.tsx": {
+        "sha256": "eba7b039a3fe14f61745ae65037b8d6a4db83ac44098cc51d86407fef684fa59",
+        "retainedBytes": 59
+      },
+      "lib/local/useSessionEvents.ts": {
+        "sha256": "c4220fdc319acee5d50ebaa43e02b3f98fb98bc541de468f500acde12a5f58d1",
+        "retainedBytes": 48
+      },
+      "lib/local/modelWords.ts": {
+        "sha256": "f58f73c8f1868fc619a57fb9979747eaf5fd2a8a8d11bfc634126bc2760124ed",
+        "retainedBytes": 0
+      },
+      "lib/local/start.ts": {
+        "sha256": "df52d9d3a944e9b505cdcfd9b152de4ecdbd008ed955077ac0ad8bf793b6a50e",
+        "retainedBytes": 0
+      },
+      "lib/work/queue.ts": {
+        "sha256": "d17f78203a7aca2f5fa810f9e3f058c26ea83441bcc28f71d67246424cf73c4b",
+        "retainedBytes": 0
+      },
+      "components/cards/SourceWords.tsx": {
+        "sha256": "0edb58dad13cbf1a68e8c0ebb19bf655b1950c24d66284af1d11b40b97f7b16d",
+        "retainedBytes": 59
+      },
+      "components/home/FolderAsk.tsx": {
+        "sha256": "762d838aaf83e9ab0a89c58933ea363ceebc21904a5959b27802e8dfdc3bbc85",
+        "retainedBytes": 107
+      },
+      "components/home/InputFooter.tsx": {
+        "sha256": "860fdd0fdddf776ba1d8f84c5ae30d14b57af4611ff609de17c6ca724dea21c8",
+        "retainedBytes": 107
+      },
+      "components/home/PlanDecision.tsx": {
+        "sha256": "ea8c6b143d5882d970d596cb5798b2e7eaa7b643ee8a436c50833d863f67efef",
+        "retainedBytes": 885
+      },
+      "styles/sub-session-summary.module.css": {
+        "sha256": "ed161ce2d8e10740068cb2b88b45545e0f200086435f1e69d148603244442762",
+        "retainedBytes": 3032
+      },
+      "components/home/SubSessionSummary.tsx": {
+        "sha256": "e01bd9a5abd99ee1778be3431eac98f3403111e37682d0e3f5ce8c0e15e6d296",
+        "retainedBytes": 3865
+      }
+    },
+    "integrationModuleCoverage": {
+      "conversation/Transcript.tsx": {
+        "sha256": "482ffb0097503b7aa7c082bf2b2a041a1f9b59fe8a597a4afd55bcd6cc760706",
+        "importedByGallery": false,
+        "retainedBytes": 0,
+        "fullSurfaceRendered": false,
+        "scope": "Outside gallery target modules; not imported or rendered. Hash records final source provenance only."
+      },
+      "components/work/WorkTimeline.tsx": {
+        "sha256": "845ed6344893a073e163f0c7ee1d6757cfc9bd8ce9e78b3d23f47e93101f88ed",
+        "importedByGallery": false,
+        "retainedBytes": 0,
+        "fullSurfaceRendered": false,
+        "scope": "Outside gallery target modules; not imported or rendered. Hash records final source provenance only."
+      }
+    }
+  },
+  "limits": [
+    "No browser screenshots or visual inspection",
+    "No application hydration, network requests, data mutation, or production records",
+    "Native details markup retained; app controls disabled",
+    "Isolated component viewport, not complete BuddyView or application shell",
+    "320px and dark modes are preview controls, not observed device or accessibility acceptance"
+  ]
+}

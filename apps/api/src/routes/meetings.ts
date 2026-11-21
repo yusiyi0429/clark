@@ -6,6 +6,7 @@ import { renderMaterialPreview } from "../materialPreview.js";
 import { appendSupplementMaterial, replaceMeetingMaterials } from "../meetingMaterials.js";
 import { getMeetingRow } from "../meetingStore.js";
 import { attendeesOf } from "../meetingDecisionView.js";
+import { canReadMeetingSource, leftPartnerMeeting } from "../partnerMeetings.js";
 import { personDisplayNames } from "../people.js";
 import { isActiveMember } from "../threads.js";
 import { importTranscript } from "../outcome.js";
@@ -27,7 +28,8 @@ export function registerMeetingRoutes(app: AppInstance, ctx: RouteContext): void
       const person = req.person!;
       const meeting = await getMeetingRow(q, req.params.id);
       const allowed = meeting && (person.role === "ceo" || meeting.lead_dri_id === person.personId || attendeesOf(meeting).personIds.includes(person.personId));
-      if (!allowed) return fail(reply, 404, "NOT_FOUND", "会议不存在");
+      if (!allowed || meeting.status === "cancelled" || await leftPartnerMeeting(q,meeting.id,person.personId) ||
+        !await canReadMeetingSource(q, app.meetingFollowThrough.minutes, meeting, person)) return fail(reply, 404, "NOT_FOUND", "会议不存在");
       const turns = meeting.transcript?.turns ?? [];
       const start = req.query.from === undefined ? 0 : turns.findIndex((turn) => turn.id === req.query.from);
       if (start < 0) return { turns: [], nextTurn: null, total: turns.length };

@@ -182,13 +182,15 @@ describe("使用周报", () => {
     const post = (url: string, payload?: unknown) => t.app.inject({ method: "POST", url, headers: { cookie: member, origin: t.publicOrigin }, ...(payload ? { payload } : {}) });
     expect((await post("/api/me/usage/onboarding-step", { step: "radar" })).statusCode).toBe(204);
     expect((await post("/api/me/usage/onboarding-step", { step: "radar" })).statusCode).toBe(204);
+    expect((await post("/api/me/usage/onboarding-step", { step: "buddy" })).statusCode).toBe(204);
     expect((await post("/api/me/usage/onboarding-step", { step: "nowhere" })).statusCode).toBe(400);
     expect(await rows()).toEqual([
       { kind: "login", detail: null, day: "2026-10-19" },
+      { kind: "onboarding_step", detail: "buddy", day: "2026-10-19" },
       { kind: "onboarding_step", detail: "radar", day: "2026-10-19" },
     ]);
     expect((await post("/api/me/onboarding/complete")).statusCode).toBe(200);
     // active 是请求结束后顺手写的，不等它。
-    await vi.waitFor(async () => expect((await rows()).map((row) => row.kind)).toEqual(["active", "login", "onboarding_step"]));
+    await vi.waitFor(async () => expect((await rows()).map((row) => row.kind)).toEqual(["active", "login", "onboarding_step", "onboarding_step"]));
   });
 });

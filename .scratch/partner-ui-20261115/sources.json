@@ -1,0 +1,12 @@
+{
+  "task_id": "partner-ui-20261115",
+  "sources": [
+    {"id":"muse-design","url":"https://introducing-muse.com/","kind":"official-design-essay","read_in":"preceding-ui-assessment","used_for":"Main conversation, secondary activity/details, structured reviewable work","limit":"A reference design is not TianShu user evidence."},
+    {"id":"dots","url":"https://chatgpt.com/features/dots/","kind":"official-product-page","read_in":"preceding-ui-assessment","used_for":"Responsibility, progress, results and human judgment hierarchy","limit":"Does not establish this implementation's quality or effect."},
+    {"id":"grok-bot-docs","url":"https://docs.x.ai/grok-bot/overview","kind":"official-product-documentation","read_in":"preceding-ui-assessment","used_for":"Primary conversation with secondary details/library/computer surfaces","limit":"Separate product from Grok chat; no feature equivalence claim."},
+    {"id":"next-client-docs","path":"apps/web/node_modules/next/dist/docs/01-app/01-getting-started/05-server-and-client-components.md","kind":"installed-primary-documentation","read_in":"current-stage","used_for":"Keep browser APIs/hooks within existing client boundary"},
+    {"id":"existing-measurement","path":"apps/web/src/components/home/InputBar.tsx","kind":"actual-source","read_in":"current-stage","used_for":"ResizeObserver observes root including dock; use it to measure queue height"},
+    {"id":"rework-contract","path":"apps/web/src/components/home/PlanDecision.tsx","kind":"actual-source","read_in":"current-stage","used_for":"failed is acceptance rework; avoid inventing crash/error semantics"}
+  ],
+  "unverified": ["Human preference", "Live task completion benefit", "Pixel layout and dark contrast", "Real browser focus and touch"]
+}

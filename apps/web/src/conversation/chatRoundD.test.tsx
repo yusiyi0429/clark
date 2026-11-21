@@ -40,14 +40,15 @@ function closingDiv(html: string, start: number): number {
 const quote: TextQuote ={ id: "quote-1", text: "先保灯塔交付，再推 TokenOps", source: { scope: "global" } };
 
 describe("D1 对话层没有页头横条", () => {
-  it("没有页头横条；左上是不可点的星标，右上是「收起 ⌄」；附件不在对话层里；正文从顶部开始", () => {
+  it("没有页头横条；顶上正中是伙伴（不可点），右上是「收起 ⌄」，左上不再有天枢标识；附件不在对话层里；正文从顶部开始", () => {
     const html = renderToStaticMarkup(<ConversationHistorySheet data={data()} label="天枢" global onClose={noop} />);
     expect(html).not.toContain("<header");
     expect(html).toContain('aria-label="收起对话记录"');
-    expect(html).toMatch(/<span[^>]*aria-hidden="true"[^>]*data-testid="conversation-sheet-mark"/);
+    expect(html).toMatch(/<span[^>]*data-testid="conversation-sheet-buddy"><span[^>]*data-place="sheet" data-skin="classic"[^>]*aria-hidden="true"/);
+    expect(html).not.toContain("conversation-sheet-mark");
     expect(html).not.toContain("上传附件");
     // 拖拽条、两颗角键之后就是滚动正文，中间没有别的一层。
-    expect(html).toMatch(/<section[^>]*><div[^>]*aria-hidden="true"[^>]*><\/div><span[^>]*conversation-sheet-mark[\s\S]*?<\/span><button[^>]*收起对话记录[\s\S]*?<\/button><div[^>]*data-testid="conversation-scroll"/);
+    expect(html).toMatch(/<section[^>]*><div[^>]*aria-hidden="true"[^>]*><\/div><span[^>]*conversation-sheet-buddy[\s\S]*?<\/span><\/span><button[^>]*收起对话记录[\s\S]*?<\/button><div[^>]*data-testid="conversation-scroll"/);
   });
   it("附件上传状态仍在对话层里显示", () => {
     expect(renderToStaticMarkup(<ConversationHistorySheet data={data({ uploading: true })} label="天枢" global onClose={noop} />)).toContain("附件上传中…");

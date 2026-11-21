@@ -22,6 +22,10 @@
   box-shadow: 0 10px 32px rgb(14 21 37 / 8%), 0 1px 4px rgb(14 21 37 / 5%);
   will-change: transform, opacity;
 }
+/* 新首页深色（同 app/scheme-dark.css 的条件）：底色读变量，页头那层渐变（header-capsule 读 --ts-reading-surface）跟着同一个底色，页头写死的深字换成新首页字色（同 meeting-view）；老页面照旧白底。 */
+:global(:root[data-theme="tianshu"][data-color-scheme="dark"]:has([data-scheme="auto"])) .panel { background: var(--surface); --ts-reading-surface: var(--surface); }
+:global(:root[data-theme="tianshu"][data-color-scheme="dark"]:has([data-scheme="auto"])) .panel :global(.ts-detail-header > h1) { color: var(--ink); }
+:global(:root[data-theme="tianshu"][data-color-scheme="dark"]:has([data-scheme="auto"])) .panel :global(.ts-detail-header > .ts-row > .button:first-child) { color: var(--ink-muted); }
 .panel[data-entering] { animation: slide 200ms cubic-bezier(.2, .8, .2, 1) both; }
 .panel[data-exiting] { animation: slide 200ms cubic-bezier(.2, .8, .2, 1) reverse both; }
 .dialog { display: flex; flex: 1; min-width: 0; border-radius: inherit; outline: none; }

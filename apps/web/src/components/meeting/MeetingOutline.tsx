@@ -4,6 +4,7 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type 
 import { ListTree } from "lucide-react";
 import { readingScroller, readingTopInset, scrollToElement } from "./readingScroll";
 import s from "@/styles/meeting-workspace.module.css";
+import { FadeText } from "@/lib/home/overflowFade";
 
 /**
  * 会议页目录（feedback 10 / H07）：
@@ -64,7 +65,7 @@ export function MeetingOutline({ items, active, onJump, label = "会议目录" }
         return (
           <li key={item.key}>
             <button type="button" data-active={selected} aria-current={selected ? "location" : undefined} onClick={() => { onJump(item.key); onPick(); }}>
-              <span className={s.tocLabel}>{item.label}</span>
+              <FadeText className={s.tocLabel}>{item.label}</FadeText>
               {item.hint ? <em data-tone={item.tone ?? "neutral"}>{item.hint}</em> : null}
             </button>
             {selected && item.children?.length ? (

@@ -114,6 +114,22 @@ describe("全局输入条（clark workspace 614–640）", () => {
     expect(html).not.toContain("对话记录");
   });
 
+  it("默认、生命感、熊猫：主按钮就是伙伴那颗胶囊，不写名字（读屏照样念「对话团团」）；没选时是默认胶囊；Miles、C妹 还写「对话<名字>」", () => {
+    const html = dock({ buddy: { name: "团团", form: "alive" } });
+    expect(html).toMatch(/data-skin="alive"[^>]*aria-label="对话团团"/);
+    expect(html).not.toContain(">对话团团<");
+    expect(html).not.toContain("对话天枢");
+    expect(html).toMatch(/data-place="entry" data-skin="alive"/);
+    expect(dock()).toMatch(/data-place="entry" data-skin="classic"/);
+    expect(dock()).not.toContain(">对话天枢<");
+    const miles = dock({ buddy: { name: "miles", form: "miles" } });
+    expect(miles).toMatch(/data-place="entry" data-skin="miles"/);
+    expect(miles).toContain(">对话miles<");
+    const cmei = dock({ buddy: { name: "小C", form: "cmei" } });
+    expect(cmei).toMatch(/data-place="entry" data-skin="cmei"/);
+    expect(cmei).toContain(">对话小C<");
+  });
+
   it("键盘面：首页占位「问点什么，或者说要约的会…」，二级页「继续讨论…」，批注后改为围绕批注", () => {
     expect(dock({ keyboard: true })).toContain('placeholder="问点什么，或者说要约的会…"');
     expect(dock({ keyboard: true })).toContain('aria-label="全局对话输入"');

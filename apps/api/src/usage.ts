@@ -155,7 +155,7 @@ async function memoryPath(q: Query, range: Range): Promise<Omit<TUsagePath, "pre
 
 /** 上手流程的步骤，顺序与 WelcomeFlow 一致（按角色和配置会跳过其中几步）。 */
 const ONBOARDING_STEPS: [TOnboardingStepName, string][] = [
-  ["hello", "欢迎"], ["tour-notifications", "通知栏"], ["tour-board", "工作台"], ["mission-flow", "Mission 形成"], ["work", "本月工作"],
+  ["buddy", "选择你的伙伴"], ["hello", "欢迎"], ["tour-notifications", "通知栏"], ["tour-board", "工作台"], ["mission-flow", "Mission 形成"], ["work", "本月工作"],
   ["radar", "雷达"], ["voiceprint", "声纹"], ["connect", "连 AI 工具"], ["collector", "采集器"], ["scan", "扫描"], ["review", "确认清单"],
   ["delegation", "委托"], ["start", "可以开始"],
 ];

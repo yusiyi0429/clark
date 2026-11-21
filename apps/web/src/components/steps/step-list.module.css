@@ -22,6 +22,14 @@
 :global([data-tone=light]) .result{color:#9599a1}
 :global([data-tone=light]) .step[data-status=active]{color:#3f4754}
 :global([data-tone=light]) .step[data-status=pending]{color:#c3c6cc}
+/* 跟着外观走的一套（data-tone=ink，新首页二级页里用）：深浅色都取墨色变量。 */
+:global([data-tone=ink]) .step{color:var(--ink-muted)}
+:global([data-tone=ink]) .result{color:var(--ink-faint)}
+:global([data-tone=ink]) .step[data-status=active]{color:var(--ink)}
+:global([data-tone=ink]) .step[data-status=pending]{color:var(--ink-faint)}
 
 @media(max-width:959px){.list{font-size:13px}.step{height:24px}.mark{height:24px}}
 @media(prefers-reduced-motion:reduce){.step,.step[data-status=active] .dot{animation:none}}
+
+/* 新首页不出省略号（本人 11/18）：放不下就换行，长预览限高往下渐隐；只在新首页的外壳里生效，旧界面照旧。 */
+:global(:root:has([data-type-scale="one"])) .result { overflow: visible; white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }

@@ -36,7 +36,7 @@ const squash = (text: string) => text.replace(/\s+/g, "");
 
 export async function getRequestRow(q: Query, id: string): Promise<RequestRow | null> {
   if (!UUID.test(id)) return null;
-  return ((await q("SELECT * FROM requests WHERE id = $1", [id])).rows[0] as RequestRow | undefined) ?? null;
+  return ((await q("SELECT * FROM requests WHERE id = $1 AND team_kind IS NULL", [id])).rows[0] as RequestRow | undefined) ?? null;
 }
 const readRecipients = async (q: Query, id: string) =>
   (await q("SELECT person_id, status, done_by, done_at FROM request_recipients WHERE request_id = $1 ORDER BY person_id", [id])).rows as RecipientRow[];
@@ -145,9 +145,9 @@ export async function listRequests(q: Query, viewerId: string, box: TRequestBox,
     EXISTS (SELECT 1 FROM notifications n WHERE n.person_id = $1 AND n.object_type = 'request' AND n.object_id = r.id::text AND n.read_at IS NULL) AS unread`;
   const rows = (box === "inbox"
     ? await q(`SELECT r.*, rr.status AS my_status, ${aggregates} FROM request_recipients rr JOIN requests r ON r.id = rr.request_id
-        WHERE rr.person_id = $1 AND r.status <> 'draft' ORDER BY rr.status = 'pending' DESC, r.sent_at DESC LIMIT 100`, [viewerId])
+        WHERE rr.person_id = $1 AND r.team_kind IS NULL AND r.status <> 'draft' ORDER BY rr.status = 'pending' DESC, r.sent_at DESC LIMIT 100`, [viewerId])
     // 影响卡是系统替拍板的人推的，文档变更的确认卡是系统替作者发的，都不进「发出的」。
-    : await q(`SELECT r.*, NULL AS my_status, ${aggregates} FROM requests r WHERE r.initiator_id = $1 AND r.kind NOT IN ('impact', 'doc_change')
+    : await q(`SELECT r.*, NULL AS my_status, ${aggregates} FROM requests r WHERE r.initiator_id = $1 AND r.team_kind IS NULL AND r.kind NOT IN ('impact', 'doc_change')
         ORDER BY r.status = 'done', r.created_at DESC LIMIT 100`, [viewerId])).rows as (RequestRow & {
     my_status: "pending" | "done" | null; recipient_ids: string[]; done_count: number; open_questions: number; unread: boolean;
   })[];
@@ -242,7 +242,7 @@ async function executeInTransaction(client: PoolClient, viewerId: string, scope:
   allowed: Set<string>): Promise<{ ok: true } | RequestError> {
   const q: Query = (sql, params) => client.query(sql, params);
   if (!UUID.test(scope.objectId)) return NOT_FOUND;
-  const row = (await q("SELECT * FROM requests WHERE id = $1 FOR UPDATE", [scope.objectId])).rows[0] as RequestRow | undefined;
+  const row = (await q("SELECT * FROM requests WHERE id = $1 AND team_kind IS NULL FOR UPDATE", [scope.objectId])).rows[0] as RequestRow | undefined;
   if (!row) return NOT_FOUND;
   const recipients = await readRecipients(q, row.id);
   const isInitiator = row.initiator_id === viewerId;

@@ -1,0 +1,57 @@
+/*
+ * 伙伴形象 Miles、C妹（components/coagent/MilesCapsule、milesRig）：上面是探出胶囊的半身，下面是写着名字的小胶囊（整块 66 高，
+ * 对话层页头那颗大一号、72 高）；宽跟着名字，高和宽都由 MilesCapsule 写在元素上。
+ * 出现、退场和其他形象一样（capsuleIn / capsuleOut，coagent-capsule.module.css），Miles 自己升上来、沉回去由 milesRig 播。
+ * 这里只放跟着姿势切换的几档：待机时头摆正；在听时头侧过来一点、目光朝向说话的人；在说时胶囊染一层淡淡的蓝紫。
+ * Q 版圆形头像（data-shape="circle"，设计 5.1、5.2）：浅底一圈发丝线；在想、正在输入、做完了三种样子（目光、头的位移按画的坐标）。
+ */
+
+.miles {
+  position: relative;
+  animation: capsuleIn 460ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  animation-delay: var(--coagent-enter-delay, 0ms);
+}
+
+.miles[data-leaving] { animation: capsuleOut 320ms cubic-bezier(0.32, 0.72, 0, 1) both; }
+
+.unit { display: block; width: 100%; height: 100%; overflow: visible; }
+
+.headPose { transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1); }
+.gaze { transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1); }
+.miles[data-pose='listening'] .headPose { transform: rotate(3.5deg); }
+.miles[data-pose='listening'] .gaze { transform: translate(var(--g), 0px); }
+
+.breathe { animation: breathe 3.8s ease-in-out infinite; }
+
+.miles[data-shape='circle'] { width: 100%; height: 100%; overflow: hidden; border-radius: 50%; background: color-mix(in oklab, var(--accent) 12%, var(--surface)); }
+.miles[data-shape='circle']::after { content: ''; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 var(--hairline-w, 1px) var(--hairline); pointer-events: none; }
+
+/* 在想：眼睛往左上、头微微偏；正在输入：眼睛往下、1.2 秒轻点一下头；做完了：笑眼（闭眼那两道弧）。 */
+.miles[data-pose='thinking'] .gaze { transform: translate(-10px, -16px); }
+.miles[data-pose='thinking'] .headPose { transform: rotate(-4deg); }
+.miles[data-pose='typing'] .gaze { transform: translate(0px, 16px); }
+.miles[data-pose='typing'] .headPose { animation: nod 1.2s ease-in-out infinite; }
+.miles[data-pose='done'] :is([data-part='eye-l'], [data-part='eye-r']) { display: none; }
+.miles[data-pose='done'] :is([data-part='eye-l-closed'], [data-part='eye-r-closed']) { display: inline; }
+
+.speakGlass { opacity: 0; transition: opacity 260ms ease; }
+.miles[data-pose='speaking'] .speakGlass { opacity: 1; }
+
+@keyframes capsuleIn {
+  from { opacity: 0; transform: scale(0.94); filter: blur(6px); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+
+@keyframes capsuleOut {
+  from { opacity: 1; transform: none; filter: none; }
+  to { opacity: 0; transform: scale(0.94); filter: blur(6px); }
+}
+
+@keyframes breathe { 0%, 100% { transform: none; } 50% { transform: scale(1.012, 1.02); } }
+
+@keyframes nod { 0%, 100% { transform: none; } 50% { transform: rotate(2deg) translateY(6px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .miles, .miles[data-leaving], .breathe, .miles[data-pose] .headPose { animation: none; }
+  .headPose, .gaze, .speakGlass { transition: none; }
+}

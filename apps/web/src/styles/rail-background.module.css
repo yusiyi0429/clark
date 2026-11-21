@@ -1,0 +1,80 @@
+/*
+ * 左边通知栏的背景（components/railBackground）：每张预设只定义两个变量，通知栏（notifications.module.css 的 .rail）
+ * 和设置里的小样（.swatch）用同一份，看到的就是换上去的样子。都是偏深的底色，白字始终看得清。
+ * 「我的图」：本人上传的图（--rail-photo）上压一层上深、中浅、下略深的暗色，时间和通知卡的白字不会被浅色照片吃掉。
+ */
+
+.bg {
+  --rail-bg-color: #4b5a73;
+  --rail-bg-image: radial-gradient(ellipse at 18% 3%, rgb(222 231 246 / 22%) 0%, transparent 46%), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 1100' preserveAspectRatio='xMidYMid slice'%3E%3Cg fill='none' stroke='%23fff' stroke-opacity='.075' stroke-width='1.1'%3E%3Cpath d='M-20 100 C110 78 250 248 420 150'/%3E%3Cpath d='M-20 200 C110 146 250 316 420 250'/%3E%3Cpath d='M-20 300 C110 270 250 440 420 350'/%3E%3Cpath d='M-20 400 C110 352 250 522 420 450'/%3E%3Cpath d='M-20 500 C110 476 250 646 420 550'/%3E%3Cpath d='M-20 600 C110 548 250 718 420 650'/%3E%3Cpath d='M-20 700 C110 666 250 836 420 750'/%3E%3Cpath d='M-20 800 C110 742 250 912 420 850'/%3E%3Cpath d='M-20 900 C110 872 250 1042 420 950'/%3E%3Cpath d='M-20 1000 C110 954 250 1124 420 1050'/%3E%3C/g%3E%3C/svg%3E"), linear-gradient(180deg, #6a7a93 0%, #50607b 50%, #39455c 100%);
+}
+
+.bg[data-rail-bg="dusk"] {
+  --rail-bg-color: #615671;
+  --rail-bg-image: radial-gradient(ellipse at 22% 2%, rgb(255 214 188 / 30%) 0%, transparent 48%), radial-gradient(ellipse at 100% 88%, rgb(150 120 200 / 30%) 0%, transparent 58%), linear-gradient(180deg, #86768f 0%, #615671 48%, #3d3650 100%);
+}
+
+.bg[data-rail-bg="pine"] {
+  --rail-bg-color: #476459;
+  --rail-bg-image: radial-gradient(ellipse at 18% 3%, rgb(214 238 224 / 22%) 0%, transparent 46%), radial-gradient(ellipse at 92% 100%, rgb(28 56 52 / 45%) 0%, transparent 60%), linear-gradient(180deg, #68867b 0%, #476459 50%, #2f4542 100%);
+}
+
+.bg[data-rail-bg="night"] {
+  --rail-bg-color: #252e48;
+  --rail-bg-image: radial-gradient(ellipse at 82% 4%, rgb(132 160 236 / 26%) 0%, transparent 50%), radial-gradient(ellipse at 8% 96%, rgb(96 76 160 / 24%) 0%, transparent 55%), linear-gradient(180deg, #36415f 0%, #252e48 52%, #161c2f 100%);
+}
+
+.bg[data-rail-bg="sand"] {
+  --rail-bg-color: #6f5d51;
+  --rail-bg-image: radial-gradient(ellipse at 20% 3%, rgb(255 232 204 / 28%) 0%, transparent 48%), linear-gradient(180deg, #958070 0%, #6f5d51 50%, #4a3e38 100%);
+}
+
+.bg[data-rail-bg="custom"] {
+  --rail-bg-color: #2c3446;
+  --rail-bg-image: linear-gradient(180deg, rgb(12 18 30 / 52%) 0%, rgb(12 18 30 / 30%) 28%, rgb(12 18 30 / 30%) 64%, rgb(12 18 30 / 44%) 100%), var(--rail-photo);
+}
+
+/* 设置里的选择面板：竖着的小样，比例接近通知栏；点一张就换上。 */
+.options { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+
+.option {
+  position: relative;
+  display: grid;
+  gap: 7px;
+  padding: 6px 6px 8px;
+  border: 1px solid #e3e8ef;
+  border-radius: 18px;
+  background: #fff;
+  color: #3a4352;
+  font: inherit;
+  font-size: 12.5px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.option:hover { border-color: #c9d4e4; }
+.option[data-selected] { border-color: #3a6cf0; box-shadow: 0 0 0 1px #3a6cf0, 0 6px 18px -10px rgb(0 40 255 / 35%); }
+.option[aria-disabled="true"] { cursor: progress; }
+.option input { position: absolute; opacity: 0; pointer-events: none; }
+.option:has(input:focus-visible), .option:focus-visible { outline: 2px solid #3a6cf0; outline-offset: 2px; }
+
+.swatch {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 3 / 4;
+  border-radius: 13px;
+  background-color: var(--rail-bg-color);
+  background-image: var(--rail-bg-image);
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  box-shadow: inset 0 .5px rgb(255 255 255 / 52%);
+}
+
+.upload .swatch { border: 1px dashed #c3ccd9; background: #f6f8fb; box-shadow: none; color: #6b7686; }
+.upload:hover .swatch { border-color: #9fb0c8; color: #3a4352; }
+
+.error { grid-column: 1 / -1; margin: 0; color: #c2410c; font-size: 13px; }
+
+@media (max-width: 599px) { .options { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; } }

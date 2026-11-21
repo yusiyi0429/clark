@@ -11,6 +11,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronRight, Link2 } from "lucide-react";
 import type { TProgressArtifact, TProgressOnTrack, TProgressOverview, TProgressPersonSummary, TProgressRedLine } from "@warmap/contracts";
 import { DetailFrame } from "@/components/shell/DetailFrame";
+import { PersonAvatar } from "@/components/avatar/PersonAvatar";
 import { useRegisterDetail, useWorkspace } from "@/components/shell/WorkspaceContext";
 import { browserApi, type Card } from "@/lib/api/client";
 import { relativeDayTime } from "@/lib/companyTime";
@@ -105,8 +106,8 @@ export function ProgressBody({ progress, onNavigate }: { progress: TProgressOver
   </>;
 }
 
-function Person({ name }: { name: string }) {
-  return <span className={s.person}><span className={s.avatar} aria-hidden>{name.slice(-2)}</span>{name}</span>;
+function Person({ person: { personId, name } }: { person: { personId: string; name: string } }) {
+  return <span className={s.person}><PersonAvatar personId={personId} className={s.avatar}>{name.slice(-2)}</PersonAvatar>{name}</span>;
 }
 
 /** 数字对比加一条进度条：前一个是预计 / 剩下的，后一个是已用 / 还需的；超出的部分标红。 */
@@ -143,7 +144,7 @@ function RedLineRow({ line }: { line: TProgressRedLine }) {
       <div className={s.itemHead}>
         <span className={s.flag} data-tone="red">比预期慢</span>
         <h3 className={s.itemTitle}>{task.title}</h3>
-        <Person name={line.person.name} />
+        <Person person={line.person} />
       </div>
       <p className={s.meta}>
         <span>{line.mission.title}</span><span>{dayRangeText(task.startDate, task.dueDate)}</span><span>{STATUS_TEXT[task.status]}</span>
@@ -158,7 +159,7 @@ function RedLineRow({ line }: { line: TProgressRedLine }) {
     <div className={s.itemHead}>
       <span className={s.flag} data-tone="red">做不完</span>
       <h3 className={s.itemTitle}>{line.mission.title}</h3>
-      <Person name={line.person.name} />
+      <Person person={line.person} />
     </div>
     <p className={s.meta}><span>截止 {dayRangeText(line.mission.deadline, line.mission.deadline)}</span><span>{line.tasks.length} 件未完成</span></p>
     <Meter capacity={line.leftDays} demand={line.neededDays} capacityLabel="剩" demandLabel="还需" />
@@ -175,7 +176,7 @@ function SummaryRow({ summary, onNavigate }: { summary: TProgressPersonSummary; 
   const review = summary.weeklyReview;
   return <li className={s.item}>
     <div className={s.itemHead}>
-      <Person name={summary.person.name} />
+      <Person person={summary.person} />
       {review ? <button type="button" className={s.linkChip} onClick={(event) => onNavigate(review.href, event.currentTarget)}>
         周复盘 {dayRangeText(review.weekStart, review.weekEnd)}<ChevronRight size={14} aria-hidden /></button>
         : <span className={s.tag}>无周复盘</span>}
@@ -195,7 +196,7 @@ function OnTrackRow({ row }: { row: TProgressOnTrack }) {
     <div className={s.itemHead}>
       <span className={s.flag} data-tone="green">按计划</span>
       <h3 className={s.itemTitle}>{row.task.title}</h3>
-      <Person name={row.person.name} />
+      <Person person={row.person} />
     </div>
     <p className={s.meta}><span>{row.mission.title}</span><span>{dayRangeText(row.task.startDate, row.task.dueDate)}</span><span>{STATUS_TEXT[row.task.status]}</span></p>
     <Meter capacity={row.task.plannedDays} demand={row.task.usedDays} capacityLabel="预计" demandLabel="已用" />

@@ -4,6 +4,7 @@ import { CITATION_SCHEME } from "./sourceCitations.js";
 import { weekRange } from "./weeklyProgress.js";
 import { weeklyReviewText } from "./weeklyReviews.js";
 import { PERSONAL_REVIEW_FIELDS, readPersonalReviewMaterials, type PersonalReviewRow } from "./personalReviews.js";
+import { cutText } from "./textCut.js";
 
 /**
  * 个人复盘生成：读 Mission 卡 → 读每周复盘 → 读采集记录 → 起草。
@@ -41,7 +42,7 @@ export type PersonalReviewDraftInput = {
 };
 
 const day = (date: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", month: "2-digit", day: "2-digit" }).format(date).replace("-", "/");
-const clip = (text: string, max: number) => text.length > max ? `${text.slice(0, max - 1)}…` : text;
+const clip = (text: string, max: number) => text.length > max ? cutText(text, max) : text;
 const monthWindow = (period: string) => {
   const [year, month] = period.split("-").map(Number);
   // 北京时间当月 1 日 0 点到次月 1 日 0 点；周进展允许次月首周补记（与单元复盘同一口径）。

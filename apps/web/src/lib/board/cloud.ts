@@ -1,0 +1,268 @@
+/**
+ * 新骨架要的云端接口（V2 设计第 5.1 节，契约 taskCards.ts、topics.ts、localDevices.ts，见 boardOpenapi.ts）。
+ * 后端实现还在做，接口可能暂时 404：读的当成「还没有」，写的报一句「没成功」。
+ */
+import type {
+  TCreateTopicRequest,
+  TBudget, TAcceptCardDraftsRequest, TCardBoardResponse, TCardBriefResponse, TCardDetailResponse, TCardPlanBriefResponse, TCardPlanView, TCardSplitListResponse, TCardSplitRequestView, TCardTaskView,
+  TCreateLocalDeviceRequest, TCreateLocalDeviceResponse, TLocalDeviceView, TPatchCardRequest, TResearchTopicView,
+  TTopicBriefResponse, TTopicDetailResponse, TTopicVersionView, TWorkersResponse,
+  TBackgroundResponse, TClaimSessionStartsResponse, TRouteResponse, TWorkHomeResponse,
+  TProject, TProjectDetailResponse, TProjectFeedResponse, TProjectGoal, TProjectListResponse, TProjectPipelineResponse, TUpdateProjectRequest,
+  TArchivedSubSessionListResponse, TSubSessionKind, TUpdateSubSessionRequest,
+  TConversationModelChoice, TConversationModelListResponse, TProjectPipelineModel,
+  TCardAgreementChangeListResponse, TCardRelayRequest,
+  THandoverSecretFinding, TProjectTransfer, TUpdateProjectTransferRequest, TConversationHistory, TProjectBoardResponse, TProjectGoalChangedItem,
+} from "@warmap/contracts";
+import { browserApi } from "@/lib/api/client";
+
+export class CloudError extends Error {
+  /** body：服务端回的原样（交接说明里有像密钥的，findings 在这里）。 */
+  constructor(readonly status: number, message: string, readonly code?: string, readonly body?: unknown) { super(message); }
+}
+
+type Result<T> = { data?: T; error?: unknown; response: Response };
+
+/** 401 去登录；不成功抛 CloudError（带服务端的话）。 */
+export async function unwrap<T>(call: Promise<Result<T>>): Promise<T> {
+  let result: Result<T>;
+  try {
+    result = await call;
+  } catch {
+    throw new CloudError(0, "连不上天枢，请稍后再试");
+  }
+  const { data, error, response } = result;
+  if (response.status === 401) {
+    window.location.assign(`/access?next=${encodeURIComponent(window.location.pathname)}`);
+    throw new CloudError(401, "登录过期了");
+  }
+  if (!response.ok || data === undefined) {
+    const body = (error ?? {}) as { message?: string; code?: string };
+    throw new CloudError(response.status, body.message ?? "没成功，请重试", body.code, error);
+  }
+  return data;
+}
+/** 读：接口还没有（404）时返回 null。 */
+async function maybe<T>(call: Promise<Result<T>>): Promise<T | null> {
+  try {
+    return await unwrap(call);
+  } catch (error) {
+    if (error instanceof CloudError && error.status === 404) return null;
+    throw error;
+  }
+}
+
+const id = (value: string) => ({ path: { id: value } });
+const task = (taskId: string) => ({ path: { taskId } });
+
+// ── 看板 ──
+export const readBoard = (taskId: string) => maybe<TCardBoardResponse>(browserApi.GET("/api/plan-tasks/{taskId}/cards", { params: task(taskId) }));
+export const planCards = (taskId: string, hint?: string) => unwrap<TCardPlanView>(browserApi.POST("/api/plan-tasks/{taskId}/card-plans", { params: task(taskId), body: hint ? { hint } : {} }) as Promise<Result<TCardPlanView>>);
+/**
+ * start：新首页第 4.4 节，交给 Agent 的卡同时登记要开工（配对的电脑上的网页认领后开）。budget：开工框上方选的预算（11.3），带了就存成这件 Task 的预算。
+ * afterSequence（17.2 第 29 条）：项目对话里本人看到的最后一条，「开了哪几个子会话」插在它后面；不带时云端自己读。
+ */
+export const acceptDrafts = (taskId: string, drafts: TAcceptCardDraftsRequest["drafts"], start = false, budget?: TAcceptCardDraftsRequest["budget"], afterSequence?: number) =>
+  unwrap(browserApi.POST("/api/plan-tasks/{taskId}/card-drafts/accept", { params: task(taskId), body: { drafts, ...(start ? { start } : {}), ...(budget ? { budget } : {}), ...(afterSequence ? { afterSequence } : {}) } }))
+    .then((data) => data.cards as TCardTaskView[]);
+/** 这件 Task 现在的预算（11.3；没单独设过时是本人的缺省，inherited）：开工框的模式分段从它开始。 */
+export const readTaskBudget = (taskId: string) => maybe(browserApi.GET("/api/me/tasks/{taskId}/budget", { params: task(taskId) }));
+/** 改这件 Task 的预算（Task 详情里「预算」那一行，11.3）。 */
+export const saveTaskBudget = (taskId: string, budget: TBudget) => unwrap(browserApi.PUT("/api/me/tasks/{taskId}/budget", { params: task(taskId), body: budget }));
+/** 本人新 Task 的缺省预算（「偏好」，11.3；没设过是自动）。 */
+export const readBudgetDefault = () => maybe(browserApi.GET("/api/me/budget-default"));
+export const saveBudgetDefault = (budget: TBudget) => unwrap(browserApi.PUT("/api/me/budget-default", { body: budget }));
+/** 本人的通知开关（「偏好」，13.2）：飞书推送，缺省开。 */
+export const readNotificationSettings = () => maybe(browserApi.GET("/api/me/notification-settings"));
+export const saveNotificationSettings = (feishu: boolean) => unwrap(browserApi.PUT("/api/me/notification-settings", { body: { feishu } }));
+export const dismissDraft = (draftId: string) => unwrap(browserApi.POST("/api/card-drafts/{id}/dismiss", { params: id(draftId) }));
+export const shipPending = (taskId: string, statement?: string) =>
+  unwrap(browserApi.POST("/api/plan-tasks/{taskId}/deliverable/versions/from-pending", { params: task(taskId), body: statement ? { statement } : {} }));
+export const addTopicVersionToPending = (taskId: string, topicVersionId: string) =>
+  unwrap(browserApi.POST("/api/plan-tasks/{taskId}/deliverable/pending", { params: task(taskId), body: { topicVersionId } }));
+
+// ── 拆卡（第 21 节）：登记了还没开工的拆卡，真正去拆的是本人电脑上的规划员 ──
+export const listSplits = () => maybe<TCardSplitListResponse>(browserApi.GET("/api/me/card-splits") as Promise<Result<TCardSplitListResponse>>).then((data) => data?.requests ?? []);
+/**
+ * 原话最多 4000 字（契约 RegisterCardSplitRequest）；afterSequence（17.2 第 29 条）：项目对话里本人看到的最后一条，拆卡那几块插在它后面。
+ * 都没有就不带请求体（云端自己读对话最后一条）。
+ */
+export const WORDS_MAX = 4000;
+export const splitBody = (words?: string, afterSequence?: number) => {
+  const body = { ...(words?.trim() ? { words: words.trim().slice(0, WORDS_MAX) } : {}), ...(afterSequence ? { afterSequence } : {}) };
+  return Object.keys(body).length ? body : undefined;
+};
+export const registerSplit = (taskId: string, words?: string, afterSequence?: number) =>
+  unwrap<TCardSplitRequestView>(browserApi.POST("/api/plan-tasks/{taskId}/card-splits", { params: task(taskId), body: splitBody(words, afterSequence) }) as Promise<Result<TCardSplitRequestView>>);
+/** 规划员开起来以后把登记去掉（回 204，没有回包）。 */
+export const removeSplit = (splitId: string) => unwrap(browserApi.DELETE("/api/me/card-splits/{id}", { params: id(splitId) }))
+  .then(() => undefined, (error: unknown) => { if (!(error instanceof CloudError && error.status === 204)) throw error; });
+export const planBrief = (taskId: string) => unwrap<TCardPlanBriefResponse>(browserApi.GET("/api/plan-tasks/{taskId}/plan-brief", { params: task(taskId) }) as Promise<Result<TCardPlanBriefResponse>>);
+
+// ── 卡 ──
+export const readCard = (cardId: string) => maybe<TCardDetailResponse>(browserApi.GET("/api/me/cards/{id}", { params: id(cardId) }));
+export const patchCard = (cardId: string, body: TPatchCardRequest) => unwrap(browserApi.PATCH("/api/me/cards/{id}", { params: id(cardId), body })) as Promise<unknown>;
+export const cardBrief = (cardId: string) => unwrap<TCardBriefResponse>(browserApi.GET("/api/me/cards/{id}/brief", { params: id(cardId) }));
+const handback = (cardId: string, handbackId: string) => ({ path: { id: cardId, handbackId } });
+export const overrule = (cardId: string, handbackId: string, reason: string) =>
+  unwrap(browserApi.POST("/api/me/cards/{id}/handbacks/{handbackId}/overrule", { params: handback(cardId, handbackId), body: { reason } }));
+export const retryAcceptance = (cardId: string, handbackId: string) => unwrap(browserApi.POST("/api/me/cards/{id}/handbacks/{handbackId}/retry", { params: handback(cardId, handbackId) }));
+/** 登记「再改一轮」「我来补」（主循环第 61、62 条）：那台电脑上开着的网页认领后送给执行方；回卡的详情。 */
+export const relayHandback = (cardId: string, handbackId: string, body: TCardRelayRequest) =>
+  unwrap<TCardDetailResponse>(browserApi.POST("/api/me/cards/{id}/handbacks/{handbackId}/relay", { params: handback(cardId, handbackId), body }) as Promise<Result<TCardDetailResponse>>);
+/** 卡的约定的修改记录，新的在前（主循环第 60 条）。 */
+export const listAgreementChanges = (cardId: string) =>
+  unwrap<TCardAgreementChangeListResponse>(browserApi.GET("/api/me/cards/{id}/agreement-changes", { params: id(cardId) }) as Promise<Result<TCardAgreementChangeListResponse>>).then((data) => data.changes);
+/** 执行方提的改约定：改成这样 / 不改；回卡的详情。 */
+export const decideProposal = (cardId: string, proposalId: string, decision: "accept" | "reject") =>
+  unwrap<TCardDetailResponse>(browserApi.POST("/api/me/cards/{id}/agreement-proposals/{proposalId}/decision", { params: { path: { id: cardId, proposalId } }, body: { decision } }) as Promise<Result<TCardDetailResponse>>);
+export const markReturned = (cardId: string, handbackId: string) => unwrap(browserApi.POST("/api/me/cards/{id}/handbacks/{handbackId}/returned", { params: handback(cardId, handbackId) }));
+
+// ── worker（跨 Task）──
+export const readWorkers = () => maybe<TWorkersResponse>(browserApi.GET("/api/me/workers") as Promise<Result<TWorkersResponse>>);
+
+// ── 本机设备 ──
+export const listDevices = () => maybe(browserApi.GET("/api/me/local-devices")).then((data) => (data?.devices ?? []) as TLocalDeviceView[]);
+export const createDevice = (body: TCreateLocalDeviceRequest) => unwrap<TCreateLocalDeviceResponse>(browserApi.POST("/api/me/local-devices", { body }) as Promise<Result<TCreateLocalDeviceResponse>>);
+/** 回 204，没有回包。 */
+export const revokeDevice = (deviceId: string) => unwrap(browserApi.DELETE("/api/me/local-devices/{id}", { params: id(deviceId) }))
+  .then(() => undefined, (error: unknown) => { if (!(error instanceof CloudError && error.status === 204)) throw error; });
+
+// ── 调研专题 ──
+export const listTopics = (status: "active" | "archived" = "active") =>
+  maybe(browserApi.GET("/api/me/topics", { params: { query: { status } } })).then((data) => (data?.topics ?? []) as TResearchTopicView[]);
+/** 建专题；自由子会话（第 68 条，项目下的「+」）带 free、projectId、firstMessage，不带标题（云端取第一句截短），云端同时登记开工。 */
+export const createTopic = (body: TCreateTopicRequest) => unwrap<TResearchTopicView>(browserApi.POST("/api/me/topics", { body }) as Promise<Result<TResearchTopicView>>);
+export const readTopic = (topicId: string) => maybe<TTopicDetailResponse>(browserApi.GET("/api/me/topics/{id}", { params: id(topicId) }));
+export const patchTopic = (topicId: string, body: { title?: string; status?: "active" | "archived" }) => unwrap(browserApi.PATCH("/api/me/topics/{id}", { params: id(topicId), body }));
+export const readTopicVersion = (topicId: string, number: number) =>
+  unwrap<TTopicVersionView>(browserApi.GET("/api/me/topics/{id}/versions/{number}", { params: { path: { id: topicId, number } } }) as Promise<Result<TTopicVersionView>>);
+/** critics：评审会用的挑刺岗位 id（本人点的），不传用团队里的前三个。 */
+export const topicBrief = (topicId: string, critics?: string[]) =>
+  unwrap<TTopicBriefResponse>(browserApi.GET("/api/me/topics/{id}/brief", { params: { path: { id: topicId }, ...(critics?.length ? { query: { critics: critics.join(",") } } : {}) } }) as Promise<Result<TTopicBriefResponse>>);
+
+// ── 新首页（workHome.ts）：B 的实现到之前这几个读接口是 404，网页回落到上面几份数据自己拼（lib/home/derive.ts）──
+export const readWorkHome = () => maybe<TWorkHomeResponse>(browserApi.GET("/api/me/work-home") as Promise<Result<TWorkHomeResponse>>);
+export const readBackground = (scope: string) => maybe<TBackgroundResponse>(browserApi.GET("/api/me/background", { params: { query: { scope } } }) as Promise<Result<TBackgroundResponse>>);
+// ── 项目（第 16 节，projects.ts）──
+const project = (projectId: string) => ({ path: { projectId } });
+export const listProjects = () => unwrap<TProjectListResponse>(browserApi.GET("/api/me/projects") as Promise<Result<TProjectListResponse>>);
+/** 建一个项目；带 taskId 时顺手把这件 Task 挂上来（「挂到… → 新建」）。 */
+export const createProject = (name: string, taskId?: string) =>
+  unwrap<TProject>(browserApi.POST("/api/me/projects", { body: taskId ? { name, taskId } : { name } }) as Promise<Result<TProject>>);
+export const readProject = (projectId: string) => maybe<TProjectDetailResponse>(browserApi.GET("/api/me/projects/{projectId}", { params: project(projectId) }) as Promise<Result<TProjectDetailResponse>>);
+/** 改名、归档（archived: true）、恢复（archived: false）。 */
+export const updateProject = (projectId: string, body: TUpdateProjectRequest) =>
+  unwrap<TProject>(browserApi.PATCH("/api/me/projects/{projectId}", { params: project(projectId), body }) as Promise<Result<TProject>>);
+/** 回 204、没有回包的：unwrap 把它当成没成（status 204），这里算成了。 */
+const noContent = (call: Promise<unknown>) => call.then(() => undefined, (error: unknown) => { if (!(error instanceof CloudError && error.status === 204)) throw error; });
+/** 删掉项目（35 条，撤不回，204）：有在跑的 409 PROJECT_BUSY（message 写是哪几个），正在转交 409 PROJECT_TRANSFERRING。本机解绑由调用方做。 */
+export const deleteProject = (projectId: string) =>
+  noContent(unwrap<unknown>(browserApi.DELETE("/api/me/projects/{projectId}", { params: project(projectId) }) as Promise<Result<unknown>>));
+const subSession = (kind: TSubSessionKind, id: string) => ({ path: { kind, id } });
+/** 子会话改名、归档（archived: true）、恢复（false）（35 条，204）；在跑时归档 409 SUB_SESSION_RUNNING。 */
+export const updateSubSession = (kind: TSubSessionKind, id: string, body: TUpdateSubSessionRequest) =>
+  noContent(unwrap<unknown>(browserApi.PATCH("/api/me/sub-sessions/{kind}/{id}", { params: subSession(kind, id), body }) as Promise<Result<unknown>>));
+/** 删掉子会话：进回收站，30 天内能恢复；在跑 409 SUB_SESSION_RUNNING。 */
+export const deleteSubSession = (kind: TSubSessionKind, id: string) =>
+  noContent(unwrap<unknown>(browserApi.DELETE("/api/me/sub-sessions/{kind}/{id}", { params: subSession(kind, id) }) as Promise<Result<unknown>>));
+/** 归档了的子会话（新归档的在前），带原来的项目和字母。 */
+export const listArchivedSubSessions = () =>
+  unwrap<TArchivedSubSessionListResponse>(browserApi.GET("/api/me/sub-sessions/archived") as Promise<Result<TArchivedSubSessionListResponse>>);
+/** 项目对话能选的模型和各自的思考程度（36 条）；默认的排第一，没接 Chat 为空（不出选择）。 */
+export const listConversationModels = () =>
+  unwrap<TConversationModelListResponse>(browserApi.GET("/api/me/conversation-models") as Promise<Result<TConversationModelListResponse>>);
+/** 这个项目对话选的模型和思考程度，没选为 null（照 Chat 的默认）。 */
+export const readPipelineModel = (projectId: string) =>
+  unwrap<TProjectPipelineModel>(browserApi.GET("/api/me/projects/{projectId}/pipeline/model", { params: project(projectId) }) as Promise<Result<TProjectPipelineModel>>);
+/** 改项目对话的模型和思考程度，null 回到默认；不在列表里 400 INVALID_MODEL_CHOICE，没接 Chat 409 CHAT_NOT_CONNECTED。 */
+export const setPipelineModel = (projectId: string, choice: TConversationModelChoice | null) =>
+  unwrap<TProjectPipelineModel>(browserApi.PUT("/api/me/projects/{projectId}/pipeline/model", { params: project(projectId), body: { choice } }) as Promise<Result<TProjectPipelineModel>>);
+/** 本人打开了一个子会话（sub，卡或专题的 id）或项目对话（project）：记下看过，左栏蓝点消失（26 条，204、幂等）。 */
+export const markWorkSeen = (kind: "sub" | "project", id: string) =>
+  unwrap<unknown>(browserApi.POST("/api/me/work-seen", { body: { kind, id } }) as Promise<Result<unknown>>);
+/** 给挂在这个项目上的一件 Task 存验收截止日（YYYY-MM-DD），null 是不存了、退回记下的原验收时间点。 */
+export const setGoalDueDate = (projectId: string, taskId: string, dueDate: string | null) =>
+  unwrap<unknown>(browserApi.PUT("/api/me/projects/{projectId}/goals/{taskId}/due-date", { params: { path: { projectId, taskId } }, body: { dueDate } }) as Promise<Result<unknown>>);
+/** 把一件 Task 挂到这个项目（原来挂在别处就移过来）。 */
+export const attachGoal = (projectId: string, taskId: string) =>
+  unwrap<TProjectGoal>(browserApi.PUT("/api/me/projects/{projectId}/goals/{taskId}", { params: { path: { projectId, taskId } } }) as Promise<Result<TProjectGoal>>);
+/** 项目对话（第一次打开时建）；收发走现有对话接口，scope 是 project:<projectId>。 */
+export const openProjectPipeline = (projectId: string) =>
+  maybe<TProjectPipelineResponse>(browserApi.POST("/api/me/projects/{projectId}/pipeline", { params: project(projectId) }) as Promise<Result<TProjectPipelineResponse>>);
+// ── 项目转交（16.7，projectTransfers.ts）──
+const transfer = (transferId: string) => ({ path: { id: transferId } });
+type TransferCall = Promise<Result<TProjectTransfer>>;
+/** 转给…：发起一份（准备交接），云端先写一份交接说明。 */
+export const startTransfer = (projectId: string, toPersonId: string, afterSequence?: number) =>
+  unwrap<TProjectTransfer>(browserApi.POST("/api/me/projects/{projectId}/transfers", { params: project(projectId), body: { toPersonId, ...(afterSequence ? { afterSequence } : {}) } }) as TransferCall);
+export const readTransfer = (transferId: string) => maybe<TProjectTransfer>(browserApi.GET("/api/me/project-transfers/{id}", { params: transfer(transferId) }) as TransferCall);
+/** 改交接说明、带不带对话、两个选择、本机检查结果（准备中）。 */
+export const updateTransfer = (transferId: string, body: TUpdateProjectTransferRequest) =>
+  unwrap<TProjectTransfer>(browserApi.PATCH("/api/me/project-transfers/{id}", { params: transfer(transferId), body }) as TransferCall);
+/** 交接说明里像密钥的地方（发出时回 422 SECRET_IN_NOTE）：哪一段第几行、命中那一截。不是这种错为 null。 */
+export const secretFindings = (error: unknown): THandoverSecretFinding[] | null =>
+  error instanceof CloudError && error.code === "SECRET_IN_NOTE" ? (error.body as { findings?: THandoverSecretFinding[] } | undefined)?.findings ?? [] : null;
+export const sendTransfer = (transferId: string) => unwrap<TProjectTransfer>(browserApi.POST("/api/me/project-transfers/{id}/send", { params: transfer(transferId) }) as TransferCall);
+export const withdrawTransfer = (transferId: string) => unwrap<TProjectTransfer>(browserApi.POST("/api/me/project-transfers/{id}/withdraw", { params: transfer(transferId) }) as TransferCall);
+export const acceptTransfer = (transferId: string) => unwrap<TProjectTransfer>(browserApi.POST("/api/me/project-transfers/{id}/accept", { params: transfer(transferId) }) as TransferCall);
+export const declineTransfer = (transferId: string) => unwrap<TProjectTransfer>(browserApi.POST("/api/me/project-transfers/{id}/decline", { params: transfer(transferId) }) as TransferCall);
+/** 带上了对话记录时，接手人读原来那段项目对话；没带回 404（null）。 */
+export const readTransferHistory = (transferId: string) =>
+  maybe<TConversationHistory>(browserApi.GET("/api/me/project-transfers/{id}/history", { params: transfer(transferId) }) as Promise<Result<TConversationHistory>>);
+/** 停掉还在云端排队、没有电脑接下的子会话（转交时选了「停掉」；回 204，没有在排的 404 也算停了）。电脑上已经在跑的经本机程序停。 */
+export const cancelStart = (kind: "card" | "topic", subId: string) => unwrap(browserApi.DELETE("/api/me/sub-sessions/{kind}/{id}/start", { params: { path: { kind, id: subId } } }))
+  .then(() => undefined, (error: unknown) => { if (!(error instanceof CloudError && (error.status === 204 || error.status === 404))) throw error; });
+// ── 没挂 Task 的项目拆卡（16.3，projects.ts 的 ProjectBoardResponse）──
+/** 拆卡的对象：一件 Task，或一个没挂 Task 的项目。 */
+export type PlanTarget = { taskId: string } | { projectId: string };
+/** 看板、拆卡失败这些按它记：Task 是 taskId，项目是 project:<projectId>。 */
+export const planKey = (target: PlanTarget) => ("taskId" in target ? target.taskId : `project:${target.projectId}`);
+export const registerProjectSplit = (projectId: string, words?: string, afterSequence?: number) =>
+  unwrap<TCardSplitRequestView>(browserApi.POST("/api/me/projects/{projectId}/card-splits", { params: project(projectId), body: splitBody(words, afterSequence) }) as Promise<Result<TCardSplitRequestView>>);
+/**
+ * 登记拆卡（伙伴或页面上的「拆一下」）：配对的电脑上开着的网页认领后开规划员。
+ * words（16.8）：本人在输入框里的话，存成这次拆卡的原话；已有一条没开工的登记时换掉那条的原话。
+ */
+export const registerPlan = (target: PlanTarget, words?: string, afterSequence?: number) =>
+  ("taskId" in target ? registerSplit(target.taskId, words, afterSequence) : registerProjectSplit(target.projectId, words, afterSequence));
+export const projectPlanBrief = (projectId: string) =>
+  unwrap<TCardPlanBriefResponse>(browserApi.GET("/api/me/projects/{projectId}/plan-brief", { params: project(projectId) }) as Promise<Result<TCardPlanBriefResponse>>);
+/** 项目里不挂 Task 的卡、还没处理的草稿、最近一次计划；接口没上为 null。 */
+export const readProjectBoard = (projectId: string) =>
+  maybe<TProjectBoardResponse>(browserApi.GET("/api/me/projects/{projectId}/board", { params: project(projectId) }) as Promise<Result<TProjectBoardResponse>>);
+/** 放进看板（不挂 Task：不带预算，开工用本人的缺省预算）。 */
+export const acceptProjectDrafts = (projectId: string, drafts: TAcceptCardDraftsRequest["drafts"], start = false, afterSequence?: number) =>
+  unwrap(browserApi.POST("/api/me/projects/{projectId}/card-drafts/accept", { params: project(projectId), body: { drafts, ...(start ? { start } : {}), ...(afterSequence ? { afterSequence } : {}) } }))
+    .then((data) => data.cards as TCardTaskView[]);
+/**
+ * 月中 Task 改了或取消了（16.4）：答「停掉 / 留着」。停掉时云端了结还排着的开工登记，这台电脑上在跑的由网页停。
+ * 答过了（别的标签页、别的电脑）回 409 ALREADY_ANSWERED：当成答过，重读动态就好。
+ */
+/**
+ * 答「等你」里的自动接力（18.12，POST /api/me/projects/:projectId/auto-relay，204）：continue 清零恢复，stop 收起那一条、等本人在项目对话里说话再恢复。
+ * 没停着回 409 NOT_PAUSED（别处已经答了）：当成答过。
+ */
+export const decideAutoRelay = (projectId: string, decision: "continue" | "stop") =>
+  unwrap<unknown>(browserApi.POST("/api/me/projects/{projectId}/auto-relay", { params: { path: { projectId } }, body: { decision } }) as Promise<Result<unknown>>)
+    .then(() => undefined, (error: unknown) => { if (!(error instanceof CloudError && error.code === "NOT_PAUSED")) throw error; });
+/**
+ * 确认 / 修改 / 拒绝一条会后待定事项（17.2 第 43 条，契约 nexusDri.ts）：修改带改后的内容。
+ * 不是负责人 403；过期、被新版本作废、已处理过 409——下次读「等你」这一条就不在了。
+ */
+export const decideNexusConfirmation = (id: string, decision: "confirmed" | "amended" | "rejected", value?: string) =>
+  unwrap<unknown>(browserApi.POST("/api/me/nexus-confirmations/{id}/decision", { params: { path: { id } }, body: value === undefined ? { decision } : { decision, value } }) as Promise<Result<unknown>>);
+/** 忽略一件等你（方案 A，id 是 WaitingItem.id，204）：只从等你里收起，事情本身不动；原因必填，这一件之后变了又回来。 */
+/** version 只给会议行（id 是 partner-meeting:<会议行 id>）：那一场当时的样子（lib/home/focus 的 meetingVersion）。 */
+export const ignoreWaiting = (id: string, reason: string, version?: string) =>
+  noContent(unwrap<unknown>(browserApi.POST("/api/me/waiting/{id}/ignore", { params: { path: { id } }, body: { reason, ...(version ? { version } : {}) } }) as Promise<Result<unknown>>));
+export const answerGoalChange = (projectId: string, changeId: string, answer: "stop" | "keep") =>
+  unwrap<TProjectGoalChangedItem>(browserApi.POST("/api/me/projects/{projectId}/goal-changes/{id}", { params: { path: { projectId, id: changeId } }, body: { answer } }) as Promise<Result<TProjectGoalChangedItem>>)
+    .then(() => undefined, (error: unknown) => { if (!(error instanceof CloudError && error.code === "ALREADY_ANSWERED")) throw error; });
+export const readProjectFeed = (projectId: string) =>
+  maybe<TProjectFeedResponse>(browserApi.GET("/api/me/projects/{projectId}/feed", { params: project(projectId) }) as Promise<Result<TProjectFeedResponse>>);
+export const routeMessage = (text: string) => maybe<TRouteResponse>(browserApi.POST("/api/me/route", { body: { text } }) as Promise<Result<TRouteResponse>>);
+/** 认领「要开工」：一条只给一处；本机起不来就 release 放回去（带认领它的这台电脑，只放回这台认领的那条；别处已经重新认领的回 404，照常忽略）。 */
+export const claimStarts = (deviceId: string) => maybe<TClaimSessionStartsResponse>(browserApi.POST("/api/me/session-starts/claim", { body: { deviceId } }) as Promise<Result<TClaimSessionStartsResponse>>);
+export const releaseStart = (startId: string, deviceId: string) => unwrap(browserApi.POST("/api/me/session-starts/{id}/release", { params: id(startId), body: { deviceId } }))
+  .then(() => undefined, (error: unknown) => { if (!(error instanceof CloudError && error.status === 204)) throw error; });

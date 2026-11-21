@@ -28,6 +28,8 @@ export type ParsedSource =
   | { kind: "memory"; ref: string; file: string; section: number | null }
   | { kind: "chat"; ref: string; conversationId: string; sequence: number }
   | { kind: "pmem"; ref: string; id: string }
+  /** 本体对象：world:<object_id>@<version>（答案里照抄 query_company、read_ontology 给的 ref）。 */
+  | { kind: "world"; ref: string; objectId: string; version: number }
   | { kind: "unknown"; ref: string };
 
 const MATERIAL_VERSION = /^material:([^@#\s]+)@v(\d+)(?:#p(\d+))?$/;
@@ -69,6 +71,10 @@ export function parseSourceRef(ref: string): ParsedSource {
       return match ? { kind: "chat", ref, conversationId: match[1], sequence: Number(match[2]) } : { kind: "unknown", ref };
     }
     case "pmem": return /^[^\s#:]+$/.test(rest) ? { kind: "pmem", ref, id: rest } : { kind: "unknown", ref };
+    case "world": {
+      const match = /^([^@\s#:/]+)@(\d+)$/.exec(rest);
+      return match ? { kind: "world", ref, objectId: match[1], version: Number(match[2]) } : { kind: "unknown", ref };
+    }
     default: return { kind: "unknown", ref };
   }
 }
@@ -149,13 +155,14 @@ export function shortDate(iso: string | null | undefined): string {
   return date.toLocaleDateString("zh-CN", { month: "numeric", day: "numeric", timeZone: "Asia/Shanghai" });
 }
 
-export function clip(text: string, max: number): string {
+/** whole：新首页里不截、不拼「…」（本人 11/18），放不下由样式换行。 */
+export function clip(text: string, max: number, whole = false): string {
   const flat = text.replace(/\s+/g, " ").trim();
-  return flat.length <= max ? flat : `${flat.slice(0, max)}…`;
+  return whole || flat.length <= max ? flat : `${flat.slice(0, max)}…`;
 }
 
 /** 依据的名字：材料写文件名、第几版、第几段；发言写谁、哪天；决定写日子和一小段原文。 */
-export function sourceLabel(ref: string, context: SourceContext, issueId?: string | null): string {
+export function sourceLabel(ref: string, context: SourceContext, issueId?: string | null, whole = false): string {
   const parsed = parseSourceRef(ref);
   switch (parsed.kind) {
     case "material": {
@@ -179,7 +186,7 @@ export function sourceLabel(ref: string, context: SourceContext, issueId?: strin
       const hit = historyHit(context.history, ref, issueId);
       if (hit && (hit.layer === "effective" || hit.layer === "inactive")) {
         const state = hit.layer === "inactive" ? (hit.entry.status === "superseded" ? "已被替代的决定" : "已撤回的决定") : `${shortDate(hit.entry.decidedAt)} ${VIA_SHORT[hit.entry.confirmedVia]}`;
-        return `${state.trim()}「${clip(hit.entry.text, 14)}」`;
+        return `${state.trim()}「${clip(hit.entry.text, 14, whole)}」`;
       }
       return "历史决定";
     }
@@ -193,30 +200,30 @@ export function sourceLabel(ref: string, context: SourceContext, issueId?: strin
     }
     case "signal": {
       const hit = historyHit(context.history, ref, issueId);
-      return hit?.layer === "change" ? `外部信号 · ${clip(hit.change.sourceRef, 16)}` : "外部信号";
+      return hit?.layer === "change" ? `外部信号 · ${clip(hit.change.sourceRef, 16, whole)}` : "外部信号";
     }
     case "outcome": {
       if (parsed.meetingId === context.meetingId) return parsed.itemId ? "这场会的会后条目" : "这场会的会后结论";
       const title = context.meetings.get(parsed.meetingId);
-      return title ? `会议「${clip(title, 16)}」的结论` : "关联会议的结论";
+      return title ? `会议「${clip(title, 16, whole)}」的结论` : "关联会议的结论";
     }
     case "meeting": {
       if (parsed.id === context.meetingId) return "当前会议";
       const title = context.meetings.get(parsed.id);
-      return title ? `会议「${clip(title, 16)}」` : "关联会议";
+      return title ? `会议「${clip(title, 16, whole)}」` : "关联会议";
     }
     case "transcript": {
       if (parsed.meetingId === context.meetingId) return "这场会的会议记录";
       const title = context.meetings.get(parsed.meetingId);
-      return title ? `会议记录「${clip(title, 14)}」` : "关联会议记录";
+      return title ? `会议记录「${clip(title, 14, whole)}」` : "关联会议记录";
     }
     case "issue": {
       const title = context.issueTitle(parsed.id);
-      return title ? `议题「${clip(title, 16)}」` : "关联议题";
+      return title ? `议题「${clip(title, 16, whole)}」` : "关联议题";
     }
     case "research": {
       const title = context.issueTitle(parsed.issueId);
-      return title ? `议题预研「${clip(title, 12)}」` : "议题预研";
+      return title ? `议题预研「${clip(title, 12, whole)}」` : "议题预研";
     }
     case "memory": {
       // 内部文件名（kd-*）换成中文名，不把 ID 摆给 CEO。

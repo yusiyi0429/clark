@@ -26,6 +26,7 @@ export const FeishuMinuteInboxItem = Type.Object(
     /** 对不上天枢人员的参会人数。 */
     otherAttendees: Type.Integer({ minimum: 0 }),
     suggestion: Type.Union([FeishuMinuteSuggestion, Type.Null()]),
+    suggestions: Type.Optional(Type.Array(FeishuMinuteSuggestion)),
   },
   { additionalProperties: false },
 );

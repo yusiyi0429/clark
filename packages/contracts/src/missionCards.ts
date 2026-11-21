@@ -3,6 +3,7 @@ import { MonthlyPlanPeriod } from "./monthlyPlans.js";
 import { ActionDescriptor } from "./cards.js";
 import { MissionCardPayload } from "./missions.js";
 import { ThreadMember } from "./threads.js";
+import { NullableInteger } from "./nullable.js";
 
 /** 个人任务允许建议的字段；唯一责任人由任务卡归属决定。 */
 export const MissionCardField = Type.Union([
@@ -127,7 +128,7 @@ export const MissionCardFeedbackView = Type.Object({
   field: Type.Union([MissionCardField, Type.Null()]), kind: FeedbackKind,
   authorId: Type.String(), authorName: Type.String(), body: Type.String(),
   quote: NullableText, proposed: NullableText, original: NullableText,
-  sourceVersion: Type.Union([Type.Integer({ minimum: 1 }), Type.Null()]),
+  sourceVersion: NullableInteger({ minimum: 1 }),
   basis: Type.Union([Type.Literal("draft"), Type.Literal("candidate")]),
   late: Type.Boolean(), round: Type.Integer({ minimum: 1 }), createdAt: DateTime,
   verdict: Type.Object({ text: Type.String(), tone: Type.Union([Type.Literal("open"), Type.Literal("accept"), Type.Literal("decline"), Type.Literal("late"), Type.Literal("wait")]) }, { additionalProperties: false }),
@@ -149,7 +150,7 @@ export const MissionCardCorrectionView = Type.Object({
   authorId: Type.String(), authorName: Type.String(), direct: Type.Boolean(),
   status: Type.Union([Type.Literal("pending"), Type.Literal("applied"), Type.Literal("rejected")]),
   decidedBy: NullableText, decidedByName: NullableText, decidedAt: NullableDateTime, note: NullableText,
-  appliedVersion: Type.Union([Type.Integer({ minimum: 1 }), Type.Null()]),
+  appliedVersion: NullableInteger({ minimum: 1 }),
   stale: Type.Boolean(), createdAt: DateTime,
 }, { additionalProperties: false });
 /** 更正入口随看的人变化；closedReason 为 null 时本卡可更正。 */

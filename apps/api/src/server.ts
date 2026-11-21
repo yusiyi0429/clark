@@ -30,8 +30,8 @@ import { createPersonalReviewDraftAgent } from "./personalReviewAgent.js";
 import { createMonthlyReviewAssessAgent, createMonthlyReviewDraftAgent, createMonthlyReviewSummaryAgent } from "./monthlyReviewAgents.js";
 import { createMonthlyReviewScheduler } from "./monthlyReviewScheduler.js";
 import { createMissionRoundScheduler } from "./missionRoundScheduler.js";
-import { createCollectorHealthScheduler } from "./collector.js";
-import { createCollectorDistillAgent, createCollectorDistillScheduler } from "./collectorDistill.js";
+import { homePushJobs } from "./homePush.js";
+import { createCollectorRawPurgeScheduler } from "./collectorDistill.js";
 import { createWeeklyReviewDraftAgent } from "./weeklyReviewAgent.js";
 import { createWeeklyReviewService } from "./weeklyReviewService.js";
 import { canUseMemberView, ensureLocalDevLogin } from "./memberAccess.js";
@@ -40,8 +40,11 @@ import { recoverStaleMissionDrafts } from "./missionRounds.js";
 import { recoverInterruptedOutcome } from "./outcome.js";
 import { personDisplayNames } from "./people.js";
 import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR } from "./meetingRecordings.js";
-import { resolveWorldEnv, resolveWorldTkEnv } from "./worldClient.js";
+import { resolveWorldEnv, resolveWorldTkEnv, WorldClient, worldConfigured } from "./worldClient.js";
+import { missionAutoLoadJobs } from "./missionAutoLoad.js";
 import { createJobWorker, exampleJobHandlers } from "./jobs.js";
+import { INTAKE_JOB, scanIntake } from "./workIntake.js";
+import { resolveNexusDriEnv } from "./nexusDri.js";
 import { usageReportJobs } from "./usage.js";
 import { resolveFeishuEnv } from "./feishu/config.js";
 import { parseAdminPersonIds } from "./admin.js";
@@ -59,12 +62,15 @@ function requiredEnv(name: string): string {
 
 const env: AppEnv = {
   sessionSecret: requiredEnv("SESSION_SECRET"),
-  sessionMaxAgeSeconds: Number(process.env.SESSION_MAX_AGE_SECONDS ?? "2592000"),
+  // 会话多久没用才过期（用着就续期，见 session.ts）：缺省 90 天。
+  sessionMaxAgeSeconds: Number(process.env.SESSION_MAX_AGE_SECONDS ?? "7776000"),
   publicOrigin: requiredEnv("PUBLIC_ORIGIN"),
   extraOrigins: (process.env.EXTRA_ALLOWED_ORIGINS ?? "").split(",").map((origin) => origin.trim()).filter(Boolean),
   driServiceToken: requiredEnv("DRI_SERVICE_TOKEN"),
   ontologyServiceToken: process.env.ONTOLOGY_SERVICE_TOKEN,
   internalChatToken: process.env.INTERNAL_CHAT_TOKEN || undefined,
+  internalChatTokensPrevious: (process.env.INTERNAL_CHAT_TOKENS_PREVIOUS ?? "").split(",").map((token) => token.trim()).filter(Boolean),
+  internalCallerAllowlist: (process.env.INTERNAL_CALLER_ALLOWLIST ?? "").split(",").map((entry) => entry.trim()).filter(Boolean),
   // 首页对话改走独立 Chat 服务的开关：设了地址才走（还要 INTERNAL_CHAT_TOKEN），不设照旧走天枢自己的对话。
   chatServiceUrl: process.env.CHAT_SERVICE_URL || undefined,
   // 微信 ClawBot 默认关（10/28 不稳定，生产先不上）；设 WECHAT_ENABLED=1 才开。
@@ -104,6 +110,13 @@ const env: AppEnv = {
   preflightThinking: process.env.PREFLIGHT_THINKING || undefined,
   // 预研、会后提取、雷达的模型与思考强度（RESEARCH_MODEL / OUTCOME_MODEL / RADAR_MODEL 等，可选，agentModels.ts）。
   agentModels: agentModelEnvFrom(process.env),
+  // 交付物评审与版本说明（可选，指向 TokenHub）：不配时用 PI_BASE_URL / PI_API_KEY / HEAVY_MODEL、思考 medium。
+  review: { model: process.env.REVIEW_MODEL || undefined, baseUrl: process.env.REVIEW_BASE_URL || undefined,
+    apiKey: process.env.REVIEW_API_KEY || undefined, thinking: process.env.REVIEW_THINKING || undefined },
+  // 云端拆卡和云端 Agent 验收（缺省关，拆卡和验收在本人电脑上做）。
+  boardCloudAgents: process.env.BOARD_CLOUD_AGENTS === "1",
+  // 天枢自己的月度计划和月末复盘（缺省关，复盘和月初拆解只走 M2）。
+  tianshuMonthlyCycle: process.env.TIANSHU_MONTHLY_CYCLE === "1",
   buildSha: process.env.BUILD_SHA ?? "dev",
   materialStorageDir: process.env.MEETING_MATERIAL_STORAGE_DIR,
   conversationAttachmentStorageDir: process.env.CONVERSATION_ATTACHMENT_STORAGE_DIR,
@@ -121,10 +134,14 @@ const env: AppEnv = {
   feishuWebOrigin: process.env.FEISHU_WEB_ORIGIN?.trim() || undefined,
   // 会议记录正文能不能写进本体（等斯一答复）：值为 1 才写，缺省只写已确认的决策和行动项。
   meetingRecordText: process.env.MEETING_WORLD_RECORD_TEXT === "1",
+  // 只关会议写本体（会后链切到 Nexus 以后）：值为 1 才关，缺省照旧写。
+  meetingWorldWritesOff: process.env.MEETING_WORLD_WRITES_OFF === "1",
   collectionBitable: process.env.FEISHU_BITABLE_MODE === "live" ? "live" : "mock",
   // 信息收集、文档变更推送（D-56）：值为 1 才开，缺省关。
   collectionsEnabled: process.env.COLLECTIONS_ENABLED === "1",
   docChangeEnabled: process.env.DOC_CHANGE_ENABLED === "1",
+  // Nexus → DRI 确认的接收端：NEXUS_DRI_SERVICE_TOKEN、NEXUS_DRI_TENANT_ID（都设才开）；回调 NEXUS_DRI_CALLBACK_URL、NEXUS_DRI_CALLBACK_SECRET（没设就不发，记成待发）。
+  nexusDri: resolveNexusDriEnv(),
 };
 
 const port = Number(process.env.PORT ?? "4000");
@@ -240,11 +257,10 @@ const monthlyReviewScheduler = createMonthlyReviewScheduler(monthlyReviewService
 // 周复盘（D-01）：只在本人要时起草（对话、周复盘页），每周五的自动起草 11/03 停了；与个人复盘同一个 heavy 模型槽位。
 const weeklyReviewService = createWeeklyReviewService({ pool, agent: createWeeklyReviewDraftAgent(reviewAgentOptions),
   people: () => peopleDirectory.searchPeople(undefined).filter(canUseMemberView).map((person) => person.personId) });
-// 采集器原文整理（D-02）：同一个 heavy 模型，每 5 分钟整理一次，原文 14 天后清空。TODO(jobs)：jobs 合入后迁成周期任务。
-const collectorDistillScheduler = createCollectorDistillScheduler(pool, createCollectorDistillAgent(reviewAgentOptions));
+// 本机采集器已下线：不再整理原文，已收到的原文照 14 天清空，每 5 分钟清一次。
+const collectorRawPurgeScheduler = createCollectorRawPurgeScheduler(pool);
 const now = () => new Date();
 const missionRoundScheduler = createMissionRoundScheduler(pool, now);
-const collectorHealthScheduler = createCollectorHealthScheduler(pool, now);
 await recoverStaleMissionDrafts(pool, now());
 // 启动补偿：崩溃中断的 running 扫描标为 failed（不自动重跑）
 await radarService.recoverStaleRuns();
@@ -296,14 +312,24 @@ const usageJobs = usageReportJobs(pool.query.bind(pool), peopleDirectory, now);
 const summaryJobs = app.battlefieldSummaries.jobs();
 // 一号位要动手的事主动私信到飞书（复盘与拆解开放、周复盘待确认、红色议题）：配了飞书才发。
 const ceoNoticeJobs = feishuClient ? ceoFeishuNoticeJobs({ pool, people: () => peopleDirectory.searchPeople(undefined), now }) : { handlers: {}, recurring: [] };
+// 新首页「等你」里急的几件推到本人的「天枢伙伴」单聊（设计 13.2）：配了飞书才发。
+const homePush = feishuClient ? homePushJobs({ pool, now, people: () => peopleDirectory.searchPeople(undefined).filter(canUseMemberView).map((person) => person.personId),
+  readHome: (personId) => app.readWorkHome({ personId, role: "member" }) }) : { handlers: {}, recurring: [] };
+// 每天从本体载入本月和下月的 Mission（设计 10.5，代替手动跑 missions:load-world）：TIANSHU_AUTO_LOAD_MISSIONS=1 且本体配了才开，缺省关；只读本体、用主实例。
+const autoLoadMissions = process.env.TIANSHU_AUTO_LOAD_MISSIONS === "1";
+const missionLoadJobs = missionAutoLoadJobs({ enabled: autoLoadMissions, pool, now,
+  world: autoLoadMissions && worldConfigured(env) ? new WorldClient(pool.query.bind(pool), env) : null });
+// Nexus → DRI 确认：人员对应补上后把之前找不到人的补认；配了回调就把待发的确认记录排进去。
+await app.nexusDri.resume();
 const jobWorker = createJobWorker({
   pool,
   handlers: {
-    ...exampleJobHandlers, ...feishuTokens?.handlers, ...followThroughJobs.handlers, ...docChangeJobs.handlers, ...app.collectionJobs.handlers, ...usageJobs.handlers, ...summaryJobs.handlers, ...ceoNoticeJobs.handlers, ...app.taskPlacementJobs,
+    [INTAKE_JOB]: () => scanIntake({ app, pool, env }),
+    ...exampleJobHandlers, ...feishuTokens?.handlers, ...followThroughJobs.handlers, ...docChangeJobs.handlers, ...app.collectionJobs.handlers, ...usageJobs.handlers, ...summaryJobs.handlers, ...ceoNoticeJobs.handlers, ...homePush.handlers, ...app.taskPlacementJobs, ...missionLoadJobs.handlers, ...app.nexusDri.jobs, ...app.monthReviewJobs.handlers, ...app.plannedDueDateJobs.handlers,
     ...(env.feishu ? feishuEventJobs(pool, mergeFeishuEventHandlers(followThroughJobs.feishuEvents, docChangeJobs.feishuEvents, app.feishuChat?.events ?? {})) : {}),
     ...(feishuClient ? feishuNotifyJobs({ pool, client: feishuClient, publicOrigin: env.publicOrigin }) : {}),
   },
-  recurring: [...(feishuTokens?.recurring ?? []), ...followThroughJobs.recurring, ...app.collectionJobs.recurring, ...usageJobs.recurring, ...summaryJobs.recurring, ...ceoNoticeJobs.recurring],
+  recurring: [{ kind: INTAKE_JOB, everyMs: 10_000 }, ...(feishuTokens?.recurring ?? []), ...followThroughJobs.recurring, ...app.collectionJobs.recurring, ...usageJobs.recurring, ...summaryJobs.recurring, ...ceoNoticeJobs.recurring, ...homePush.recurring, ...missionLoadJobs.recurring, ...app.monthReviewJobs.recurring, ...app.plannedDueDateJobs.recurring],
 });
 let feishuEvents: { close: () => void } | undefined;
 app.addHook("onClose", async () => {
@@ -313,18 +339,19 @@ app.addHook("onClose", async () => {
   monthlyReviewScheduler.close();
   await monthlyReviewService.idle();
   missionRoundScheduler.close();
-  collectorHealthScheduler.close();
   await jobWorker.close();
   await weeklyReviewService.idle();
-  await collectorDistillScheduler.close();
+  await collectorRawPurgeScheduler.close();
 });
 scheduler.start();
-monthlyScheduler.start();
-monthlyReviewScheduler.start();
+// 天枢自己的月度计划草案和月末复盘：TIANSHU_MONTHLY_CYCLE=1 才自动起（缺省关，走 M2）。
+if (env.tianshuMonthlyCycle) {
+  monthlyScheduler.start();
+  monthlyReviewScheduler.start();
+}
 missionRoundScheduler.start();
-collectorHealthScheduler.start();
 jobWorker.start();
-collectorDistillScheduler.start();
+collectorRawPurgeScheduler.start();
 await app.listen({ port, host: "0.0.0.0" });
 // 飞书长连接：收到事件只落库并排 jobs，3 秒内 ack；单聊消息落库后直接交给 worker 跑那一条，不等下一轮。
 feishuEvents = env.feishu ? startFeishuEventStream(pool, env.feishu, jobWorker.runNow) : undefined;

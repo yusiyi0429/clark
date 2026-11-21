@@ -5,12 +5,13 @@ import { describe, expect, it, vi } from "vitest";
 import { TEST_CEO, TEST_MEMBER, createTestApp } from "./helpers.js";
 import type { ConversationRuntime } from "../src/conversations.js";
 import { homeTurn } from "../src/homeTurn.js";
-import { CHAT_ROUTE } from "../src/chatService.js";
+import { CHAT_ROUTE, historyMessages } from "../src/chatService.js";
+import { THIRD, boardFixture } from "./boardFixture.js";
 
 const CHAT_TOKEN = "chat-token-test";
 const RUN = "6f0c1a52-6d7e-4e57-9a51-0a9a4c3e2b10";
-/** Chat（8699279）TurnCommand 收的字段；它不收多余字段。 */
-const TURN_FIELDS = new Set(["clientRequestId", "message", "attachmentIds", "resumeRunId", "channel", "anchorSelection", "references", "page"]);
+/** Chat（8699279）TurnCommand 收的字段；它不收多余字段。answers 是伙伴选项框的作答（契约 workHome.ts 顶部）。 */
+const TURN_FIELDS = new Set(["clientRequestId", "message", "attachmentIds", "resumeRunId", "channel", "anchorSelection", "references", "page", "answers"]);
 /** Chat 的 page：path、title、guide 都必填，最多 200、40、150 字（10/29 人豪）。 */
 const validPage = (page: unknown) => {
   if (page === undefined) return true;
@@ -18,7 +19,7 @@ const validPage = (page: unknown) => {
   return [[path, 200], [title, 40], [guide, 150]].every(([value, max]) => typeof value === "string" && value.length > 0 && value.length <= (max as number));
 };
 
-type ChatRequest = { method: string; url: string; headers: IncomingHttpHeaders; body: string };
+type ChatRequest = { method: string; url: string; headers: IncomingHttpHeaders; body: string; raw?: Buffer };
 type Page = { messages: unknown[]; runs: unknown[]; nextCursor: string | null };
 
 /** Chat 的一轮 SSE：先一行心跳，事件带 Chat 自己的 conversationId / runId / scope / sequence。 */
@@ -44,7 +45,12 @@ async function fakeChat(options: {
   upload?: (request: ChatRequest) => unknown;
   /** POST /turns/:id/cancel（本人点停止）；没给时 404。 */
   cancel?: (res: ServerResponse, request: ChatRequest) => void;
+  /** POST /conversations 开段之前先等它（模拟 Chat 卡住、或开段期间别的进程先登记了）。 */
+  beforeCreate?: () => Promise<void>;
+  /** 按对话选模型（17.2 第 36 条）：GET /models 回它，GET/PUT /conversations/:id/model 读改；没给时这几条 404（老 Chat）。 */
+  models?: { source: string; modelId: string; label: string; efforts: string[]; defaultEffort: string; isDefault: boolean }[];
 } = {}) {
+  const choices = new Map<string, unknown>();
   const requests: ChatRequest[] = [];
   const now = () => new Date().toISOString();
   const listed: FakeConversation[] = (options.conversations ?? []).map((item) => (typeof item === "string" ? { conversationId: item, createdAt: now(), updatedAt: now() } : item));
@@ -59,7 +65,8 @@ async function fakeChat(options: {
   const server = createServer(async (req, res) => {
     const chunks: Buffer[] = [];
     for await (const chunk of req) chunks.push(chunk as Buffer);
-    const request = { method: req.method ?? "", url: req.url ?? "", headers: req.headers, body: Buffer.concat(chunks).toString("utf8") };
+    const raw = Buffer.concat(chunks);
+    const request = { method: req.method ?? "", url: req.url ?? "", headers: req.headers, body: raw.toString("utf8"), raw };
     requests.push(request);
     const send = (status: number, body: unknown) => {
       res.writeHead(status, { "content-type": "application/json" });
@@ -68,6 +75,7 @@ async function fakeChat(options: {
     if (req.headers.authorization !== `Bearer ${CHAT_TOKEN}`) return send(401, { error: { code: "UNAUTHORIZED", message: "内部服务凭据无效" } });
     if (request.method === "GET" && request.url === "/conversations") return send(200, { conversations: listed.slice(0, 50) });
     if (request.method === "POST" && request.url === "/conversations") {
+      await options.beforeCreate?.();
       const created = { conversationId: randomUUID(), createdAt: now(), updatedAt: now() };
       listed.unshift(created);
       conversations.unshift(created.conversationId);
@@ -78,6 +86,16 @@ async function fakeChat(options: {
       return send(200, (options.segments?.[history[1]] ?? options.pages)?.[history[2]] ?? { messages: [], runs: [], nextCursor: null });
     }
     if (request.method === "POST" && request.url.endsWith("/attachments")) return send(200, options.upload?.(request));
+    const modelPath = /^\/conversations\/([^/]+)\/model$/.exec(request.url);
+    if (options.models && request.method === "GET" && request.url === "/models") return send(200, { models: options.models });
+    if (options.models && modelPath && request.method === "GET") return send(200, { choice: choices.get(modelPath[1]) ?? null });
+    if (options.models && modelPath && request.method === "PUT") {
+      const { choice } = JSON.parse(request.body) as { choice: { source: string; modelId: string; effort: string } | null };
+      if (choice && !options.models.some((model) => model.source === choice.source && model.modelId === choice.modelId && model.efforts.includes(choice.effort)))
+        return send(400, { error: { code: "INVALID_MODEL_CHOICE", message: "没有这个模型，或它不支持这档思考程度" } });
+      choices.set(modelPath[1], choice);
+      return send(200, { choice });
+    }
     if (request.method === "POST" && /^\/turns\/[^/]+\/cancel$/.test(request.url) && options.cancel) return options.cancel(res, request);
     if (request.method === "POST" && request.url.endsWith("/turns")) {
       // 和 Chat 的 TurnCommand 一样不收多余字段：字段名对不上时整轮 400。
@@ -114,12 +132,16 @@ function countingRuntime(): ConversationRuntime & { calls: number } {
   return runtime;
 }
 
-/** 界面收到的事件（只取 data 行）。 */
-function events(payload: string): Record<string, unknown>[] {
+/** 界面收到的所有事件（只取 data 行）。 */
+function allEvents(payload: string): Record<string, unknown>[] {
   return payload.split("\n\n").flatMap((block) => {
     const line = block.split("\n").find((candidate) => candidate.startsWith("data:"));
     return line ? [JSON.parse(line.slice(5)) as Record<string, unknown>] : [];
   });
+}
+/** 界面收到的事件，去掉每轮最前面的两个回执（17.4，单独测）。 */
+function events(payload: string): Record<string, unknown>[] {
+  return allEvents(payload).filter((event) => event.type !== "receipt");
 }
 
 function multipart(filename: string, content: string): { headers: Record<string, string>; payload: Buffer } {
@@ -182,7 +204,12 @@ describe("首页对话走独立 Chat（CHAT_SERVICE_URL）", () => {
       expect(received[1]).not.toHaveProperty("delta");
       expect(received[2]).toMatchObject({ phase: "started", name: "read_world_object" });
       expect(received.filter((event) => event.type === "tool").some((event) => "label" in event)).toBe(false);
-      expect(received.every((event, index) => event.runId === RUN && event.scope === "global" && event.sequence === index + 1)).toBe(true);
+      // 回执（17.4）排在最前：天枢收下了、伙伴读到了；序号接着排。
+      // 回执按这条消息的 id（转给 Chat 的 clientRequestId）对上。
+      const messageId = JSON.parse(chat.turns()[0].body).clientRequestId as string;
+      expect(allEvents(response.payload).slice(0, 2)).toEqual([{ type: "receipt", state: "delivered", messageId, runId: RUN, scope: "global", sequence: 1 },
+        { type: "receipt", state: "read", messageId, runId: RUN, scope: "global", sequence: 2 }]);
+      expect(received.every((event, index) => event.runId === RUN && event.scope === "global" && event.sequence === index + 3)).toBe(true);
       expect(received.some((event) => "conversationId" in event)).toBe(false);
 
       // 每个请求都带内部凭据和本人身份，浏览器的 Cookie 不转给 Chat。
@@ -403,7 +430,10 @@ describe("首页对话走独立 Chat（CHAT_SERVICE_URL）", () => {
     const attachmentId = randomUUID();
     const results = [
       { attachments: [{ attachmentId, fileName: "brief.md", mime: "text/markdown", size: 15, status: "ready", extractedChars: 5, reason: null }] },
-      { attachments: [{ attachmentId: randomUUID(), fileName: "scan.md", mime: "text/markdown", size: 3, status: "failed", extractedChars: 0, reason: "empty" }] },
+      { attachments: [{ attachmentId: randomUUID(), fileName: "scan.md", mime: "text/markdown", size: 3, status: "failed", extractedChars: 0, reason: null }] },
+      { attachments: [{ attachmentId: randomUUID(), fileName: "截图.jpg", mime: "image/jpeg", size: 8, status: "ready", extractedChars: 0, reason: null }] },
+      { attachments: [{ attachmentId: randomUUID(), fileName: "大图.png", mime: "image/png", size: 8, status: "failed", extractedChars: 0,
+        reason: "图片超过 5 MB（模型能看的单张上限），请压缩后再发" }] },
     ];
     const chat = await fakeChat({ upload: () => results.shift() });
     await withChat(chat, countingRuntime(), async (t) => {
@@ -418,13 +448,29 @@ describe("首页对话走独立 Chat（CHAT_SERVICE_URL）", () => {
       expect(forwarded.headers["content-type"]).toMatch(/^multipart\/form-data/);
       expect(forwarded.body).toContain('filename="brief.md"');
       expect(forwarded.body).toContain("# 渠道备忘");
+      // 认不得的类型（新首页 14.5 的清单以外）不转给 Chat。
+      const exe = await upload(multipart("tool.exe", "MZ"));
+      expect([exe.statusCode, exe.json().code, exe.json().message]).toEqual([400, "UNSUPPORTED_ATTACHMENT", "tool.exe：格式不支持"]);
+      expect(chat.requests.filter((request) => request.url.endsWith("/attachments"))).toHaveLength(1);
 
       await t.app.inject({ method: "POST", url: "/api/conversations/global/messages",
         headers: { cookie, origin: t.publicOrigin, accept: "text/event-stream" }, payload: { message: "看看附件", attachments: [{ id: attachmentId }] } });
       expect(JSON.parse(chat.turns()[0].body).attachmentIds).toEqual([attachmentId]);
 
       const unreadable = await upload(multipart("scan.md", "   "));
-      expect([unreadable.statusCode, unreadable.json().code]).toEqual([400, "ATTACHMENT_UNREADABLE"]);
+      expect([unreadable.statusCode, unreadable.json().code, unreadable.json().message]).toEqual([400, "ATTACHMENT_UNREADABLE", "scan.md 没能读出文字，请换一份再传。"]);
+
+      // 图片（17.2 第 37 条）：原样转给 Chat（字节和类型不变），Chat 认了就是 ready；Chat 写了不收的原因照它说。
+      const jpg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]);
+      const image = (name: string, type: string) => ({ headers: { "content-type": "multipart/form-data; boundary=img" }, payload: Buffer.concat([
+        Buffer.from(`--img\r\nContent-Disposition: form-data; name="files"; filename="${name}"\r\nContent-Type: ${type}\r\n\r\n`), jpg, Buffer.from("\r\n--img--\r\n")]) });
+      const photo = await upload(image("截图.jpg", "image/jpeg"));
+      expect(photo.json().attachments[0]).toMatchObject({ fileName: "截图.jpg", mimeType: "image/jpeg" });
+      const sent = chat.requests.filter((request) => request.url.endsWith("/attachments")).at(-1)!;
+      expect(sent.body).toContain("Content-Type: image/jpeg");
+      expect(sent.raw!.includes(jpg)).toBe(true);
+      const big = await upload(image("大图.png", "image/png"));
+      expect([big.statusCode, big.json().message]).toEqual([400, "大图.png：图片超过 5 MB（模型能看的单张上限），请压缩后再发"]);
     });
   });
 
@@ -734,7 +780,9 @@ describe("给 Chat 的回看接口（/internal/conversation-*）", () => {
 
       expect((await t.app.inject({ url: "/internal/conversation-catalog", headers: headers("ceo", TEST_CEO.personId, "wrong") })).statusCode).toBe(401);
       expect((await t.app.inject({ url: "/internal/conversation-catalog", headers: { authorization: `Bearer ${CHAT_TOKEN}`, "x-owner-id": TEST_CEO.personId } })).json().code).toBe("VIEW_REQUIRED");
-      expect((await t.app.inject({ url: "/internal/conversation-catalog", headers: headers("member") })).statusCode).toBe(403);
+      // 用不了的视角 403：成员用不了 CEO 视角。CEO 能切到工作模式（17.2 第 45 条），成员视角对他放行。
+      expect((await t.app.inject({ url: "/internal/conversation-catalog", headers: headers("ceo", TEST_MEMBER.personId) })).statusCode).toBe(403);
+      expect((await t.app.inject({ url: "/internal/conversation-catalog", headers: headers("member") })).statusCode).toBe(200);
       expect((await t.app.inject({ url: "/internal/conversation-recall/search?from=yesterday", headers: headers() })).statusCode).toBe(400);
     } finally {
       await t.close();
@@ -804,6 +852,29 @@ describe("首页对话带上本人所在页面（CHAT_PAGE_CONTEXT）", () => {
     }, CHAT_TOKEN, { chatPageContext: true });
   });
 
+  it("Task 页（本月页 /me/month/tasks/<id>、新首页锚到 Task 的 /me/work/tasks/<id>）带上本人读到的这个 Task；新首页本身、不是本人的 Task 不带", async () => {
+    const chat = await fakeChat();
+    const now = new Date("2026-11-06T02:00:00.000Z");
+    const t = await createTestApp({ internalChatToken: CHAT_TOKEN, chatServiceUrl: chat.url, chatPageContext: true }, countingRuntime(), {
+      monthlyNow: () => now,
+      planTasks: async (missions) => missions.some((mission) => mission.id === "m-page") ? [{ taskId: "task-1", missionId: "m-page", name: "对话质量达标", doneDefinition: null,
+        criteria: ["有题库打分结果", "有新人上手录屏"] }] : [],
+    });
+    try {
+      await t.sql(`INSERT INTO missions(id,version,code,period,title,owner_id,capability_id,battlefield_ids,outcome,milestones,source_ref,source_document_id,source_revision,source_title)
+        VALUES('m-page',1,'m-page','2026-11','内部版上线',$1,'method','["growth"]','目标','[]','fixture://p','fixture',1,'fixture')`, [TEST_CEO.personId]);
+      await t.sql("INSERT INTO tasks(id,title,owner_id,created_by,status,mission_id,step_order,plan_task_id) VALUES($1,'写方案',$2,'self','in_progress','m-page',1,'task-1')",
+        [randomUUID(), TEST_CEO.personId]);
+      for (const path of ["/me/month/tasks/task-1", "/me/work/tasks/task-1", "/me/work", "/me/work/tasks/task-other"]) await send(t, path);
+      const guide = expect.stringContaining("它有 2 条验收标准；看板上待开始 0 张、进行中 1 张");
+      expect(pages(chat)).toEqual([{ path: "/me/month/tasks/task-1", title: "Task：对话质量达标", guide }, { path: "/me/work/tasks/task-1", title: "Task：对话质量达标", guide },
+        null, null]);
+    } finally {
+      await t.close();
+      await chat.close();
+    }
+  }, 30_000);
+
   it("关着时（缺省）即使网页带了页面路径也不发 page", async () => {
     const chat = await fakeChat();
     await withChat(chat, countingRuntime(), async (t) => {
@@ -811,4 +882,705 @@ describe("首页对话带上本人所在页面（CHAT_PAGE_CONTEXT）", () => {
       expect(pages(chat)).toEqual([null]);
     });
   });
+});
+
+describe("项目对话走 Chat（project:<projectId>，新首页第 16 节）", () => {
+  /** 本人负责 task-open（boardFixture）；Chat 里已有一段总管线 main-segment。 */
+  const pipelineFixture = async (chat: Awaited<ReturnType<typeof fakeChat>>) =>
+    boardFixture({}, { internalChatToken: CHAT_TOKEN, chatServiceUrl: chat.url, chatPageContext: true, boardCloudAgents: false });
+  /** 本人建一个项目，挂上 task-open。 */
+  const newProject = async (f: Awaited<ReturnType<typeof boardFixture>>) => {
+    const res = await f.call("POST", "/api/me/projects", { name: "对话质量", taskId: "task-open" });
+    expect(res.statusCode).toBe(201);
+    return res.json().projectId as string;
+  };
+  const open = (f: Awaited<ReturnType<typeof boardFixture>>, projectId: string) => f.call("POST", `/api/me/projects/${projectId}/pipeline`);
+  const createdSegments = (chat: Awaited<ReturnType<typeof fakeChat>>) => chat.requests.filter((request) => request.method === "POST" && request.url === "/conversations");
+  const say = (f: Awaited<ReturnType<typeof boardFixture>>, scope: string, payload: Record<string, unknown>) => f.t.app.inject({ method: "POST",
+    url: `/api/conversations/${encodeURIComponent(scope)}/messages`, headers: { cookie: f.member, origin: f.t.publicOrigin, accept: "text/event-stream" }, payload });
+  const history = (f: Awaited<ReturnType<typeof boardFixture>>, scope: string) =>
+    f.t.app.inject({ method: "GET", url: `/api/conversations/${encodeURIComponent(scope)}/messages`, headers: { cookie: f.member } });
+
+  it("伙伴把话转给项目对话（17.4 message_project）：立即回、不等项目对话回完；那句带「伙伴转来」开头进项目那段；项目对话正在回上一轮时不打断，隔几秒再发；读回历史标 via=buddy", async () => {
+    const upstreams: ServerResponse[] = [];
+    let busy = false;
+    const chat = await fakeChat({ conversations: ["main-segment"], turn: (res) => {
+      if (busy) {
+        res.writeHead(409, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: { code: "TURN_RUNNING", message: "本会话已有运行中的轮次" } }));
+        return;
+      }
+      busy = true;
+      upstreams.push(res);
+      sse(res, [{ type: "turn_started" }, { type: "message", delta: "收到" }], false);
+    } });
+    const f = await pipelineFixture(chat);
+    const finish = () => {
+      upstreams.at(-1)!.end(`data: ${JSON.stringify({ conversationId: "chat-conversation", runId: RUN, scope: "global", sequence: 9, type: "done", status: "completed" })}\n\n`);
+      busy = false;
+    };
+    try {
+      const projectId = await newProject(f);
+      const act = (args: unknown) => f.t.app.inject({ method: "POST", url: "/internal/me/buddy-actions/message_project",
+        headers: { authorization: `Bearer ${CHAT_TOKEN}`, "x-owner-id": TEST_MEMBER.personId }, payload: { args } });
+      expect((await act({ projectId, text: "录屏先停" })).json().code).toBe("BUDDY_NOT_AUTHORIZED");
+      await f.call("PUT", "/api/me/buddy-authority", { authority: "full" });
+
+      // 项目对话还在回（流没结束）时动作已经回了。
+      const forwarded = await act({ projectId, text: "录屏先停，先把打分做完" });
+      expect(forwarded.json()).toMatchObject({ summary: expect.stringContaining("项目「对话质量」"), undoable: false, auditId: expect.any(String) });
+      await vi.waitFor(() => expect(chat.turns()).toHaveLength(1));
+      const pipeline = (await open(f, projectId)).json().conversationId as string;
+      expect(chat.turns()[0].url).toBe(`/conversations/${pipeline}/turns`);
+      expect(JSON.parse(chat.turns()[0].body).message).toBe("【伙伴转来】录屏先停，先把打分做完");
+      // 项目对话自己也有这张动作清单：从项目对话里再转（转回自己）不做，免得一轮接一轮转下去。
+      const loop = await f.t.app.inject({ method: "POST", url: "/internal/me/buddy-actions/message_project",
+        headers: { authorization: `Bearer ${CHAT_TOKEN}`, "x-owner-id": TEST_MEMBER.personId }, payload: { args: { projectId, text: "再转一次" }, conversationId: pipeline } });
+      expect([loop.statusCode, loop.json().code]).toEqual([409, "ALREADY_IN_PROJECT"]);
+
+      // 再转一句：项目对话还在回，不打断（不请 Chat 停），等它回完再发。
+      await act({ projectId, text: "再加一条" });
+      expect(await f.t.sql("SELECT state FROM work_intake WHERE scope=$1 AND message=$2",
+        [`project:${projectId}`, "【伙伴转来】再加一条"])).toEqual([{ state: "queued" }]);
+      expect(chat.turns()).toHaveLength(1);
+      expect(chat.requests.some((request) => request.url.endsWith("/cancel"))).toBe(false);
+      finish();
+      await vi.waitFor(() => expect(chat.turns()).toHaveLength(2), { timeout: 10_000 });
+      expect(JSON.parse(chat.turns()[1].body).message).toBe("【伙伴转来】再加一条");
+      finish();
+
+      expect((await act({ projectId: randomUUID(), text: "别人的" })).statusCode).toBe(404);
+      expect(historyMessages([{ role: "user", text: "【伙伴转来】录屏先停", runId: RUN }, { role: "assistant", text: "好", runId: RUN }],
+        [{ runId: RUN, status: "completed" }])[0]).toMatchObject({ role: "user", content: "录屏先停", via: "buddy" });
+      // 子会话报告替本人发的那句（18 节第 10 条）：去掉开头、标 report，网页不画成本人的气泡。
+      expect(historyMessages([{ role: "user", text: "【子会话回报】B · 修登录页：做完一轮停下了。", runId: RUN }, { role: "assistant", text: "好", runId: RUN }],
+        [{ runId: RUN, status: "completed" }])[0]).toMatchObject({ role: "user", content: "B · 修登录页：做完一轮停下了。", via: "report" });
+    } finally {
+      await f.close();
+      await chat.close();
+    }
+  }, 40_000);
+
+  it("3700 小卡 U：接了 Chat 时伙伴登记拆卡取得到本人原话——Chat 读回的消息带上时间；项目之前登记过拆卡、本人新说一句、在正在跑的这一轮里登记，存的是这句", async () => {
+    const segments: Record<string, Record<string, Page>> = {};
+    const chat = await fakeChat({ conversations: ["main-segment"], segments });
+    const f = await pipelineFixture(chat);
+    try {
+      // 这个月没挂 Task 的项目才按项目拆（本人 11/16 方案 A：挂了 Task 的按 Task 拆）。
+      const created = await f.call("POST", "/api/me/projects", { name: "验收1112" });
+      expect(created.statusCode).toBe(201);
+      const projectId = created.json().projectId as string;
+      const pipeline = (await open(f, projectId)).json().conversationId as string;
+      await f.call("PUT", "/api/me/buddy-authority", { authority: "full" });
+      // 这个项目之前登记过一次拆卡（开了规划员，登记去掉了）。
+      const earlier = (await f.call("POST", `/api/me/projects/${projectId}/card-splits`)).json().id as string;
+      expect((await f.call("DELETE", `/api/me/card-splits/${earlier}`)).statusCode).toBe(204);
+      const since = new Date((await f.t.sql("SELECT created_at FROM card_split_requests WHERE id=$1", [earlier]))[0].created_at as string).getTime();
+      const at = (minutes: number) => new Date(since + minutes * 60_000).toISOString();
+      const said = "开一张卡：在 验收1112\\ 里新建 目录.md，别的文件都不要动";
+      const [old, current] = [randomUUID(), randomUUID()];
+      // Chat 的历史原样：消息只带 turnAt；正在跑的这一轮里本人那句没带，只有这一轮的 turnAt。
+      const runs = [{ runId: old, status: "completed", turnAt: at(-60) }, { runId: current, status: "running", turnAt: at(1) }];
+      const messages = [{ role: "user" as const, text: "上次拆卡时说的", runId: old, turnAt: at(-60), attachments: [] },
+        { role: "assistant" as const, text: "好", runId: old, turnAt: at(-60), attachments: [] }, { role: "user" as const, text: said, runId: current, attachments: [] }];
+      segments[pipeline] = { "0": { messages, runs, nextCursor: null } };
+      expect(historyMessages(messages, runs).map((message) => message.createdAt)).toEqual([at(-60), at(-60), at(1)]);
+
+      const split = await f.t.app.inject({ method: "POST", url: "/internal/me/buddy-actions/split_cards",
+        headers: { authorization: `Bearer ${CHAT_TOKEN}`, "x-owner-id": TEST_MEMBER.personId },
+        payload: { args: { projectId, words: `本人原话：${said}\n\n交代：\n1. 只新建 目录.md，不许新建别的文件` }, conversationId: pipeline } });
+      expect(split.statusCode).toBe(200);
+      expect((await f.t.sql("SELECT source_words FROM card_split_requests WHERE id=$1", [split.json().result.requestId]))[0].source_words).toEqual([said]);
+    } finally {
+      await f.close();
+      await chat.close();
+    }
+  }, 40_000);
+
+  it("17.2 第 36 条：项目对话选模型和思考程度转给 Chat——列表照 Chat 的；没选为 null；改选存在项目那段上（还没建先建），不合法照 Chat 的 400；别人的项目 404；老 Chat 没这几条接口时列表为空", async () => {
+    const models = [{ source: "TokenHub · wangsu", modelId: "wangsu/claude", label: "claude", efforts: ["low", "medium", "high"], defaultEffort: "medium", isDefault: true },
+      { source: "TokenHub · aliyun", modelId: "aliyun/qwen", label: "千问", efforts: ["off", "high"], defaultEffort: "off", isDefault: false }];
+    const chat = await fakeChat({ conversations: ["main-segment"], models });
+    const f = await pipelineFixture(chat);
+    try {
+      const projectId = await newProject(f);
+      expect((await f.call("GET", "/api/me/conversation-models")).json()).toEqual({ models });
+      const path = `/api/me/projects/${projectId}/pipeline/model`;
+      // 项目对话还没建：读是 null，不开段。
+      expect((await f.call("GET", path)).json()).toEqual({ choice: null });
+      expect(createdSegments(chat)).toHaveLength(0);
+      const qwen = { source: "TokenHub · aliyun", modelId: "aliyun/qwen", effort: "high" };
+      expect((await f.call("PUT", path, { choice: qwen })).json()).toEqual({ choice: qwen });
+      const pipeline = (await open(f, projectId)).json().conversationId as string;
+      expect(createdSegments(chat)).toHaveLength(1);
+      expect(chat.requests.filter((request) => request.method === "PUT").map((request) => [request.url, request.headers["x-viewer-role"]]))
+        .toEqual([[`/conversations/${pipeline}/model`, "member"]]);
+      expect((await f.call("GET", path)).json()).toEqual({ choice: qwen });
+      const invalid = await f.call("PUT", path, { choice: { ...qwen, effort: "medium" } });
+      expect([invalid.statusCode, invalid.json().code]).toEqual([400, "INVALID_MODEL_CHOICE"]);
+      expect((await f.call("PUT", path, { choice: null })).json()).toEqual({ choice: null });
+      expect((await f.call("GET", path)).json()).toEqual({ choice: null });
+      expect((await f.call("GET", `/api/me/projects/${randomUUID()}/pipeline/model`)).statusCode).toBe(404);
+      expect((await f.call("PUT", `/api/me/projects/${randomUUID()}/pipeline/model`, { choice: null })).statusCode).toBe(404);
+    } finally {
+      await f.close();
+      await chat.close();
+    }
+    const old = await fakeChat({ conversations: ["main-segment"] });
+    const g = await pipelineFixture(old);
+    try {
+      const projectId = await newProject(g);
+      expect((await g.call("GET", "/api/me/conversation-models")).json()).toEqual({ models: [] });
+      await open(g, projectId);
+      expect((await g.call("GET", `/api/me/projects/${projectId}/pipeline/model`)).json()).toEqual({ choice: null });
+    } finally {
+      await g.close();
+      await old.close();
+    }
+  }, 40_000);
+
+  it("第一次打开在 Chat 开一段（201），再打开还是这一段（200）；两个同时打开也只开一段", async () => {
+    const chat = await fakeChat({ conversations: ["main-segment"] });
+    const f = await pipelineFixture(chat);
+    try {
+      const projectId = await newProject(f);
+      const first = await open(f, projectId);
+      expect(first.statusCode).toBe(201);
+      expect(first.json()).toEqual({ projectId, conversationId: chat.conversations[0], scope: `project:${projectId}` });
+      expect(chat.conversations[0]).not.toBe("main-segment");
+      const again = await open(f, projectId);
+      expect([again.statusCode, again.json()]).toEqual([200, first.json()]);
+      expect(createdSegments(chat)).toHaveLength(1);
+      // 项目对话那一段按 member 视角开（只在 DRI 工作台）。
+      expect(createdSegments(chat)[0].headers).toMatchObject({ "x-owner-id": TEST_MEMBER.personId, "x-viewer-role": "member" });
+
+      // 同时打开：只开一段，两个请求拿到同一段。
+      await f.t.sql("DELETE FROM project_pipelines");
+      const before = createdSegments(chat).length;
+      const both = await Promise.all([open(f, projectId), open(f, projectId)]);
+      expect(both.map((res) => res.statusCode).sort()).toEqual([200, 201]);
+      expect(new Set(both.map((res) => res.json().conversationId)).size).toBe(1);
+      expect(createdSegments(chat)).toHaveLength(before + 1);
+      expect(await f.t.sql("SELECT project_id, owner_id, conversation_id FROM project_pipelines")).toEqual([
+        { project_id: projectId, owner_id: TEST_MEMBER.personId, conversation_id: both[0].json().conversationId }]);
+    } finally {
+      await f.close();
+      await chat.close();
+    }
+  }, 30_000);
+
+  it("项目对话那段比总管线新：总管线的历史和发一句仍进原来那段；项目对话发一句进自己那段，帧的 scope 是 project，带上这个项目的页面，选项框作答转给 Chat", async () => {
+    const chat = await fakeChat({ conversations: ["main-segment"] });
+    const f = await pipelineFixture(chat);
+    try {
+      const projectId = await newProject(f);
+      const scope = `project:${projectId}`;
+      const pipeline = (await open(f, projectId)).json().conversationId as string;
+      // Chat 那边项目对话这段是最近更新的。
+      expect(chat.listed[0].conversationId).toBe(pipeline);
+
+      await history(f, "global");
+      expect(chat.requests.filter((request) => request.url.includes("/messages")).map((request) => request.url.split("/")[2])).toEqual(["main-segment"]);
+      expect((await say(f, "global", { message: "今天先做什么" })).statusCode).toBe(200);
+      expect(chat.turns().at(-1)!.url).toBe("/conversations/main-segment/turns");
+
+      const askId = randomUUID();
+      const sent = await say(f, scope, { message: "就按推荐的来", answers: { askId, items: [{ questionId: "q1", option: 0 }] } });
+      expect(sent.statusCode).toBe(200);
+      const turn = chat.turns().at(-1)!;
+      expect(turn.url).toBe(`/conversations/${pipeline}/turns`);
+      expect(turn.headers).toMatchObject({ "x-owner-id": TEST_MEMBER.personId, "x-viewer-role": "member" });
+      const command = JSON.parse(turn.body) as Record<string, unknown>;
+      expect(command.answers).toEqual({ askId, items: [{ questionId: "q1", option: 0 }] });
+      expect(command.page).toEqual({ path: `/me/work/projects/${projectId}`, title: "项目：对话质量", guide: expect.stringContaining("现在挂着的目标：对话质量达标") });
+      const received = events(sent.payload);
+      expect(received.map((event) => event.type)).toEqual(["route", "message", "done"]);
+      expect(received.every((event) => event.scope === scope)).toBe(true);
+      // 没在 Chat 多开段，天枢自己的对话也没建。
+      expect(createdSegments(chat)).toHaveLength(1);
+      expect(await f.t.sql("SELECT id FROM conversations WHERE scope LIKE 'project:%'")).toEqual([]);
+
+      // 总管线和项目对话各留各的最近一轮：项目对话这一轮在自己的线上接得上，总管线上不是它。
+      const follow = (target: string) => f.t.app.inject({ method: "GET", url: `/api/conversations/${encodeURIComponent(target)}/turns/${RUN}/stream`, headers: { cookie: f.member } });
+      const followed = await follow(scope);
+      expect(followed.statusCode).toBe(200);
+      expect(events(followed.payload).at(-1)).toMatchObject({ type: "done", scope });
+      expect(events((await follow("global")).payload).every((event) => event.scope === "global")).toBe(true);
+    } finally {
+      await f.close();
+      await chat.close();
+    }
+  }, 30_000);
+
+  it("历史：没开过是空的（不建）；开过读那一段，提问卡和作答记录照契约原样给界面，不合格的丢掉", async () => {
+    const [r1, r2] = [randomUUID(), randomUUID()];
+    const askId = randomUUID();
+    const questions = { kind: "questions", askId, questions: [{ id: "q1", question: "先做哪个？", options: [{ label: "先补录屏", recommended: true }, { label: "先跑题库" }] }] };
+    const record = { askId, items: [{ questionId: "q1", question: "先做哪个？", kind: "option", answer: "先补录屏", recommended: true }] };
+    const said = (role: string, text: string, runId: string, position: number, extra: Record<string, unknown> = {}) =>
+      ({ id: randomUUID(), position: String(position), role, text, runId, attachmentIds: [], attachments: [], ...extra });
+    const chat = await fakeChat({ conversations: ["pipe-1", "main-segment"], segments: { "pipe-1": { "0": { messages: [
+      said("user", "怎么拆", r1, 1),
+      said("assistant", "有两种做法", r1, 2, { cards: [questions, { kind: "questions", askId, questions: [] }, { kind: "made_up" }] }),
+      said("user", "先补录屏", r2, 3, { answers: record }),
+      said("assistant", "好", r2, 4, { cards: "坏的" }),
+    ], runs: [{ runId: r1, status: "completed" }, { runId: r2, status: "completed" }], nextCursor: null } } } });
+    const f = await pipelineFixture(chat);
+    try {
+      const projectId = await newProject(f);
+      const scope = `project:${projectId}`;
+      expect((await history(f, scope)).json()).toEqual({ scope, messages: [] });
+      expect(chat.requests).toEqual([]);
+
+      await f.t.sql("INSERT INTO project_pipelines (project_id, owner_id, conversation_id) VALUES ($1, $2, 'pipe-1')", [projectId, TEST_MEMBER.personId]);
+      const read = (await history(f, scope)).json();
+      expect(read.scope).toBe(scope);
+      expect(read.messages.map((item: { role: string; content: string; cards?: unknown; answers?: unknown }) => [item.role, item.content, item.cards, item.answers])).toEqual([
+        ["user", "怎么拆", undefined, undefined],
+        ["assistant", "有两种做法", [questions], undefined],
+        ["user", "先补录屏", undefined, record],
+        ["assistant", "好", undefined, undefined],
+      ]);
+      // 总管线照旧只读 main-segment，看不到项目对话那段。
+      expect((await history(f, "global")).json().messages).toEqual([]);
+      expect(chat.requests.filter((request) => request.url.includes("/messages")).map((request) => request.url.split("/")[2])).toEqual(["pipe-1", "main-segment"]);
+    } finally {
+      await f.close();
+      await chat.close();
+    }
+  }, 30_000);
+
+  it("别人的项目、没有的项目都 404：开对话、读历史、发一句、传附件都不找 Chat", async () => {
+    const chat = await fakeChat();
+    const f = await pipelineFixture(chat);
+    try {
+      const theirs = randomUUID();
+      await f.t.sql("INSERT INTO projects (id, owner_id, name, created_at, updated_at) VALUES ($1, $2, '别人的项目', now(), now())", [theirs, THIRD.personId]);
+      const malformed = await open(f, "not-a-uuid");
+      expect([malformed.statusCode, malformed.json().code]).toEqual([404, "NOT_FOUND"]);
+      for (const projectId of [theirs, randomUUID()]) {
+        const scope = `project:${projectId}`;
+        const opened = await open(f, projectId);
+        expect([opened.statusCode, opened.json().code]).toEqual([404, "NOT_FOUND"]);
+        expect((await history(f, scope)).statusCode).toBe(404);
+        expect((await say(f, scope, { message: "进展？" })).statusCode).toBe(404);
+        const upload = multipart("brief.md", "# 方案");
+        expect((await f.t.app.inject({ method: "POST", url: `/api/conversations/${encodeURIComponent(scope)}/attachments`,
+          headers: { cookie: f.member, origin: f.t.publicOrigin, ...upload.headers }, payload: upload.payload })).statusCode).toBe(404);
+      }
+      expect(chat.requests).toEqual([]);
+      expect(await f.t.sql("SELECT * FROM project_pipelines")).toEqual([]);
+    } finally {
+      await f.close();
+      await chat.close();
+    }
+  }, 30_000);
+
+  /** 截下这段时间写出的结构化日志里某个 event 的几行。 */
+  const captureLogs = () => {
+    const lines: string[] = [];
+    const write = process.stdout.write.bind(process.stdout);
+    vi.spyOn(process.stdout, "write").mockImplementation(((chunk: string | Uint8Array, ...rest: unknown[]) => {
+      lines.push(String(chunk));
+      return (write as (...args: unknown[]) => boolean)(chunk, ...rest);
+    }) as typeof process.stdout.write);
+    return (event: string) => lines.flatMap((line) => line.split("\n")).filter((line) => line.includes(`"event":"${event}"`)).map((line) => JSON.parse(line) as Record<string, unknown>);
+  };
+  const globalReads = (chat: Awaited<ReturnType<typeof fakeChat>>) =>
+    chat.requests.filter((request) => request.method === "GET" && request.url.includes("/messages")).map((request) => request.url.split("/")[2]);
+
+  it("Chat 开段卡住时不占着数据库连接和事务；15 秒没回应回 503，只记一条 id 不明的孤儿段日志", async () => {
+    let created!: () => void;
+    const reached = new Promise<void>((resolve) => { created = resolve; });
+    const chat = await fakeChat({ conversations: ["main-segment"], beforeCreate: () => { created(); return new Promise<void>(() => undefined); } });
+    const f = await pipelineFixture(chat);
+    const logs = captureLogs();
+    try {
+      const pending = open(f, await newProject(f));
+      await reached;
+      // Chat 卡着的时候，这个库里没有开着事务等着的连接。
+      expect(await f.t.sql("SELECT pid FROM pg_stat_activity WHERE datname = current_database() AND state = 'idle in transaction'")).toEqual([]);
+      const started = Date.now();
+      const res = await pending;
+      expect([res.statusCode, res.json().code]).toEqual([503, "CHAT_UNAVAILABLE"]);
+      expect(Date.now() - started).toBeLessThan(20_000);
+      expect(await f.t.sql("SELECT * FROM project_pipelines")).toEqual([]);
+      expect(logs("chat_service.pipeline_orphan")).toEqual([expect.objectContaining({ conversationId: null })]);
+    } finally {
+      vi.restoreAllMocks();
+      await f.close();
+      await chat.close();
+    }
+  }, 40_000);
+
+  it("Chat 开了段、天枢没登记上：这段记成孤儿段（日志带 id），总管线读历史、发一句仍进原来那段", async () => {
+    const chat = await fakeChat({ conversations: ["main-segment"] });
+    const f = await pipelineFixture(chat);
+    const logs = captureLogs();
+    try {
+      const projectId = await newProject(f);
+      await f.t.sql(`CREATE FUNCTION refuse_pipeline() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'connection lost'; END $$;
+        CREATE TRIGGER refuse_pipeline BEFORE INSERT ON project_pipelines FOR EACH ROW EXECUTE FUNCTION refuse_pipeline();`);
+      expect((await open(f, projectId)).statusCode).toBe(500);
+      const orphan = chat.conversations[0];
+      expect(orphan).not.toBe("main-segment");
+      // Chat 那边这段是最新的一段。
+      expect(chat.listed[0].conversationId).toBe(orphan);
+      expect(logs("chat_service.pipeline_orphan")).toEqual([expect.objectContaining({ conversationId: orphan })]);
+
+      await history(f, "global");
+      expect(globalReads(chat)).toEqual(["main-segment"]);
+      expect((await say(f, "global", { message: "今天先做什么" })).statusCode).toBe(200);
+      expect(chat.turns().at(-1)!.url).toBe("/conversations/main-segment/turns");
+
+      // 登记恢复以后再开：开新的一段并记下，总管线还是原来那段。
+      await f.t.sql("DROP TRIGGER refuse_pipeline ON project_pipelines");
+      const again = await open(f, projectId);
+      expect(again.statusCode).toBe(201);
+      expect(again.json().conversationId).not.toBe(orphan);
+      expect((await say(f, "global", { message: "还有呢" })).statusCode).toBe(200);
+      expect(chat.turns().at(-1)!.url).toBe("/conversations/main-segment/turns");
+    } finally {
+      vi.restoreAllMocks();
+      await f.close();
+      await chat.close();
+    }
+  }, 30_000);
+
+  it("开段期间这个项目已经登记了别的段：用已登记的那段（200），刚开的那段记成孤儿段，总管线不用它", async () => {
+    let f!: Awaited<ReturnType<typeof boardFixture>>;
+    let projectId!: string;
+    const chat = await fakeChat({ conversations: ["main-segment"], beforeCreate: async () => {
+      await f.t.sql("INSERT INTO project_pipelines (project_id, owner_id, conversation_id) VALUES ($1, $2, 'elsewhere')", [projectId, TEST_MEMBER.personId]);
+    } });
+    f = await pipelineFixture(chat);
+    const logs = captureLogs();
+    try {
+      projectId = await newProject(f);
+      const res = await open(f, projectId);
+      expect([res.statusCode, res.json().conversationId]).toEqual([200, "elsewhere"]);
+      const orphan = chat.conversations[0];
+      expect(orphan).not.toBe("main-segment");
+      expect(logs("chat_service.pipeline_orphan")).toEqual([expect.objectContaining({ conversationId: orphan })]);
+      expect(await f.t.sql("SELECT conversation_id FROM project_pipelines")).toEqual([{ conversation_id: "elsewhere" }]);
+
+      await history(f, "global");
+      expect(globalReads(chat)).toEqual(["main-segment"]);
+    } finally {
+      vi.restoreAllMocks();
+      await f.close();
+      await chat.close();
+    }
+  }, 30_000);
+});
+
+describe("伙伴代本人做事走 Chat（17.4）", () => {
+  it("动作做完往这一轮的流里插界面效果、计划清单、卡，写动作做成了替伙伴打勾；读回历史时接上清单和卡；回答到一半再发一句：停掉上一轮、清单收起，新一轮照常", async () => {
+    const upstreams: ServerResponse[] = [];
+    const frame = (event: Record<string, unknown>) => `data: ${JSON.stringify({ conversationId: "chat-conversation", runId: RUN, scope: "global", sequence: 9, ...event })}\n\n`;
+    let busy = false;
+    /** Chat 收到「停下」、上一轮还没结束时库里的清单（每一轮都是同一个 RUN，结束时也会收起，只有这一刻分得出是插话收起的）。 */
+    let readPlan: (() => Promise<unknown>) | undefined;
+    let planAtCancel: unknown;
+    const chat = await fakeChat({
+      conversations: [randomUUID()],
+      pages: { "0": { messages: [{ role: "user", text: "换成深色", runId: RUN }, { role: "assistant", text: "换好了", runId: RUN }],
+        runs: [{ runId: RUN, status: "completed" }], nextCursor: null } },
+      turn: (res) => {
+        // 上一轮还没结束时 Chat 回 TURN_RUNNING；停掉以后才收下。
+        if (busy) {
+          res.writeHead(409, { "content-type": "application/json" });
+          res.end(JSON.stringify({ error: { code: "TURN_RUNNING", message: "本会话已有运行中的轮次" } }));
+          return;
+        }
+        busy = true;
+        upstreams.push(res);
+        sse(res, [{ type: "turn_started" }, { type: "message", delta: "我来" }], false);
+      },
+      cancel: async (res, request) => {
+        planAtCancel = await readPlan?.();
+        upstreams.at(-1)!.end(frame({ type: "done", status: "aborted" }));
+        busy = false;
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ runId: request.url.split("/")[2], status: "aborted" }));
+      },
+    });
+    await withChat(chat, countingRuntime(), async (t) => {
+      const cookie = await t.memberCookie();
+      await t.app.listen({ port: 0, host: "127.0.0.1" });
+      const base = `http://127.0.0.1:${(t.app.server.address() as AddressInfo).port}`;
+      const ask = async (message: string) => {
+        const response = await fetch(`${base}/api/conversations/global/messages`, { method: "POST",
+          headers: { cookie, origin: t.publicOrigin, accept: "text/event-stream", "content-type": "application/json" }, body: JSON.stringify({ message }) });
+        const reader = response.body!.getReader();
+        let text = "";
+        const until = async (needle: string) => { while (!text.includes(needle)) text += new TextDecoder().decode((await reader.read()).value); };
+        const rest = async () => { for (;;) { const { done, value } = await reader.read(); if (done) return text; text += new TextDecoder().decode(value); } };
+        return { until, rest };
+      };
+      const act = (name: string, args: unknown) => t.app.inject({ method: "POST", url: `/internal/me/buddy-actions/${name}`,
+        headers: { authorization: `Bearer ${CHAT_TOKEN}`, "x-owner-id": TEST_MEMBER.personId }, payload: { args, runId: RUN, conversationId: "chat-conversation" } });
+      expect((await t.app.inject({ method: "PUT", url: "/api/me/buddy-authority", headers: { cookie, origin: t.publicOrigin }, payload: { authority: "full" } })).statusCode).toBe(200);
+
+      const first = await ask("换成深色，再跟测试甲说一声");
+      await first.until("我来");
+      const entries = [{ content: "换外观", status: "in_progress" }, { content: "转达测试甲", status: "pending" }];
+      expect((await act("update_plan", { entries })).json()).toMatchObject({ summary: "清单更新了", auditId: null, undoable: false });
+      expect((await act("set_appearance", { appearance: "dark" })).json()).toMatchObject({ undoable: true });
+      const draftedRes = await act("send_message", { toPersonIds: [TEST_CEO.personId], text: "下午的会改到四点" });
+      expect([draftedRes.statusCode, draftedRes.json().code]).toEqual([200, undefined]);
+      const drafted = draftedRes.json();
+      upstreams[0].end(frame({ type: "done", status: "completed" }));
+      busy = false;
+      const received = events(await first.rest());
+      const draftId = drafted.result.draftId as string;
+      expect(received.filter((event) => ["plan", "ui", "card"].includes(event.type as string)).map(({ type, plan, ui, card }) => ({ type, plan, ui, card }))).toEqual([
+        { type: "plan", plan: { entries, collapsed: false }, ui: undefined, card: undefined },
+        { type: "ui", plan: undefined, ui: { kind: "appearance", appearance: "dark" }, card: undefined },
+        // 换外观做成了而伙伴没打勾：天枢替它把进行中的那一步标成完成。
+        { type: "plan", plan: { entries: [{ ...entries[0], status: "completed" }, entries[1]], collapsed: false }, ui: undefined, card: undefined },
+        { type: "card", plan: undefined, ui: undefined, card: { kind: "buddy_message", draftId } },
+        // 这一轮答完：清单收起，条目照伙伴最后交的（加天枢打的勾），不替它改。
+        { type: "plan", plan: { entries: [{ ...entries[0], status: "completed" }, entries[1]], collapsed: true }, ui: undefined, card: undefined },
+      ]);
+      expect(received.every((event) => event.runId === RUN && event.scope === "global")).toBe(true);
+
+      // 读回历史：这一轮的回答带上最后那张清单和转达卡。
+      const history = (await t.app.inject({ method: "GET", url: "/api/conversations/global/messages", headers: { cookie } })).json();
+      expect(history.messages.find((message: { role: string }) => message.role === "assistant")).toMatchObject({
+        plan: { entries: [{ ...entries[0], status: "completed" }, entries[1]], collapsed: true }, cards: [{ kind: "buddy_message", draftId }] });
+
+      // 回答到一半再发一句：上一轮停掉（以「已停止」结束，清单收起），新一句开新的一轮、回执照给。
+      const second = await ask("算了，先别发");
+      await second.until("我来");
+      // 这一轮又交了清单（重新展开），下面被插话打断时收起：Chat 收到「停下」时（上一轮还没结束）已经收起。
+      await act("update_plan", { entries });
+      readPlan = async () => (await t.sql("SELECT collapsed FROM buddy_plans WHERE run_id=$1", [RUN]))[0];
+      expect(await readPlan()).toEqual({ collapsed: false });
+      const third = await ask("就这样");
+      const thirdText = await (async () => { await third.until("我来"); upstreams.at(-1)!.end(frame({ type: "done", status: "completed" })); return third.rest(); })();
+      const stopped = events(await second.rest());
+      expect(stopped.filter((event) => event.type === "done")).toEqual([expect.objectContaining({ status: "aborted" })]);
+      expect(chat.requests.filter((request) => request.url === `/turns/${RUN}/cancel`)).toHaveLength(1);
+      // 中途插话：第一个勾在停上一轮之前就到（还没有这一轮，不带 runId），第二个勾等新一轮开始；同一条消息 id，重发时也不变。
+      const thirdTurns = chat.turns().slice(-2).map((turn) => JSON.parse(turn.body).clientRequestId as string);
+      expect(new Set(thirdTurns).size).toBe(1);
+      expect(allEvents(thirdText).slice(0, 2)).toEqual([{ type: "receipt", state: "delivered", messageId: thirdTurns[0], scope: "global", sequence: 1 },
+        { type: "receipt", state: "read", messageId: thirdTurns[0], runId: RUN, scope: "global", sequence: 2 }]);
+      expect(events(thirdText).at(-1)).toMatchObject({ type: "done", status: "completed" });
+      expect(planAtCancel).toEqual({ collapsed: true });
+      expect((await t.sql("SELECT collapsed FROM buddy_plans WHERE run_id=$1", [RUN]))[0]).toEqual({ collapsed: true });
+    });
+  }, 30_000);
+
+  /** 一轮伙伴回答：开流写一句后停住，plan 给了就在这一轮里交一张清单，再用 last 那一帧结束；回界面收到的事件和库里的清单。 */
+  const endedTurn = async (last: Record<string, unknown>, plan?: { content: string; status: string }[]) => {
+    let upstream!: ServerResponse;
+    const chat = await fakeChat({ conversations: [randomUUID()], turn: (res) => { upstream = res; sse(res, [{ type: "turn_started" }, { type: "message", delta: "我来" }], false); } });
+    let received: Record<string, unknown>[] = [];
+    let rows: unknown[] = [];
+    await withChat(chat, countingRuntime(), async (t) => {
+      const cookie = await t.memberCookie();
+      await t.app.listen({ port: 0, host: "127.0.0.1" });
+      const base = `http://127.0.0.1:${(t.app.server.address() as AddressInfo).port}`;
+      const response = await fetch(`${base}/api/conversations/global/messages`, { method: "POST",
+        headers: { cookie, origin: t.publicOrigin, accept: "text/event-stream", "content-type": "application/json" }, body: JSON.stringify({ message: "查两件事" }) });
+      const reader = response.body!.getReader();
+      let text = "";
+      while (!text.includes("我来")) text += new TextDecoder().decode((await reader.read()).value);
+      if (plan) {
+        const res = await t.app.inject({ method: "POST", url: "/internal/me/buddy-actions/update_plan",
+          headers: { authorization: `Bearer ${CHAT_TOKEN}`, "x-owner-id": TEST_MEMBER.personId }, payload: { args: { entries: plan }, runId: RUN, conversationId: "chat-conversation" } });
+        expect(res.json()).toMatchObject({ summary: "清单更新了" });
+      }
+      upstream.end(`data: ${JSON.stringify({ conversationId: "chat-conversation", runId: RUN, scope: "global", sequence: 9, ...last })}\n\n`);
+      for (;;) { const { done, value } = await reader.read(); if (done) break; text += new TextDecoder().decode(value); }
+      received = events(text);
+      rows = await t.sql("SELECT entries,collapsed FROM buddy_plans WHERE run_id=$1", [RUN]);
+    });
+    return { received, rows };
+  };
+  const unfinished = [{ content: "查天枢项目最新进展", status: "in_progress" }, { content: "联网查上市信息", status: "in_progress" }, { content: "汇总两件事的结论", status: "pending" }];
+
+  it("一轮正常结束时清单收起，条目状态不改", async () => {
+    const { received, rows } = await endedTurn({ type: "done", status: "completed" }, unfinished);
+    // 收起的那一帧在 done 之前推给网页，条目原样。
+    expect(received.filter((event) => event.type === "plan" || event.type === "done").map(({ type, plan, status }) => ({ type, plan, status }))).toEqual([
+      { type: "plan", plan: { entries: unfinished, collapsed: false }, status: undefined },
+      { type: "plan", plan: { entries: unfinished, collapsed: true }, status: undefined },
+      { type: "done", plan: undefined, status: "completed" },
+    ]);
+    expect(rows).toEqual([{ entries: unfinished, collapsed: true }]);
+  }, 30_000);
+
+  it("一轮出错停下时清单也收起", async () => {
+    const { received, rows } = await endedTurn({ type: "error", code: "MODEL_FAILED", message: "模型出错" }, unfinished);
+    expect(received.filter((event) => event.type === "plan").at(-1)).toMatchObject({ plan: { entries: unfinished, collapsed: true } });
+    expect(received.at(-1)).toMatchObject({ type: "error" });
+    expect(rows).toEqual([{ entries: unfinished, collapsed: true }]);
+  }, 30_000);
+
+  it("没有清单的一轮结束时不报错", async () => {
+    const logged: string[] = [];
+    const spy = vi.spyOn(process.stdout, "write").mockImplementation((chunk: unknown) => { logged.push(String(chunk)); return true; });
+    try {
+      const { received, rows } = await endedTurn({ type: "done", status: "completed" });
+      expect(received.some((event) => event.type === "plan")).toBe(false);
+      expect(received.at(-1)).toMatchObject({ type: "done", status: "completed" });
+      expect(rows).toEqual([]);
+      expect(logged.filter((line) => line.includes("hook_failed"))).toEqual([]);
+    } finally {
+      spy.mockRestore();
+    }
+  }, 30_000);
+
+  it("中途插话给了第一个勾以后还是没开成：流里给一帧 error（不带 runId）就结束，码照开流前的拒绝", async () => {
+    let upstream!: ServerResponse;
+    let state: "free" | "busy" | "broken" = "free";
+    const chat = await fakeChat({
+      conversations: [randomUUID()],
+      turn: (res) => {
+        if (state === "free") {
+          state = "busy";
+          upstream = res;
+          sse(res, [{ type: "turn_started" }, { type: "message", delta: "我来" }], false);
+          return;
+        }
+        // 上一轮还在回时 409；停掉以后对话服务出了问题（500）。
+        res.writeHead(state === "busy" ? 409 : 500, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: state === "busy" ? { code: "TURN_RUNNING", message: "本会话已有运行中的轮次" } : { code: "INTERNAL", message: "坏了" } }));
+      },
+      cancel: (res, request) => {
+        upstream.end(`data: ${JSON.stringify({ conversationId: "chat-conversation", runId: RUN, scope: "global", sequence: 9, type: "done", status: "aborted" })}\n\n`);
+        state = "broken";
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ runId: request.url.split("/")[2], status: "aborted" }));
+      },
+    });
+    await withChat(chat, countingRuntime(), async (t) => {
+      const cookie = await t.memberCookie();
+      await t.app.listen({ port: 0, host: "127.0.0.1" });
+      const url = `http://127.0.0.1:${(t.app.server.address() as AddressInfo).port}/api/conversations/global/messages`;
+      const post = (message: string) => fetch(url, { method: "POST", headers: { cookie, origin: t.publicOrigin, accept: "text/event-stream",
+        "content-type": "application/json" }, body: JSON.stringify({ message }) });
+      const first = await post("写长一点");
+      const reader = first.body!.getReader();
+      let text = "";
+      while (!text.includes("我来")) text += new TextDecoder().decode((await reader.read()).value);
+      const second = await post("算了");
+      expect(second.status).toBe(200);
+      const received = allEvents(await second.text());
+      const messageId = JSON.parse(chat.turns()[1].body).clientRequestId as string;
+      expect(received).toEqual([{ type: "receipt", state: "delivered", messageId, scope: "global", sequence: 1 },
+        { type: "error", code: "CHAT_FAILED", message: "对话服务这次没有接下请求。", scope: "global", sequence: 2 }]);
+    });
+  }, 30_000);
+  it("选项框（18 节第 9 条 ask_user）：参数照规矩校验；存成这一轮的卡、经流推给网页、读历史读得回；本人发出任何新消息把 open 的标 dismissed，带 buddyQuestionId 的标 answered；项目对话的框只被项目对话里的话收掉", async () => {
+    const deploy = { header: "部署方式", question: "这次发到哪？", options: [
+      { label: "只发预发", detail: "先在预发看一眼，不碰生产", recommended: true }, { label: "预发和生产", detail: "一起发，省一轮" }] };
+    const when = { header: "时间", question: "什么时候发？", options: [{ label: "今天", detail: "现在就发" }, { label: "本周五", detail: "等周五没人用的时候" }], multiSelect: false };
+    const asks: unknown[][] = [];
+    let act: (name: string, args: unknown, extra?: Record<string, unknown>) => Promise<{ statusCode: number; json: () => any }> = async () => { throw new Error("not ready"); };
+    const chat = await fakeChat({
+      conversations: ["chat-conversation"],
+      pages: { "0": { messages: [{ role: "user", text: "部署吧", runId: RUN }, { role: "assistant", text: "先问两件事", runId: RUN }],
+        runs: [{ runId: RUN, status: "completed" }], nextCursor: null } },
+      // 这一轮里伙伴调 ask_user（队列里有的话），然后结束这一轮。
+      turn: (res) => void (async () => {
+        sse(res, [{ type: "turn_started" }, { type: "message", delta: "先问两件事" }], false);
+        const questions = asks.shift();
+        if (questions) expect((await act("ask_user", { questions })).statusCode).toBe(200);
+        res.end(`data: ${JSON.stringify({ conversationId: "chat-conversation", runId: RUN, scope: "global", sequence: 9, type: "done", status: "completed" })}\n\n`);
+      })(),
+    });
+    await withChat(chat, countingRuntime(), async (t) => {
+      const cookie = await t.memberCookie();
+      act = (name, args, extra = { runId: RUN, conversationId: "chat-conversation" }) => t.app.inject({ method: "POST", url: `/internal/me/buddy-actions/${name}`,
+        headers: { authorization: `Bearer ${CHAT_TOKEN}`, "x-owner-id": TEST_MEMBER.personId }, payload: { args, ...extra } });
+      const say = (payload: Record<string, unknown>) => t.app.inject({ method: "POST", url: "/api/conversations/global/messages",
+        headers: { cookie, origin: t.publicOrigin, accept: "text/event-stream" }, payload });
+      const cards = async () => (await t.app.inject({ method: "GET", url: "/api/conversations/global/messages", headers: { cookie } })).json()
+        .messages.find((message: { role: string }) => message.role === "assistant").cards;
+
+      // 没授权也能用（只动界面）；动作清单里有它，说明写清什么时候用。
+      const listed = (await t.app.inject({ method: "GET", url: "/internal/me/buddy-actions",
+        headers: { authorization: `Bearer ${CHAT_TOKEN}`, "x-owner-id": TEST_MEMBER.personId } })).json().actions
+        .find((action: { name: string }) => action.name === "ask_user");
+      expect(listed).toMatchObject({ kind: "ui", description: expect.stringContaining("不要把问题写成一段话") });
+      // 参数校验：推荐的不在第一个、一题只有一个选项、选项没说明、超过 4 题都是 400；这一轮没带 runId 出不来。
+      const bad = [
+        { questions: [{ ...deploy, options: [deploy.options[1], deploy.options[0]] }] },
+        { questions: [{ ...deploy, options: [deploy.options[0]] }] },
+        { questions: [{ ...deploy, options: [{ label: "只发预发" }, deploy.options[1]] }] },
+        { questions: [deploy, when, deploy, when, deploy] },
+      ];
+      for (const args of bad) expect([(await act("ask_user", args)).statusCode, (await act("ask_user", args)).json().code]).toEqual([400, "INVALID_ARGS"]);
+      const noTurn = await act("ask_user", { questions: [deploy] }, {});
+      expect([noTurn.statusCode, noTurn.json().code]).toEqual([409, "NO_TURN"]);
+
+      // 第一轮：伙伴出一个框，经 card 事件推给网页；读历史在那一轮的回答上、open。
+      asks.push([deploy, when]);
+      const first = events((await say({ message: "部署吧" })).body).filter((event) => event.type === "card");
+      expect(first).toEqual([expect.objectContaining({ runId: RUN, scope: "global",
+        card: { kind: "buddy_question", questionId: expect.any(String), questions: [deploy, when], status: "open" } })]);
+      const firstId = (first[0].card as { questionId: string }).questionId;
+      expect(await cards()).toEqual([{ kind: "buddy_question", questionId: firstId, questions: [deploy, when], status: "open" }]);
+
+      // 本人没答、聊了别的：那张 dismissed；伙伴这一轮又出了一个，新的那张 open。
+      asks.push([deploy]);
+      const second = events((await say({ message: "先说说昨天的会" })).body).find((event) => event.type === "card")!;
+      const secondId = (second.card as { questionId: string }).questionId;
+      expect((await cards()).map((card: { questionId: string; status: string }) => [card.questionId, card.status])).toEqual([[firstId, "dismissed"], [secondId, "open"]]);
+
+      // 点选项回答：网页把选择拼成一句话发出、带 buddyQuestionId；那张 answered。Chat 那边只收到原话（不认识的字段 Chat 会整轮拒收）。
+      await say({ message: "部署方式：只发预发（推荐）", buddyQuestionId: secondId });
+      expect((await cards()).map((card: { status: string }) => card.status)).toEqual(["dismissed", "answered"]);
+      expect(JSON.parse(chat.turns().at(-1)!.body)).not.toHaveProperty("buddyQuestionId");
+      // 已经收掉的不能再答成 answered。
+      await say({ message: "还是预发和生产", buddyQuestionId: firstId });
+      expect((await cards()).map((card: { status: string }) => card.status)).toEqual(["dismissed", "answered"]);
+
+      // 项目对话里出的框记在那个项目对话上：伙伴台的话收不掉它，只有项目对话里的话收掉。
+      const projectId = (await t.app.inject({ method: "POST", url: "/api/me/projects", headers: { cookie, origin: t.publicOrigin }, payload: { name: "对话质量" } })).json().projectId as string;
+      const pipeline = (await t.app.inject({ method: "POST", url: `/api/me/projects/${projectId}/pipeline`, headers: { cookie, origin: t.publicOrigin } })).json().conversationId as string;
+      const projectRun = randomUUID();
+      const inProject = (await act("ask_user", { questions: [when] }, { runId: projectRun, conversationId: pipeline })).json().result.questionId as string;
+      const status = async () => (await t.sql("SELECT scope,status FROM buddy_questions WHERE id=$1", [inProject]))[0];
+      await say({ message: "伙伴台这边说一句" });
+      expect(await status()).toEqual({ scope: `project:${projectId}`, status: "open" });
+      await t.app.inject({ method: "POST", url: `/api/conversations/${encodeURIComponent(`project:${projectId}`)}/messages`,
+        headers: { cookie, origin: t.publicOrigin, accept: "text/event-stream" }, payload: { message: "时间：本周五", buddyQuestionId: inProject } });
+      expect(await status()).toEqual({ scope: `project:${projectId}`, status: "answered" });
+    });
+  }, 30_000);
+  it("回话带上这一轮实际用的来源和模型：Chat 的 usage 报了就给界面一帧 model（换了才再给），记下最后一次，读历史时在回答上；没报的没有", async () => {
+    const usage = { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2 };
+    let turns = 0;
+    const chat = await fakeChat({
+      conversations: ["chat-conversation"],
+      pages: { "0": { messages: [{ role: "user", text: "你好", runId: RUN }, { role: "assistant", text: "在", runId: RUN }],
+        runs: [{ runId: RUN, status: "completed" }], nextCursor: null } },
+      turn: (res) => sse(res, ++turns === 1 ? [{ type: "turn_started" },
+        { type: "usage", ...usage, provider: "tokenhub", model: "claude-opus-5-5" },
+        { type: "usage", ...usage, provider: "tokenhub", model: "claude-opus-5-5" },
+        { type: "usage", ...usage, provider: "tokenhub", model: "qwen3.8-flash" },
+        { type: "message", delta: "在" }, { type: "done", status: "completed" }]
+        : [{ type: "turn_started" }, { type: "usage", ...usage }, { type: "message", delta: "在" }, { type: "done", status: "completed" }]),
+    });
+    await withChat(chat, countingRuntime(), async (t) => {
+      const cookie = await t.memberCookie();
+      const say = () => t.app.inject({ method: "POST", url: "/api/conversations/global/messages",
+        headers: { cookie, origin: t.publicOrigin, accept: "text/event-stream" }, payload: { message: "你好" } });
+      const answer = async () => (await t.app.inject({ method: "GET", url: "/api/conversations/global/messages", headers: { cookie } })).json()
+        .messages.find((message: { role: string }) => message.role === "assistant");
+      const first = events((await say()).body).filter((event) => event.type === "model");
+      expect(first.map(({ provider, model }) => ({ provider, model }))).toEqual([
+        { provider: "tokenhub", model: "claude-opus-5-5" }, { provider: "tokenhub", model: "qwen3.8-flash" }]);
+      expect(first.every((event) => event.runId === RUN && Object.keys(event).sort().join() === "model,provider,runId,scope,sequence,type")).toBe(true);
+      await vi.waitFor(async () => expect((await answer()).model).toEqual({ provider: "tokenhub", model: "qwen3.8-flash" }));
+      // Chat 没报模型（老版本）：不给 model 帧，记下的那一轮照旧。
+      expect(events((await say()).body).some((event) => event.type === "model")).toBe(false);
+      expect(await t.sql("SELECT run_id,provider,model FROM chat_turn_models")).toEqual([{ run_id: RUN, provider: "tokenhub", model: "qwen3.8-flash" }]);
+    });
+  }, 30_000);
 });

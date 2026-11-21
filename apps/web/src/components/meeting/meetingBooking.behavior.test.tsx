@@ -59,7 +59,7 @@ const PEOPLE = [
   { personId: "p-third", displayName: "周舟", roles: ["dri"] },
 ];
 const PO: TWorldAnchorOption = { kind: "po", id: "<po-oct>", title: "E&O 10 月目标", brief: "十月把预约跑通", lifecycle: "committed", ownerId: null, parentId: null };
-/** 自己的 Mission（打开就默认挂上）、周舟的 Mission（服务那个 PO）。 */
+/** 自己的 Mission、周舟的 Mission（服务那个 PO）。打开默认不挂（本人 11/16）。 */
 const MISSION: TWorldAnchorOption = { kind: "mission", id: "m-draft", title: "草稿 Mission", brief: null, lifecycle: "draft", ownerId: "p-member", parentId: null };
 const THEIRS: TWorldAnchorOption = { kind: "mission", id: "m-zhou", title: "周舟的 Mission", brief: null, lifecycle: "confirmed", ownerId: "p-third", parentId: PO.id };
 
@@ -97,19 +97,25 @@ async function fill(viewer: typeof MEMBER | typeof CEO) {
 }
 
 describe("约会议", () => {
-  it("打开就挂好自己的 Mission，收起成一行；结束早于开始约不了", async () => {
+  it("打开默认不挂（本人 11/16，同开会弹层）：所属一行写「不挂」、右边「选择」，不挂也能约；挂上以后「不挂」能去掉；结束早于开始约不了", async () => {
     await fill(MEMBER);
-    const row = render(MEMBER).find((node) => node.props?.["data-anchor-row"] !== undefined)!;
+    let row = render(MEMBER).find((node) => node.props?.["data-anchor-row"] !== undefined)!;
+    expect(text(row)).toBe("不挂选择");
+    expect(button(render(MEMBER), "约好").props!.disabled).toBe(false);
+    click(button(render(MEMBER), "选择"));
+    click(render(MEMBER).find((node) => node.props?.["aria-pressed"] === false && text(node).includes("草稿 Mission")));
+    row = render(MEMBER).find((node) => node.props?.["data-anchor-row"] !== undefined)!;
     expect(nodes(row).some((node) => text(node) === "我的 Mission")).toBe(true);
     expect(text(row)).toContain("草稿 Mission");
-    expect(button(render(MEMBER), "约好").props!.disabled).toBe(false);
+    click(button(render(MEMBER), "不挂"));
+    expect(text(render(MEMBER).find((node) => node.props?.["data-anchor-row"] !== undefined)!)).toBe("不挂选择");
     change(render(MEMBER).find((node) => node.type === Select && node.props?.["aria-label"] === "结束")!, "09:30");
     expect(button(render(MEMBER), "约好").props!.disabled).toBe(true);
   });
 
-  it("换：我的 Mission 直接列，其余收成几行；进 PO 选中后往下挑它的 Mission", async () => {
+  it("选择：我的 Mission 直接列，其余收成几行；进 PO 选中后往下挑它的 Mission", async () => {
     await fill(MEMBER);
-    click(button(render(MEMBER), "更换"));
+    click(button(render(MEMBER), "选择"));
     let tree = render(MEMBER);
     expect(tree.filter((node) => node.type === "h4").map(text)).toEqual(["我的 Mission", "其他"]);
     expect(tree.filter((node) => node.props?.["data-level"] !== undefined).map((node) => node.props!["data-level"])).toEqual(["others", "po"]);
@@ -136,8 +142,9 @@ describe("约会议", () => {
         ? { data: { people: PEOPLE.map(({ personId, displayName }) => ({ personId, displayName })) }, response: { ok: true, status: 200 } }
         : { data: { options }, response: { ok: true, status: 200 } });
     await fill(CEO);
+    expect(text(render(CEO).find((node) => node.props?.["data-anchor-row"] !== undefined)!)).toBe("不挂选择");
+    click(button(render(CEO), "选择"));
     let tree = render(CEO);
-    expect(tree.some((node) => node.props?.["data-anchor-row"] !== undefined)).toBe(false);
     expect(tree.filter((node) => node.type === "h4").map(text)).toEqual(["公司目标", "战场"]);
     const goals = tree.filter((node) => node.props?.["aria-pressed"] !== undefined).map(text);
     expect(goals[0]).toContain(LTO.title);
@@ -172,7 +179,7 @@ describe("约会议", () => {
 
   it("提交带上挂点", async () => {
     await fill(MEMBER);
-    click(button(render(MEMBER), "更换"));
+    click(button(render(MEMBER), "选择"));
     click(render(MEMBER).find((node) => node.props?.["data-level"] === "po"));
     click(render(MEMBER).find((node) => node.props?.["aria-pressed"] === false && text(node).includes(PO.title)));
     api.post.mockResolvedValue({ data: { card: { objectRef: { id: "m-new" }, navigation: [{ href: "/me/meetings/m-new", label: "会议" }] } }, response: { ok: true, status: 200 } });
@@ -200,10 +207,11 @@ describe("约会议", () => {
     expect(tree.find((node) => node.type === Select && node.props?.["aria-label"] === "结束")!.props!.value).toBe("15:30");
     expect(tree.find((node) => node.type === Select && node.props?.["aria-label"] === "主持人")!.props!.value).toBe("p-third");
     expect(tree.filter((node) => String(node.props?.["aria-label"] ?? "").startsWith("去掉")).map((node) => node.props!["aria-label"])).toEqual(["去掉 林晓"]);
-    // 没挂：挑选器直接展开，「约好」不能点。
-    expect(tree.some((node) => node.props?.["data-anchor-row"] !== undefined)).toBe(false);
-    expect(button(tree, "约好").props!.disabled).toBe(true);
-    // CEO 的挑选器里公司目标直接列着：点 PO 就挂上。
+    // 没挂：一行「不挂」，不挂也能约。
+    expect(text(tree.find((node) => node.props?.["data-anchor-row"] !== undefined)!)).toBe("不挂选择");
+    expect(button(tree, "约好").props!.disabled).toBe(false);
+    // 点「选择」：CEO 的挑选器里公司目标直接列着，点 PO 就挂上。
+    click(button(renderDraft(), "选择"));
     click(renderDraft().find((node) => node.props?.["aria-pressed"] === false && text(node).includes(PO.title)));
     api.post.mockResolvedValue({ data: { card: { objectRef: { id: "m-new" }, navigation: [{ href: "/meetings/m-new", label: "Meeting" }] } }, response: { ok: true, status: 200 } });
     (button(renderDraft(), "约好").props!.onClick as () => void)();

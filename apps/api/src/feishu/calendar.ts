@@ -5,7 +5,7 @@ import { FeishuApiError } from "./client.js";
  * - 主日历：POST /calendar/v4/calendars/primary → data.calendars[0].calendar.calendar_id（calendar:calendar:readonly）
  * - 建日程：POST /calendar/v4/calendars/{calendar_id}/events?idempotency_key=<会议 id>（calendar:calendar.event:create）；
  *   起止是秒级 timestamp 字符串 + timezone，vchat.vc_type = "vc" 是飞书视频会议，vchat.meeting_settings.auto_record 开自动录制；
- *   返回 data.event.event_id、vchat.meeting_url（会议链接；没有时用 app_link 打开日程）
+ *   返回 data.event.event_id、vchat.meeting_url。app_link 打开日程，不能用于入会。
  * - 加参与人：POST /calendar/v4/calendars/{calendar_id}/events/{event_id}/attendees?user_id_type=open_id，
  *   body {attendees: [{type: "user", user_id}], need_notification: true}（calendar:calendar.event:update）
  * - 改时间：PATCH /calendar/v4/calendars/{calendar_id}/events/{event_id}，body {summary, start_time, end_time, need_notification}（calendar:calendar.event:update）
@@ -18,6 +18,14 @@ import { FeishuApiError } from "./client.js";
  * 建日程还没在真飞书上跑过，等后台开通日历权限后验证（特别是建好时 vchat.meeting_url 有没有值）。
  */
 const OPEN_API = "https://open.feishu.cn/open-apis";
+/** 旧数据可能把打开日程的 app_link 存在入会地址里。 */
+export function meetingJoinUrl(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && !url.username && !url.password && !/\/calendar(?:\/|$)/i.test(url.pathname) ? url.href : null;
+  } catch { return null; }
+}
 const TIMEOUT_MS = 15_000;
 const TIMEZONE = "Asia/Shanghai";
 
@@ -35,6 +43,7 @@ export type FeishuCalendarInstance = {
 };
 
 export type FeishuCalendarApi = {
+  getEvent?(userAccessToken: string, calendarId: string, eventId: string): Promise<FeishuCalendarEvent>;
   primaryCalendarId(userAccessToken: string): Promise<string>;
   /** idempotencyKey 相同的重复请求不会建第二个日程。 */
   createEvent(userAccessToken: string, calendarId: string, input: FeishuCalendarEventInput, idempotencyKey: string): Promise<FeishuCalendarEvent>;
@@ -70,6 +79,11 @@ export function createFeishuCalendarApi({ fetch: fetchImpl = fetch }: { fetch?: 
       if (typeof id !== "string" || !id) throw new FeishuApiError(0, "飞书没有返回主日历");
       return id;
     },
+    async getEvent(userAccessToken, calendarId, eventId) {
+      const data = await call(userAccessToken, eventPath(calendarId,eventId));
+      const event = (data.event ?? {}) as { vchat?: { meeting_url?: unknown } };
+      return { eventId, joinUrl: meetingJoinUrl(event.vchat?.meeting_url) };
+    },
     async createEvent(userAccessToken, calendarId, input, idempotencyKey) {
       const data = await call(userAccessToken, `${eventPath(calendarId)}?idempotency_key=${encodeURIComponent(idempotencyKey)}`, {
         method: "POST",
@@ -82,8 +96,7 @@ export function createFeishuCalendarApi({ fetch: fetchImpl = fetch }: { fetch?: 
       });
       const event = (data.event ?? {}) as { event_id?: unknown; app_link?: unknown; vchat?: { meeting_url?: unknown } };
       if (typeof event.event_id !== "string" || !event.event_id) throw new FeishuApiError(0, "飞书没有返回日程 ID");
-      const link = [event.vchat?.meeting_url, event.app_link].find((value): value is string => typeof value === "string" && value.length > 0);
-      return { eventId: event.event_id, joinUrl: link ?? null };
+      return { eventId: event.event_id, joinUrl: meetingJoinUrl(event.vchat?.meeting_url) };
     },
     async addAttendees(userAccessToken, calendarId, eventId, openIds) {
       await call(userAccessToken, `${eventPath(calendarId, eventId)}/attendees?user_id_type=open_id`, {

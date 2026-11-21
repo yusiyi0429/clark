@@ -59,16 +59,16 @@ describe("全局对话层划词引用（B4）", () => {
 });
 
 describe("对话层没有页头横条（D1，取代 B7 的薄栏）", () => {
-  it("没有页头横条；左上星标只是标识（不可聚焦、不挂动作），右上「收起 ⌄」收起对话层；附件不在这里", () => {
+  it("没有页头横条；顶上正中的伙伴只是标识（不可聚焦、不挂动作），右上「收起 ⌄」收起对话层；附件不在这里", () => {
     const onClose = vi.fn();
     const html = renderToStaticMarkup(<ConversationHistorySheet data={data} label="天枢" global onClose={onClose} />);
     expect(html).not.toContain("<header");
     expect(html).not.toContain("仅你可见");
-    expect(html).toMatch(/<span[^>]*aria-hidden="true"[^>]*data-testid="conversation-sheet-mark"[^>]*><svg data-mark/);
-    expect(html).not.toMatch(/<button[^>]*>\s*<svg data-mark/);
+    expect(html).toMatch(/data-testid="conversation-sheet-buddy"><span[^>]*aria-hidden="true"/);
+    expect(html).not.toContain("<svg data-mark");
     expect(html).not.toContain('aria-label="添加附件"');
     expect(h.buttons.get("收起对话记录")?.onPress).toBe(onClose);
     // 拖拽条不动，在最前面。
-    expect(html.indexOf('aria-hidden="true"')).toBeLessThan(html.indexOf("conversation-sheet-mark"));
+    expect(html.indexOf('aria-hidden="true"')).toBeLessThan(html.indexOf("conversation-sheet-buddy"));
   });
 });

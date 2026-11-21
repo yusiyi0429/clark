@@ -51,7 +51,7 @@ vi.mock("./useTaskGroup", () => ({ useThreadGroup: () => ({ view: { members: [],
 vi.mock("./useColumnMode", () => ({ useColumnMode: () => harness.column }));
 vi.mock("./references", () => ({ useReferences: () => null }));
 vi.mock("@/components/coagent/presence", () => ({ useListening: () => false }));
-vi.mock("@/components/coagent/skin", () => ({ useCoAgentSkin: () => ["default"] }));
+vi.mock("@/components/buddy/useBuddy", () => ({ useBuddy: () => ({ buddy: null, loading: false }) }));
 vi.mock("@/components/coagent/PresenceCapsule", () => ({ PresenceCapsule: () => null }));
 vi.mock("./ConversationColumn", () => ({ conversationStyles: {}, ConversationColumn: (props: NonNullable<typeof harness.rail> & { children: ReactNode }) => {
   harness.rail = props; return <aside data-channel={props.channel}>{props.children}</aside>;

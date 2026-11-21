@@ -79,6 +79,8 @@ describe("依据 ref 解析", () => {
     expect(parseSourceRef("chat:7d1c0f7e")).toMatchObject({ kind: "unknown" });
     expect(parseSourceRef("pmem:5f0e8c1a-2b3c")).toEqual({ kind: "pmem", ref: "pmem:5f0e8c1a-2b3c", id: "5f0e8c1a-2b3c" });
     expect(parseSourceRef("pmem:a b")).toMatchObject({ kind: "unknown" });
+    expect(parseSourceRef("world:7885a696-3b6c@5")).toEqual({ kind: "world", ref: "world:7885a696-3b6c@5", objectId: "7885a696-3b6c", version: 5 });
+    for (const bad of ["world:7885a696", "world:7885a696@v5", "world:a b@1", "world:@3"]) expect(parseSourceRef(bad)).toMatchObject({ kind: "unknown" });
     expect(parseSourceRef("signal:s-1")).toMatchObject({ kind: "signal", id: "s-1" });
     expect(parseSourceRef("whatever")).toMatchObject({ kind: "unknown" });
   });
@@ -123,6 +125,9 @@ describe("依据点下去打开什么（feedback 14）", () => {
     // 依据按钮只放一小段原文（14 字），完整原文在历史条目里。
     expect(sourceLabel("decision:r-1", ctx, ISSUE)).toBe("9/25 会后确认「9 月起新签合同必须附验收清…」");
     expect(sourceLabel("decision:h-0", ctx, ISSUE)).toBe("已被替代的决定「先签约后补清单」");
+    // 新首页（本人 11/18）：不截、不拼省略号，放不下由样式换行。
+    expect(sourceLabel("decision:r-1", ctx, ISSUE, true)).not.toContain("…");
+    expect(sourceLabel("decision:r-1", ctx, ISSUE, true)).toMatch(/^9\/25 会后确认「9 月起新签合同必须附验收清.+」$/);
     expect(sourceTarget("decision:nope", ctx)).toMatchObject({ type: "detail", hit: null });
     expect(sourceTarget("fact:f-1", ctx, ISSUE)).toMatchObject({ type: "anchor", anchorId: historyAnchorId(ISSUE, "fact:f-1") });
   });

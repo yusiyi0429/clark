@@ -1,7 +1,8 @@
 "use client";
 
 /**
- * 会议页「挂到」下面那一条进度线：这场会走到哪一步、此刻在发生什么。靠左一行，放不下按步折行。
+ * 会议页「挂到」下面那一条进度线：这场会走到哪一步、此刻在发生什么。只画这一步（本人 11/16：不画整条链），全部走完画最后一步。
+ * 下面几条是这一步可能是什么（模型 steps 照旧算整条，给别处判断用）：
  *
  * - 在飞书约上的会：已约好 → 等开会 → 进行中 → 等妙记 → 生成会议卡 → 待你确认（整卡确认后是已确认）；
  * - 没在飞书约上的会：等开会 → 进行中 → 待交记录 → 生成会议卡 → 待你确认。
@@ -12,12 +13,12 @@
  * `MinutesRecovery` 是待交记录时进度线下面那一块：先贴妙记链接读取，其次再读一次、连接飞书，最后上传会议记录（前三样只给主持人和建会的人）。
  */
 import { useEffect, useState, type ReactNode } from "react";
-import { ChevronRight } from "lucide-react";
 import type { TMeetingCardPayload, TMeetingMinutesFailure, TMeetingMinutesFetchResponse, TMeetingMinutesStatus } from "@warmap/contracts";
 import { feishuConnectHref, readFeishuConnection } from "@/lib/feishuLogin";
 import { readMeetingMinutesLink, refetchMeetingMinutes } from "./meetingDecisionApi";
 import { CARD_EXPECTED_MS, MINUTES_EXPECTED_MS, elapsed, useNow, type FeishuLive } from "./MeetingHeader";
 import p from "@/styles/meeting-progress.module.css";
+import { useDots } from "@/lib/home/noEllipsis";
 
 export type ProgressStepKey = "booked" | "waiting" | "live" | "record" | "card" | "confirm";
 export type ProgressStep = { key: ProgressStepKey; label: string; state: "done" | "current" | "todo" };
@@ -125,22 +126,17 @@ function ProgressClock({ since, expectedMs }: { since: string; expectedMs: numbe
 
 /** 进度线本身；`actions` 跟在这一步后面。待交记录时的补救（MinutesRecovery）由会议页放在正文最上面。 */
 export function MeetingProgress({ model, actions }: { model: MeetingProgressModel; actions?: ReactNode }) {
+  const step = model.steps.find((entry) => entry.state === "current") ?? model.steps.at(-1);
+  if (!step) return null;
+  const current = step.state === "current";
   return (
     <ol className={p.progress} aria-label="进度">
-      {model.steps.map((step, index) => {
-        const current = step.state === "current";
-        return (
-          <li key={step.key} className={p.step} data-step={step.key} data-state={step.state} data-tone={current ? model.tone : undefined}
-            aria-current={current ? "step" : undefined}>
-            <i className={p.dot} aria-hidden />
-            <span>{step.label}</span>
-            {current && model.since ? <ProgressClock since={model.since} expectedMs={model.expectedMs} /> : null}
-            {current && actions ? <span className={p.actions}>{actions}</span> : null}
-            {/* 箭头跟在这一步后面：折行时新的一行不会以箭头开头。 */}
-            {index < model.steps.length - 1 ? <ChevronRight size={12} strokeWidth={2} aria-hidden className={p.arrow} /> : null}
-          </li>
-        );
-      })}
+      <li className={p.step} data-step={step.key} data-state={step.state} data-tone={current ? model.tone : undefined} aria-current={current ? "step" : undefined}>
+        <i className={p.dot} aria-hidden />
+        <span>{step.label}</span>
+        {current && model.since ? <ProgressClock since={model.since} expectedMs={model.expectedMs} /> : null}
+        {current && actions ? <span className={p.actions}>{actions}</span> : null}
+      </li>
     </ol>
   );
 }
@@ -166,6 +162,7 @@ export function MinutesRecovery({ meetingId, status, failure, canFetch, onFetche
   uploading?: boolean;
   uploadError?: string | null;
 }) {
+  const dots = useDots();
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -192,14 +189,14 @@ export function MinutesRecovery({ meetingId, status, failure, canFetch, onFetche
   const others = [
     retry && !connectHref ? <button key="retry" type="button" className={p.quiet} disabled={busy} onClick={() => void run(() => refetchMeetingMinutes(meetingId))}>再读一次</button> : null,
     connectHref ? <a key="connect" className={p.quiet} href={connectHref}>连接飞书</a> : null,
-    onUpload ? <button key="upload" type="button" className={p.quiet} disabled={uploading} onClick={onUpload}>{uploading ? "上传中…" : "上传会议记录"}</button> : null,
+    onUpload ? <button key="upload" type="button" className={p.quiet} disabled={uploading} onClick={onUpload}>{uploading ? dots("上传中…") : "上传会议记录"}</button> : null,
   ].filter(Boolean);
   return (
     <div className={p.recovery}>
       {canFetch ? (
         <form className={p.link} onSubmit={(event) => { event.preventDefault(); read(); }}>
           <input type="url" aria-label="妙记链接" placeholder="贴妙记链接" value={url} disabled={busy} onChange={(event) => setUrl(event.target.value)} />
-          <button type="submit" className={p.read} disabled={busy || !url.trim()}>{busy ? "读取中…" : "读取"}</button>
+          <button type="submit" className={p.read} disabled={busy || !url.trim()}>{busy ? dots("读取中…") : "读取"}</button>
         </form>
       ) : null}
       {others.length ? <div className={p.others}>{others}</div> : null}

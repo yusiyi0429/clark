@@ -1,0 +1,127 @@
+/*
+ * 伙伴对话的气泡和卡片（设计 6.1–6.3，conversation/ReplyBubbles.tsx）：只在新首页的伙伴主线和项目对话里。
+ * 一种字号（app/home-type.css）：这里不写字号、字重，只用 --ink / --ink-muted / --ink-faint 分层；颜色只用变量，深色跟着变。
+ * 同一个人连着的气泡间隔 4，换人间隔 16；气泡不带尾巴。
+ */
+.turn { margin: 0 0 16px; color: var(--ink); overflow-wrap: anywhere; }
+.userTurn { display: flex; flex-direction: column; align-items: flex-end; margin: 0 0 16px; color: var(--ink); overflow-wrap: anywhere; }
+.turn:has(+ .turn), .userTurn:has(+ .userTurn) { margin-bottom: 4px; }
+
+.group { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+
+.buddy, .mine { max-width: min(75%, 560px); min-width: 0; padding: 9px 14px; border-radius: 18px; }
+.buddy { background: var(--default); }
+.mine { background: var(--accent-soft); }
+/* 本人气泡里照旧按语音整理的样子换行。 */
+.mine.mine p { white-space: pre-line; margin-bottom: var(--space-2); }
+.mine.mine :is(ul, ol) { margin: 6px 0 var(--space-2); }
+.mine.mine li { margin: 2px 0; }
+
+/* 表情挂在气泡底边（设计 6.5）：点过的都压在那一块的右下角（本人 11/18），本人那句上伙伴点的也在这里；挂着表情时让出压出去的那一截。 */
+.buddy, .mine, .card { position: relative; }
+.edge { position: absolute; right: 8px; bottom: -12px; display: flex; align-items: center; gap: 6px; }
+.mine > .edge { flex-direction: row-reverse; }
+:is(.buddy, .mine, .card):has(> .edge :is([data-reacted], [data-by-buddy])) { margin-bottom: 12px; }
+/*
+ * 每块旁边一排回应、回复、复制（本人 11/18，照 Claude Duet；Reactions.tsx 的 MessageActions）：是块的子元素、定位到块外，鼠标移过去仍算在这一块上。
+ * 伙伴的在块右边外侧、本人的在左边外侧（顺序也镜像），离块 8（用内边距补上，这段也算悬停），上下居中；鼠标在这一块上、焦点进来、浮层开着时才出。
+ */
+.actions { position: absolute; left: 100%; top: 50%; transform: translateY(-50%); display: flex; gap: 2px; padding-left: 8px; opacity: 0; transition: opacity var(--dur-fast) linear; }
+.mine > .actions { left: auto; right: 100%; padding: 0 8px 0 0; flex-direction: row-reverse; }
+:is(.buddy, .mine, .card):is(:hover, :focus-within) > .actions, .actions:has([aria-expanded="true"]) { opacity: 1; }
+/* 发出的那句回复了哪一块：气泡上方一行淡色，回复图标加开头几个字；点开看全文。 */
+.replied { display: inline-flex; align-items: center; gap: 4px; min-width: 0; max-width: min(75%, 560px); height: auto; margin: 0 4px 4px; padding: 0; border: 0; background: none; color: var(--ink-faint); font: inherit; cursor: pointer; }
+.repliedText { min-width: 0; max-height: 2lh; overflow: hidden; text-align: left; white-space: normal; overflow-wrap: anywhere; }
+.repliedText[data-over] { -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 1lh), transparent); mask-image: linear-gradient(to bottom, black calc(100% - 1lh), transparent); }
+.replied:hover { background: none; color: var(--ink-muted); }
+.replied:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+.repliedFull { max-width: 360px; max-height: 320px; overflow: auto; padding: var(--space-2); color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; outline: none; }
+/* 本人那句的两个勾：气泡里右下角，不另占一行。 */
+.mine:has(> .tick) { padding-right: 36px; }
+.mine > .tick { position: absolute; right: 12px; bottom: 9px; height: var(--type-lh, 24px); align-items: center; margin: 0; }
+
+/* 快捷回复（设计 6.4）：最后一个气泡下面一排小胶囊，靠左；白底、发丝线、圆角满，点了就发出。 */
+.pills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.pills button { min-height: 34px; padding: 5px 14px; border: 0; border-radius: var(--r-capsule, 999px); background: var(--surface); box-shadow: inset 0 0 0 1px var(--hairline-strong); color: var(--ink); font: inherit; text-align: left; cursor: pointer; transition: background-color var(--dur-fast) linear; }
+.pills button:hover { background: var(--default-soft); }
+.pills button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+.open:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+
+/* 卡片：白底细边，宽度占满对话栏（不超过 560）；标题、时间（更淡）、正文：放得下是全文，放不下是摘要（淡）和「打开」。 */
+.card {
+  width: 100%;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--hairline-strong);
+  border-radius: var(--r-card);
+  --card-pad-x: 16px;
+  padding: 14px var(--card-pad-x);
+  max-width: 560px;
+  color: var(--ink);
+}
+.cardHead { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+/* 没有标题那一行（清单卡前面没有冒号引子）：第一块不留上边距。 */
+.card > :first-child { margin-top: 0; }
+.cardTitle { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.faint { flex: none; color: var(--ink-faint); white-space: nowrap; }
+/* 摘要最多两行，多了第二行往下渐隐（不出省略号，本人 11/18）。 */
+.summary { max-height: 2lh; margin-top: 2px; overflow: hidden; color: var(--ink-muted); overflow-wrap: anywhere; }
+.summary[data-over] { -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 1lh), transparent); mask-image: linear-gradient(to bottom, black calc(100% - 1lh), transparent); }
+.acts { display: flex; margin-top: 12px; }
+.open { height: 34px; padding: 0 14px; border: 0; border-radius: var(--r-control); background: var(--ink); color: var(--surface); font: inherit; cursor: pointer; transition: background-color var(--dur-fast) linear; }
+.open:hover { background: var(--ink-muted); }
+.cardBody { margin-top: 10px; }
+/*
+ * 卡里的全文：限高 12 行（ReplyBubbles 的 CARD_FULL_LINES，写在行内样式上；收起后少一行）量放不放得下；放不下时不占位置、看不见，只留着跟着卡片宽度重新量。
+ * 收起时贴着卡片底边往上放：比卡片高的那一截伸到上面，不把对话的滚动区往下撑长。
+ */
+.cardFull { margin-top: 10px; overflow: hidden; }
+.cardFull[data-fold] { position: absolute; bottom: 0; left: var(--card-pad-x); right: var(--card-pad-x); visibility: hidden; pointer-events: none; }
+
+/* 「•••」：三个点轮流变深。 */
+.typing { display: flex; gap: 5px; width: fit-content; padding: 14px 16px; }
+.typing i { width: 7px; height: 7px; border-radius: 50%; background: var(--ink-faint); opacity: .35; animation: dot 1.2s ease-in-out infinite; }
+.typing i:nth-child(2) { animation-delay: .18s; }
+.typing i:nth-child(3) { animation-delay: .36s; }
+/* 卡片壳子还在写：标题下面一行同样的「•••」，不另起气泡。 */
+.cardTyping { align-items: center; height: 1lh; margin-top: 2px; padding: 0; }
+@keyframes dot { 30% { opacity: 1; transform: translateY(-2px); } }
+
+/* 入场：第一次出现时淡入、轻轻上来；一起到的几块错开 60ms。读历史来的不动。 */
+.buddy[data-enter], .card[data-enter] { animation: bubbleIn 320ms cubic-bezier(.32, .72, 0, 1) var(--enter-delay, 0ms) both; transform-origin: left bottom; }
+.card[data-enter] { animation-name: cardIn; }
+@keyframes bubbleIn { from { opacity: 0; transform: translateY(6px) scale(.96); } }
+@keyframes cardIn { from { opacity: 0; transform: translateY(6px); } }
+
+/* 每轮的「用时 / 步骤」那一排，在这一组气泡下面：电脑上鼠标移上去才出，手机上一直淡色出。 */
+.meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; color: var(--ink-faint); opacity: 0; transition: opacity var(--dur-fast) linear; }
+.meta > * + *::before { content: "·"; display: inline-block; margin-right: 6px; text-decoration: none; }
+.turn:hover .meta, .turn:focus-within .meta, .meta:has([aria-expanded="true"]) { opacity: 1; }
+
+@media (max-width: 959px) {
+  .buddy, .mine { max-width: 85%; }
+  .card { max-width: none; }
+}
+@media (max-width: 959px), (hover: none) {
+  .meta { opacity: 1; }
+}
+/* 有鼠标时卡片给旁边那一排留位置（8 + 三个 28 + 两个 2 = 96），按钮不盖住卡片。 */
+@media (hover: hover) {
+  .card { max-width: min(560px, 100% - 96px); }
+}
+/* 有鼠标的窄窗口：气泡同样给这一排让位，不伸出对话栏；手机上照旧 85%。 */
+@media (hover: hover) and (max-width: 959px) {
+  .buddy, .mine { max-width: min(85%, 100% - 96px); }
+}
+/* 手机上不出这一排（长按出浮层）：藏起来但留着回应按钮给浮层定位，放回块里的底角，不撑出对话栏。 */
+@media (hover: none) {
+  .actions { top: auto; bottom: 0; left: 0; transform: none; padding: 0; visibility: hidden; pointer-events: none; }
+  .mine > .actions { left: auto; right: 0; padding: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .buddy[data-enter], .card[data-enter], .typing i { animation: none; }
+}
+:global([data-reduce-motion='true']) .buddy[data-enter],
+:global([data-reduce-motion='true']) .card[data-enter],
+:global([data-reduce-motion='true']) .typing i { animation: none; }

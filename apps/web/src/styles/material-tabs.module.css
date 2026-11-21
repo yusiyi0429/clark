@@ -155,3 +155,10 @@
 .pulse { flex: none; width: 6px; height: 6px; border-radius: 50%; background: #3a83f7; animation: material-menu-pulse 1.2s ease-in-out infinite; }
 @keyframes material-menu-pulse { 50% { opacity: .35; transform: scale(.8); } }
 @media (prefers-reduced-motion: reduce) { .pulse { animation: none; } }
+
+/* 新首页深色（会议页挪进新首页后）：「材料」的深色字在深底上看不清，只换成字色变量；浅色不变。 */
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .trigger.trigger { color: var(--ink-muted); }
+
+/* 新首页不出省略号（本人 11/18）：材料下拉钮上的名字放不下就换行，钮跟着长高；旧界面照旧。 */
+:global(:root:has([data-type-scale="one"])) .trigger.trigger { height: auto; white-space: normal; text-align: left; }
+:global(:root:has([data-type-scale="one"])) .label { white-space: normal; text-overflow: clip; overflow-wrap: anywhere; }

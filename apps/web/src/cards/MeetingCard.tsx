@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { UNSAFE_PortalProvider } from "react-aria/PortalProvider";
 import { Check, ChevronDown, FileUp, Loader2, Pencil, RefreshCw, X } from "lucide-react";
 import { browserApi } from "@/lib/api/client";
 import { feishuConnectHref } from "@/lib/feishuLogin";
@@ -47,6 +48,7 @@ import { buildHistoryIndex, outcomeAnchorId, type SourceContext, type SourceMate
 import { TranscriptReader } from "@/components/meeting/TranscriptReader";
 import s from "@/styles/meeting-workspace.module.css";
 import p from "@/styles/meeting-progress.module.css";
+import { useDots } from "@/lib/home/noEllipsis";
 
 export { MaterialPane, materialMeta, previewKind, type MaterialMeta, type MaterialPreview } from "@/components/meeting/meetingMaterialPreview";
 
@@ -209,6 +211,7 @@ export function TranscriptCandidateDialog({
   onConfirm: (mappings: Record<string, string>) => void;
   onDiscard: () => void;
 }) {
+  const dots = useDots();
   const [mappings, setMappings] = useState<Record<string, string>>(() =>
     Object.fromEntries(candidate.speakers.map((speaker) => [speaker.speakerName, speaker.suggestedPersonId ?? ""])),
   );
@@ -219,7 +222,7 @@ export function TranscriptCandidateDialog({
         <div>
           <h2>确认会议记录</h2>
           <p>
-            {candidate.source.fileName} · {Math.ceil(candidate.source.sizeBytes / 1024)} KB · SHA-256 {candidate.source.sha256.slice(0, 12)}…
+            {candidate.source.fileName} · {Math.ceil(candidate.source.sizeBytes / 1024)} KB · SHA-256 {dots(`${candidate.source.sha256.slice(0, 12)}…`)}
           </p>
           <p>
             {candidate.turnCount} 条发言 · {candidate.speakerCount} 位说话人 · 时长 {offsetLabel(candidate.durationSeconds)} · 解析器 {candidate.source.parserVersion}
@@ -247,6 +250,8 @@ export function TranscriptCandidateDialog({
                   <td>{row.speakerName}</td>
                   <td>{row.turnCount}</td>
                   <td>
+                    {/* 原生 modal 外的内容不可交互；下拉和手持 sheet 都挂在当前 dialog 内。 */}
+                    <UNSAFE_PortalProvider getContainer={() => dialogRef.current}>
                     <div style={{ maxWidth: 220 }}><Select
                       aria-label={`映射 ${row.speakerName}`}
                       size="compact"
@@ -260,6 +265,7 @@ export function TranscriptCandidateDialog({
                         ...directory.map((person) => ({ value: person.personId, label: person.displayName })),
                       ]}
                     /></div>
+                    </UNSAFE_PortalProvider>
                   </td>
                   <td>{MAPPING_STATUS_LABEL[row.status]}</td>
                 </tr>
@@ -301,7 +307,7 @@ export function TranscriptCandidateDialog({
         </button>
         {hasConfirm ? (
           <button type="button" className={s.candidateConfirm} disabled={pending} onClick={() => onConfirm(mappings)}>
-            {pending ? "确认中…" : "确认并写入逐字稿"}
+            {pending ? dots("确认中…") : "确认并写入逐字稿"}
           </button>
         ) : null}
       </footer>
@@ -505,6 +511,7 @@ export const sameSentence = (a: string, b: string) => {
 };
 
 export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: memberReadOnly = false }: CardRenderProps & { readOnly?: boolean }) {
+  const dots = useDots();
   const source = payloadOf<MeetingPayload & { purpose?: string | null }>(card);
   const workspace = useWorkspace();
   const isHost = source.leadDriId === workspace.viewerId;
@@ -1288,7 +1295,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
       {regenerateAction ? (
         <button type="button" disabled={pending} onClick={() => void regenerate()}>
           <RefreshCw size={13} aria-hidden="true" />
-          {pending ? "预审中…" : "重新预审"}
+          {pending ? dots("预审中…") : "重新预审"}
         </button>
       ) : null}
       {/* 「重新安排会议」仍挂在这一行下面；「编辑会议」在标题右侧的铅笔浮层里。 */}
@@ -1330,7 +1337,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
           {regenerateAction ? (
             <button type="button" disabled={pending} onClick={() => void regenerate()}>
               <RefreshCw size={13} aria-hidden="true" />
-              {pending ? "预审中…" : "用最新资料重新预审"}
+              {pending ? dots("预审中…") : "用最新资料重新预审"}
             </button>
           ) : null}
         </div>
@@ -1470,7 +1477,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
             ))}
             <input ref={materialRef} type="file" multiple accept={MATERIAL_ACCEPT} aria-label="选择会前材料" />
             <div className={s.stageActions}>
-              <button type="button" disabled={uploading} onClick={() => void replaceMaterials()}>{uploading ? "解析中…" : "替换材料集"}</button>
+              <button type="button" disabled={uploading} onClick={() => void replaceMaterials()}>{uploading ? dots("解析中…") : "替换材料集"}</button>
               {actionOf("meeting.run_preflight") ? <button type="button" disabled={pending} onClick={() => void run(actionOf("meeting.run_preflight")!, {})}>运行预审</button> : null}
             </div>
           </section>
@@ -1531,7 +1538,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
                             if (file) void uploadSupplementMaterial(request.id, file);
                           }}
                         />
-                        {supplementBusyId === request.id ? <small aria-live="polite">上传中…</small> : null}
+                        {supplementBusyId === request.id ? <small aria-live="polite">{dots("上传中…")}</small> : null}
                       </label>
                     </li>
                   ))}
@@ -1582,12 +1589,13 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
         {feishuEvent.organizerId === workspace.viewerId ? <button type="button" className={s.feishuAction}
           onClick={() => window.location.assign(feishuConnectHref(`${window.location.pathname}${window.location.search}`))}>连接飞书</button> : null}
       </span>
-    ) : feishuEvent.status === "failed" && retryBooking ? (
+    ) : feishuEvent.status === "failed" ? (
       <span className={s.feishuEntry}>
         <span className={s.feishuFailed}>飞书未约上</span>
-        <button type="button" className={s.feishuAction} disabled={pending} onClick={() => void run(retryBooking, {})}>重试</button>
+        {retryBooking ? <button type="button" className={s.feishuAction} disabled={pending} onClick={() => void run(retryBooking, {})}>重试</button> : null}
       </span>
-    ) : feishuEvent.joinUrl && !live ? <a className={s.feishuLink} href={feishuEvent.joinUrl} target="_blank" rel="noreferrer">进入飞书会议</a> : null;
+    ) : feishuEvent.status === "pending" ? <span className={s.feishuEntry} role="status">正在飞书创建日程</span>
+      : feishuEvent.status === "booked" && !feishuEvent.joinUrl ? <span className={s.feishuEntry} role="status">飞书日程已建，尚无入会地址</span> : null;
 
   // 会开完以后走到哪一步看进度线，这一行不再重复写。
   const statusNow = progress && ended ? undefined
@@ -1683,7 +1691,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
         {/* 第一次上传在进度线「待交记录」后面；这里只在已有候选时给重新上传，拖进主栏任何地方也行（FileDropZone）。 */}
         <button type="button" className={s.recordUpload} disabled={uploading} onClick={() => uploadRef.current?.click()}>
           <FileUp size={16} aria-hidden="true" />
-          {uploading ? "上传中…" : "重新上传会议记录"}
+          {uploading ? dots("上传中…") : "重新上传会议记录"}
         </button>
         {!candidateOpen ? (
           <button type="button" className={s.candidateReopen} onClick={() => setCandidateOpen(true)}>
@@ -1806,7 +1814,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
   // 能上传会议记录的人（CEO、主持人）：进度线上待交记录后面的「上传会议记录」打开这里的选文件。
   const canUpload = payload.status === "scheduled" && (!memberReadOnly || isHost);
   // 等开会、进行中时「进入飞书会议」在页头最右那一格；待交记录时正文最上面单独一块给贴妙记链接、上传会议记录这几样补救。
-  const joinUrl = live === "waiting" || live === "live" ? payload.feishuEvent?.joinUrl ?? null : null;
+  const joinUrl = live === "live" || (live === "waiting" && Date.parse(payload.endsAt) > progressNow) ? payload.feishuEvent?.joinUrl ?? null : null;
   const progressActions = progress?.upload ? (
     <MinutesRecovery meetingId={meetingId} status={source.minutesStatus ?? "none"} failure={source.minutesFailure ?? null}
       canFetch={canFetchMinutes} onFetched={() => void reloadCard()} onUpload={canUpload ? () => uploadRef.current?.click() : undefined}

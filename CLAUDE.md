@@ -60,7 +60,8 @@
 - 根目录使用 pnpm workspace；目标应用为 `apps/web` 与 `apps/api`，共享契约位于 `packages/contracts`。
 - `apps/web` 只负责页面、组件、样式、展示态和 API 客户端，不保存业务数据，不实现状态迁移、模型调用、调度或数据库访问。
 - `apps/api` 负责业务对象、Card 投影、Action、Pi Runtime、人员目录与本体公司事实读取、外部集成、鉴权、调度和持久化。
-- `packages/contracts` 只保存 TypeBox schema 与 OpenAPI 生成入口，不依赖 React、Fastify 运行实例、Pi 或数据库实现。
+- `apps/local` 是装在本人电脑上的天枢本机程序：只监听 127.0.0.1，负责网页直连、配对、拉起本机的 Claude Code（以后 Codex）、会话事件、本机钥匙和单向报给云端的发件箱。它不访问天枢数据库、不接收云端指令，只调用 `apps/api` 的同步接口；源码只用 `node:` 标准库，产物用 Bun 编成单文件。
+- `packages/contracts` 只保存 TypeBox schema 与 OpenAPI 生成入口，不依赖 React、Fastify 运行实例、Pi 或数据库实现。本机程序的接口和同步载荷在 `localRunner.ts`。
 - Web 客户端类型由 OpenAPI 生成，生成文件不得手工修改；契约变化先改 schema，再重新生成。
 - 旧 `frontend/` 已在 Ticket 18 随 cutover 整体删除，未迁移其业务逻辑、数据或 localStorage；像素级视觉与交互基线为根目录 `UpgradeDesign.pen`，源码恢复依赖根仓库 Git 历史。
 
@@ -83,4 +84,5 @@ Issues 和 Specs 使用本地 Markdown，保存在 `.scratch/<feature-slug>/`。
 通过用户级 MCP 服务 `tianshu` 读写本人的执行事项（令牌只在用户配置里，不写进项目文件）。
 
 - 只在本人明确要求时才往天枢里写（比如「记一下」「建一件事」「提交验收」），没说就不动：要建事项时先用 `list_my_items` 看有没有同一件，本人叫建什么就建什么；要记进展时用 `append_progress` 写一条（做了什么、证据链接、下一步或阻塞）；做出来的文档、设计稿、PR 用 `add_link` 放进对应事项；要提交验收时用 `submit_for_acceptance`（对照完成标准逐条写明是否达到和依据），由本人在天枢确认完成。只写真实做过的事。
+- Task 的约定与对表：本人问某个 Task「能交了吗」「还差什么」时，用 `check_task` 对表，照结果说结论和差的那几条，不自己另判；每条用什么证明、谁来认用 `get_task_agreement` 看（`list_my_items` 的 tasks 带 `criteriaCount` 和 `agreementComplete`）。本人要交一版时才用 `add_deliverable_version` 交链接（自动参考评审，文件从网页传）；交付由本人在天枢点。
 - 用户说「同步本周进展」时：先调用 tianshu 的 `list_my_items`（status=all）看我负责的执行事项；我已知的协作事项用 `get_item` 核对。再根据我这周实际做过的事（当前目录的提交、文档，以及我们的对话），为每件有进展的事项调用一次 `append_progress`，写清做了什么、证据链接和下一步；做出来的文档、设计稿、PR 这类有链接的东西，用 `add_link` 放进对应事项。我推进的事项已经做完的，用 `submit_for_acceptance` 提交验收，对照完成标准逐条写明是否达到和依据，完成由我在天枢确认。没有进展的事项不要写，不要编造。最后列出你写了哪几条。

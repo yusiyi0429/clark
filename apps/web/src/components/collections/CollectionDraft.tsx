@@ -14,6 +14,7 @@ import { DateTimePicker } from "@/components/ui/DatePicker";
 import { Select } from "@/components/ui/Select";
 import { requestError } from "@/components/requests/requestApi";
 import r from "@/components/requests/requests.module.css";
+import { PersonAvatar } from "@/components/avatar/PersonAvatar";
 import { deadlineText, fromPickerValue, readCollection, requestsBase, runCollectionAction, toPickerValue } from "./collectionApi";
 import c from "./collections.module.css";
 
@@ -86,7 +87,7 @@ function DraftPreview({ view, onSent }: { view: TCollectionView; onSent: (next: 
           {people.map((person) => {
             const on = chosen.includes(person.personId);
             return <button key={person.personId} type="button" className={r.personChip} aria-pressed={on} disabled={busy} onClick={() => toggle(person.personId)}>
-              <span className={r.avatar} aria-hidden="true">{on ? <Check size={12} strokeWidth={3} /> : initial(person.displayName)}</span>{person.displayName}
+              <PersonAvatar personId={on ? null : person.personId} className={r.avatar}>{on ? <Check size={12} strokeWidth={3} /> : initial(person.displayName)}</PersonAvatar>{person.displayName}
             </button>;
           })}
           {addable.length ? <Select size="compact" className={r.addPerson} aria-label="添加收件人" placeholder="添加" value=""

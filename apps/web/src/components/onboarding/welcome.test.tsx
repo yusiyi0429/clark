@@ -36,28 +36,24 @@ vi.mock("react", async (original) => {
   };
 });
 
-import { WorkSnapshot, WelcomeFlow, monthTargetCopy, onboardingSteps, radarSummaryLine, type OnboardingData } from "./WelcomeFlow";
+import { WelcomeFlow, onboardingSteps, radarSummaryLine, type OnboardingData } from "./WelcomeFlow";
 import { WorkspaceSchematic } from "./WorkspaceSchematic";
 import { MissionFlow } from "./MissionFlow";
 import { OnboardingProgress } from "./OnboardingProgress";
 import { RadarSettingsEditor, type RadarSavedSummary } from "@/components/radar/RadarSettingsEditor";
 import { ConnectAgentForm } from "@/components/ConnectAgentForm";
-import { CollectorInstallPanel, collectorCommand, scanSteps, type CollectorStatus } from "./CollectorSetup";
 import { DelegationPanel } from "./DelegationPanel";
-import { revisedLabel, reviewEmpty, ReviewSummary, submitReview, type ReviewLists, type ReviewPicks } from "./ReviewLists";
-import { MemoryImportPanel } from "./MemoryImportSlot";
-import { CollectorConsentSwitch } from "./CollectorConsentSwitch";
 import { browserApi } from "@/lib/api/client";
+import { BuddyNameInput } from "@/components/buddy/BuddyPicker";
+import { BuddyCarousel, BuddyFigure } from "./BuddyCarousel";
+import { BUDDY_PERSONALITIES } from "@/components/buddy/PersonalityPicker";
+import { PresenceCapsule } from "@/components/coagent/PresenceCapsule";
+import { CoAgentCapsule } from "./CoAgentCapsule";
 
 const base = { displayName: "测试", companyName: null, delegationStep: false, voiceprint: { configured: false, enrolled: false, updatedAt: null }, next: { text: "可以开始工作", action: "进入工作台", href: "/me" } };
 const member: Extract<OnboardingData, { role: "member" }> = { ...base, role: "member", radar: { configured: false, enabled: false, directions: 0 }, work: { period: "2026-10", planStatus: "none", battlefields: [], missions: [], missionCards: [] } };
 // CEO 的雷达就是公司雷达，不能关闭（enabled 恒为 true）。
 const ceo: Extract<OnboardingData, { role: "ceo" }> = { ...base, role: "ceo", radar: { configured: false, enabled: true, directions: 0 }, company: { sixMonthGoal: "", battlefields: [], capabilities: [], people: [] } };
-const missionCard = {
-  cardId: "my-card", roundId: "my-round", period: "2026-10", battlefieldId: "bf", battlefieldName: "灯塔项目",
-  phase: "open" as const, status: "草稿 · 讨论中", closesAt: "2026-10-03T10:00:00.000Z", serverNow: "2026-10-01T10:00:00.000Z",
-  missionCount: 2, placeholder: true, href: "/me/mission-cards/my-card",
-};
 
 type Element = ReactElement<Record<string, unknown>>;
 function elements(node: ReactNode): Element[] {
@@ -97,11 +93,8 @@ function reachFinish(data: OnboardingData, nextPath?: string, summary?: RadarSav
   const editor = radarEditor(reachRadar(data, nextPath));
   if (summary) editor.onSaved!(summary);
   else editor.onLater!();
-  // 雷达之后是「连接外部工具」「安装本机采集器」：都选「稍后」；扫描页和最后一页直接往下走，进入结束页。
+  // 雷达之后是「连接外部工具」：选「稍后」，进入结束页。
   (button(renderFlow(data, nextPath), "稍后").props.onClick as () => void)();
-  (button(renderFlow(data, nextPath), "稍后").props.onClick as () => void)();
-  (button(renderFlow(data, nextPath), "下一步").props.onClick as () => void)();
-  (button(renderFlow(data, nextPath), "完成").props.onClick as () => void)();
   return renderFlow(data, nextPath);
 }
 
@@ -153,16 +146,14 @@ describe("收尾按钮文案与实际落点一致", () => {
 });
 
 describe("真实数据的首次引导", () => {
-  it("成员先导览、再看 Mission 和本月工作；CEO 只看工作台三页", () => {
-    const tail = ["connect", "collector", "scan", "review", "start"];
-    expect(onboardingSteps(member)).toEqual(["hello", "tour-notifications", "tour-board", "mission-flow", "work", "radar", ...tail]);
-    expect(onboardingSteps({ ...member, voiceprint: { ...base.voiceprint, configured: true } })).toEqual(["hello", "tour-notifications", "tour-board", "mission-flow", "work", "radar", "voiceprint", ...tail]);
+  it("成员先导览、再看 Mission 怎么定下来；CEO 只看工作台三页", () => {
+    const tail = ["connect", "start"];
+    expect(onboardingSteps(member)).toEqual(["hello", "tour-notifications", "tour-board", "mission-flow", "radar", ...tail]);
+    expect(onboardingSteps({ ...member, voiceprint: { ...base.voiceprint, configured: true } })).toEqual(["hello", "tour-notifications", "tour-board", "mission-flow", "radar", "voiceprint", ...tail]);
     expect(onboardingSteps(ceo)).toEqual(["hello", "tour-notifications", "tour-board"]);
     expect(onboardingSteps({ ...ceo, voiceprint: { ...base.voiceprint, configured: true }, delegationStep: true })).toEqual(["hello", "tour-notifications", "tour-board"]);
     // 委托授权这一步由配置打开，放在结束页之前。
-    expect(onboardingSteps({ ...member, delegationStep: true }).slice(-3)).toEqual(["review", "delegation", "start"]);
-    // 扫完三项都没有可确认的：跳过确认清单。
-    expect(onboardingSteps(member, true).slice(-3)).toEqual(["collector", "scan", "start"]);
+    expect(onboardingSteps({ ...member, delegationStep: true }).slice(-3)).toEqual(["connect", "delegation", "start"]);
   });
   it("成员导览复用同一示意图，高亮通知后转向工作", () => {
     let tree = renderFlow(member);
@@ -209,15 +200,9 @@ describe("真实数据的首次引导", () => {
     expect(diagram.slice(diagram.indexOf("之后 · 你来推进"))).toContain("拆成执行事项");
     (button(tree, "下一步").props.onClick as () => void)();
     tree = renderFlow(member);
-    expect(text(tree)).toContain("你这个月的工作");
+    expect(text(tree)).toContain("你想关注哪些变化？");
     (button(tree, "上一步").props.onClick as () => void)();
     expect(text(renderFlow(member))).toContain("每个月的 Mission，这样定下来");
-  });
-  it("空态只说没有登记，不推断没有工作", () => {
-    const html = renderToStaticMarkup(<WorkSnapshot data={member} />);
-    expect(html).toContain("这个月还没有登记你参与的战场");
-    expect(html).toContain("这个月还没有登记你的 Mission");
-    expect(html).not.toContain("没有工作");
   });
   it("CEO 两页导览各高亮对应区域，文案说明打开、返回和 Agent", () => {
     let tree = renderFlow(ceo);
@@ -245,69 +230,15 @@ describe("真实数据的首次引导", () => {
     expect(diagram).toContain("战略决策更新");
     expect(diagram).toContain("公司战略议题");
   });
-  it("目标的三种状态有独立文案，已签发但无对应目标仍说明缺失", () => {
-    expect(monthTargetCopy("none", null)).toBe("本月目标还没出来");
-    expect(monthTargetCopy("draft", null)).toBe("本月目标还在协商");
-    expect(monthTargetCopy("negotiating", null)).toBe("本月目标还在协商");
-    expect(monthTargetCopy("confirmed", "客户验证")).toBe("客户验证");
-    expect(monthTargetCopy("confirmed", null)).toContain("还没有登记");
-  });
-  it("本人的 Mission 按战场列出三条并注明余数；未关联的也能看见", () => {
-    const data = { ...member, work: { ...member.work, battlefields: [{ id: "bf", name: "灯塔", monthTarget: null }], missions: Array.from({ length: 5 }, (_, i) => ({ id: String(i), code: String(i), title: `结果${i}`, battlefieldIds: i === 4 ? [] : ["bf"] })) } };
-    const html = renderToStaticMarkup(<WorkSnapshot data={data} />);
-    expect(html).toContain("灯塔");
-    expect(html).toContain("另 1 条");
-    expect(html).not.toContain("结果3");
-    expect(html).toContain("结果4");
-  });
-  it("先读目标和本月卡状态，再展开具体 Mission；多个战场的归属仍可辨认", () => {
-    const data = { ...member, work: { ...member.work, planStatus: "confirmed" as const,
-      battlefields: [{ id: "bf", name: "灯塔项目", monthTarget: "完成客户验证" }, { id: "bf2", name: "另一战场", monthTarget: "第二项月度目标" }],
-      missionCards: [missionCard],
-      missions: [{ id: "m1", code: "m1", title: "首项具体工作", battlefieldIds: ["bf"] }, { id: "m2", code: "m2", title: "另一项具体工作", battlefieldIds: ["bf2"] }, { id: "m3", code: "m3", title: "未关联具体工作", battlefieldIds: [] }],
-    } };
-    const html = renderToStaticMarkup(<WorkSnapshot data={data} />);
-    expect(html.indexOf("第二项月度目标")).toBeLessThan(html.indexOf("我的本月卡"));
-    expect(html.indexOf("10/3 18:00 截止")).toBeLessThan(html.indexOf("首项具体工作"));
-    expect(html).toContain("另一项具体工作");
-    expect(html).toContain("未关联具体工作");
-    const details = html.slice(html.indexOf("我的 Mission"));
-    expect(details).toContain("灯塔项目");
-    expect(details).toContain("另一战场");
-  });
-  it.each([
-    { phase: "draft", status: "草稿", closesAt: null, deadline: "本轮未开放" },
-    { phase: "open", status: "草稿 · 讨论中", closesAt: missionCard.closesAt, deadline: "10/3 18:00 截止" },
-    { phase: "closed", status: "草稿 · 已截止，待汇总", closesAt: missionCard.closesAt, deadline: "讨论截止于 10/3 18:00" },
-    { phase: "reviewing", status: "候选版本 · 等刘明华拍板", closesAt: missionCard.closesAt, deadline: "讨论截止于 10/3 18:00" },
-    { phase: "confirmed", status: "已确定 · 刘明华 10/4 18:00", closesAt: missionCard.closesAt, deadline: "讨论截止于 10/3 18:00" },
-  ] as const)("我的本月卡在 $phase 阶段保留服务端状态与公司时区的截止", ({ phase, status, closesAt, deadline }) => {
-    const data = { ...member, work: { ...member.work, missionCards: [{ ...missionCard, phase, status, closesAt }] } };
-    const html = renderToStaticMarkup(<WorkSnapshot data={data} />);
-    expect(html).toContain("我的本月卡");
-    expect(html).toContain("10 月 Mission Card");
-    expect(html).toContain(status);
-    expect(html).toContain(deadline);
-    expect(html).toContain("灯塔项目 · 2 项个人任务");
-    expect(html).toContain("占位");
-    expect(html).not.toContain("这个月还没有你的卡");
-  });
-  it("没有本月卡时清楚说明入口稍后出现；有多战场卡时逐张展示", () => {
-    const empty = renderToStaticMarkup(<WorkSnapshot data={{ ...member, work: { ...member.work, missionCards: [] } }} />);
-    expect(empty).toContain("这个月还没有你的卡；定下来之后，会出现在首页。");
-    const data = { ...member, work: { ...member.work, missionCards: [missionCard, { ...missionCard, cardId: "other-card", battlefieldName: "另一战场", placeholder: false }] } };
-    const html = renderToStaticMarkup(<WorkSnapshot data={data} />);
-    expect(html).toContain("灯塔项目 · 2 项个人任务");
-    expect(html).toContain("另一战场 · 2 项个人任务");
-    expect(html.match(/>占位</g)).toHaveLength(1);
-  });
-  it("服务端首屏包含问候与晨光，胶囊不可操作；读屏进度有文本", () => {
+  it("服务端首屏包含问候、实心底（不画晨光），胶囊不可操作；读屏进度有文本", () => {
     const html = renderToStaticMarkup(<WelcomeFlow data={member} />);
     expect(html).toContain("你好，测试");
     expect(html).toContain("欢迎使用天枢。");
     expect(html).not.toContain("我是你的 Co-Agent");
     expect(html).toContain("先进入工作台");
-    expect(html).toContain("data-morning-canvas");
+    // 新首页的样子：实心底、不画晨光。后面的旧步骤还是写死的浅色，整段引导先不开深色。
+    expect(html).not.toContain("data-morning-canvas");
+    expect(html).toContain(`data-scheme="light"`);
     expect(html).not.toContain("声纹，可以现在录");
     expect(renderToStaticMarkup(<OnboardingProgress current={2} total={3} />)).toContain("第 2 步，共 3 步");
   });
@@ -351,29 +282,17 @@ describe("雷达步骤", () => {
     expect(elements(tree).find((element) => element.type === "button" && text(element.props.children as ReactNode) === "下一步")).toBeUndefined();
     expect(button(tree, "稍后")).toBeDefined();
   });
-  it("同意上传会话的开关从「连上 AI 工具」挪到「安装本机采集器」；没连上之前「下一步」不能点、可以「稍后」", () => {
+  it("连上 AI 工具之后直接到最后一页（本机采集器已下线，没有安装、扫描和确认清单），结束页也不再提采集器", () => {
     radarEditor(reachRadar(member)).onLater!();
-    const connect = renderFlow(member);
-    expect(elements(connect).some((element) => element.type === CollectorConsentSwitch)).toBe(false);
-    (button(connect, "稍后").props.onClick as () => void)();
-    const tree = renderFlow(member);
-    expect(text(tree)).toContain("安装本机采集器");
-    const panel = elements(tree).find((element) => element.type === CollectorInstallPanel);
-    expect(panel?.props).toMatchObject({ token: null, status: null });
-    expect(button(tree, "下一步").props.disabled).toBe(true);
-    expect(button(tree, "稍后")).toBeDefined();
+    (button(renderFlow(member), "稍后").props.onClick as () => void)();
+    const end = renderFlow(member);
+    expect(text(end)).toContain("可以开始了");
+    expect(text(end)).not.toContain("采集器");
   });
-  it("确认清单不用逐项确认，「完成」直接可点；委托授权一步只在配置打开时出现", () => {
-    radarEditor(reachRadar(member)).onLater!();
-    for (const label of ["稍后", "稍后", "下一步"]) (button(renderFlow(member), label).props.onClick as () => void)();
-    const review = renderFlow(member);
-    expect(text(review)).toContain("确认清单");
-    expect(button(review, "完成").props.disabled).toBe(false);
-    expect(elements(review).some((element) => element.props.role === "tablist")).toBe(false);
-    hooks.reset();
+  it("委托授权一步只在配置打开时出现，排在连上 AI 工具之后", () => {
     const flagged = { ...member, delegationStep: true };
     radarEditor(reachRadar(flagged)).onLater!();
-    for (const label of ["稍后", "稍后", "下一步", "完成"]) (button(renderFlow(flagged), label).props.onClick as () => void)();
+    (button(renderFlow(flagged), "稍后").props.onClick as () => void)();
     const delegation = renderFlow(flagged);
     expect(text(delegation)).toContain("授权天枢替你记进本体");
     expect(elements(delegation).some((element) => element.type === DelegationPanel)).toBe(true);
@@ -381,115 +300,260 @@ describe("雷达步骤", () => {
   });
 });
 
-describe("安装采集器与扫描", () => {
-  it("一行安装命令按系统给出，带着天枢地址和令牌", () => {
-    expect(collectorCommand("windows", "https://ts.example/", "tsm_x")).toBe(
-      "& ([scriptblock]::Create((irm 'https://ts.example/api/collector/install.ps1'))) -Server 'https://ts.example' -Token 'tsm_x'");
-    expect(collectorCommand("macos", "https://ts.example", "tsm_x")).toBe(
-      "curl -fsSL 'https://ts.example/api/collector/install.sh' | sh -s -- --server 'https://ts.example' --token 'tsm_x'");
-  });
-  const status = (patch: Partial<CollectorStatus> = {}): CollectorStatus => ({
-    consent: true,
-    devices: [{ id: "d", name: "工作机", platform: "windows", lastSeenAt: "2026-10-18T02:00:00.000Z" }],
-    scannedAt: null, inventory: { scheduledTasks: 3, feishuDocs: 5, memoryFiles: 12 }, ...patch,
-  });
-  const view = (steps: ReturnType<typeof scanSteps>) => steps.map((step) => [step.label, step.status, step.result ?? ""]);
-  it("扫描步骤：等盘点时当前一步高亮；盘点到了三类一起打勾带数字，再整理清单；没连上就停住", () => {
-    expect(view(scanSteps(status(), null))).toEqual([
-      ["连接采集器", "done", "工作机"], ["本机定时任务", "active", ""], ["飞书文档", "pending", ""], ["记忆文件", "pending", ""], ["整理清单", "pending", ""]]);
-    expect(view(scanSteps(status({ scannedAt: "2026-10-18T02:01:00.000Z" }), null))).toEqual([
-      ["连接采集器", "done", "工作机"], ["本机定时任务", "done", "3 项"], ["飞书文档", "done", "5 份"], ["记忆文件", "done", "12 个"], ["整理清单", "active", ""]]);
-    expect(view(scanSteps(status({ scannedAt: "2026-10-18T02:01:00.000Z" }), { basis: 4, schedules: 2 })).at(-1)).toEqual(["整理清单", "done", "依据 4 · 定时任务 2"]);
-    expect(view(scanSteps(status({ devices: [] }), null))).toEqual([
-      ["连接采集器", "stopped", "未连接"], ["本机定时任务", "stopped", "未连接"], ["飞书文档", "stopped", "未连接"], ["记忆文件", "stopped", "未连接"], ["整理清单", "active", ""]]);
-    expect(view(scanSteps(status(), null, true)).slice(1, 2)).toEqual([["本机定时任务", "stopped", "超时"]]);
-    // 没同意采集：本机清单的三步停在「未同意」，直接整理天枢里已有的。
-    expect(view(scanSteps(status({ consent: false }), null)).slice(1)).toEqual([
-      ["本机定时任务", "stopped", "未同意"], ["飞书文档", "stopped", "未同意"], ["记忆文件", "stopped", "未同意"], ["整理清单", "active", ""]]);
-  });
-  it("飞书文档的修订写成「月/日 修订 · 修订人」", () => {
-    expect(revisedLabel("2026-10-16T08:00:00.000Z", "编辑人")).toBe("10/16 修订 · 编辑人");
-    expect(revisedLabel("2026-10-16T08:00:00.000Z", null)).toBe("10/16 修订");
-  });
-});
-
-describe("确认清单：一屏摘要", () => {
-  const doc = (key: string, patch: Partial<ReviewLists["basis"][number]> = {}): ReviewLists["basis"][number] => ({
-    key, kind: "feishu_doc", title: `文档 ${key}`, url: null, revision: null, origin: "session", revisedAt: null, revisedBy: null,
-    confirmed: false, supersededBy: null, keepUntil: null, ...patch });
-  const weekly: ReviewLists["schedules"][number] = { key: "dev:TianshuWeeklySync", name: "TianshuWeeklySync", cadence: "Weekly",
-    command: "powershell.exe -File tianshu-weekly-sync.ps1", deviceName: "工作机", imported: false };
-  const lists: ReviewLists = { basis: [doc("material:m1", { kind: "material", origin: "task", title: "M2 战略解码.md" }), doc("feishu_doc:w1")], schedules: [weekly] };
-  type SummaryProps = Parameters<typeof ReviewSummary>[0];
-  const summary = (patch: Partial<SummaryProps> = {}) => {
+describe("选择你的伙伴（设计稿 17.1）", () => {
+  const flow = (data: OnboardingData, options: { nextPath?: string; buddyOnly?: boolean } = {}) => {
     hooks.begin();
-    return ReviewSummary({ lists, reviewed: false, picks: {}, onPick: () => undefined, memoryFiles: 12, saving: false, error: null, ...patch });
+    return WelcomeFlow({ data, nextPath: options.nextPath, buddy: null, buddyOnly: options.buddyOnly });
   };
-  const rows = (tree: ReactNode) => elements(tree).filter((element) => element.type === "button").map((element) => text(element.props.children as ReactNode));
-  const row = (tree: ReactNode, label: string) => {
-    const match = elements(tree).find((element) => element.type === "button" && text(element.props.children as ReactNode).startsWith(label));
-    expect(match, `应有「${label}」一行`).toBeDefined();
-    return match!;
+  /** 减少动态效果：「选定」直接翻页，不等那一下动效。 */
+  const stubWindow = (extra: object = {}) => vi.stubGlobal("window", Object.assign(new EventTarget(), { matchMedia: () => ({ matches: true }) }, extra));
+  /** 两个 PUT：授权（/api/me/buddy-authority）存上返回 full；伙伴（/api/me/buddy）按传进来的结果。 */
+  const mockPut = (buddy: { data?: unknown; error?: unknown; status?: number } = { data: { name: "团团", form: "panda", personality: "steady" } }) =>
+    vi.spyOn(browserApi, "PUT").mockImplementation((async (path: string) => path === "/api/me/buddy-authority"
+      ? { data: { authority: "full", grantedAt: "2026-11-08T08:00:00.000Z" }, response: new Response(null, { status: 200 }) }
+      : { data: buddy.data, error: buddy.error, response: new Response(null, { status: buddy.status ?? 200 }) }) as never);
+  const carousel = (tree: ReactNode) => {
+    const match = elements(tree).find((element) => element.type === BuddyCarousel);
+    expect(match, "应有左右切换的选择").toBeDefined();
+    return match!.props as unknown as { kind: string; value: string; items: { id: string }[]; sealing: boolean; onChange: (next: string) => void };
   };
-  const checklist = (tree: ReactNode, label: string) => elements(tree).find((element) => element.props.label === label && typeof element.props.onToggle === "function");
+  const nameInput = (tree: ReactNode) => {
+    const match = elements(tree).find((element) => element.type === BuddyNameInput);
+    expect(match, "起名字这一页应有伙伴的名字框").toBeDefined();
+    return match!.props as unknown as { value: string; onChange: (name: string) => void; onEnter: () => void };
+  };
+  const progress = (tree: ReactNode) => elements(tree).find((element) => element.type === OnboardingProgress)?.props;
+  const figure = (tree: ReactNode) => elements(tree).find((element) => element.type === BuddyFigure && element.props.size === "hero")?.props;
+  const press = (tree: ReactNode, label: string) => (button(tree, label).props.onClick as () => void)();
+  /** 授权页点「同意」，等授权存上、翻到起名字。 */
+  const agree = async (data: OnboardingData, options: { nextPath?: string; buddyOnly?: boolean } = {}) => {
+    press(flow(data, options), "同意");
+    await vi.waitFor(() => expect(text(flow(data, options))).toContain("给伙伴起个名字"));
+  };
 
-  it("一项一行写帮本人选好的数：还没提交过时文档、定时任务全勾；默认全部收起", () => {
-    const tree = summary();
-    expect(rows(tree)).toEqual(["记忆文件12个", "文档2份", "定时任务1个"]);
-    expect(elements(tree).filter((element) => element.props["aria-expanded"] === true)).toEqual([]);
-    expect(checklist(tree, "文档")).toBeUndefined();
-    expect(text(tree)).not.toContain("飞书知识库 ·");
+  it("还没有伙伴时四页排在最前面（选形象 → 选性格 → 授权 → 起名字），CEO 和成员都走；已经引导过的只走这四页；有伙伴的不走", () => {
+    const buddySteps = ["buddy-form", "buddy-personality", "buddy-consent", "buddy-name"];
+    expect(onboardingSteps(ceo, "first")).toEqual([...buddySteps, "hello", "tour-notifications", "tour-board"]);
+    expect(onboardingSteps(member, "first").slice(0, 5)).toEqual([...buddySteps, "hello"]);
+    expect(onboardingSteps(member, "only")).toEqual(buddySteps);
+    expect(onboardingSteps(member)[0]).toBe("hello");
+    hooks.begin();
+    expect(elements(WelcomeFlow({ data: ceo, buddy: { name: "团团", form: "panda" } })).some((element) => element.type === BuddyCarousel)).toBe(false);
   });
 
-  it("数量为 0 的那一项不显示；三项都没有时这一步跳过", () => {
-    expect(rows(summary({ lists: { basis: [], schedules: [weekly] }, memoryFiles: 0 }))).toEqual(["定时任务1个"]);
+  it("步骤点一页一个：只差伙伴的人底下是 4 个点、一页往前走一个（回归：原来四页只算 1 步，只剩一颗拉长的当前点）", async () => {
+    stubWindow();
+    mockPut();
+    const options = { buddyOnly: true };
+    expect(progress(flow(ceo, options))).toMatchObject({ current: 1, total: 4 });
+    // 只有伙伴四页：深色跟系统。
+    expect(elements(flow(ceo, options))[0].props["data-scheme"]).toBe("auto");
+    press(flow(ceo, options), "选定");
+    expect(progress(flow(ceo, options))).toMatchObject({ current: 2, total: 4 });
+    press(flow(ceo, options), "选定");
+    expect(progress(flow(ceo, options))).toMatchObject({ current: 3, total: 4 });
+    await agree(ceo, options);
+    expect(progress(flow(ceo, options))).toMatchObject({ current: 4, total: 4 });
+    const markup = renderToStaticMarkup(OnboardingProgress({ current: 2, total: 4 }));
+    expect(markup).toContain("第 2 步，共 4 步");
+    expect(markup.match(/data-current=/g)).toHaveLength(4);
+    // 第一次引导：伙伴四页之后接着原来的步骤，总数一起算。
     hooks.reset();
-    expect(rows(summary({ lists: { basis: [doc("feishu_doc:w1")], schedules: [] }, memoryFiles: null }))).toEqual(["文档1份"]);
-    expect(reviewEmpty({ basis: [], schedules: [] }, 0)).toBe(true);
-    expect(reviewEmpty({ basis: [], schedules: [] }, null)).toBe(true);
-    expect(reviewEmpty({ basis: [], schedules: [] }, 3)).toBe(false);
-    expect(reviewEmpty({ basis: [], schedules: [weekly] }, null)).toBe(false);
+    expect(progress(flow(member))).toMatchObject({ current: 1, total: 4 + onboardingSteps(member).length });
   });
 
-  it("点开一行展开勾选明细，改了勾选摘要跟着变；提交过之后按入库的勾", () => {
-    let picks: ReviewPicks = {};
-    const onPick = vi.fn((key: string, checked: boolean) => { picks = { ...picks, [key]: checked }; });
-    (row(summary({ onPick }), "文档").props.onClick as () => void)();
-    let tree = summary({ onPick, picks });
-    expect(row(tree, "文档").props["aria-expanded"]).toBe(true);
-    const list = checklist(tree, "文档")!;
-    expect(list.props).toMatchObject({ items: lists.basis, selected: ["material:m1", "feishu_doc:w1"] });
-    (list.props.onToggle as (key: string, checked: boolean) => void)("feishu_doc:w1", false);
-    expect(onPick).toHaveBeenCalledWith("feishu_doc:w1", false);
-    tree = summary({ onPick, picks });
-    expect(rows(tree)).toContain("文档1份");
-    expect(checklist(tree, "文档")!.props.selected).toEqual(["material:m1"]);
-    // 再点一次收起；记忆文件那一行展开的是导入插槽。
-    (row(tree, "文档").props.onClick as () => void)();
-    expect(checklist(summary({ onPick, picks }), "文档")).toBeUndefined();
-    (row(summary({ onPick, picks }), "记忆文件").props.onClick as () => void)();
-    expect(elements(summary({ onPick, picks })).find((element) => element.type === MemoryImportPanel)?.props).toEqual({ localMemoryFiles: 12 });
+  it("选形象：一次一个、左右切换（首尾相接），没有「在听 / 在说」，没有「先进入工作台」和「上一步」", () => {
+    const tree = flow(ceo);
+    expect(text(tree)).toContain("选择你的伙伴");
+    expect(text(tree)).not.toContain("在听");
+    expect(text(tree)).not.toContain("先进入工作台");
+    expect(elements(tree).some((element) => element.type === "button" && text(element.props.children as ReactNode) === "上一步")).toBe(false);
+    expect(carousel(tree)).toMatchObject({ kind: "figure", value: "classic", sealing: false });
+    expect(carousel(tree).items.map((item) => item.id)).toEqual(["classic", "alive", "panda", "miles", "cmei"]);
+    carousel(tree).onChange("miles");
+    expect(carousel(flow(ceo)).value).toBe("miles");
+
+    hooks.reset(); hooks.begin();
+    const onChange = vi.fn();
+    const items = [{ id: "a", label: "A" }, { id: "b", label: "B" }, { id: "c", label: "C" }, { id: "d", label: "D" }, { id: "e", label: "E" }];
+    const strip = BuddyCarousel({ items, value: "a", onChange, label: "形象", kind: "figure", children: (id) => id });
+    const slides = elements(strip).filter((element) => element.props.role === "radio");
+    expect(slides.map((slide) => [slide.props["aria-label"], slide.props["data-offset"]])).toEqual([["A", 0], ["B", 1], ["C", 2], ["D", -2], ["E", -1]]);
+    (elements(strip).find((element) => element.props["aria-label"] === "上一个")!.props.onClick as () => void)();
+    expect(onChange).toHaveBeenLastCalledWith("e");
+    (elements(strip).find((element) => element.props["aria-label"] === "下一个")!.props.onClick as () => void)();
+    expect(onChange).toHaveBeenLastCalledWith("b");
+    (slides[4].props.onClick as () => void)();
+    expect(onChange).toHaveBeenLastCalledWith("e");
+  });
+
+  it("「选定」那一下：两边退开、中间应一声，播完才翻到选性格；播的时候不能再按", () => {
+    vi.useFakeTimers();
+    try {
+      vi.stubGlobal("window", Object.assign(new EventTarget(), { matchMedia: () => ({ matches: false }) }));
+      press(flow(ceo), "选定");
+      let tree = flow(ceo);
+      expect(carousel(tree).sealing).toBe(true);
+      expect(button(tree, "选定").props.disabled).toBe(true);
+      vi.advanceTimersByTime(560);
+      tree = flow(ceo);
+      expect(text(tree)).toContain("选择性格");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("选性格是 11/08 定的四种（沉稳靠谱默认），每种显示「进度落后」那一句，不用表情", () => {
+    stubWindow();
+    press(flow(ceo), "选定");
+    const tree = flow(ceo);
+    expect(carousel(tree)).toMatchObject({ kind: "card", value: "steady" });
+    expect(carousel(tree).items.map((item) => item.id)).toEqual(["steady", "direct", "warm", "coach"]);
+    expect(BUDDY_PERSONALITIES.map((item) => item.label)).toEqual(["沉稳靠谱", "直言不讳", "温和体贴", "启发追问"]);
+    expect(BUDDY_PERSONALITIES.find((item) => item.id === "steady")!.sample).toBe("全链路这条比计划晚两天。能先交的我拆出来了，周三前补齐，你看行不行。");
+    for (const item of BUDDY_PERSONALITIES) expect(item.sample, item.label).not.toMatch(/\p{Extended_Pictographic}/u);
+  });
+
+  it("选性格 → 授权（同意就把授权存成 full）→ 起名字：台上一直是选好的形象；名字空着不能完成；存好再往下走", async () => {
+    stubWindow();
+    const put = mockPut();
+    carousel(flow(ceo)).onChange("miles");
+    press(flow(ceo), "选定");
+    let tree = flow(ceo);
+    expect(text(tree)).toContain("选择性格");
+    expect(figure(tree)).toMatchObject({ skin: "miles", pose: "speaking" });
+    carousel(tree).onChange("coach");
+    press(flow(ceo), "选定");
+    tree = flow(ceo);
+    expect(text(tree)).toContain("伙伴可以替你做你能做的事");
+    expect(button(tree, "稍后")).toBeDefined();
+    expect(put).not.toHaveBeenCalled();
+    await agree(ceo);
+    expect(put).toHaveBeenCalledExactlyOnceWith("/api/me/buddy-authority", { body: { authority: "full" } });
+    tree = flow(ceo);
+    expect(nameInput(tree).value).toBe("");
+    expect(button(tree, "完成").props.disabled).toBe(true);
+    nameInput(tree).onEnter();
+    expect(put).toHaveBeenCalledTimes(1);
+    nameInput(tree).onChange(" 团团 ");
+    tree = flow(ceo);
+    expect(figure(tree)).toMatchObject({ skin: "miles", name: "团团", pose: "listening" });
+    expect(button(tree, "完成").props.disabled).toBe(false);
+    press(tree, "完成");
+    await vi.waitFor(() => expect(text(flow(ceo))).toContain("你好，测试"));
+    expect(put).toHaveBeenLastCalledWith("/api/me/buddy", { body: { name: "团团", form: "miles", personality: "coach" } });
+  });
+
+  it("授权可以「稍后」：不调接口（保持 none），直接到起名字；存不上就留在授权页并说明", async () => {
+    stubWindow();
+    let put = mockPut();
+    press(flow(ceo), "选定");
+    press(flow(ceo), "选定");
+    press(flow(ceo), "稍后");
+    expect(text(flow(ceo))).toContain("给伙伴起个名字");
+    expect(put).not.toHaveBeenCalled();
+
     hooks.reset();
-    const saved: ReviewLists = { basis: [{ ...lists.basis[0], confirmed: true }, lists.basis[1]], schedules: [{ ...weekly, imported: false }] };
-    expect(rows(summary({ lists: saved, reviewed: true }))).toEqual(["记忆文件12个", "文档1份", "定时任务0个"]);
+    put.mockRestore();
+    put = vi.spyOn(browserApi, "PUT").mockResolvedValue({ data: undefined, error: { message: "授权没有存上" }, response: new Response(null, { status: 500 }) } as never);
+    press(flow(ceo), "选定");
+    press(flow(ceo), "选定");
+    press(flow(ceo), "同意");
+    await vi.waitFor(() => expect(text(flow(ceo))).toContain("授权没有存上"));
+    expect(text(flow(ceo))).toContain("伙伴可以替你做你能做的事");
   });
 
-  it("点完成把两份清单按当前勾选分别提交；任一份没存上就抛错留在这一步", async () => {
-    const put = vi.spyOn(browserApi, "PUT").mockImplementation((async (path: string) => ({ data: { candidates: [`saved ${path}`] }, response: new Response(null, { status: 200 }) })) as never);
-    const saved = await submitReview(lists, false, { "feishu_doc:w1": false });
-    expect(put).toHaveBeenCalledTimes(2);
-    expect(put).toHaveBeenCalledWith("/api/me/work-basis", { body: { keys: ["material:m1"] } });
-    expect(put).toHaveBeenCalledWith("/api/me/schedule-migration", { body: { keys: ["dev:TianshuWeeklySync"] } });
-    expect(saved).toEqual({ basis: ["saved /api/me/work-basis"], schedules: ["saved /api/me/schedule-migration"] });
-    // 空的清单不提交。
-    put.mockClear();
-    await submitReview({ basis: [], schedules: [weekly] }, false, {});
-    expect(put).toHaveBeenCalledExactlyOnceWith("/api/me/schedule-migration", { body: { keys: ["dev:TianshuWeeklySync"] } });
-    put.mockImplementation((async () => ({ data: undefined, error: { message: "清单已经变了，请刷新后再确认" }, response: new Response(null, { status: 400 }) })) as never);
-    await expect(submitReview(lists, false, {})).rejects.toThrow("清单已经变了，请刷新后再确认");
+  it("「上一步」一页页退回，选过的都留着", async () => {
+    stubWindow();
+    mockPut();
+    carousel(flow(ceo)).onChange("panda");
+    press(flow(ceo), "选定");
+    carousel(flow(ceo)).onChange("direct");
+    press(flow(ceo), "选定");
+    await agree(ceo);
+    nameInput(flow(ceo)).onChange("团团");
+    press(flow(ceo), "上一步");
+    expect(text(flow(ceo))).toContain("伙伴可以替你做你能做的事");
+    press(flow(ceo), "上一步");
+    expect(carousel(flow(ceo)).value).toBe("direct");
+    press(flow(ceo), "上一步");
+    expect(carousel(flow(ceo))).toMatchObject({ kind: "figure", value: "panda" });
   });
 
-  it("提交失败在摘要里原位显示", () => {
-    expect(elements(summary({ error: "没有存上，请重试" })).find((element) => element.props.role === "alert")).toBeDefined();
+  it("伙伴几页之后的每一页，顶上一直是本人选的那颗（刚选的、以前选好的都算）；选的是默认那颗就还是原来的大胶囊", async () => {
+    stubWindow();
+    mockPut();
+    carousel(flow(member)).onChange("panda");
+    press(flow(member), "选定");
+    press(flow(member), "选定");
+    await agree(member);
+    nameInput(flow(member)).onChange("团团");
+    press(flow(member), "完成");
+    await vi.waitFor(() => expect(text(flow(member))).toContain("你好，测试"));
+    const hero = (tree: ReactNode) => elements(tree).find((element) => element.type === PresenceCapsule)?.props;
+    expect(hero(flow(member))).toMatchObject({ skin: "panda", name: "团团", pose: "idle" });
+    press(flow(member), "开始");
+    expect(text(flow(member))).toContain("左边是通知栏");
+    expect(hero(flow(member))).toMatchObject({ skin: "panda" });
+    expect(elements(flow(member)).some((element) => element.type === CoAgentCapsule)).toBe(false);
+
+    hooks.reset(); hooks.begin();
+    expect(hero(WelcomeFlow({ data: member, buddy: { name: "Christopher", form: "miles" } }))).toMatchObject({ skin: "miles", name: "Christopher" });
+    hooks.reset(); hooks.begin();
+    const classic = WelcomeFlow({ data: member, buddy: { name: "小天", form: "classic" } });
+    expect(hero(classic)).toBeUndefined();
+    expect(elements(classic).some((element) => element.type === CoAgentCapsule)).toBe(true);
+  });
+
+  it("名字太长、多的字被截掉时，框下面写「名字已到最长」；输入法组字时不提示，组完被截才提示；删回放得下就消失", () => {
+    const onChange = vi.fn();
+    const render = () => { hooks.begin(); return BuddyNameInput({ value: "", onChange }); };
+    const type = (value: string, isComposing = false) => {
+      const input = elements(render()).find((element) => element.type === "input")!;
+      (input.props.onChange as (event: unknown) => void)({ target: { value }, nativeEvent: { isComposing } });
+    };
+    const hint = () => text(render());
+    expect(hint()).toBe("");
+    type("Christopherrr");
+    expect(onChange).toHaveBeenLastCalledWith("Christopher");
+    expect(hint()).toBe("名字已到最长");
+    expect(elements(render()).find((element) => element.props.role === "status")).toBeDefined();
+    type("Christophe");
+    expect(hint()).toBe("");
+    type("一二三四五六七", true);
+    expect(onChange).toHaveBeenLastCalledWith("一二三四五六七");
+    expect(hint()).toBe("");
+    const input = elements(render()).find((element) => element.type === "input")!;
+    (input.props.onCompositionEnd as (event: unknown) => void)({ currentTarget: { value: "一二三四五六七" } });
+    expect(onChange).toHaveBeenLastCalledWith("一二三四五六");
+    expect(hint()).toBe("名字已到最长");
+  });
+
+  it("伙伴存不上就留在起名字这一页并说明，不往下走", async () => {
+    stubWindow();
+    mockPut({ data: undefined, error: { message: "伙伴要有名字" }, status: 400 });
+    press(flow(ceo), "选定");
+    press(flow(ceo), "选定");
+    await agree(ceo);
+    nameInput(flow(ceo)).onChange("团团");
+    press(flow(ceo), "完成");
+    await vi.waitFor(() => expect(text(flow(ceo))).toContain("伙伴要有名字"));
+    expect(text(flow(ceo))).toContain("给伙伴起个名字");
+  });
+
+  it("已经引导过、只差伙伴的人：存好就回原来要去的页面，不再记一次引导完成", async () => {
+    const replace = vi.fn();
+    stubWindow({ location: { replace } });
+    mockPut({ data: { name: "团团", form: "alive", personality: "steady" } });
+    const complete = vi.spyOn(browserApi, "POST").mockResolvedValue({ data: undefined, response: new Response(null, { status: 204 }) } as never);
+    const options = { nextPath: "/radar", buddyOnly: true };
+    carousel(flow(ceo, options)).onChange("alive");
+    press(flow(ceo, options), "选定");
+    press(flow(ceo, options), "选定");
+    await agree(ceo, options);
+    nameInput(flow(ceo, options)).onChange("团团");
+    press(flow(ceo, options), "完成");
+    await vi.waitFor(() => expect(replace).toHaveBeenCalledExactlyOnceWith("/radar"));
+    expect(complete).not.toHaveBeenCalledWith("/api/me/onboarding/complete");
   });
 });

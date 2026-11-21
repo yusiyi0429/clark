@@ -11,6 +11,7 @@ vi.mock("react", async (original) => {
   } };
 });
 vi.mock("@/lib/api/client", () => ({ browserApi: { GET: ui.get, POST: ui.post, DELETE: ui.del } }));
+vi.mock("@/lib/home/noEllipsis", () => ({ useDots: () => (text: string) => text }));
 vi.mock("@/components/ConfirmDialog", () => ({ useConfirm: () => ({ ask: ui.ask, dialog: null }) }));
 import { ConnectionDialog } from "./ConnectionDialog";
 import { ConnectAgentForm, PersonalTokenForm, connectionState, watchFirstUse } from "./ConnectAgentForm";

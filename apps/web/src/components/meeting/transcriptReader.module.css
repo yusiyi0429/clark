@@ -13,3 +13,10 @@
 @keyframes turnFlash{0%,35%{background:#3a83f714;box-shadow:0 0 0 3px #3a83f766}100%{background:transparent;box-shadow:0 0 0 0 transparent}}
 @media(max-width:959px){.turn{grid-template-columns:auto minmax(0,1fr);row-gap:2px}.text{grid-column:1/-1}}
 @media(prefers-reduced-motion:reduce){.turn[data-flash=true]{animation:none;box-shadow:0 0 0 3px #3a83f766}}
+
+/* 新首页深色（会议页挪进新首页后）：说话人和正文在深底上看不清，只换成新首页的字色变量；浅色不变。 */
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .speaker { color: var(--ink); }
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .text { color: var(--ink-muted); }
+
+/* 新首页不出省略号（本人 11/18）：放不下就换行，长预览限高往下渐隐；只在新首页的外壳里生效，旧界面照旧。 */
+:global(:root:has([data-type-scale="one"])) .speaker { overflow: visible; white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }

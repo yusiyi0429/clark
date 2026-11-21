@@ -70,3 +70,6 @@
   .facts > div { grid-template-columns: 64px minmax(0, 1fr); }
 }
 @media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } .more > summary svg { transition: none; } }
+
+/* 新首页不出省略号（本人 11/18）：放不下就换行，长预览限高往下渐隐；只在新首页的外壳里生效，旧界面照旧。 */
+:global(:root:has([data-type-scale="one"])) .targetTitle { overflow: visible; white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }

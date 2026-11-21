@@ -1,5 +1,11 @@
 import type { FastifyReply } from "fastify";
-import { PersonalProfileView, UpdatePersonalProfileRequest } from "@warmap/contracts";
+import { AppearanceSettings, Budget, Buddy, BuddyOrNull, NotificationSettings, MAX_AVATAR_IMAGE_BYTES, MAX_RAIL_IMAGE_BYTES, PersonAvatarsResponse, PersonalProfileView, RailBackground, SaveAvatarRequest, SaveRailBackgroundRequest, SavedAvatar, UpdatePersonalProfileRequest } from "@warmap/contracts";
+import { BUDDY_NAME_UNITS, buddyNameUnits, readBuddy, saveBuddy } from "../buddy.js";
+import { readAppearance, readNotificationSettings, writeAppearance, writeNotificationSettings } from "../homePush.js";
+import { readBudgetDefault, writeBudgetDefault } from "../budgets.js";
+import { CardError } from "../taskCards.js";
+import { RailBackgroundError, readRailBackground, readRailImage, saveRailBackground } from "../railBackground.js";
+import { AvatarError, deleteAvatar, listAvatarVersions, readAvatar, saveAvatar } from "../avatar.js";
 import { Type } from "@sinclair/typebox";
 import { AcceptMyTaskRequest, AddTaskCollaboratorsRequest, AppendTaskProgressRequest, Card, CreateMyTaskRequest, CreatePersonalTokenRequest, CreatePersonalTokenResponse, ListPersonalTokensResponse, MarkNotificationsSeenRequest, MeHomeResponse, MemberBattlefieldResponse, MemberMeetingsResponse, MonthPlanResponse, PatchMyTaskRequest, PutMyTaskNoteRequest, ReopenMyTaskRequest, ReturnMyTaskRequest, ReturnTaskAcceptanceRequest, StandaloneMyTaskRequest, SaveMonthPlanRequest, TaskAcceptanceDraft, TaskDetailResponse, TaskProgressEntry, UnreadThreadsResponse, DictationSessionResponse, DictationPolishRequest, DictationPolishResponse, HomePlanResponse, HomePlanMark, PlanCalendarResponse, Period, BattlefieldProgressResponse, CreatePlanMarkRequest, PatchPlanMarkRequest, type TDictationResult, type TTaskView, type TVoiceprintStatus } from "@warmap/contracts";
 import { listMyNotifications, markNotificationsSeen } from "../notifications.js";
@@ -25,6 +31,7 @@ import { createPersonalToken, listPersonalTokens, revokePersonalToken } from "..
 import { getIssueRow } from "../issues.js";
 import { getMeetingRow } from "../meetingStore.js";
 import { projectMemberIssueCard, projectMemberMeetingCard } from "../memberCards.js";
+import { isPartnerMeetingRecipient, leftPartnerMeeting, meetingForViewer } from "../partnerMeetings.js";
 import { isActiveMember, unreadThreads } from "../threads.js";
 import { AGENT_ROLES, anonUserId, randomTurnSuffix, stableThreadId, tracedTurn, withAgent } from "../tracing.js";
 
@@ -47,6 +54,95 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
     const gender = req.body.gender?.trim() || null;
     await q("INSERT INTO person_profiles (person_id, gender) VALUES ($1, $2) ON CONFLICT (person_id) DO UPDATE SET gender = EXCLUDED.gender", [person.personId, gender]);
     return { personId: person.personId, displayName: names().get(person.personId) ?? person.personId, gender };
+  });
+
+  // 「偏好」里的通知开关（新首页 13.2）：本人读写，飞书通知缺省开。
+  app.get("/api/me/notification-settings", { preHandler: requirePerson, schema: { response: { 200: NotificationSettings } } }, async (req, reply) => {
+    reply.header("Cache-Control", "no-store");
+    return readNotificationSettings(q, req.person!.personId);
+  });
+  app.put("/api/me/notification-settings", { preHandler: requirePerson, schema: { body: NotificationSettings, response: { 200: NotificationSettings } } }, async (req) =>
+    writeNotificationSettings(q, req.person!.personId, req.body));
+
+  // 「偏好」里的外观（新首页 17.2）：本人读写，没设过是跟随系统。
+  app.get("/api/me/appearance", { preHandler: requirePerson, schema: { response: { 200: AppearanceSettings } } }, async (req, reply) => {
+    reply.header("Cache-Control", "no-store");
+    return readAppearance(q, req.person!.personId);
+  });
+  app.put("/api/me/appearance", { preHandler: requirePerson, schema: { body: AppearanceSettings, response: { 200: AppearanceSettings } } }, async (req) =>
+    writeAppearance(q, req.person!.personId, req.body));
+
+  // 「偏好」里新 Task 的缺省预算（设计 11.3）：本人读写，没设过是自动；设预算至少一项上限。
+  app.get("/api/me/budget-default", { preHandler: requirePerson, schema: { response: { 200: Budget } } }, async (req, reply) => {
+    reply.header("Cache-Control", "no-store");
+    return readBudgetDefault(q, req.person!.personId);
+  });
+  app.put("/api/me/budget-default", { preHandler: requirePerson, schema: { body: Budget, response: { 200: Budget } } }, async (req, reply) => {
+    try { return await writeBudgetDefault(q, req.person!.personId, req.body); } catch (cause) {
+      if (cause instanceof CardError) return fail(reply, cause.status, cause.code, cause.message);
+      throw cause;
+    }
+  });
+
+  // 伙伴也只有本人读写：名字按宽度算（buddyNameUnits），全是空白或超宽契约的长度挡不住，这里挡。
+  app.get("/api/me/buddy", { preHandler: requirePerson, schema: { response: { 200: BuddyOrNull } } }, async (req, reply) => {
+    reply.header("Cache-Control", "no-store");
+    return readBuddy(q, req.person!.personId);
+  });
+  app.put("/api/me/buddy", { preHandler: requirePerson, schema: { body: Buddy, response: { 200: Buddy } } }, async (req, reply) => {
+    reply.header("Cache-Control", "no-store");
+    const units = buddyNameUnits(req.body.name);
+    if (!units) return fail(reply, 400, "INVALID_INPUT", "伙伴要有名字");
+    if (units > BUDDY_NAME_UNITS) return fail(reply, 400, "INVALID_INPUT", "伙伴的名字太长");
+    return saveBuddy(q, req.person!.personId, req.body);
+  });
+
+  // 通知栏背景也只有本人读写。图片地址带 ?v=imageVersion，换图地址就变，所以图片本身可以长期缓存。
+  app.get("/api/me/rail-background", { preHandler: requirePerson, schema: { response: { 200: RailBackground } } }, async (req, reply) => {
+    reply.header("Cache-Control", "no-store");
+    return readRailBackground(q, req.person!.personId);
+  });
+  app.put("/api/me/rail-background", { preHandler: requirePerson, bodyLimit: Math.ceil(MAX_RAIL_IMAGE_BYTES / 3) * 4 + 64 * 1024,
+    schema: { body: SaveRailBackgroundRequest, response: { 200: RailBackground } } }, async (req, reply) => {
+    reply.header("Cache-Control", "no-store");
+    try {
+      return await saveRailBackground(q, req.person!.personId, req.body);
+    } catch (error) {
+      if (error instanceof RailBackgroundError) return fail(reply, error.status, error.code, error.message);
+      throw error;
+    }
+  });
+  app.get("/api/me/rail-background/image", { preHandler: requirePerson }, async (req, reply) => {
+    const found = await readRailImage(q, req.person!.personId);
+    if (!found) return fail(reply, 404, "NOT_FOUND", "还没有上传过图片");
+    return reply.type(found.type).header("Cache-Control", "private, max-age=31536000, immutable")
+      .header("X-Content-Type-Options", "nosniff").send(found.image);
+  });
+
+  // 头像本人换、本人删；登录的人都能看别人的（和人员名册一样）。图片地址带 ?v=version，换图地址就变，图片本身可以长期缓存。
+  app.put("/api/me/avatar", { preHandler: requirePerson, bodyLimit: Math.ceil(MAX_AVATAR_IMAGE_BYTES / 3) * 4 + 64 * 1024,
+    schema: { body: SaveAvatarRequest, response: { 200: SavedAvatar } } }, async (req, reply) => {
+    reply.header("Cache-Control", "no-store");
+    try {
+      return await saveAvatar(q, req.person!.personId, req.body.image);
+    } catch (error) {
+      if (error instanceof AvatarError) return fail(reply, error.status, error.code, error.message);
+      throw error;
+    }
+  });
+  app.delete("/api/me/avatar", { preHandler: requirePerson }, async (req, reply) => {
+    await deleteAvatar(q, req.person!.personId);
+    return reply.code(204).send();
+  });
+  app.get("/api/people/avatars", { preHandler: requirePerson, schema: { response: { 200: PersonAvatarsResponse } } }, async (_req, reply) => {
+    reply.header("Cache-Control", "no-store");
+    return { avatars: await listAvatarVersions(q) };
+  });
+  app.get("/api/people/:personId/avatar", { preHandler: requirePerson, schema: { params: Type.Object({ personId: Type.String({ minLength: 1 }) }) } }, async (req, reply) => {
+    const found = await readAvatar(q, req.params.personId);
+    if (!found) return fail(reply, 404, "NOT_FOUND", "没有头像照片");
+    return reply.type(found.type).header("Cache-Control", "private, max-age=31536000, immutable")
+      .header("X-Content-Type-Options", "nosniff").send(found.image);
   });
 
   const names = () => personDisplayNames(peopleDirectory);
@@ -201,7 +297,7 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
       ...(row.status === "held" ? { processing: {
         since: (row.outcome.status === "running" ? row.outcome.startedAt : null) ?? row.outcome.pendingSince ?? null,
         failed: row.outcome.status === "failed" } } : {}),
-      hostName: displayNames.get(row.lead_dri_id) ?? row.lead_dri_id, href: `/me/meetings/${row.id}` })) };
+      hostName: displayNames.get(row.lead_dri_id) ?? row.lead_dri_id, href: `/me/work/meetings/${row.id}` })) };
   });
 
   app.get("/api/me/cards/issues/:id", { preHandler: requireMember, schema: { params: idParams, response: { 200: Card } } }, async (req, reply) => {
@@ -216,11 +312,11 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
   });
 
   app.get("/api/me/cards/meetings/:id", { preHandler: requireMember, schema: { params: idParams, response: { 200: Card } } }, async (req, reply) => {
-    if (!await isActiveMember(q, { objectType: "meeting", objectId: req.params.id }, req.person!.personId))
-      return fail(reply, 404, "CARD_NOT_FOUND", "会议不存在");
+    const person = req.person!;
     const row = await getMeetingRow(q, req.params.id);
-    if (!row) return fail(reply, 404, "CARD_NOT_FOUND", "会议不存在");
-    return projectMemberMeetingCard(row, ctx.env.sessionSecret, req.person!.personId);
+    if (!row || await leftPartnerMeeting(q,row.id,person.personId) || (!isPartnerMeetingRecipient(row,person.personId,true)
+      && !await isActiveMember(q,{ objectType:"meeting", objectId:row.id },person.personId))) return fail(reply, 404, "CARD_NOT_FOUND", "会议不存在");
+    return projectMemberMeetingCard(await meetingForViewer(q,app.meetingFollowThrough.minutes,row,person), ctx.env.sessionSecret,person.personId);
   });
 
   app.post(

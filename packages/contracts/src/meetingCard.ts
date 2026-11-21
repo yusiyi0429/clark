@@ -1,4 +1,5 @@
 import { Type, type Static } from "@sinclair/typebox";
+import { NullableInteger } from "./nullable.js";
 
 /**
  * 会议卡（FR-4、FR-5）：会议 Card 与会议 Event 共用一份冻结 payload（MeetingCardFrozenPayload）。
@@ -50,7 +51,7 @@ const objectChangeFields = {
   id: CardItemId,
   targetRef: NullableString({ minLength: 1, maxLength: 500 }),
   targetTitle: NullableString({ maxLength: 500 }),
-  expectedVersion: Type.Union([Type.Integer({ minimum: 0 }), Type.Null()]),
+  expectedVersion: NullableInteger({ minimum: 0 }),
   before: Type.Union([Type.Object({ text: Type.String() }, { additionalProperties: false }), Type.Null()]),
   after: Type.Object({ text: Type.String({ minLength: 1, maxLength: 20000 }) }, { additionalProperties: false }),
   basisSectionIds: Type.Array(Type.String({ minLength: 1, maxLength: 64 }), { maxItems: 50 }),
@@ -190,7 +191,7 @@ export const MeetingObjectResult = Type.Object(
       Type.Literal("pending"), Type.Literal("updated"), Type.Literal("failed"), Type.Literal("not_allowed"),
       Type.Literal("conflict"), Type.Literal("superseded"), Type.Literal("blocked"),
     ]),
-    actualVersion: Type.Union([Type.Integer({ minimum: 0 }), Type.Null()]),
+    actualVersion: NullableInteger({ minimum: 0 }),
     error: NullableString(),
   },
   { additionalProperties: false },
@@ -231,6 +232,11 @@ export const MeetingCardView = Type.Object(
     viewerId: Type.String({ minLength: 1 }),
     /** 冻结时写不写进本体（主持人或创建人在冻结前定；冻结后看 sync.writeToWorld）。 */
     writeToWorld: Type.Boolean(),
+    /**
+     * 会议写本体整个关掉了（MEETING_WORLD_WRITES_OFF=1，会后链切到 Nexus 以后）时为 true，没关时不带。
+     * 关着时会议卡照常生成、照常逐条确认，只是不写本体：确认、冻结一律按「不写入」记，网页把「不写进本体」开关收起来。
+     */
+    worldWritesOff: Type.Optional(Type.Boolean()),
     confirmed: Type.Union([
       Type.Object(
         // actionItems：这次确认时的行动项快照（10/30 之前推成执行事项的带 taskId）。

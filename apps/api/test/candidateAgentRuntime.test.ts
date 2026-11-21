@@ -93,6 +93,27 @@ describe("batch candidate runtime public seam", () => {
     });
   });
 
+  it("带图片：图片随用户消息发出，模型注册成能看图；不带图片时只认文字", async () => {
+    await createTestDb(async ({ db }) => {
+      await migrate(db);
+      const seen: { input: string[]; content: unknown }[] = [];
+      const run = (images?: { type: "image"; data: string; mimeType: string }[]) => runCandidateAgent({
+        query: db.query.bind(db), kind: "deliverable_review", input: { task: "fixture" }, prompt: "只提交结构化候选。", schema: Candidate,
+        baseUrl: "https://provider.invalid/v1/responses", apiKey: "test-key", modelId: "fake-heavy", images,
+        streamSimple: (model, context) => {
+          seen.push({ input: [...model.input], content: context.messages[0]?.content });
+          return stream([{ type: "toolCall", id: `submit-${seen.length}`, name: "submit_candidate", arguments: { summary: "看过了" } }], "toolUse");
+        },
+      });
+      await run([{ type: "image", data: "aGVsbG8=", mimeType: "image/png" }]);
+      await run();
+      expect(seen[0].input).toEqual(["text", "image"]);
+      expect(seen[0].content).toEqual(expect.arrayContaining([{ type: "image", data: "aGVsbG8=", mimeType: "image/png" }]));
+      expect(seen[1].input).toEqual(["text"]);
+      expect(JSON.stringify(seen[1].content)).not.toContain("image/png");
+    });
+  });
+
   it("业务校验不通过时把说明回给模型，改好重交才收下", async () => {
     await createTestDb(async ({ db }) => {
       await migrate(db);

@@ -1,11 +1,14 @@
 /**
  * 对话区的滚动控制（全局对话层与二级页右列共用），行为对齐 Claude 网页版 / ChatGPT：
  * - 打开时落在底部并跟随（历史后到也跟到底）；用户往上滚就停，自己滚回真实末尾再跟随；
+ * - 跟随时一次长高超过半屏（一整段话到了）：约 240ms 的短促缓动滑过去，不瞬间跳；逐字的小增长照旧贴底；
+ *   刚打开、换内容后的一小会儿（历史一次到）和一次长高超过三屏时照旧瞬间到底；滑动途中本人一动手就停；
  * - 发送：约 240ms 的短促缓动把刚发的那条（最后一个 `[data-chat-role="user"]`）推到滚动区顶部留白之下，
  *   下面留出刚好够它上去的空白（留白元素在内容之后，不被内容的 ResizeObserver 看到）；
  * - 回答进行中视图不动、不跟随；超过一屏时 ↓ 出现（`atBottom` 只看真实内容的末尾，不算留白），点 ↓ 跳到最新并跟随；
  * - 留白只在发送那一刻按真实内容重算（不跨轮叠加），之后只缩不涨，并且缩完当前位置仍然可达，视图不跳；
  * - 找不到刚发的那条（群聊：消息等服务端回来才出现）就照旧滚到底并跟随；
+ * - onSend="bottom"（新首页伙伴主线、项目对话，像微信）：发送时不置顶、不留白，滚到底并跟随，往上翻就停、点 ↓ 回到底部接着跟；
  * - 换频道直接落到底部；从气泡打开（anchor="reply"）停在最后一条回答的开头，不跟随。
  * - 宽度变了（讨论台展开 / 收起，正文重排）：置顶中按刚发那条的新位置重新置顶、留白重算；自由浏览时视口顶上那条留在原处；跟随照旧追到底。
  * - 滚动区正被整体缩放（展开动画的 transform）时，元素之间的距离按缩放比换回布局距离。
@@ -16,6 +19,8 @@
 import { onResize, resizing } from "./resizeGate";
 
 export type ScrollAnchor = "end" | "reply";
+/** 发送那一刻：pin 把刚发的那条推到顶部（默认）；bottom 滚到底并跟随。 */
+export type ScrollOnSend = "pin" | "bottom";
 export type ScrollMode = "follow" | "pinned" | "free";
 export type ScrollEvent =
   | { type: "open"; anchor: ScrollAnchor }
@@ -34,6 +39,13 @@ export const SEND_PIN_MS = 240;
 export const END_THRESHOLD = 70;
 /** 用户手势（滚轮、触摸、按键、按下滚动条）之后多久内的 scroll 算用户滚动。 */
 const INTENT_MS = 400;
+/** 打开、换内容之后多久以内的长高算「历史一次到」，照旧瞬间到底。 */
+export const OPEN_SETTLE_MS = 1000;
+
+/** 跟随时这一下要不要滑过去：打开一会儿以后、一次长高超过半屏、不超过三屏（再多就是整块换了内容）。 */
+export function followGlides({ jump, viewport, sinceOpen }: { jump: number; viewport: number; sinceOpen: number }): boolean {
+  return sinceOpen >= OPEN_SETTLE_MS && jump > viewport / 2 && jump <= viewport * 3;
+}
 
 export const easeOutCubic = (t: number) => 1 - (1 - t) ** 3;
 
@@ -80,6 +92,7 @@ const RESIZE_GATE: ResizeGate = { resizing, onResize };
 
 export type ScrollControllerOptions = {
   anchor?: ScrollAnchor;
+  onSend?: ScrollOnSend;
   onAtBottom?: (atBottom: boolean) => void;
   reduced?: () => boolean;
   /** 滚动区上方留白（默认读 padding-top）。 */
@@ -112,6 +125,8 @@ export function createScrollController(options: ScrollControllerOptions = {}) {
   let scroller: HTMLElement | null = null, content: HTMLElement | null = null, reserveEl: HTMLElement | null = null;
   let reserve = 0, pinTop = 0, lastSet = -1, lastTop = 0, intentAt = -Infinity, pointerDown = false, bottom = true;
   let lastWidth: number | undefined;
+  /** 打开（接上滚动区）或换内容的时刻：之后 OPEN_SETTLE_MS 以内跟随照旧瞬间。 */
+  let openedAt = -Infinity;
   /** 置顶的那条（宽度变了按它重算 pinTop）；自由浏览时视口顶上那条和它离留白线多远（宽度变了放回原处）。 */
   let pinEl: HTMLElement | null = null, anchorEl: HTMLElement | null = null, anchorOffset = 0;
   let animation: { id: number; target: () => number } | null = null;
@@ -206,8 +221,14 @@ export function createScrollController(options: ScrollControllerOptions = {}) {
     setReserve(nextReserve({ mode, current: reserve, keepTop, viewport: m.viewport, naturalEnd: m.naturalEnd }));
     if (reflowed && mode === "pinned" && !animation) setTop(pinTop);
     if (mode === "follow" && !animation) {
-      const target = followTop(metrics(scroller));
-      if (target > scroller.scrollTop + 0.5) setTop(target);
+      const now2 = metrics(scroller);
+      const target = followTop(now2);
+      const jump = target - scroller.scrollTop;
+      if (followGlides({ jump, viewport: now2.viewport, sinceOpen: now() - openedAt })) {
+        // 一整段话到了：滑过去（目标每帧重算，期间还在长也追得上）；减少动效时 animateTo 自己瞬间到。
+        const element = scroller;
+        animateTo(() => Math.max(0, element.scrollHeight - reserve - element.clientHeight));
+      } else if (jump > 0.5) setTop(target);
     }
     captureAnchor();
     report();
@@ -268,6 +289,7 @@ export function createScrollController(options: ScrollControllerOptions = {}) {
       unsubscribeGate = gate?.onResize({ start: layout, end: layout }) ?? null;
       lastTop = element.scrollTop;
       lastWidth = element.clientWidth;
+      openedAt = now();
       element.addEventListener("scroll", onScroll, { passive: true });
       intentEvents.forEach((type) => element.addEventListener(type, onIntent, { passive: true }));
       element.addEventListener("pointerdown", onPointerDown);
@@ -285,11 +307,11 @@ export function createScrollController(options: ScrollControllerOptions = {}) {
       reserveEl = element;
       if (element) element.style.height = reserve ? `${reserve}px` : "";
     },
-    /** 发送：刚发的那条置顶；找不到就滚到底并跟随。只在回答开始的那一刻调用一次。 */
+    /** 发送：刚发的那条置顶；找不到、或 onSend="bottom" 就滚到底并跟随。只在回答开始的那一刻调用一次。 */
     send() {
       if (!scroller) return;
       cancel();
-      const users = content?.querySelectorAll<HTMLElement>('[data-chat-role="user"]');
+      const users = options.onSend === "bottom" ? undefined : content?.querySelectorAll<HTMLElement>('[data-chat-role="user"]');
       const sent = users?.[users.length - 1];
       mode = nextMode(mode, { type: "send", found: Boolean(sent) });
       if (!sent) {
@@ -321,6 +343,7 @@ export function createScrollController(options: ScrollControllerOptions = {}) {
     /** 换频道等整块换内容：清掉留白，直接落到底部并跟随。 */
     reset() {
       cancel();
+      openedAt = now();
       mode = nextMode(mode, { type: "reset" });
       setReserve(0);
       if (scroller) setTop(scroller.scrollHeight);

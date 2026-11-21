@@ -14,7 +14,7 @@
 | 本体（tkos.world） | 按人授权的读取，以及明确的产品写入 | 公司事实的权威来源；API 侧只做可重建的只读投影 |
 | 飞书 | 企业自建应用 | 免登与用户令牌、长连接事件、消息通知、妙记、多维表格 |
 | M2（`apps/m2`） | 主应用会话、私有 bootstrap | 独立拆解与协作，文件状态在 `m2_state` 卷，不覆盖主应用计划 |
-| 本机采集器（`tools/collector`） | 成员本机 | 心跳与本机清单上报（本人同意后），API 后台整理 |
+| 本机程序（`apps/local`） | 本人电脑上的天枢网页直连（127.0.0.1，配对口令） | 拉起本机 Claude Code 干活，事件只给本机网页；状态、计划、证据、产出物、交回、花费经发件箱单向报给 API，云端不指挥本机。见 [RFC](../technical/local-runner/RFC.md) |
 
 生产请求经过宿主机 Nginx、Caddy，再到 Web、API 或 M2；本地 Web 用开发代理。数据库与业务服务只在 Compose 内网暴露。
 
@@ -60,9 +60,9 @@ API 把业务对象投影为固定类型的 Card，带展示数据、导航、�
 - 信息收集（`collections.ts`）：Agent 起草收集请求，大家共填一张飞书多维表格（`FEISHU_BITABLE_MODE=live` 才写真实表格），后台双向同步与提醒。
 - 文档变更（`docChanges.ts`）：在机器人所在的群里 @机器人 贴飞书文档链接即发布，Agent 找出可能被修订或取代的旧文档，确认后向依据旧版的人推送影响卡。
 
-### 个人 MCP 与采集器
+### 个人 MCP
 
-`/mcp/me` 使用 OAuth 或个人令牌，能力受本人权限约束，授权流程见 [MCP 指南](../guides/mcp-oauth.md)。采集器用 `collector` 类个人令牌上报心跳，本人同意后才上传本机清单，原文由后台整理、14 天后清空。
+`/mcp/me` 使用 OAuth 或个人令牌，能力受本人权限约束，授权流程见 [MCP 指南](../guides/mcp-oauth.md)。本机采集器已下线：上报与心跳接口返回 410，不再整理原文；已收到的原文照 14 天清空，已整理的结果只读保留。
 
 ### 飞书
 
@@ -75,7 +75,7 @@ API 把业务对象投影为固定类型的 Card，带展示数据、导航、�
 ## 公司事实与个人记忆
 
 - **人员目录**：`company-people.v1`，由 `peopleDirectory.ts` 加载；登录、会话角色、本人隔离、人名解析只看它，不从本体推导登录权限（ADR-0027）。
-- **本体公司事实**：`query_company` 工具按本人在 `COMPANY_WORLD_ACCESS_FILE` 中被授权的域读取本体正文（`company.ts`、`companyWorld.ts`），投影写在 `MEMORY_STORAGE_DIR/company`，可重建。后台服务（雷达、会前预审、预研、月度起草与复盘、任务卡起草）经 `companyContext.ts` 按 `COMPANY_SYSTEM_PERSON_ID` 的授权读取。读不到时如实说没读到，不用本地资料兜底；`empty` 才表示本体里确实没有。服务令牌不扩大任何人的可见范围（ADR-0027）。
+- **本体公司事实**：`query_company` 工具按本人在 `COMPANY_WORLD_ACCESS_FILE` 中被授权的域读取本体正文（`company.ts`、`companyWorld.ts`），每条带对象 ref（`id@version`）和类型；伙伴对话先按类型、周期和标题定位，只读定位到的对象，定位不到才全量读（[本体上下文取用](../technical/ontology-context.md)）。全量读时投影写在 `MEMORY_STORAGE_DIR/company`，可重建。后台服务（雷达、会前预审、预研、月度起草与复盘、任务卡起草）经 `companyContext.ts` 按 `COMPANY_SYSTEM_PERSON_ID` 的授权读取。读不到时如实说没读到，不用本地资料兜底；`empty` 才表示本体里确实没有。服务令牌不扩大任何人的可见范围（ADR-0027）。
 - **个人记忆**：存数据库，只有本人可见。后台从本人的对话中提炼（新增、替代、遗忘），每轮用 `MEMORY_RECALL_MODEL` 从本人记忆目录里挑相关条目；回答里用到时带记忆标记。本人可在记忆页查看、修改、删除、恢复，也可导入资料并逐条确认（`personalMemory*.ts`、`personalDistillation.ts`、`memoryImport*.ts`）。
 
 ## 观测

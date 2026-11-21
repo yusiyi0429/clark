@@ -28,9 +28,12 @@ import { MissionGroupTranscript } from "./MissionGroupTranscript";
 import { MissionGroupComposer } from "./MissionGroupComposer";
 import { PresenceCapsule } from "@/components/coagent/PresenceCapsule";
 import { useListening } from "@/components/coagent/presence";
-import { useCoAgentSkin } from "@/components/coagent/skin";
+import { isFigureSkin } from "@/components/coagent/skin";
+import { useBuddy, type Buddy } from "@/components/buddy/useBuddy";
 import type { DetailGroup } from "./missionCardGroup";
 import { MESSAGE_REPLY, type QuotePrefill, type QuoteSource, type TextQuote } from "./quotes";
+import { useUnseenReply } from "./unseenReply";
+import { createVoiceChannel } from "./voiceChannel";
 import groupStyles from "@/styles/mission-group.module.css";
 import w from "@/styles/app-shell.module.css";
 
@@ -94,10 +97,12 @@ export function ConversationHost({
 }) {
   const onPage = Boolean(detailOpen && page && !ui.globalView);
   const target = onPage && page ? page : GLOBAL;
-  return <ScopedConversation key={target.scope} target={target} detailOpen={detailOpen} rail={rail} agentTitle={agentTitle} ui={ui} />;
+  // 本人的伙伴（spec 5.5）：首页输入条和右列页头都用它的名字，右列胶囊用它选的样子；在这里读一次，换页不重读。
+  const { buddy } = useBuddy();
+  return <ScopedConversation key={target.scope} target={target} detailOpen={detailOpen} rail={rail} agentTitle={agentTitle} buddy={buddy} ui={ui} />;
 }
 
-function ScopedConversation({ target, detailOpen, rail, agentTitle, ui }: { target: ConversationTarget; detailOpen: boolean; rail: boolean; agentTitle: string; ui: ConversationUiState }) {
+function ScopedConversation({ target, detailOpen, rail, agentTitle, buddy, ui }: { target: ConversationTarget; detailOpen: boolean; rail: boolean; agentTitle: string; buddy: Buddy | null; ui: ConversationUiState }) {
   const router = useRouter();
   const [viewingMaterial, setViewingMaterial] = useState<{ id: string; editable: boolean; format?: string } | null>(null);
   useEffect(() => {
@@ -135,6 +140,8 @@ function ScopedConversation({ target, detailOpen, rail, agentTitle, ui }: { targ
 
   /** 听写出错（没授权、没听清）：输入条交上来，在对话层里说（D6）。 */
   const [dictationError, setDictationError] = useState<string | null>(null);
+  /** 页头的伙伴和输入条的小麦克风共用的那次听写。 */
+  const [voice] = useState(createVoiceChannel);
   // 新引用 / 起草（引用提问、划词引用、起草文档）在没有右列的页面上：打字面和对话层一起出来。
   const usesDock = !rail || ui.historyOpen;
   useEffect(() => {
@@ -168,9 +175,10 @@ function ScopedConversation({ target, detailOpen, rail, agentTitle, ui }: { targ
   const restoreReferences = useStableCallback((cards: Card[]) => references?.add(cards));
   const wideExit = useStableCallback(() => setSheetWide?.(false));
   const scopeQuotes = useMemo(() => ui.quotes.filter((item) => item.source?.scope === target.scope), [ui.quotes, target.scope]);
+  const attention = useUnseenReply(data, ui.historyOpen);
 
   if (rail && !ui.historyOpen) {
-    return <RailConversation data={data} target={target} agentTitle={agentTitle} ui={ui} references={global ? [] : items} onDiscussGlobal={discussGlobal} />;
+    return <RailConversation data={data} target={target} agentTitle={agentTitle} buddy={buddy} ui={ui} references={global ? [] : items} onDiscussGlobal={discussGlobal} />;
   }
 
   return (
@@ -180,19 +188,22 @@ function ScopedConversation({ target, detailOpen, rail, agentTitle, ui }: { targ
           <button type="button" className={w.historyBackdrop} data-testid="conversation-backdrop" aria-label="关闭对话记录" onClick={closeHistory}
             data-leaving={sheet.leaving || undefined} tabIndex={sheet.leaving ? -1 : undefined} />
           <ConversationHistorySheet data={data} label={target.label} global={global} onClose={closeHistory} composerRef={dockRef} leaving={sheet.leaving}
-            wide={canWide && sheetWide} onWide={canWide ? setSheetWide : undefined}
+            wide={canWide && sheetWide} onWide={canWide ? setSheetWide : undefined} buddy={buddy} voice={voice}
             notice={dictationError} onQuote={(text) => ui.quoteInConversation(text, { scope: target.scope, intent: MESSAGE_REPLY })} />
         </>
       ) : null}
       <ConversationDock
         data={data}
         label={target.label}
+        buddy={buddy}
+        attention={attention}
         global={global}
         detail={detailOpen}
         keyboard={ui.historyOpen}
         onKeyboardChange={keyboardChange}
         historyOpen={ui.historyOpen}
         onDictationError={setDictationError}
+        voice={voice}
         references={items}
         onRemoveReference={removeReference}
         onClearReferences={clearReferences}
@@ -221,6 +232,7 @@ function RailConversation({
   data,
   target,
   agentTitle,
+  buddy,
   ui,
   references,
   onDiscussGlobal,
@@ -228,6 +240,7 @@ function RailConversation({
   data: ConversationData;
   target: ConversationTarget;
   agentTitle: string;
+  buddy: Buddy | null;
   ui: ConversationUiState;
   references: Card[];
   onDiscussGlobal: () => void;
@@ -256,7 +269,6 @@ function RailConversation({
   const group = useMissionGroup(missionGroup, groupVisible);
   const thread = useThreadGroup(otherThread?.objectType ?? "task", taskGroup?.taskId ?? otherThread?.objectId, groupVisible);
   const listening = useListening(target.scope);
-  const [skin] = useCoAgentSkin();
   // 新人第一次进群、群里有 Co-Agent 讲的来龙去脉：群聊看得见时，胶囊出现几秒，那段话同时亮一下。每段只一次。
   const [catchUp, setCatchUp] = useState<{ id: number; leaving: boolean } | null>(null);
   const shownCatchUps = useRef(new Set<number>());
@@ -271,12 +283,12 @@ function RailConversation({
     return () => { window.clearTimeout(leave); window.clearTimeout(gone); };
   }, [thread.catchUp, groupVisible]);
   const capsule = listening || catchUp
-    ? <PresenceCapsule skin={skin} pose={catchUp && (!catchUp.leaving || !listening) ? "speaking" : "listening"} leaving={!listening && !!catchUp?.leaving} />
+    ? <PresenceCapsule skin={buddy?.form ?? "classic"} name={buddy?.name} pose={catchUp && (!catchUp.leaving || !listening) ? "speaking" : "listening"} leaving={!listening && !!catchUp?.leaving} />
     : undefined;
   const members = threadGroup ? (thread.view?.members ?? threadGroup.members) : (group.view?.members ?? missionGroup?.members ?? []);
   const groupLabel = otherThread?.objectType === "issue" ? "议题群聊" : otherThread?.objectType === "meeting" ? "会议群聊" : "事项群组";
   const channels: ConversationChannel[] = [
-    { id: "agent", kind: "agent", label: "天枢", title: agentTitle, unread: 0 },
+    { id: "agent", kind: "agent", label: "天枢", title: buddy?.name ?? agentTitle, unread: 0 },
     ...(hasGroup ? [{ id: "group", kind: "group" as const, label: `${groupLabel} · ${members.length + (missionGroup ? 1 : 0)}`,
       title: otherThread ? `${target.label} · ${members.length} 人` : `${groupLabel} · ${members.length + (missionGroup ? 1 : 0)}`,
       unread: threadGroup ? (thread.view?.unread ?? 0) : (group.view?.unread ?? 0) }] : []),
@@ -389,6 +401,7 @@ function RailConversation({
         composerHeight={composerHeight}
         coagent={capsule}
         coagentBrief={!listening}
+        coagentNamed={isFigureSkin(buddy?.form)}
         deskWidth={deskOpen ? deskColumn : null}
         onDesk={canDesk ? setDeskOpen : undefined}
         headerAction={channel === "group" && threadGroup && !thread.left ? <ThreadMembersMenu objectType={otherThread?.objectType ?? "task"} objectId={taskGroup?.taskId ?? otherThread!.objectId} viewerId={threadGroup.viewerId} members={(thread.view?.members ?? threadGroup.members.map((member) => ({ ...member, title: null })))} onChanged={() => void thread.refresh()} />
@@ -436,6 +449,7 @@ function RailConversation({
         onRestoreQuotes={ui.restoreQuotes}
         draftOwnerId={target.group?.viewerId}
         allowAttachments={!target.group}
+        buddyName={buddy?.name}
       />}
     </>
   );

@@ -1,0 +1,2 @@
+$ vitest run "--maxWorkers=4" "--reporter=json" "--outputFile=../../.scratch/partner-ui-20261115/web-tests-final.json"
+JSON report written to C:/Users/10021/Desktop/clark/Tianshu-MVP/.claude/worktrees/new-home-integration/.scratch/partner-ui-20261115/web-tests-final.json

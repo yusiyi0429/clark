@@ -7,12 +7,13 @@
  */
 
 import { useRef, useState, type DragEvent } from "react";
-import { Button } from "ts-design/primitives";
+import { HeroButton } from "@/components/HeroButton";
 import { ArrowUpRight, Check, ChevronDown, ClipboardPaste, Copy, FileUp, X } from "lucide-react";
 import { browserApi } from "@/lib/api/client";
 import { SegmentedSwitch } from "@/components/SegmentedSwitch";
 import { MEMORY_EXPORT_PROMPT, SOURCE_HOME, SOURCE_LABEL, textFile, uploadFile, type ImportFile, type MemoryImport } from "./memoryModel";
 import s from "./memory.module.css";
+import { useDots } from "@/lib/home/noEllipsis";
 
 type Source = "chatgpt" | "claude";
 const ACCEPT = ".zip,.json,.md,.txt";
@@ -21,6 +22,7 @@ const MAX_PASTE = 64 * 1024;
 const size = (chars: number) => (chars >= 1000 ? `${(chars / 1000).toFixed(1)}k 字` : `${chars} 字`);
 
 export function MemoryImportPanel({ onCreated }: { onCreated: (created: MemoryImport) => void }) {
+  const dots = useDots();
   const [source, setSource] = useState<Source>("chatgpt");
   const [text, setText] = useState("");
   const [files, setFiles] = useState<File[]>([]);
@@ -65,11 +67,11 @@ export function MemoryImportPanel({ onCreated }: { onCreated: (created: MemoryIm
       <SegmentedSwitch label="来源" selected={source} onSelect={(next) => { setSource(next); setFiles([]); }}
         segments={[{ id: "chatgpt", label: "ChatGPT" }, { id: "claude", label: "Claude" }]} />
       <div className={s.promptBar}>
-        <Button variant="ghost" className={s.ghost} onPress={() => void copy()}>
-          {copied ? <Check size={15} aria-hidden /> : <Copy size={15} aria-hidden />}{copied ? "已复制" : "复制提示词"}
-        </Button>
+        <HeroButton variant="tertiary" size="sm" onPress={() => void copy()}>
+          {copied ? <Check size={16} aria-hidden /> : <Copy size={16} aria-hidden />}{copied ? "已复制" : "复制提示词"}
+        </HeroButton>
         <button type="button" className={s.disclose} aria-expanded={showPrompt} aria-label="提示词原文" onClick={() => setShowPrompt(!showPrompt)}>
-          <ChevronDown size={15} aria-hidden />
+          <ChevronDown size={16} aria-hidden />
         </button>
         <a className={s.outLink} href={SOURCE_HOME[source]} target="_blank" rel="noreferrer">{SOURCE_LABEL[source]}<ArrowUpRight size={14} aria-hidden /></a>
       </div>
@@ -83,7 +85,7 @@ export function MemoryImportPanel({ onCreated }: { onCreated: (created: MemoryIm
           {source === "claude" ? (
             <>
               <input ref={picker} type="file" accept={ACCEPT} multiple hidden onChange={(event) => { addFiles(event.target.files); event.target.value = ""; }} />
-              <Button variant="ghost" className={s.iconButton} aria-label="上传导出文件" onPress={() => picker.current?.click()}><FileUp size={17} aria-hidden /></Button>
+              <HeroButton variant="ghost" size="sm" isIconOnly aria-label="上传导出文件" onPress={() => picker.current?.click()}><FileUp size={16} aria-hidden /></HeroButton>
             </>
           ) : null}
         </div>
@@ -100,7 +102,7 @@ export function MemoryImportPanel({ onCreated }: { onCreated: (created: MemoryIm
       ) : null}
       <div className={s.reviewBar}>
         {error ? <span className={s.error} role="alert">{error}</span> : null}
-        <Button variant="ghost" className={s.primary} isDisabled={!ready || busy} onPress={() => void submit()}>{busy ? "导入中…" : "导入"}</Button>
+        <HeroButton variant="primary" size="sm" isDisabled={!ready || busy} onPress={() => void submit()}>{busy ? dots("导入中…") : "导入"}</HeroButton>
       </div>
     </div>
   );

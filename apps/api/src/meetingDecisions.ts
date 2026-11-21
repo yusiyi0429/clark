@@ -1,5 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
 import type { Pool } from "pg";
+import { canReadMeetingSource, type MinuteReader } from "./partnerMeetings.js";
 import type { TMeetingWorldResponse, TPickedWorldAnchor, TWorldAnchorOption } from "@warmap/contracts";
 import type { PeopleDirectory } from "./peopleDirectory.js";
 import { attendeesOf } from "./meetingDecisionView.js";
@@ -15,6 +16,7 @@ import { shanghaiDate } from "./workdays.js";
  * 会后只有会议卡一个入口（FR-5.1、拍板 4、11）：旧格式会议的逐条决定（meeting_decisions）只读显示，不再确认、提醒、代判或往下推。
  */
 export type MeetingDecisionDeps = {
+  minutes?: MinuteReader;
   pool: Pool;
   peopleDirectory: PeopleDirectory;
   /** 挂点选项里的 LTO、本月 PO 从这里读；没有时选项只有 Mission 和单元。 */
@@ -39,7 +41,7 @@ export function createMeetingDecisionService(deps: MeetingDecisionDeps) {
   /** 这场会在本体里：主持人和建会的人能改挂点；他们和 CEO 看会议记录状态；实际参会的人只看挂点和落点；别人 404。 */
   async function worldView(meetingId: string, viewerId: string): Promise<WorldResult> {
     const meeting = await getMeetingRow(q, meetingId);
-    if (!meeting) return NOT_FOUND;
+    if (!meeting || !await canReadMeetingSource(q,deps.minutes,meeting,{personId:viewerId,role:isCeo(viewerId)?"ceo":"member"})) return NOT_FOUND;
     const canEdit = canEditAnchors(meeting, viewerId);
     const showStatus = canEdit || isCeo(viewerId);
     if (!showStatus && !attendeesOf(meeting).personIds.includes(viewerId)) return NOT_FOUND;

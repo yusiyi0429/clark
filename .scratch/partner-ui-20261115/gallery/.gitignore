@@ -1,0 +1,6 @@
+baseline-source/
+baseline-source.tar
+.build-before/
+.build-after/
+scenes-before.json
+scenes-after.json

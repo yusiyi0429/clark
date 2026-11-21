@@ -10,6 +10,8 @@ vi.mock("@/components/HeroButton", () => ({ HeroButton: ({ children, onPress, is
   if (props["aria-label"]) ui.disabled.set(props["aria-label"], isDisabled);
   return <button disabled={isDisabled} {...props}>{children}</button>;
 } }));
+// 头像：传过照片的显示照片（PersonAvatar 自己有读取逻辑），这里只看每一行交给它的是谁。
+vi.mock("@/components/avatar/PersonAvatar", () => ({ PersonAvatar: ({ personId, className, children }: { personId?: string; className?: string; children: ReactNode }) => <span className={className} data-avatar={personId} aria-hidden="true">{children}</span> }));
 vi.mock("./MissionRoundProgress", () => ({ MissionRoundProgress: (props: { round: TMissionRoundSummary }) => { ui.progress.push(props); return <button aria-label="查看任务准备进度">本人确认进度</button>; } }));
 
 import { MissionCardNoticeGroup } from "./MissionCardNoticeGroup";
@@ -28,6 +30,12 @@ describe("本月 Mission Card 通知分组", () => {
     expect(html).toContain("01-3 战役"); expect(html).toContain("待处理 2");
     expect(html).toContain('data-waiting="true"'); expect(html).toContain("2 条意见待你处理");
     expect(html.match(/>占位</g)).toHaveLength(1); expect(html.match(/<time /g)).toHaveLength(1);
+  });
+
+  it("每人一行的头像：交给 PersonAvatar 按这个人画（传过照片显示照片，没传过是名字首字）", () => {
+    const html = renderToStaticMarkup(<MissionCardNoticeGroup round={summary()} entry="ceo" onNavigate={vi.fn()} onRefresh={vi.fn()} />);
+    expect(html).toMatch(/data-avatar="bai"[^>]*>白</);
+    expect(html).toMatch(/data-avatar="sun"[^>]*>孙</);
   });
 
   it("成员只有自己的行，没有拍板人的待办", () => {

@@ -141,6 +141,9 @@ describe("MCP OAuth", () => {
       const tools = (await mcp(f, connection.tokens.access_token, rpc("tools/list"))).json().result.tools;
       expect(tools.map((tool: { name: string }) => tool.name)).toContain("list_my_items");
       expect(tools.map((tool: { name: string }) => tool.name)).not.toContain("append_progress");
+      // 约定与对表：只读的两个照列，交版本是写工具，只读连接里没有。
+      expect(tools.map((tool: { name: string }) => tool.name)).toEqual(expect.arrayContaining(["get_task_agreement", "check_task"]));
+      expect(tools.map((tool: { name: string }) => tool.name)).not.toContain("add_deliverable_version");
       const denied = await mcp(f, connection.tokens.access_token, rpc("append_progress", { itemId: randomUUID(), body: "不应写入" }));
       expect(denied.statusCode).toBe(403); expect(denied.headers["www-authenticate"]).toContain("insufficient_scope");
       const repairDenied = await mcp(f, connection.tokens.access_token, rpc("report_task_repair_receipt", {

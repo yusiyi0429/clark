@@ -7,6 +7,7 @@ import type { CardContent } from "./meetingCardModel";
 import { CardItemMenu } from "./CardItemMenu";
 import { InlineText } from "./InlineText";
 import c from "./meeting-card.module.css";
+import { useNoEllipsis } from "@/lib/home/noEllipsis";
 
 type Change = CardContent["objectChanges"][number];
 type ObjectChangeDiffProps = {
@@ -34,6 +35,7 @@ const brief = (text: string) => (text.length > 60 ? `${text.slice(0, 60)}…` : 
  * 目标未定是红色标签，能编辑的人从挂点对象的文字组件里选目标；目标版本变过是黄色「目标已变」；右侧「⋯」删除。
  */
 export function ObjectChangeDiff({ change, state, wasAfter, editable, locked, basis, options, onAfter, onLeave, onTarget, onDelete }: ObjectChangeDiffProps) {
+  const whole = useNoEllipsis();
   const live = editable && state !== "deleted";
   const stale = "stale" in change && change.stale;
   const undecided = change.targetRef === null;
@@ -46,7 +48,7 @@ export function ObjectChangeDiff({ change, state, wasAfter, editable, locked, ba
         {stale && state !== "deleted" ? <span className={c.flag} data-tone="warn">目标已变</span> : null}
         {undecided && live && onTarget ? (
           <Select aria-label="选目标" placeholder="选目标" size="compact" className={c.targetPicker} value="" disabled={locked || !options.length}
-            options={options.map((option) => ({ value: option.targetRef, label: option.title, description: brief(option.text) }))}
+            options={options.map((option) => ({ value: option.targetRef, label: option.title, description: whole ? option.text : brief(option.text) }))}
             onChange={(value) => { const option = options.find((item) => item.targetRef === value); if (option) onTarget(option); }} />
         ) : null}
         {live && onDelete ? (

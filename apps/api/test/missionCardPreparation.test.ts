@@ -231,7 +231,8 @@ describe("本人准备、组合 Review 与职责边界", () => {
       await t.app.close();
       expect((await t.sql("SELECT agent_status FROM mission_round_reviews WHERE id=$1",[original.id]))[0].agent_status).toBe("queued");
       t.app=await t.restart();
-      await vi.waitFor(async()=>expect((await f.summary()).payload.coAgentReview.status).toBe("completed"));
+      // 重启后启动（编译路由和 schema）要 1 秒多，比 waitFor 默认的 1 秒长。
+      await vi.waitFor(async()=>expect((await f.summary()).payload.coAgentReview.status).toBe("completed"),{timeout:10_000});
       expect(generate).toHaveBeenCalledTimes(2);
       expect(generate.mock.calls[1][0]).toEqual(original.agent_input);
       release!({candidate:{summary:"旧进程晚到不得覆盖",findings:[]}});

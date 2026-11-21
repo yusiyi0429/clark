@@ -6,8 +6,8 @@
 
 /* 对话里的提问卡。 */
 .list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; counter-reset: ask; }
-.list li { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 8px; color: #25282e; font-size: 15px; line-height: 1.6; counter-increment: ask; }
-.list li::before { content: counter(ask); color: #9599a1; font-size: 13px; font-variant-numeric: tabular-nums; line-height: 24px; }
+.list li { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 8px; color: var(--ink); font-size: 15px; line-height: 1.6; counter-increment: ask; }
+.list li::before { content: counter(ask); color: var(--ink-faint); font-size: 13px; font-variant-numeric: tabular-nums; line-height: 24px; }
 .start.start { min-height: 40px; padding: 8px 16px 8px 18px; gap: 6px; border-radius: var(--onboarding-pill-radius); background: var(--onboarding-blue); color: var(--solid-fg); font-size: 15px; font-weight: 600; }
 .start.start[data-disabled] { opacity: .38; }
 
@@ -17,35 +17,35 @@
 .progress { display: flex; flex: 1; gap: 4px; min-width: 0; margin: 0; padding: 0; list-style: none; }
 .progress li { flex: 1; min-width: 0; }
 .segment { display: block; width: 100%; height: 20px; padding: 8px 0; border: 0; background: none; cursor: pointer; }
-.segment::before { content: ""; display: block; height: 4px; border-radius: 2px; background: #e6e9ee; transition: background .16s ease; }
-.segment[data-answered]::before { background: color-mix(in oklab, var(--onboarding-blue) 45%, #fff); }
+.segment::before { content: ""; display: block; height: 4px; border-radius: 2px; background: var(--hairline); transition: background .16s ease; }
+.segment[data-answered]::before { background: color-mix(in oklab, var(--onboarding-blue) 45%, var(--surface)); }
 .segment[aria-current='step']::before { background: var(--onboarding-blue); }
 .segment:focus-visible { outline: 2px solid var(--onboarding-blue); outline-offset: 2px; border-radius: 4px; }
-.count { flex: none; color: #7a7f89; font-size: 13px; font-variant-numeric: tabular-nums; }
+.count { flex: none; color: var(--ink-faint); font-size: 13px; font-variant-numeric: tabular-nums; }
 .spacer { flex: 1; }
 
 .page { display: grid; gap: 14px; min-width: 0; animation: pageIn 180ms cubic-bezier(.22, 1, .36, 1) both; }
 .page[data-back] { animation-name: pageBack; }
-.question { margin: 0; color: #1d1d1f; font-size: 19px; font-weight: 600; line-height: 1.5; overflow-wrap: anywhere; }
+.question { margin: 0; color: var(--ink); font-size: 19px; font-weight: 600; line-height: 1.5; overflow-wrap: anywhere; }
 .options { display: grid; gap: 8px; }
-.option { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; align-items: center; gap: 12px; width: 100%; min-height: 52px; box-sizing: border-box; padding: 10px 14px 10px 12px; border: 1px solid #e1e5eb; border-radius: 12px; background: #fff; color: #25282e; font: inherit; text-align: left; cursor: pointer; transition: border-color .14s ease, background .14s ease, box-shadow .14s ease; }
-@media (hover: hover) { .option:hover { border-color: #b9c9e6; background: #f7f9fd; } }
+.option { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; align-items: center; gap: 12px; width: 100%; min-height: 52px; box-sizing: border-box; padding: 10px 14px 10px 12px; border: 1px solid var(--hairline); border-radius: 12px; background: var(--surface); color: var(--ink); font: inherit; text-align: left; cursor: pointer; transition: border-color .14s ease, background .14s ease, box-shadow .14s ease; }
+@media (hover: hover) { .option:hover { border-color: var(--hairline-strong); background: var(--neutral-wash); } }
 .option:focus-visible { outline: none; border-color: var(--onboarding-blue); box-shadow: 0 0 0 3px color-mix(in oklab, var(--onboarding-blue) 22%, transparent); }
-.option[aria-checked='true'] { border-color: var(--onboarding-blue); background: color-mix(in oklab, var(--onboarding-blue) 7%, #fff); }
-.key { display: inline-grid; place-items: center; width: 24px; height: 24px; border: 1px solid #dfe3e8; border-radius: 7px; background: #f6f7f9; color: #6b7280; font: 600 12px/1 var(--font-mono, ui-monospace, monospace); }
+.option[aria-checked='true'] { border-color: var(--onboarding-blue); background: color-mix(in oklab, var(--onboarding-blue) 7%, var(--surface)); }
+.key { display: inline-grid; place-items: center; width: 24px; height: 24px; border: 1px solid var(--hairline); border-radius: 7px; background: var(--neutral-wash); color: var(--ink-muted); font: 600 12px/1 var(--font-mono, ui-monospace, monospace); }
 .option[aria-checked='true'] .key { border-color: var(--onboarding-blue); background: var(--onboarding-blue); color: #fff; }
 .optionText { display: grid; gap: 2px; min-width: 0; }
 .optionText > span { font-size: 15px; font-weight: 500; line-height: 1.5; overflow-wrap: anywhere; }
-.optionText small { color: #7a7f89; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.optionText small { color: var(--ink-faint); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
 .trail { display: inline-flex; align-items: center; gap: 8px; color: var(--onboarding-blue); }
-.recommended { padding: 0 8px; border-radius: var(--onboarding-pill-radius); background: color-mix(in oklab, var(--confirmed) 10%, #fff); color: var(--confirmed); font-size: 12px; font-weight: 600; line-height: 22px; white-space: nowrap; }
+.recommended { padding: 0 8px; border-radius: var(--onboarding-pill-radius); background: color-mix(in oklab, var(--confirmed) 10%, var(--surface)); color: var(--confirmed); font-size: 12px; font-weight: 600; line-height: 22px; white-space: nowrap; }
 .other { display: grid; gap: 8px; }
-.otherInput { width: 100%; min-height: 76px; max-height: 220px; box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--onboarding-blue); border-radius: 12px; background: #fff; color: #25282e; font: inherit; font-size: 15px; line-height: 1.65; resize: none; field-sizing: content; box-shadow: 0 0 0 3px color-mix(in oklab, var(--onboarding-blue) 16%, transparent); }
+.otherInput { width: 100%; min-height: 76px; max-height: 220px; box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--onboarding-blue); border-radius: 12px; background: var(--surface); color: var(--ink); font: inherit; font-size: 15px; line-height: 1.65; resize: none; field-sizing: content; box-shadow: 0 0 0 3px color-mix(in oklab, var(--onboarding-blue) 16%, transparent); }
 .otherInput:focus { outline: none; }
 
 .foot { display: flex; align-items: center; gap: 8px; }
 .foot .spacer { min-width: 0; }
-.back.back, .skip.skip { min-height: 40px; padding: 8px 12px; gap: 4px; border-radius: var(--onboarding-control-radius); color: #6b7280; font-size: 14px; font-weight: 500; }
+.back.back, .skip.skip { min-height: 40px; padding: 8px 12px; gap: 4px; border-radius: var(--onboarding-control-radius); color: var(--ink-muted); font-size: 14px; font-weight: 500; }
 .next.next { min-height: 40px; padding: 8px 18px; gap: 6px; border-radius: var(--onboarding-pill-radius); background: var(--onboarding-blue); color: var(--solid-fg); font-size: 15px; font-weight: 600; }
 
 /* 作答那一句：紧凑的问答记录（在本人的气泡里，颜色随气泡）。 */
@@ -67,4 +67,7 @@
 @media (hover: none), (pointer: coarse) {
   .back.back, .skip.skip, .next.next, .start.start { min-height: 44px; }
 }
+/* 新首页里（外壳带 data-scheme="auto"）：「推荐」是中性小字，不用成功色；选项字重 400（5.2 只用 400/600）。 */
+:global([data-scheme="auto"]) .recommended { background: var(--neutral-wash); color: var(--ink-muted); font-weight: 400; }
+:global([data-scheme="auto"]) .optionText > span, :global([data-scheme="auto"]) .record dd { font-weight: 400; }
 @media (prefers-reduced-motion: reduce) { .page { animation: none; } .segment::before, .option { transition: none; } }

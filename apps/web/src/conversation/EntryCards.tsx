@@ -23,11 +23,14 @@ import { useWorkspace } from "@/components/shell/WorkspaceContext";
 import { DraftRequest } from "@/components/requests/RequestScreen";
 import { CollectionDraftCard } from "@/components/collections/CollectionDraft";
 import { MeetingDraftCard } from "@/components/meeting/MeetingDraftCard";
+import { BuddyMessageCard } from "@/components/home/BuddyMessageCard";
 import { prepareQuestion, readRequest, requestError, runRequestAction } from "@/components/requests/requestApi";
 import { browserApi } from "@/lib/api/client";
 import { relativeDayTime } from "@/lib/companyTime";
 import r from "@/components/requests/requests.module.css";
+import { PersonAvatar } from "@/components/avatar/PersonAvatar";
 import s from "@/styles/entry-cards.module.css";
+import { FadeText } from "@/lib/home/overflowFade";
 
 type Answer = { text: string; source: "body" | "question"; questionId: string | null };
 /** 头像上的字：三个字的名字取名（「斯一」），两个字的取全名，和飞书一样。 */
@@ -66,6 +69,10 @@ function EntryCard({ card, createdAt }: { card: TConversationCard; createdAt?: s
     case "questions": return <AskCard card={card} />;
     case "collection_draft": return <section className={`${s.card} ${s.bare}`}><CollectionDraftCard collectionId={card.collectionId} /></section>;
     case "meeting_draft": return <MeetingDraftCard card={card} />;
+    case "buddy_message": return <BuddyMessageCard draftId={card.draftId} />;
+    // 伙伴的选项框由新首页的对话时间线画（WorkTimeline），这里不画。
+    case "buddy_question": return null;
+    case "buddy_dispatch": return null;
   }
 }
 
@@ -185,7 +192,7 @@ function PickCard({ card, createdAt }: { card: Extract<TConversationCard, { kind
         {(picked ? [picked] : card.candidates).map((candidate) => (
           <li key={candidate.requestId}>
             <button type="button" className={s.pick} aria-pressed={candidate.requestId === chosen} disabled={chosen !== null} onClick={() => void choose(candidate)}>
-              <span className={r.avatar} aria-hidden="true">{initial(candidate.initiatorName)}</span>
+              <PersonAvatar personId={candidate.initiatorId} className={r.avatar}>{initial(candidate.initiatorName)}</PersonAvatar>
               <span className={s.pickText}><strong>{candidate.title}</strong><small>{candidate.initiatorName} · {relativeDayTime(candidate.sentAt)}</small></span>
               {chosen ? null : <ChevronRight size={16} aria-hidden="true" className={s.chevron} />}
             </button>
@@ -278,7 +285,7 @@ function WeeklyReviewCard({ id, href }: { id: string; href: string }) {
       </header>
       {drafting ? <StepList className={s.steps} steps={review.generationSteps.map((step) => ({ id: step.id, label: step.label,
         status: step.status === "running" ? "active" : step.status === "failed" ? "stopped" : step.status, ...(step.result ? { result: step.result } : {}) }))} /> : null}
-      {!drafting && lines.length ? <div className={s.summary}>{lines.map((line, index) => <p key={index}>{line}</p>)}</div> : null}
+      {!drafting && lines.length ? <div className={s.summary}>{lines.map((line, index) => <FadeText as="p" key={index}>{line}</FadeText>)}</div> : null}
       {review.status === "draft_failed" && review.draftError ? <p className={r.error}>{review.draftError.message}</p> : null}
       <footer className={s.foot}>
         {kept && !drafting ? <span className={r.tag} data-tone="done">{kept}</span> : <span />}
@@ -319,7 +326,7 @@ function ReviewCard({ id, href }: { id: string; href: string }) {
       </header>
       {drafting ? <StepList className={s.steps} steps={review.generationSteps.map((step) => ({ id: step.id, label: step.label,
         status: step.status === "running" ? "active" : step.status === "failed" ? "stopped" : step.status, ...(step.result ? { result: step.result } : {}) }))} /> : null}
-      {!drafting && lines.length ? <div className={s.summary}>{lines.map((line, index) => <p key={index}>{line}</p>)}</div> : null}
+      {!drafting && lines.length ? <div className={s.summary}>{lines.map((line, index) => <FadeText as="p" key={index}>{line}</FadeText>)}</div> : null}
       {review.status === "draft_failed" && review.draftError ? <p className={r.error}>{review.draftError.message}</p> : null}
       <footer className={s.foot}>
         {kept && !drafting ? <span className={r.tag} data-tone="done">{kept}</span> : <span />}

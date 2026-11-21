@@ -3,7 +3,7 @@
 /**
  * 个人菜单：通知栏左下角点自己的名字（收起成窄条时是头像）弹出。一级只放每天会点的和身份相关的（样稿 voice-keys-v3）——
  * 雷达、我的记忆（成员 /me/memory、CEO /memory）、定时任务（成员 /me/schedules、CEO /schedules）、「设置 ›」、CEO 的组织配置、双身份者切换工作台，最后是退出登录。
- * 配一次就不太动的收进「设置 ›」，在菜单右边弹出二级：语音输入、声纹（已配置时）、连接飞书（接了飞书时）、连接微信（接了微信时）、连接到外部工具、本机采集器、Co-Agent 形象、修改口令、
+ * 配一次就不太动的收进「设置 ›」，在菜单右边弹出二级：个人资料、换头像、语音输入、声纹（已配置时）、连接飞书（接了飞书时）、连接微信（接了微信时）、连接到外部工具、卸载本机采集器（装过的人才有）、伙伴形象、通知栏背景、修改口令、
  * 重看首次引导、管理员视图（管理员）。
  * 声纹、雷达、口令、语音输入各开一个小弹窗，不离开当前页面。
  */
@@ -11,7 +11,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button, Modal, Popover } from "ts-design/primitives";
 import { TianshuPortalTheme } from "ts-design";
-import { Activity, ArrowLeftRight, ArrowRight, AudioLines, Brain, CalendarClock, ChevronRight, KeyRound, Link2, LogOut, Laptop, MessageCircle, Mic, PlugZap, Radar, RotateCcw, Settings, Settings2, Smile, X } from "lucide-react";
+import { Activity, ArrowRight, AudioLines, Brain, CalendarClock, Check, ChevronRight, CircleUserRound, Image as ImageIcon, KeyRound, Link2, LogOut, Laptop, MessageCircle, Mic, PlugZap, Radar, RotateCcw, Settings, Settings2, Smile, X } from "lucide-react";
 import { browserApi } from "@/lib/api/client";
 import { feishuConnectHref, readFeishuConnection } from "@/lib/feishuLogin";
 import { logout } from "@/lib/logout";
@@ -19,15 +19,18 @@ import { VoiceprintCard } from "@/components/member/VoiceprintCard";
 import { RadarSettingsEditor } from "@/components/radar/RadarSettingsEditor";
 import m from "@/styles/account-menu.module.css";
 import { ConnectionDialog } from "@/components/ConnectionDialog";
-import { CoAgentSkinPicker } from "@/components/coagent/SkinPicker";
+import { BuddySettings } from "@/components/buddy/BuddySettings";
+import { RailBackgroundSettings } from "@/components/railBackground/RailBackgroundSettings";
+import { PersonAvatar } from "@/components/avatar/PersonAvatar";
+import { AvatarEditor } from "@/components/avatar/AvatarEditor";
 import { VoiceKeysDialog } from "@/conversation/VoiceKeysDialog";
-import { CollectorInstallPanel, useCollectorStatus } from "@/components/onboarding/CollectorSetup";
-import { CollectorReview } from "@/components/onboarding/ReviewLists";
+import { CollectorUninstallPanel, useCollectorInstalled } from "@/components/CollectorUninstall";
 import { readTaskQualityEnabled } from "@/components/task-quality/taskQualityStatus";
 import { PersonalProfileForm } from "@/components/PersonalProfileForm";
 import { WechatConnectPanel, readWechatConnection, type WechatConnection } from "@/components/WechatConnect";
 
 export interface Account {
+  personId?: string | null;
   displayName: string;
   loginId?: string;
   role: "ceo" | "member";
@@ -48,15 +51,21 @@ export function accountSubtitle(account: Account, demo: boolean): string {
   return [account.loginId, account.role === "ceo" ? "CEO" : "成员"].filter(Boolean).join(" · ");
 }
 
-type Dialog = "voiceprint" | "radar" | "connection" | "collector" | "coagent" | "passcode" | "voice" | "profile" | "wechat" | null;
+type Dialog = "voiceprint" | "avatar" | "radar" | "connection" | "collector" | "coagent" | "railBackground" | "passcode" | "voice" | "profile" | "wechat" | null;
+
+/** CEO 的两种模式（17.2 第 45 条）：管理模式是 CEO 视角（现在的 CEO 界面），工作模式是成员视角（新首页）。 */
+const MODES = [{ view: "ceo", label: "管理模式" }, { view: "member", label: "工作模式" }] as const;
 
 export function AccountMenu({ account, compact = false, onNavigate }: { account: Account; compact?: boolean; onNavigate?: (href: string) => void }) {
   const [open, setOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [dialog, setDialog] = useState<Dialog>(null);
+  const collectorInstalled = useCollectorInstalled();
   const [leaving, setLeaving] = useState(false);
   const [leaveArmed, setLeaveArmed] = useState(false);
   const [canSwitchView, setCanSwitchView] = useState(false);
+  // 管理模式里「工作模式」后面的数：本人有几件「等你」的事（17.2 第 45 条），开菜单时取一次。
+  const [waiting, setWaiting] = useState(0);
   const [admin, setAdmin] = useState(false);
   const [voiceConfigured, setVoiceConfigured] = useState(false);
   const [feishu, setFeishu] = useState<{ enabled: boolean; connected: boolean } | null>(null);
@@ -92,9 +101,9 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
     void readFeishuConnection().then(setFeishu);
     void readWechatConnection().then(setWechat);
     void readTaskQualityEnabled().then(setTaskQuality);
+    if (account.role === "ceo") void browserApi.GET("/api/me/work-home/waiting-count").then(({ response, data }) => setWaiting(response.ok && data ? data.count : 0), () => undefined);
   };
-  const switchView = async () => {
-    const view = account.role === "ceo" ? "member" : "ceo";
+  const switchView = async (view: "ceo" | "member") => {
     setBusy(true);
     setError(null);
     try {
@@ -102,7 +111,7 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
       if (!response.ok) throw new Error("switch failed");
       window.location.assign(view === "ceo" ? "/" : "/me");
     } catch {
-      setError("切换工作台失败，请重试。");
+      setError("切换失败，请重试。");
       setBusy(false);
     }
   };
@@ -128,18 +137,18 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
     <>
       <Popover isOpen={open} onOpenChange={openMenu}>
         <Button ref={trigger} variant="ghost" className={compact ? m.avatarButton : m.chip} aria-label={`${account.displayName}，打开个人菜单`} data-account-menu>
-          <span className={m.avatar} aria-hidden="true">
+          <PersonAvatar personId={account.personId} className={m.avatar}>
             {avatarInitial(account.displayName)}
-          </span>
+          </PersonAvatar>
           {compact ? null : <span className={m.name}>{account.displayName}</span>}
         </Button>
         <Popover.Content placement={compact ? "right bottom" : "top start"} offset={10} className={m.popover}>
           <TianshuPortalTheme>
             <Popover.Dialog className={m.menu} aria-label="个人菜单">
               <div className={m.who}>
-                <span className={m.avatarLarge} aria-hidden="true">
+                <PersonAvatar personId={account.personId} className={m.avatarLarge}>
                   {avatarInitial(account.displayName)}
-                </span>
+                </PersonAvatar>
                 <span>
                   <strong>{account.displayName}</strong>
                   {accountSubtitle(account, false) ? <small>{accountSubtitle(account, false)}</small> : null}
@@ -177,6 +186,10 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
                         <Settings2 size={16} aria-hidden="true" />
                         个人资料
                       </Button>
+                      <Button variant="ghost" className={m.item} onPress={() => pick("avatar")}>
+                        <CircleUserRound size={16} aria-hidden="true" />
+                        换头像
+                      </Button>
                       <Button variant="ghost" className={m.item} onPress={() => pick("voice")}>
                         <Mic size={16} aria-hidden="true" />
                         语音输入
@@ -193,12 +206,16 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
                       <Button variant="ghost" className={m.item} onPress={() => pick("connection")}>
                         <PlugZap size={16} aria-hidden="true" />连接到外部工具
                       </Button>
-                      <Button variant="ghost" className={m.item} onPress={() => pick("collector")}>
-                        <Laptop size={16} aria-hidden="true" />本机采集器
-                      </Button>
+                      {collectorInstalled ? <Button variant="ghost" className={m.item} onPress={() => pick("collector")}>
+                        <Laptop size={16} aria-hidden="true" />卸载本机采集器
+                      </Button> : null}
                       <Button variant="ghost" className={m.item} onPress={() => pick("coagent")}>
                         <Smile size={16} aria-hidden="true" />
-                        Co-Agent 形象
+                        伙伴形象
+                      </Button>
+                      <Button variant="ghost" className={m.item} onPress={() => pick("railBackground")}>
+                        <ImageIcon size={16} aria-hidden="true" />
+                        通知栏背景
                       </Button>
                       <Button variant="ghost" className={m.item} onPress={() => pick("passcode")}>
                         <KeyRound size={16} aria-hidden="true" />
@@ -231,10 +248,17 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
                   组织配置
                 </Button>
               ) : null}
-              {canSwitchView ? <Button variant="ghost" className={m.item} isDisabled={busy} onPress={() => void switchView()}>
-                <ArrowLeftRight size={16} aria-hidden="true" />
-                {account.role === "ceo" ? "切换到负责人工作台" : "切换到 CEO 工作台"}
-              </Button> : null}
+              {canSwitchView ? <>
+                <hr className={m.rule} />
+                {MODES.map(({ view, label }) => (
+                  <Button key={view} variant="ghost" className={m.item} isDisabled={busy} aria-current={account.role === view ? "true" : undefined}
+                    onPress={() => { if (account.role !== view) void switchView(view); }}>
+                    {account.role === view ? <Check size={16} aria-hidden="true" /> : <span className={m.blank} aria-hidden="true" />}
+                    {label}
+                    {view === "member" && account.role === "ceo" && waiting > 0 ? <span className={m.count} aria-label={`${waiting} 件等你`}>{waiting}</span> : null}
+                  </Button>
+                ))}
+              </> : null}
               {error ? <p className={m.error} role="alert">{error}</p> : null}
               <hr className={m.rule} />
               <Button
@@ -259,6 +283,7 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
           <VoiceprintCard />
         </MenuDialog>
       ) : null}
+      {dialog === "avatar" ? <MenuDialog title="换头像" onClose={() => setDialog(null)}><AvatarEditor personId={account.personId ?? null} initial={avatarInitial(account.displayName)} onDone={() => setDialog(null)} /></MenuDialog> : null}
       {dialog === "profile" ? <MenuDialog title="个人资料" onClose={() => setDialog(null)}><PersonalProfileForm /></MenuDialog> : null}
       {dialog === "radar" ? (
         <MenuDialog title={radarTitle} wide onClose={() => setDialog(null)}>
@@ -285,24 +310,14 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
           <PasscodeForm loginId={account.loginId} onDone={() => setDialog(null)} />
         </MenuDialog>
       ) : null}
-      {dialog === "coagent" ? <MenuDialog title="Co-Agent 形象" wide onClose={() => setDialog(null)}><CoAgentSkinPicker /></MenuDialog> : null}
+      {dialog === "coagent" ? <MenuDialog title="伙伴形象" wide onClose={() => setDialog(null)}><BuddySettings /></MenuDialog> : null}
+      {dialog === "railBackground" ? <MenuDialog title="通知栏背景" wide onClose={() => setDialog(null)}><RailBackgroundSettings personId={account.personId} /></MenuDialog> : null}
       {dialog === "voice" ? <VoiceKeysDialog onClose={() => setDialog(null)} /> : null}
       {dialog === "connection" ? <MenuDialog title="连接到外部工具" wide onClose={() => setDialog(null)}><ConnectionDialog role={account.role} /></MenuDialog> : null}
       {dialog === "wechat" ? <MenuDialog title="连接微信" onClose={() => setDialog(null)}><WechatConnectPanel onChange={setWechat} /></MenuDialog> : null}
-      {dialog === "collector" ? <MenuDialog title="本机采集器" wide onClose={() => setDialog(null)}><CollectorDialog /></MenuDialog> : null}
+      {dialog === "collector" ? <MenuDialog title="卸载本机采集器" wide onClose={() => setDialog(null)}><CollectorUninstallPanel /></MenuDialog> : null}
     </>
   );
-}
-
-/** 个人菜单里的本机采集器：和首次引导同一块安装面板，开着时读状态，令牌只在这次打开里留着；盘点到了，下面确认清单。 */
-function CollectorDialog() {
-  const [token, setToken] = useState<string | null>(null);
-  const status = useCollectorStatus(true);
-  const memoryFiles = status?.devices.length && status.consent ? status.inventory.memoryFiles : null;
-  return <>
-    <CollectorInstallPanel token={token} onToken={setToken} status={status} />
-    <CollectorReview scannedAt={status?.scannedAt ?? null} memoryFiles={memoryFiles} />
-  </>;
 }
 
 /** 个人菜单里的飞书：没连好时「连接飞书」，整页去飞书授权、授权完回到这一页；连好了只显示状态。 */
@@ -341,8 +356,8 @@ export function MenuDialog({ title, wide = false, onClose, children }: { title: 
 
 const FOUR_DIGITS = /^\d{4}$/;
 
-/** 版本信息藏在「修改口令」底部（用户 2026-09-30 指定）：Web 与 API 各自的构建版本，一样时只写一个。 */
-function BuildVersion() {
+/** Web 与 API 各自的构建版本，一样时只写一个（「修改口令」底部、新首页个人菜单最后一行）。 */
+export function useBuildVersion(): string {
   const [text, setText] = useState("");
   useEffect(() => {
     let active = true;
@@ -352,6 +367,12 @@ function BuildVersion() {
     });
     return () => { active = false; };
   }, []);
+  return text;
+}
+
+/** 版本信息藏在「修改口令」底部（用户 2026-09-30 指定）。 */
+function BuildVersion() {
+  const text = useBuildVersion();
   return text ? <p className={m.version}>{text}</p> : null;
 }
 

@@ -1,0 +1,927 @@
+diff --git a/apps/web/src/components/home/PartnerMeetings.tsx b/apps/web/src/components/home/PartnerMeetings.tsx
+index a95d8f46..4e5a6f49 100644
+--- a/apps/web/src/components/home/PartnerMeetings.tsx
++++ b/apps/web/src/components/home/PartnerMeetings.tsx
+@@ -1,22 +1,23 @@
+ "use client";
+ 
+-import { useEffect, useRef, useState, type MouseEvent } from "react";
++import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
+ import { useWorkspace } from "@/components/shell/WorkspaceContext";
+ import { HeroButton } from "@/components/HeroButton";
+ import { MeetingBookingSheet } from "@/components/meeting/MeetingBookingSheet";
+ import { attachFeishuMinute } from "@/components/meeting/meetingDecisionApi";
+ import { Select } from "@/components/ui/Select";
+ import { browserApi } from "@/lib/api/client";
+ import type { components } from "@/lib/api/schema";
+ import { calendarDate, COMPANY_TIMEZONE } from "@/lib/companyTime";
+ import { meetingHref } from "@/lib/home/meeting";
+ import { usePartnerMeetings, type PartnerMeeting } from "@/lib/home/partnerMeetingFeed";
+ import type { WaitingItem } from "@/lib/home/types";
++import type { TimedBlock } from "@/components/work/WorkTimeline";
+ import { MeetingControl, type HomeMeeting } from "./MeetingControl";
+ import h from "@/styles/home.module.css";
+ import s from "./partner-meetings.module.css";
+ 
+ export { PartnerMeetingsProvider } from "@/lib/home/partnerMeetingFeed";
+ 
+ const WEEK = 7 * 86_400_000;
+ const tokenOf = (item: PartnerMeeting) => item.id.slice("feishu-minute:".length);
+@@ -93,87 +94,127 @@ export function PartnerHomeMeetings({ meeting }: { meeting: HomeMeeting }) {
+     {later.length ? <details className={s.later}>
+       <summary>后续预约 <span>{later.length}</span></summary>
+       <MeetingRows items={later} />
+     </details> : null}
+     {booking && viewer.personId ? <MeetingBookingSheet open viewer={{ ...viewer, personId: viewer.personId }} onClose={() => setBooking(false)} /> : null}
+   </section>;
+ }
+ 
+-/** 同一个 item 保留自己的行和原会议入口，从预约、入会更新到正文。 */
+-export function PartnerMeetingInbox() {
++/** 时间是会议本身的时间；预约独立展示，不伪装成伙伴已经收到的事件。 */
++export function usePartnerMeetingFeed(): { blocks: TimedBlock[]; notice: ReactNode; scheduled: ReactNode } {
+   const { items, error, reload } = usePartnerMeetings();
+-  const section = useRef<HTMLElement>(null);
+-  const lastLocated = useRef("");
+-  useEffect(() => {
+-    const locate = () => {
+-      const hash = location.hash;
+-      if (!hash.startsWith("#minute-")) { lastLocated.current = ""; return; }
+-      if (lastLocated.current === hash) return;
+-      const target = document.getElementById(hash.slice(1));
+-      if (!target || !section.current?.contains(target)) return;
+-      lastLocated.current = hash;
+-      target.focus({ preventScroll: true });
+-      target.scrollIntoView({ block: "nearest" });
+-    };
+-    locate();
+-    window.addEventListener("hashchange", locate);
+-    return () => window.removeEventListener("hashchange", locate);
+-  }, [items]);
+-  if (!items.length && !error) return null;
+-  return <section ref={section} aria-label="会议收件" className={s.inbox}>
++  const appointments = items.filter((item) => item.stage === "scheduled").sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
++  return {
++    blocks: items.filter((item) => item.stage !== "scheduled").map((item) => ({
++      key: "partner-meeting:" + item.id,
++      at: item.at,
++      node: <MeetingRows items={[item]} inbox timeline />,
++    })),
++    notice: error ? <ReadError message={error} retry={reload} /> : null,
++    scheduled: appointments.length ? <details className={s.later}>
++      <summary>会议安排 <span>{appointments.length}</span></summary>
++      <MeetingRows items={appointments} inbox />
++    </details> : null,
++  };
++}
++
++/** 兼容原收件入口；主会话可直接合并 blocks，复用同一个会议 provider。 */
++export function PartnerMeetingInbox() {
++  const { blocks, notice, scheduled } = usePartnerMeetingFeed();
++  if (!blocks.length && !notice && !scheduled) return null;
++  return <section aria-label="会议收件" className={s.inbox}>
+     <h2 className={h.sectionTitle}>会议收件</h2>
+-    {error ? <ReadError message={error} retry={reload} /> : null}
+-    <MeetingRows items={items} inbox />
++    {notice}
++    {scheduled}
++    {blocks.map((block) => <div key={block.key} data-block={block.key}>{block.node}</div>)}
+   </section>;
+ }
+ 
+ function ReadError({ message, retry }: { message: string; retry(): void }) {
+   return <p role="alert" className={s.error}>{message}<button type="button" className={s.link} onClick={retry}>重试</button></p>;
+ }
+ 
+-function MeetingRows({ items, inbox = false }: { items: PartnerMeeting[]; inbox?: boolean }) {
++function MeetingRows({ items, inbox = false, timeline = false }: { items: PartnerMeeting[]; inbox?: boolean; timeline?: boolean }) {
+   const { navigate } = useWorkspace();
+   return <ul className={s.rows}>
+-    {items.map((item) => <MeetingRow key={item.id} item={item} navigate={navigate} inbox={inbox} />)}
++    {items.map((item) => <MeetingRow key={item.id} item={item} navigate={navigate} inbox={inbox} timeline={timeline} />)}
+   </ul>;
+ }
+ 
+-function MeetingRow({ item, navigate, inbox }: { item: PartnerMeeting; navigate: Navigate; inbox: boolean }) {
++function MeetingRow({ item, navigate, inbox, timeline }: { item: PartnerMeeting; navigate: Navigate; inbox: boolean; timeline: boolean }) {
+   const now = Date.now();
+   const unmatched = item.stage === "unmatched";
+   const titleHref = item.meetingId ? item.href : unmatched ? null : external(item.sourceUrl) ? item.sourceUrl : external(item.href) ? item.href : null;
+   const join = active(item) && (item.stage === "live" || !item.endsAt || Date.parse(item.endsAt) > now) && external(item.joinUrl) ? item.joinUrl : null;
+   const sourceHref = external(item.sourceUrl) && item.sourceUrl !== titleHref && item.sourceUrl !== join ? item.sourceUrl : null;
+   const sources = item.sources?.length ? item.sources : item.recordHref
+     ? [{ label: "查看记录", recordHref: item.recordHref, sourceUrl: item.sourceUrl }] : [];
+   const [opened, setOpened] = useState<string | null>(null);
+   const [organize, setOrganize] = useState(false);
++  const row = useRef<HTMLLIElement>(null);
++  const lastLocated = useRef("");
++  const anchorId = inbox && item.id.startsWith("feishu-minute:") ? "minute-" + encodeURIComponent(tokenOf(item)) : undefined;
++  useEffect(() => {
++    if (!anchorId) return;
++    const locate = () => {
++      if (location.hash.slice(1) !== anchorId) { lastLocated.current = ""; return; }
++      const target = row.current;
++      if (!target || lastLocated.current === anchorId) return;
++      // Native details may wrap this row in the header's schedule disclosure.
++      let parent = target.closest<HTMLDetailsElement>("details");
++      while (parent) {
++        parent.open = true;
++        parent = parent.parentElement?.closest<HTMLDetailsElement>("details") ?? null;
++      }
++      lastLocated.current = anchorId;
++      target.focus({ preventScroll: true });
++      target.scrollIntoView({ block: "nearest" });
++    };
++    locate();
++    window.addEventListener("hashchange", locate);
++    return () => window.removeEventListener("hashchange", locate);
++  }, [anchorId]);
+   const record = sources.find((source) => source.recordHref && source.recordHref === opened);
+   const sourceLabel = item.source === "feishu" ? (unmatched ? "飞书妙记" : item.meetingId ? "飞书会议" : "飞书日程") : "天枢会议";
+-  return <li className={s.row} id={unmatched && inbox ? "minute-" + encodeURIComponent(tokenOf(item)) : undefined}
+-    tabIndex={unmatched && inbox ? -1 : undefined} data-stage={item.stage}>
++  const primary = s.link + " " + s.primary;
++  const firstRecord = sources.find((source) => source.recordHref);
++  const openRecord = (href: string) => setOpened(opened === href ? null : href);
++  return <li ref={row} className={s.row + (timeline ? " " + s.event : "")} id={anchorId}
++    tabIndex={anchorId ? -1 : undefined} data-stage={item.stage}>
+     <div className={s.rowBody}>
+       <div className={s.subject}>
+         {titleHref && (internal(titleHref) || external(titleHref)) ? <a className={s.title} href={titleHref}
+           target={external(titleHref) ? "_blank" : undefined} rel={external(titleHref) ? "noopener noreferrer" : undefined}
+           onClick={(event) => follow(event, titleHref, navigate)}>{item.title}</a> : <strong className={s.title}>{item.title}</strong>}
+-        <p className={s.meta}><time dateTime={item.at}>{meetingTime(item, now)}</time><span> · {sourceLabel}{item.statusText === sourceLabel ? "" : " · " + item.statusText}</span></p>
+-        {item.preflightText && item.meetingId ? <a className={s.preflight} href={item.href} onClick={(event) => follow(event, item.href, navigate)}>{item.preflightText}</a> : null}
++        <p className={s.meta}>会议时间 · <time dateTime={item.at}>{meetingTime(item, now)}</time></p>
++        <p className={s.status} data-needs-action={item.needsAction || undefined}>{item.statusText}</p>
+       </div>
+       <div className={s.actions}>
+-        {join ? <a className={s.link} href={join} target="_blank" rel="noopener noreferrer">加入会议</a> : null}
+-        {sources.map((source) => source.recordHref ? <button type="button" key={source.recordHref} className={s.link}
+-          aria-expanded={opened === source.recordHref} onClick={() => setOpened(opened === source.recordHref ? null : source.recordHref)}>
+-          {sources.length === 1 ? "查看记录" : source.label}
+-        </button> : null)}
+-        {sourceHref && (!sources.length || !unmatched) ? <a className={s.link} href={sourceHref} target="_blank" rel="noopener noreferrer">打开来源</a> : null}
+-        {unmatched ? <button type="button" className={s.link} aria-expanded={organize} onClick={() => setOrganize(!organize)}>整理妙记</button> : null}
++        {join ? <a className={primary} href={join} target="_blank" rel="noopener noreferrer">加入会议</a>
++          : unmatched ? <button type="button" className={primary} aria-expanded={organize} onClick={() => setOrganize(!organize)}>整理妙记</button>
++          : firstRecord ? <button type="button" className={primary} aria-expanded={opened === firstRecord.recordHref} onClick={() => openRecord(firstRecord.recordHref)}>查看记录</button>
++          : item.meetingId ? <a className={primary} href={item.href} onClick={(event) => follow(event, item.href, navigate)}>打开会议</a>
++          : titleHref ? <a className={primary} href={titleHref} target="_blank" rel="noopener noreferrer">查看日程</a> : null}
+       </div>
+     </div>
++    <details className={s.sources}>
++      <summary>来源与详情</summary>
++      <div className={s.sourceBody}>
++        <p className={s.meta}>{sourceLabel}</p>
++        {item.preflightText && item.meetingId ? <a className={s.preflight} href={item.href} onClick={(event) => follow(event, item.href, navigate)}>{item.preflightText}</a> : null}
++        <div className={s.actions}>
++          {sources.map((source) => source.recordHref ? <button type="button" key={source.recordHref} className={s.link}
++            aria-expanded={opened === source.recordHref} onClick={() => openRecord(source.recordHref)}>
++            {sources.length === 1 ? "查看记录" : source.label}
++          </button> : null)}
++          {sourceHref ? <a className={s.link} href={sourceHref} target="_blank" rel="noopener noreferrer">打开来源</a> : null}
++        </div>
++      </div>
++    </details>
+     {record?.recordHref ? <RecordText key={record.recordHref} href={record.recordHref} sourceUrl={record.sourceUrl ?? null} /> : null}
+     {organize && unmatched ? <OrganizeMinute token={tokenOf(item)} navigate={navigate} /> : null}
+   </li>;
+ }
+ 
+ function RecordText({ href, sourceUrl }: { href: string; sourceUrl: string | null }) {
+   const [text, setText] = useState<string | null>(null);
+   const [error, setError] = useState("");
+diff --git a/apps/web/src/components/home/partner-meetings.module.css b/apps/web/src/components/home/partner-meetings.module.css
+index f0437d34..837f4046 100644
+--- a/apps/web/src/components/home/partner-meetings.module.css
++++ b/apps/web/src/components/home/partner-meetings.module.css
+@@ -5,40 +5,50 @@
+ }
+ .heading { justify-content: space-between; flex-wrap: wrap; }
+ .actions { flex-wrap: wrap; min-width: 0; }
+ .inbox, .rows, .row, .subject, .detail { min-width: 0; }
+ .inbox { margin-block: var(--space-3); }
+ .rows { list-style: none; padding: 0; margin: 0; }
+ .row { padding: var(--space-2); }
+ .row + .row { border-top: 1px solid var(--hairline); }
++.event { margin-block: var(--space-2); padding: var(--space-3); border: 1px solid var(--hairline); border-radius: var(--r-inset); background: var(--surface); }
+ .rowBody { align-items: baseline; justify-content: space-between; flex-wrap: wrap; }
+ .subject { flex: 1 1 200px; }
+ .title { display: inline-block; color: var(--ink); font: inherit; font-weight: 600; text-decoration: none; overflow-wrap: anywhere; }
+ a.title:hover, .preflight:hover, .link:hover { text-decoration: underline; text-underline-offset: 3px; }
+-.meta, .preflight, .detail, .later, .error {
++.meta, .preflight, .detail, .later, .error, .status, .sources {
+   font-size: var(--text-sm);
+   line-height: 1.5;
+ }
+ .meta { margin: 2px 0 0; color: var(--ink-muted); overflow-wrap: anywhere; }
++.status { margin: var(--space-1) 0 0; color: var(--ink); overflow-wrap: anywhere; }
++.row[data-stage="attention"] .status { color: var(--danger); }
++.status[data-needs-action] { font-weight: 600; }
+ .preflight { display: inline-block; color: var(--tianshu-blue-secondary); text-decoration: none; overflow-wrap: anywhere; }
+ .link {
+   display: inline-flex; align-items: center; min-height: var(--row-28); padding: 0 var(--space-1);
+   border: 0; border-radius: var(--r-control); background: none; color: var(--tianshu-blue-secondary);
+   font: inherit; font-size: var(--text-sm); text-align: left; text-decoration: none; cursor: pointer;
+ }
+ .link:disabled { color: var(--ink-faint); cursor: default; }
++.primary { min-height: 44px; box-sizing: border-box; justify-content: center; padding-inline: var(--space-3); background: var(--accent-soft); color: var(--tianshu-blue-secondary); font-weight: 600; overflow-wrap: anywhere; }
++.primary:hover { background: var(--default-soft); }
++.sources { margin-top: var(--space-2); color: var(--ink-muted); }
++.sources summary { width: fit-content; min-height: 44px; align-content: center; cursor: pointer; overflow-wrap: anywhere; }
++.sourceBody { display: grid; gap: var(--space-1); padding: 0 var(--space-2) var(--space-2); }
+ .later { margin-top: var(--space-1); color: var(--ink-muted); }
+-.later summary { width: fit-content; padding: var(--space-1) var(--space-2); cursor: pointer; }
++.later > summary { width: fit-content; min-height: 44px; box-sizing: border-box; align-content: center; padding: var(--space-1) var(--space-2); cursor: pointer; }
+ .later summary span { margin-inline-start: var(--space-1); font-variant-numeric: tabular-nums; }
+ .detail { margin: var(--space-2) 0 0; padding: var(--space-2); background: var(--default-soft); color: var(--ink); border-radius: var(--r-control); }
+ .transcript { max-height: 42vh; padding: var(--space-1); overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+ .organize { flex-wrap: wrap; }
+ .organize > :first-child { max-width: 100%; min-width: min(220px, 100%); }
+-.error { display: flex; align-items: center; gap: var(--space-2); margin: 0; padding-inline: var(--space-2); color: var(--danger); }
++.error { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); margin: 0; padding-inline: var(--space-2); color: var(--danger); overflow-wrap: anywhere; }
++.error button { min-height: 44px; }
+ .receipt { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); margin: 0; padding: var(--space-2); font-size: var(--text-sm); color: var(--ink-muted); overflow-wrap: anywhere; }
+ .row:focus-visible, .row :focus-visible, .later summary:focus-visible, .error button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-control); }
+ .inlineSlot { display: inline-flex; align-items: center; }
+ .modeHead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+ @media (max-width: 959px), (pointer: coarse) {
+   .inbox { margin-block: var(--space-2); }
+   .row .link, .row a.title, .preflight, .later summary, .heading button, .modeHead button { min-height: 44px; }
+   .row a.title, .preflight { align-content: center; }
+diff --git a/apps/web/src/components/home/partnerMeetings.test.tsx b/apps/web/src/components/home/partnerMeetings.test.tsx
+index 4121169e..8b9024fb 100644
+--- a/apps/web/src/components/home/partnerMeetings.test.tsx
++++ b/apps/web/src/components/home/partnerMeetings.test.tsx
+@@ -1,29 +1,155 @@
+ import { renderToStaticMarkup } from "react-dom/server";
+ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+ import { readFileSync } from "node:fs";
+ import type { PartnerMeeting } from "@/lib/home/partnerMeetingFeed";
+ import type { WaitingItem } from "@/lib/home/types";
+ import type { HomeMeeting } from "./MeetingControl";
+-import { PartnerHomeMeetings, PartnerMeetingInbox, homeMeetingGroups, meetingWaitingItems } from "./PartnerMeetings";
++import { PartnerHomeMeetings, PartnerMeetingInbox, homeMeetingGroups, meetingWaitingItems, usePartnerMeetingFeed } from "./PartnerMeetings";
++
++// Run production row effects without introducing a DOM/browser dependency. SSR keeps real React hooks.
++const hooks = vi.hoisted(() => ({
++  active: false, position: 0, values: [] as unknown[], effects: [] as (() => void | (() => void))[],
++  useState(initial: unknown) {
++    const key = hooks.position++;
++    if (!(key in hooks.values)) hooks.values[key] = typeof initial === "function" ? (initial as () => unknown)() : initial;
++    return [hooks.values[key], (next: unknown) => { hooks.values[key] = typeof next === "function" ? (next as (value: unknown) => unknown)(hooks.values[key]) : next; }];
++  },
++  useRef(initial: unknown) {
++    const key = hooks.position++;
++    if (!(key in hooks.values)) hooks.values[key] = { current: initial };
++    return hooks.values[key];
++  },
++}));
++vi.mock("react", async (original) => {
++  const react = await original<typeof import("react")>();
++  return { ...react,
++    useState: (initial: unknown) => hooks.active ? hooks.useState(initial) : react.useState(initial),
++    useRef: (initial: unknown) => hooks.active ? hooks.useRef(initial) : react.useRef(initial),
++    useEffect: (effect: () => void | (() => void), dependencies?: unknown[]) => hooks.active ? void hooks.effects.push(effect) : react.useEffect(effect, dependencies),
++  };
++});
+ 
+ const feed = vi.hoisted(() => ({ items: [] as PartnerMeeting[], error: null as string | null, reload: vi.fn() }));
+ vi.mock("@/lib/home/partnerMeetingFeed", () => ({ usePartnerMeetings: () => feed, PartnerMeetingsProvider: () => null }));
+ vi.mock("@/components/shell/WorkspaceContext", () => ({ useWorkspace: () => ({ navigate: vi.fn() }) }));
+ vi.mock("./MeetingControl", () => ({ MeetingControl: () => <button>现在开会</button> }));
+ 
+ const now = Date.parse("2026-11-13T05:30:00Z");
+ const meeting = (id: string, overrides: Partial<PartnerMeeting> = {}): PartnerMeeting => ({
+   id: "meeting:" + id, meetingId: id, title: id, at: new Date(now).toISOString(), stage: "scheduled",
+   statusText: "已预约", needsAction: false, source: "tianshu", href: "/me/work/meetings/" + id, joinUrl: null, ...overrides,
+ });
+ const model = { account: { personId: "owner", displayName: "主持人", role: "member" } } as HomeMeeting;
+-beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(now); feed.items = []; feed.error = null; });
+-afterEach(() => vi.useRealTimers());
++beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(now); feed.items = []; feed.error = null; hooks.active = false; hooks.position = 0; hooks.values = []; hooks.effects = []; vi.clearAllMocks(); });
++afterEach(() => { hooks.active = false; vi.useRealTimers(); vi.unstubAllGlobals(); });
++
++type Node = { type?: unknown; props: Record<string, unknown> };
++function nodes(value: unknown): Node[] {
++  if (Array.isArray(value)) return value.flatMap(nodes);
++  if (!value || typeof value !== "object" || !("props" in value)) return [];
++  const node = value as Node;
++  return [node, ...nodes(node.props.children)];
++}
++function call(node: unknown) {
++  const element = node as Node;
++  expect(typeof element.type).toBe("function");
++  hooks.position = 0; hooks.effects = [];
++  return (element.type as (props: Record<string, unknown>) => unknown)(element.props);
++}
++function feedRow(item: PartnerMeeting) {
++  feed.items = [item];
++  const surface = usePartnerMeetingFeed();
++  const rows = surface.blocks.length ? call(surface.blocks[0].node) : call(nodes(surface.scheduled).find((node) => typeof node.type === "function"));
++  return nodes(rows).find((node) => typeof node.type === "function")!;
++}
++
++describe("伙伴会议的统一时间线", () => {
++  it("只将已发生状态放入稳定键和原始会议时间的块，预约单独收起", () => {
++    const liveAt = "2026-11-13T01:00:00+08:00", pastAt = "2026-10-01T02:00:00Z";
++    feed.items = [meeting("future", { at: "2026-12-01T02:00:00Z" }), meeting("live", { stage: "live", at: liveAt }),
++      meeting("old", { stage: "ready", at: pastAt }), meeting("calendar", { meetingId: null, source: "feishu", at: "2026-12-03T02:00:00Z" })];
++    const surface = usePartnerMeetingFeed();
++    expect(surface.blocks.map(({ key, at }) => ({ key, at }))).toEqual([
++      { key: "partner-meeting:meeting:live", at: liveAt }, { key: "partner-meeting:meeting:old", at: pastAt },
++    ]);
++    const events = surface.blocks.map(({ node }) => renderToStaticMarkup(node)).join("");
++    expect(events).toContain("会议时间");
++    expect(events).not.toContain("future");
++    expect(events).not.toContain("calendar");
++    const schedule = renderToStaticMarkup(surface.scheduled);
++    expect(schedule).toMatch(/<details[^>]*><summary>会议安排/);
++    expect(schedule).not.toMatch(/<details[^>]*\sopen/);
++    expect(schedule).toContain("future"); expect(schedule).toContain("calendar");
++    feed.items = [...feed.items].reverse();
++    expect(usePartnerMeetingFeed().blocks.map(({ key }) => key).sort()).toEqual(["partner-meeting:meeting:live", "partner-meeting:meeting:old"]);
++  });
++
++  it.each(["unmatched", "scheduled"] as const)("%s 妙记的深链先展开所有安排祖先，再聚焦原对象", (stage) => {
++    const item = meeting("minute", { id: "feishu-minute:token", meetingId: null, source: "feishu", stage, href: "/me/work/buddy#minute-token" });
++    hooks.active = true;
++    const row = call(feedRow(item));
++    const li = nodes(row).find((node) => node.type === "li")!;
++    expect(li.props.id).toBe("minute-token");
++    expect(li.props.tabIndex).toBe(-1);
++    const order: string[] = [];
++    const outer = { set open(value: boolean) { if (value) order.push("outer-open"); }, parentElement: { closest: () => null } };
++    const inner = { set open(value: boolean) { if (value) order.push("inner-open"); }, parentElement: { closest: () => outer } };
++    const target = { closest: () => inner, focus: () => order.push("focus"), scrollIntoView: () => order.push("scroll") };
++    (li.props.ref as { current: unknown }).current = target;
++    vi.stubGlobal("location", { hash: "#minute-token" });
++    const listeners = new Map<string, () => void>();
++    vi.stubGlobal("window", { addEventListener: (event: string, callback: () => void) => listeners.set(event, callback), removeEventListener: vi.fn() });
++    const cleanup = hooks.effects.map((effect) => effect());
++    expect(order).toEqual(["inner-open", "outer-open", "focus", "scroll"]);
++    listeners.get("hashchange")?.();
++    expect(order).toHaveLength(4);
++    cleanup.forEach((effect) => effect?.());
++  });
++
++  it("需处理的失败保持真实状态、可打开会议，来源细节默认折叠", () => {
++    feed.items = [meeting("failed", { stage: "attention", statusText: "记录处理失败", needsAction: true, sourceUrl: "https://source.example.org/failed", preflightText: "预审失败" })];
++    const html = renderToStaticMarkup(usePartnerMeetingFeed().blocks[0].node);
++    expect(html).toContain('data-stage="attention"');
++    expect(html).toContain("记录处理失败");
++    expect(html).not.toContain("正在处理");
++    expect(html).toMatch(/<a[^>]*href="\/me\/work\/meetings\/failed"[^>]*>打开会议<\/a>/);
++    expect(html).toMatch(/<details[^>]*><summary>来源与详情/);
++    expect(html).toContain("打开来源");
++    expect(html).not.toContain("重试预审");
++    feed.error = "没有读到会议";
++    const notice = renderToStaticMarkup(usePartnerMeetingFeed().notice);
++    expect(notice).toContain('role="alert"'); expect(notice).toContain("重试");
++  });
++
++  it("读记录失败可重试，且不把来源失败改成会议正在运行", async () => {
++    hooks.active = true;
++    const rowNode = feedRow(meeting("read", { stage: "ready", recordHref: "/api/me/partner-meetings/read/record" }));
++    let row = call(rowNode);
++    const read = nodes(row).find((node) => node.type === "button" && node.props.children === "查看记录")!;
++    (read.props.onClick as () => void)();
++    row = call(rowNode);
++    const record = nodes(row).find((node) => typeof node.type === "function")!;
++    hooks.values = [];
++    const fetchRecord = vi.fn().mockResolvedValueOnce({ ok: false, status: 403 }).mockResolvedValueOnce({ ok: true, json: async () => ({ title: "read", text: "重新读到正文", sourceUrl: null }) });
++    vi.stubGlobal("fetch", fetchRecord);
++    call(record); hooks.effects.forEach((effect) => effect());
++    await Promise.resolve(); await Promise.resolve();
++    const failure = call(record);
++    expect(renderToStaticMarkup(failure as never)).toContain("这份记录已不可读");
++    const alert = nodes(failure).find((node) => typeof node.type === "function")!;
++    (alert.props.retry as () => void)();
++    call(record); hooks.effects.forEach((effect) => effect());
++    await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
++    const success = renderToStaticMarkup(call(record) as never);
++    expect(success).toContain("重新读到正文"); expect(success).not.toContain('role="alert"');
++    expect(fetchRecord.mock.calls.map(([href]) => href)).toEqual(["/api/me/partner-meetings/read/record", "/api/me/partner-meetings/read/record"]);
++  });
++});
+ 
+ describe("首页会议和伙伴收件使用同一条记录", () => {
+   it("按公司日历展示近期、过去未处理以及更远的天枢预约；同标题的不同场次独立", () => {
+     const historic = "2026-11-01T02:00:00Z", future = "2026-11-22T02:00:00Z";
+     const old = meeting("old", { at: historic, stage: "ready" });
+     const pending = meeting("pending", { at: historic, stage: "processing", statusText: "等飞书生成妙记" });
+     const action = meeting("action", { at: historic, needsAction: true, stage: "attention" });
+     const same = meeting("same", { title: pending.title });
+diff --git a/apps/web/src/components/meeting/MeetingWorkHandoffs.tsx b/apps/web/src/components/meeting/MeetingWorkHandoffs.tsx
+index 382faa00..5d7503cb 100644
+--- a/apps/web/src/components/meeting/MeetingWorkHandoffs.tsx
++++ b/apps/web/src/components/meeting/MeetingWorkHandoffs.tsx
+@@ -1,34 +1,38 @@
+ "use client";
+ 
+-import { useEffect, useRef, useState } from "react";
++import { useEffect, useState, type ReactNode } from "react";
+ import type {
+   TContinueMeetingWork, TMeetingWorkConclusion, TMeetingWorkFeedItem, TMeetingWorkHandoffs,
+   TMeetingWorkReceipt, TMeetingWorkTarget, TMeetingWorkTargetOption,
+ } from "@warmap/contracts";
+ import { browserApi } from "@/lib/api/client";
+ import { unwrap } from "@/lib/board/cloud";
+ import { cardHref, infoHref, projectHref, topicHref } from "@/lib/home/derive";
++import type { TimedBlock } from "@/components/work/WorkTimeline";
+ import s from "./meeting-work-handoffs.module.css";
+ 
+ const labels = { project: "项目", task: "Task", card: "执行子会话", topic: "探索子会话" };
+ const stateText = { pending: "待递送", delivered: "已递送", failed: "失败" };
+ const keyOf = (t: TMeetingWorkTarget) => JSON.stringify([t.projectId, t.kind, t.id]);
+ const same = (a: TMeetingWorkTarget, b: TMeetingWorkTarget) => a.projectId === b.projectId && a.kind === b.kind && a.id === b.id;
+ const destHref = (t: TMeetingWorkTarget) => t.kind === "project" ? projectHref(t.projectId)
+   : t.kind === "task" ? infoHref(t.id) : t.kind === "card" ? cardHref(t.id) : topicHref(t.id);
+ const destName = (t: TMeetingWorkTargetOption) => t.kind === "project" ? t.projectName : `${t.projectName} / ${t.name}`;
+ const errorText = (e: unknown) => e instanceof Error ? e.message : "未能读取，请重试";
+ const readItems = () => unwrap<TMeetingWorkHandoffs>(browserApi.GET("/api/me/meeting-work-handoffs"));
+ const readTargets = () => unwrap<{ targets: TMeetingWorkTargetOption[] }>(browserApi.GET("/api/me/meeting-work-handoff-targets"));
+ const submit = (change: TMeetingWorkConclusion, targets: TContinueMeetingWork["targets"]) => unwrap<{ receipts: TMeetingWorkReceipt[] }>(
+   browserApi.POST("/api/me/meeting-work-handoffs/{confirmationRef}", { params: { path: { confirmationRef: change.confirmationRef } },
+     body: { authorization: "continue", revision: change.revision, targets } }));
+ const refreshed = "tianshu:meeting-work-confirmed";
++const confirmationTime = (at: string) => new Intl.DateTimeFormat("zh-CN", {
++  year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "UTC", hour12: false,
++}).format(new Date(at));
+ 
+ /** Only suggest an accessible Task explicitly identified by the Nexus world object reference. */
+ export function suggestedMeetingTarget(ref: string, options: readonly TMeetingWorkTargetOption[]): TMeetingWorkTargetOption | null {
+   const id = ref.replace(/@\d+$/, "");
+   return options.find(option => option.kind === "task" && option.id === id) ?? null;
+ }
+ 
+ function Source({ change }: { change: TMeetingWorkConclusion }) {
+@@ -96,17 +100,17 @@ function TargetPicker({ targets, excluded, suggestion, action, onContinue, onCan
+       const title = destName(t);
+       return <div key={key}><label className={s.choice}><input type="checkbox" checked={selected.has(key)}
+         onChange={e => change(key, e.target.checked ? "" : null)} />{labels[t.kind]} · {title}{suggestion && same(t, suggestion) ? "（会议指向此 Task）" : ""}</label>
+         {selected.has(key) && <label className={s.note}>给{title}的交代（可选）
+           <textarea value={selected.get(key)} maxLength={4000} onChange={e => change(key, e.target.value)} /></label>}
+       </div>;
+     })}
+   </fieldset><div className={s.actions}>
+-    <button type="button" disabled={busy || !selection.length || selection.length > 30} onClick={() => void send()}>{busy ? "递送中…" : action}</button>
++    <button type="button" className={s.primary} disabled={busy || !selection.length || selection.length > 30} onClick={() => void send()}>{busy ? "递送中…" : action}</button>
+     <button type="button" disabled={busy} onClick={onCancel}>暂不递送</button>
+   </div>{selection.length > 30 && <p role="status">每次最多选择 30 个去向。</p>}{error && <p role="alert">{error}</p>}</div>;
+ }
+ 
+ /** The pending Nexus decision remains the only judge. It atomically records its explicit destinations when this action is chosen. */
+ export function ConfirmAndHandOff({ requestId, amendedValue, onConfirmed }: { requestId: string; amendedValue?: string; onConfirmed: (ref: string) => void }) {
+   const [targets, setTargets] = useState<TMeetingWorkTargetOption[] | null>(null);
+   const [loading, setLoading] = useState(false);
+@@ -119,62 +123,88 @@ export function ConfirmAndHandOff({ requestId, amendedValue, onConfirmed }: { re
+   }
+   if (targets) return <TargetPicker targets={targets} excluded={[]} action={amendedValue === undefined ? "确认并继续推进" : "确认修改并继续推进"} onCancel={() => setTargets(null)}
+     onContinue={async selected => {
+       const result = await unwrap(browserApi.POST("/api/me/nexus-confirmations/{id}/decision", { params: { path: { id: requestId } },
+         body: { ...(amendedValue === undefined ? { decision: "confirmed" as const } : { decision: "amended" as const, value: amendedValue }),
+           continueWork: { authorization: "continue", targets: selected } } }));
+       window.dispatchEvent(new Event(refreshed)); onConfirmed(result.confirmationRef);
+     }} />;
+-  return <div className={s.actions}><button type="button" disabled={loading} onClick={() => void choose()}>{loading ? "读取去向…" : "选择去向并确认"}</button>
++  return <div className={s.actions}><button type="button" className={s.primary} disabled={loading} onClick={() => void choose()}>{loading ? "读取去向…" : "选择去向并确认"}</button>
+     {error && <span role="alert">{error}</span>}</div>;
+ }
+ 
+ function ChangeRow({ item, targets, update }: {
+   item: TMeetingWorkHandoffs["items"][number]; targets: TMeetingWorkTargetOption[];
+   update: (receipts: TMeetingWorkReceipt[]) => void;
+ }) {
+   const { conclusion: change, receipts } = item;
+   const suggestion = suggestedMeetingTarget(change.content.targetRef, targets);
+   const [choosing, setChoosing] = useState(false);
+   const [pending, setPending] = useState<string[]>([]);
+   const [error, setError] = useState("");
++  const counts = receipts.reduce((total, receipt) => ({ ...total, [receipt.status]: total[receipt.status] + 1 }), { delivered: 0, pending: 0, failed: 0 });
++  useEffect(() => {
++    const anchor = `meeting-work-${change.confirmationRef}`;
++    const reveal = () => {
++      if (window.location.hash.slice(1) !== anchor) return;
++      const article = document.getElementById(anchor);
++      if (!article) return;
++      article.querySelectorAll<HTMLDetailsElement>("details").forEach(detail => { detail.open = true; });
++      article.scrollIntoView?.({ block: "nearest" });
++      article.focus({ preventScroll: true });
++    };
++    reveal();
++    window.addEventListener("hashchange", reveal);
++    return () => window.removeEventListener("hashchange", reveal);
++  }, [change.confirmationRef]);
+   async function retry(r: TMeetingWorkReceipt) {
+     setPending(old => [...old, r.id]); setError("");
+     try { update((await submit(change, [{ ...r.target, instruction: r.instruction }])).receipts); }
+     catch (e) { setError(errorText(e)); }
+     finally { setPending(old => old.filter(id => id !== r.id)); }
+   }
+   return <article className={s.entry} id={`meeting-work-${change.confirmationRef}`} tabIndex={-1}>
+-    <strong>{change.question}</strong><Content change={change} />
+-    <div className={s.meta}>{change.decision === "amended" ? "已修改并确认" : "已确认"} · 第 {change.revision} 版</div>
+-    <Source change={change} />
+-    {receipts.length > 0 && <ul className={s.receipts} aria-label="递送回执">{receipts.map(r => {
++    <header className={s.header}><span>会议交接 · {change.decision === "amended" ? "已修改并确认" : "已确认"}</span>
++      <time dateTime={change.confirmedAt}>确认于 {confirmationTime(change.confirmedAt)} UTC</time></header>
++    <h3 className={s.title}>{change.question}</h3><Content change={change} />
++    <p className={s.progress} aria-label="递送进度">
++      <span data-state="delivered">已递送 <strong>{counts.delivered}</strong></span>
++      <span data-state="pending">待递送 <strong>{counts.pending}</strong></span>
++      <span data-state="failed">失败 <strong>{counts.failed}</strong></span>
++    </p>
++    <p className={s.next}>下一步 · {counts.failed ? "重试失败的去向，查看下方原因与操作。"
++      : counts.pending ? "递送等待中的工作去向。"
++      : counts.delivered ? "打开递送去向查看，或添加工作去向。" : "选择既有工作去向，继续推进。"}</p>
++    {receipts.length > 0 && <details className={s.receiptDetails} open={counts.failed + counts.pending > 0}>
++      <summary>递送明细（{receipts.length}）{counts.failed + counts.pending > 0 ? ` · ${counts.failed + counts.pending} 个待处理` : ""}</summary>
++      <ul className={s.receipts} aria-label="递送回执">{receipts.map(r => {
+       const dest = targets.find(t => same(t, r.target));
+-      const label = dest ? destName(dest) : `${labels[r.target.kind]} ${r.target.id}（当前不可选）`;
+-      return <li key={r.id}><span>{stateText[r.status]} · {label}</span>
+-        {r.reason && <span className={s.meta}>{r.reason}</span>}
+-        {r.status === "delivered" ? dest && <a href={destHref(dest)}>打开去向</a>
+-          : <button type="button" disabled={pending.includes(r.id)} onClick={() => void retry(r)}>{pending.includes(r.id) ? "递送中…" : r.status === "pending" ? "递送此去向" : "重试此去向"}</button>}
++      const label = dest ? destName(dest) : `${labels[r.target.kind]} ${r.target.id}（${r.status === "delivered" ? "历史去向" : "当前不可选"}）`;
++      return <li key={r.id} data-state={r.status}><div className={s.receiptBody}><span>{stateText[r.status]} · {label}</span>
++        {r.instruction && <p className={s.meta}>本次交代 · {r.instruction}</p>}
++        {r.reason && <p className={r.status === "failed" ? s.failure : s.meta}>{r.reason}</p>}</div>
++        {r.status === "delivered" ? <a href={destHref(r.target)}>打开去向</a>
++          : <button type="button" className={s.primary} disabled={pending.includes(r.id)} onClick={() => void retry(r)}>{pending.includes(r.id) ? "递送中…" : r.status === "pending" ? "递送此去向" : "重试此去向"}</button>}
+       </li>;
+-    })}</ul>}
++    })}</ul></details>}
+     {suggestion && !receipts.some(r => same(r.target, suggestion)) && <p className={s.meta}>建议去向 · {destName(suggestion)}</p>}
+     {choosing ? <TargetPicker targets={targets} excluded={receipts} suggestion={suggestion} action="继续推进" onCancel={() => setChoosing(false)}
+       onContinue={async selected => { update((await submit(change, selected)).receipts); setChoosing(false); }} />
+-      : <button type="button" onClick={() => setChoosing(true)}>{receipts.length ? "添加工作去向" : "选择工作去向"}</button>}
++      : <div className={s.actions}><button type="button" className={!receipts.length ? s.primary : undefined} onClick={() => setChoosing(true)}>{receipts.length ? "添加工作去向" : "选择工作去向"}</button></div>}
+     {error && <p role="alert">{error}</p>}
++    <Source change={change} />
+   </article>;
+ }
+ 
+-export function MeetingWorkHandoffs() {
++export function useMeetingWorkHandoffFeed(): { blocks: TimedBlock[]; notice: ReactNode } {
+   const [items, setItems] = useState<TMeetingWorkHandoffs["items"]>([]);
+   const [targets, setTargets] = useState<TMeetingWorkTargetOption[]>([]);
+   const [error, setError] = useState("");
+   const [version, setVersion] = useState(0);
+-  const loadedHash = useRef("");
+   useEffect(() => {
+     let active = true;
+     const refresh = () => setVersion(v => v + 1);
+     async function load() {
+       try {
+         const data = await readItems();
+         if (!active) return;
+         setItems(data.items); setError("");
+@@ -187,24 +217,25 @@ export function MeetingWorkHandoffs() {
+         const choices = await readTargets();
+         if (active) setTargets(choices.targets);
+       } catch (e) { if (active) { setTargets([]); setError(`工作去向读取失败 · ${errorText(e)}`); } }
+     }
+     void load();
+     window.addEventListener("focus", refresh); window.addEventListener(refreshed, refresh);
+     return () => { active = false; window.removeEventListener("focus", refresh); window.removeEventListener(refreshed, refresh); };
+   }, [version]);
+-  useEffect(() => {
+-    const anchor = window.location.hash.slice(1);
+-    if (items.length && anchor.startsWith("meeting-work-") && loadedHash.current !== anchor) {
+-      loadedHash.current = anchor;
+-      document.getElementById(anchor)?.scrollIntoView?.({ block: "nearest" });
+-    }
+-  }, [items]);
+-  if (!items.length && !error) return null;
+-  return <section id="meeting-work-handoffs" className={s.panel} aria-label="会后工作交接"><h2>会后工作交接</h2>
+-    {error && <p role="alert">{error} <button type="button" onClick={() => setVersion(v => v + 1)}>重试</button></p>}
+-    {items.map(item => <ChangeRow key={item.conclusion.confirmationRef} item={item} targets={targets} update={next => setItems(old =>
++  const blocks = items.map(item => ({ key: `meeting-handoff:${item.conclusion.confirmationRef}`, at: item.conclusion.confirmedAt,
++    node: <ChangeRow item={item} targets={targets} update={next => setItems(old =>
+       old.map(row => row.conclusion.confirmationRef !== item.conclusion.confirmationRef ? row : { ...row, receipts: [
+         ...row.receipts.filter(r => !next.some(n => n.id === r.id)), ...next,
+-      ] }))} />)}
++      ] }))} /> }));
++  const notice = error ? <p className={s.notice} role="alert">{error} <button type="button" onClick={() => setVersion(v => v + 1)}>重试</button></p> : null;
++  return { blocks, notice };
++}
++
++/** Compatibility surface for pages that do not yet render the unified WorkTimeline. */
++export function MeetingWorkHandoffs() {
++  const { blocks, notice } = useMeetingWorkHandoffFeed();
++  if (!blocks.length && !notice) return null;
++  return <section id="meeting-work-handoffs" className={s.panel} aria-label="会后工作交接"><h2>会后工作交接</h2>
++    {notice}{blocks.map(block => <div key={block.key} data-block={block.key}>{block.node}</div>)}
+   </section>;
+ }
+diff --git a/apps/web/src/components/meeting/meeting-work-handoffs.module.css b/apps/web/src/components/meeting/meeting-work-handoffs.module.css
+index da932e3f..a02515bb 100644
+--- a/apps/web/src/components/meeting/meeting-work-handoffs.module.css
++++ b/apps/web/src/components/meeting/meeting-work-handoffs.module.css
+@@ -1,19 +1,75 @@
+-.panel, .entry, .picker { display: grid; min-width: 0; gap: var(--space-2); color: var(--ink); overflow-wrap: anywhere; }
++.panel, .entry, .picker {
++  display: grid;
++  min-width: 0;
++  gap: var(--space-3);
++  color: var(--ink);
++  overflow-wrap: anywhere;
++}
+ .panel { margin-block: var(--space-4); }
+ .panel h2 { margin: 0; font-size: var(--text-base); }
+-.entry { padding-block: var(--space-3); border-top: 1px solid var(--hairline); }
++.entry {
++  padding: var(--space-4);
++  border: 1px solid var(--hairline);
++  border-radius: var(--r-card);
++  background: var(--surface);
++  scroll-margin-block: var(--space-4);
++}
+ .entry p, .picker p { margin: 0; }
++.header { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); color: var(--ink-muted); font-size: var(--text-sm); }
++.header time { color: var(--ink-faint); }
++.title { margin: 0; font-size: var(--text-base); line-height: 1.5; }
++.value { line-height: 1.65; }
+ .value, .source blockquote { white-space: pre-wrap; }
+ .meta, .source, .note { color: var(--ink-muted); font-size: var(--text-sm); }
+-.source summary, .entry summary { cursor: pointer; width: fit-content; }
++.progress { display: flex; gap: var(--space-2) var(--space-4); flex-wrap: wrap; color: var(--ink-muted); font-size: var(--text-sm); }
++.progress strong { font-weight: 600; }
++.progress [data-state="delivered"] strong { color: var(--confirmed); }
++.progress [data-state="failed"] strong, .failure { color: var(--counter); }
++.next { font-size: var(--text-sm); line-height: 1.65; }
++.source, .receiptDetails { min-width: 0; border-block-start: 1px solid var(--hairline); }
++.entry summary {
++  box-sizing: border-box;
++  min-height: 44px;
++  padding-block: var(--space-2);
++  align-content: center;
++  cursor: pointer;
++  width: fit-content;
++  max-width: 100%;
++  line-height: 1.5;
++}
++.receiptDetails > summary { color: var(--ink-muted); font-size: var(--text-sm); }
+ .source blockquote { margin: var(--space-2) 0; padding-inline-start: var(--space-2); border-inline-start: 2px solid var(--hairline-strong); }
+-.entry a { color: inherit; text-decoration: underline; }
+-.actions, .receipts li { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; }
+-.receipts { display: grid; gap: var(--space-1); list-style: none; margin: 0; padding: 0; }
+-.picker fieldset { display: grid; gap: var(--space-2); border: 1px solid var(--hairline); border-radius: var(--r-control); min-width: 0; padding: var(--space-2); }
+-.choice { display: flex; align-items: baseline; gap: var(--space-2); cursor: pointer; }
++.source p { line-height: 1.65; }
++.entry a { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
++.entry a, .actions button, .entry button, .notice button {
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  box-sizing: border-box;
++  min-height: 44px;
++  min-width: 44px;
++  max-width: 100%;
++}
++.actions { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; min-width: 0; }
++.receipts { display: grid; list-style: none; margin: 0; padding: 0; }
++.receipts li { display: flex; gap: var(--space-2) var(--space-3); flex-wrap: wrap; align-items: center; padding-block: var(--space-2); }
++.receipts li + li { border-block-start: 1px solid var(--hairline); }
++.receiptBody { display: grid; gap: var(--space-1); min-width: 0; flex: 1 1 12rem; font-size: var(--text-sm); line-height: 1.6; }
++.receipts li > a, .receipts li > button { flex-shrink: 0; }
++.receipts li > a { padding-inline: var(--space-2); }
++.picker fieldset { display: grid; gap: var(--space-2); border: 1px solid var(--hairline); border-radius: var(--r-control); min-width: 0; margin: 0; padding: var(--space-3); }
++.picker legend { font-size: var(--text-sm); }
++.choice { display: flex; align-items: center; gap: var(--space-2); min-height: 44px; cursor: pointer; line-height: 1.6; }
++.choice input { flex-shrink: 0; }
+ .note { display: grid; gap: var(--space-1); margin-block: var(--space-1); }
+-.note textarea { font: inherit; color: var(--ink); background: transparent; border: 1px solid var(--hairline-strong); border-radius: var(--r-control); padding: var(--space-1); resize: none; }
+-.actions button, .entry button, .panel button { cursor: pointer; justify-self: start; width: fit-content; color: var(--ink); background: transparent; border: 1px solid var(--hairline-strong); border-radius: var(--r-control); padding: 4px 10px; font: inherit; }
++.note textarea { box-sizing: border-box; min-width: 0; width: 100%; min-height: 88px; font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--hairline-strong); border-radius: var(--r-control); padding: var(--space-2); resize: vertical; }
++.actions button, .entry button, .notice button { cursor: pointer; justify-self: start; width: fit-content; color: var(--ink); background: transparent; border: 1px solid var(--hairline-strong); border-radius: var(--r-control); padding: var(--space-2) var(--space-3); font: inherit; line-height: 1.5; }
++.actions button.primary, .entry button.primary { background: var(--solid); color: var(--solid-fg); border-color: var(--solid); }
+ .actions button:disabled, .entry button:disabled { opacity: .55; cursor: default; }
+-.actions button:focus-visible, .entry button:focus-visible, .source summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
++.notice { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; color: var(--counter); overflow-wrap: anywhere; }
++.actions button:focus-visible, .entry:focus-visible, .entry button:focus-visible, .entry summary:focus-visible, .entry a:focus-visible, .note textarea:focus-visible, .notice button:focus-visible { outline: 2px solid var(--focus, var(--ring)); outline-offset: 3px; }
++@media (max-width: 400px) {
++  .entry { padding: var(--space-3); }
++  .receiptBody { flex-basis: 100%; }
++  .picker fieldset { padding: var(--space-2); }
++}
+diff --git a/apps/web/src/components/meeting/meetingWorkHandoffs.test.tsx b/apps/web/src/components/meeting/meetingWorkHandoffs.test.tsx
+index f8c0893a..1fdd57df 100644
+--- a/apps/web/src/components/meeting/meetingWorkHandoffs.test.tsx
++++ b/apps/web/src/components/meeting/meetingWorkHandoffs.test.tsx
+@@ -1,25 +1,80 @@
+-import { describe, expect, it } from "vitest";
++import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+ import { renderToStaticMarkup } from "react-dom/server";
+-import type { TMeetingWorkFeedItem } from "@warmap/contracts";
+-import { ConfirmAndHandOff, MeetingWorkFeedEntry, suggestedMeetingTarget } from "./MeetingWorkHandoffs";
++import { isValidElement, type ReactElement, type ReactNode } from "react";
++import type { TMeetingWorkFeedItem, TMeetingWorkReceipt } from "@warmap/contracts";
++
++const hooks = vi.hoisted(() => ({ active: false, position: 0, values: [] as unknown[], effects: [] as (() => void | (() => void))[] }));
++const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
++vi.mock("react", async (original) => {
++  const real = await original<typeof import("react")>();
++  return { ...real,
++    useState: (initial: unknown) => {
++      if (!hooks.active) return real.useState(initial);
++      const values = hooks.values;
++      const index = hooks.position++;
++      if (!(index in values)) values[index] = typeof initial === "function" ? (initial as () => unknown)() : initial;
++      return [values[index], (next: unknown) => { values[index] = typeof next === "function" ? (next as (old: unknown) => unknown)(values[index]) : next; }];
++    },
++    useEffect: (effect: () => void | (() => void), deps?: unknown[]) => hooks.active ? hooks.effects.push(effect) : real.useEffect(effect, deps),
++  };
++});
++vi.mock("@/lib/api/client", () => ({ browserApi: { GET: api.get, POST: api.post } }));
++import { ConfirmAndHandOff, MeetingWorkFeedEntry, suggestedMeetingTarget, useMeetingWorkHandoffFeed } from "./MeetingWorkHandoffs";
+ 
+ const item: TMeetingWorkFeedItem = {
+   kind: "meeting_handoff", id: "00000000-0000-4000-8000-000000000003", at: "2026-11-13T09:31:00Z",
+   target: { kind: "topic", projectId: "00000000-0000-4000-8000-000000000001", id: "00000000-0000-4000-8000-000000000002", projectName: "品牌建设", name: "官网" },
+   conclusion: { confirmationRef: "00000000-0000-4000-8000-000000000004", requestId: "nexus-1", itemId: "change-1", meetingId: "external-meeting",
+     revision: 4, confirmedAt: "2026-11-13T09:30:00Z", confirmedBy: "owner", decision: "amended", question: "首页方向如何调整？",
+     content: { classification: "fact", targetRef: "homepage", value: "本人改后的首页方向" },
+     source: { id: "minutes-1", version: "v2", hash: "hash", minutesRef: "https://example.com/minutes",
+       quote: null, readState: "reference_only", reference: null, turnId: null } },
+   instruction: "延续原版", criteria: [{ kind: "task", id: "task1", revision: null, index: 1, text: "核对页面文案" }],
+   authorizedAt: "2026-11-13T09:30:30Z", authorizedBy: "owner", superseded: false,
+ };
+ 
++const receipt = (status: TMeetingWorkReceipt["status"], id = "receipt-1"): TMeetingWorkReceipt => ({
++  id, target: { kind: item.target.kind, projectId: item.target.projectId, id: item.target.id },
++  status, instruction: "保留本人交代", reason: status === "failed" ? "权限已变化" : null,
++  authorizedAt: item.authorizedAt, deliveredAt: status === "delivered" ? item.at : null,
++});
++const listeners = new Map<string, Set<() => void>>();
++const cleanups: (() => void)[] = [];
++const drive = <T,>(render: () => T): T => {
++  hooks.position = 0; hooks.effects = []; hooks.active = true;
++  try { return render(); } finally { hooks.active = false; }
++};
++const effects = () => hooks.effects.forEach(effect => { const cleanup = effect(); if (cleanup) cleanups.push(cleanup); });
++const nodes = (value: ReactNode): ReactElement<Record<string, unknown>>[] => {
++  if (Array.isArray(value)) return value.flatMap(nodes);
++  if (!isValidElement<Record<string, unknown>>(value)) return [];
++  return [value, ...nodes(value.props.children as ReactNode)];
++};
++const drawCard = (node: ReactNode) => {
++  if (!isValidElement(node) || typeof node.type !== "function") throw new Error("Expected a handoff card");
++  return drive(() => (node.type as (props: unknown) => ReactNode)(node.props));
++};
++async function feed(receipts: TMeetingWorkReceipt[], targets = [item.target]) {
++  api.get.mockImplementation(async (path: string) => ({ response: { ok: true }, data: path.endsWith("-targets") ? { targets } : { items: [{ conclusion: item.conclusion, receipts }] } }));
++  drive(useMeetingWorkHandoffFeed); effects();
++  await vi.waitFor(() => expect(api.get).toHaveBeenCalledTimes(2));
++  return drive(useMeetingWorkHandoffFeed);
++}
++
++beforeEach(() => {
++  hooks.active = false; hooks.position = 0; hooks.values = []; hooks.effects = []; listeners.clear();
++  api.get.mockReset(); api.post.mockReset();
++  vi.stubGlobal("window", { location: { hash: "" }, addEventListener: (name: string, listener: () => void) => {
++    listeners.set(name, new Set([...(listeners.get(name) ?? []), listener]));
++  }, removeEventListener: (name: string, listener: () => void) => listeners.get(name)?.delete(listener) });
++});
++afterEach(() => { cleanups.splice(0).forEach(cleanup => cleanup()); vi.unstubAllGlobals(); });
++
+ describe("会议变化在原工作中可读", () => {
+   it("建议去向只使用本人可选的同一个本体 Task 标识", () => {
+     const task = { ...item.target, kind: "task" as const };
+     expect(suggestedMeetingTarget(task.id + "@5", [item.target, task])).toBe(task);
+     expect(suggestedMeetingTarget(task.id, [item.target])).toBeNull();
+     expect(suggestedMeetingTarget(task.name, [task])).toBeNull();
+   });
+   it("展示确认原文、本次交代、可打开的真实去向和来源读取状态", () => {
+@@ -37,8 +92,128 @@ describe("会议变化在原工作中可读", () => {
+     expect(html).toContain("本次摘录");
+   });
+   it("待确认项先让本人选择去向", () => {
+     const html = renderToStaticMarkup(<ConfirmAndHandOff requestId="request-row" onConfirmed={() => undefined} />);
+     expect(html).toContain("选择去向并确认");
+     expect(html).not.toContain("已递送");
+   });
+ });
++
++describe("会后变化进入伙伴时间线", () => {
++  it("按确认时间生成稳定区块，刷新仍保留同一个 key", async () => {
++    let surface = await feed([receipt("delivered")]);
++    expect(surface.blocks).toHaveLength(1);
++    expect(surface.blocks[0]).toMatchObject({ key: `meeting-handoff:${item.conclusion.confirmationRef}`, at: item.conclusion.confirmedAt });
++    const html = renderToStaticMarkup(surface.blocks[0].node);
++    expect(html).toContain(`dateTime="${item.conclusion.confirmedAt}"`);
++    expect(html).toContain("已递送 <strong>1</strong>");
++    expect(html).toContain("待递送 <strong>0</strong>");
++    expect(html).toContain("失败 <strong>0</strong>");
++    expect(html).toContain("下一步");
++    listeners.get("tianshu:meeting-work-confirmed")?.forEach(listener => listener());
++    surface = drive(useMeetingWorkHandoffFeed); effects();
++    await vi.waitFor(() => expect(api.get).toHaveBeenCalledTimes(4));
++    expect(drive(useMeetingWorkHandoffFeed).blocks[0].key).toBe(surface.blocks[0].key);
++  });
++
++  it("已完成去向退出可选列表后仍可打开历史，同时不会恢复到选择器", async () => {
++    const surface = await feed([receipt("delivered")], []);
++    const html = renderToStaticMarkup(surface.blocks[0].node);
++    expect(html).toContain(`href="/me/work/topics/${item.target.id}">打开去向</a>`);
++    expect(html).toContain("历史去向");
++    expect(html).toMatch(/<details[^>]*><summary>递送明细/);
++    expect(html).not.toMatch(/<details[^>]*open=""[^>]*><summary>递送明细/);
++    hooks.values = [];
++    let card = drawCard(surface.blocks[0].node);
++    const add = nodes(card).find(node => node.type === "button" && node.props.children === "添加工作去向");
++    expect(add).toBeDefined();
++    (add!.props.onClick as () => void)();
++    card = drawCard(surface.blocks[0].node);
++    const picker = nodes(card).find(node => node.props.action === "继续推进");
++    expect(picker?.props.targets).toEqual([]);
++    expect(picker?.props.excluded).toEqual([receipt("delivered")]);
++    expect(api.post).not.toHaveBeenCalled();
++  });
++
++  it("待递送与失败均显式展示，失败重试沿用原目标、交代、确认版本和授权", async () => {
++    const failed = receipt("failed");
++    const pending = { ...receipt("pending", "receipt-2"), target: { ...item.target, kind: "task" as const, id: "pending-task" } };
++    const surface = await feed([failed, pending]);
++    const html = renderToStaticMarkup(surface.blocks[0].node);
++    expect(html).toContain("已递送 <strong>0</strong>");
++    expect(html).toContain("待递送 <strong>1</strong>");
++    expect(html).toContain("失败 <strong>1</strong>");
++    expect(html).toContain("权限已变化");
++    expect(html).toContain("重试此去向");
++    expect(html).toContain("递送此去向");
++    expect(html).toMatch(/<details[^>]*open=""[^>]*><summary>递送明细/);
++    const feedValues = hooks.values;
++    hooks.values = [];
++    const tree = drawCard(surface.blocks[0].node);
++    const retry = nodes(tree).find(node => node.type === "button" && node.props.children === "重试此去向");
++    api.post.mockResolvedValue({ response: { ok: true }, data: { receipts: [{ ...failed, status: "delivered", reason: null }] } });
++    (retry!.props.onClick as () => void)();
++    await vi.waitFor(() => expect(api.post).toHaveBeenCalledOnce());
++    expect(api.post).toHaveBeenCalledWith("/api/me/meeting-work-handoffs/{confirmationRef}", {
++      params: { path: { confirmationRef: item.conclusion.confirmationRef } },
++      body: { authorization: "continue", revision: 4, targets: [{ ...failed.target, instruction: failed.instruction }] },
++    });
++    hooks.values = feedValues;
++    await vi.waitFor(() => {
++      const saved = renderToStaticMarkup(drive(useMeetingWorkHandoffFeed).blocks[0].node);
++      expect(saved).toContain("已递送 <strong>1</strong>");
++      expect(saved).toContain("待递送 <strong>1</strong>");
++      expect(saved).toContain("失败 <strong>0</strong>");
++    });
++  });
++
++  it("重试被拒绝时保留失败回执和可再试的动作，并显示服务端原因", async () => {
++    const surface = await feed([receipt("failed")]);
++    hooks.values = [];
++    const retry = nodes(drawCard(surface.blocks[0].node)).find(node => node.type === "button" && node.props.children === "重试此去向");
++    api.post.mockResolvedValue({ response: { ok: false, status: 403 }, error: { message: "当前没有递送权限" } });
++    (retry!.props.onClick as () => void)();
++    await vi.waitFor(() => {
++      const failed = drawCard(surface.blocks[0].node);
++      expect(nodes(failed).some(node => node.props.role === "alert" && node.props.children === "当前没有递送权限")).toBe(true);
++    });
++    const card = drawCard(surface.blocks[0].node);
++    const again = nodes(card).find(node => node.type === "button" && node.props.children === "重试此去向");
++    expect(again?.props.disabled).toBe(false);
++    expect(renderToStaticMarkup(surface.blocks[0].node)).toContain("失败 <strong>1</strong>");
++  });
++
++  it("深链在初次载入和 hashchange 时展开来源/明细并聚焦对应卡", async () => {
++    const surface = await feed([receipt("delivered")]);
++    hooks.values = [];
++    const disclosures = [{ open: false }, { open: false }];
++    const article = { querySelectorAll: () => disclosures, scrollIntoView: vi.fn(), focus: vi.fn() };
++    const find = vi.fn(() => article);
++    vi.stubGlobal("document", { getElementById: find });
++    window.location.hash = `#meeting-work-${item.conclusion.confirmationRef}`;
++    drawCard(surface.blocks[0].node); effects();
++    expect(find).toHaveBeenCalledWith(`meeting-work-${item.conclusion.confirmationRef}`);
++    expect(disclosures.every(detail => detail.open)).toBe(true);
++    expect(article.focus).toHaveBeenCalledWith({ preventScroll: true });
++    disclosures.forEach(detail => { detail.open = false; });
++    window.location.hash = "#meeting-work-other";
++    listeners.get("hashchange")?.forEach(listener => listener());
++    expect(disclosures.every(detail => !detail.open)).toBe(true);
++    window.location.hash = `#meeting-work-${item.conclusion.confirmationRef}`;
++    listeners.get("hashchange")?.forEach(listener => listener());
++    expect(article.focus).toHaveBeenCalledTimes(2);
++    expect(disclosures.every(detail => detail.open)).toBe(true);
++  });
++
++  it("去向读取失败保留已确认变化及历史路由，并提供可重试提示", async () => {
++    api.get.mockImplementation(async (path: string) => {
++      if (path.endsWith("-targets")) throw new Error("暂时离线");
++      return { response: { ok: true }, data: { items: [{ conclusion: item.conclusion, receipts: [receipt("delivered")] }] } };
++    });
++    drive(useMeetingWorkHandoffFeed); effects();
++    await vi.waitFor(() => expect(renderToStaticMarkup(drive(useMeetingWorkHandoffFeed).notice)).toContain("工作去向读取失败 · 连不上天枢，请稍后再试"));
++    const surface = drive(useMeetingWorkHandoffFeed);
++    expect(surface.blocks).toHaveLength(1);
++    expect(renderToStaticMarkup(surface.blocks[0].node)).toContain(`href="/me/work/topics/${item.target.id}">打开去向</a>`);
++    expect(renderToStaticMarkup(surface.notice)).toContain("重试");
++  });
++});

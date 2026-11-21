@@ -45,6 +45,28 @@ describe("二级页右列（clark ConversationColumn）", () => {
     expect(html).toContain("展开对话栏：天枢");
   });
 
+  it("胶囊上写着伙伴名字（Miles）时，伙伴频道页头不再画 logo 和名字；别的外形、群聊、没有胶囊时照旧", () => {
+    const group: ConversationChannel[] = [...agent, { id: "group", kind: "group", label: "事项群组 · 3", title: "事项群组 · 3", unread: 0 }];
+    const header = (patch: { channel?: string; coagent?: boolean; coagentNamed?: boolean }) => {
+      const html = renderToStaticMarkup(
+        <ConversationColumn channels={group} channel={patch.channel ?? "agent"} onChannel={noop} mode="expanded" onMode={noop} mobileOpen={false} onMobileOpen={noop}
+          composerHeight={90} ariaLabel="灯塔 · 对话" testId="rail" coagent={patch.coagent ? <span data-skin="miles" /> : undefined} coagentNamed={patch.coagentNamed}>
+          <p>正文</p>
+        </ConversationColumn>,
+      );
+      return html.match(/<header[\s\S]*?<\/header>/)?.[0] ?? "";
+    };
+    const named = header({ coagent: true, coagentNamed: true });
+    expect(named).not.toContain("我的对话");
+    expect(named).not.toContain("data-tianshu-mark");
+    expect(named).not.toContain("<h2");
+    for (const plain of [header({ coagent: true }), header({ coagentNamed: true })]) {
+      expect(plain).toContain("我的对话");
+      expect(plain).toContain("data-tianshu-mark");
+    }
+    expect(header({ channel: "group", coagent: true, coagentNamed: true })).toContain("事项群组 · 3");
+  });
+
   it("收起偏好只认 strip，其余一律展开", () => {
     expect(readColumnMode("strip")).toBe("strip");
     expect(readColumnMode("expanded")).toBe("expanded");
@@ -61,7 +83,8 @@ describe("右列底下的两行输入条", () => {
     expect(narrow).toContain("天枢");
   });
 
-  it("提示文字是「与天枢讨论…」，空着时右端是停用的发送钮，旁边是附件和小麦克风", () => {
+  it("提示文字跟伙伴的名字：「与<名字>讨论…」，伙伴还没读到时是「与天枢讨论…」；空着时右端是停用的发送钮，旁边是附件和小麦克风", () => {
+    expect(composer({ buddyName: "Christopher" })).toContain('placeholder="与Christopher讨论…"');
     const html = composer();
     expect(html).toContain('placeholder="与天枢讨论…"');
     const send = html.match(/<button[^>]*data-state="send"[^>]*>/)?.[0] ?? "";

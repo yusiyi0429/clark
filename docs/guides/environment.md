@@ -39,7 +39,7 @@ Compose 只把 `infra/docker-compose.yml` 中 `api.environment` 声明过的变�
 | 分组 | 变量 | 缺省行为 |
 | --- | --- | --- |
 | 基础 | `PORT` | 4000 |
-| | `SESSION_MAX_AGE_SECONDS` | 2592000（30 天） |
+| | `SESSION_MAX_AGE_SECONDS` | 7776000（90 天；多久没用才过期，用着就续期） |
 | | `EXTRA_ALLOWED_ORIGINS` | 除 `PUBLIC_ORIGIN` 外不放行其他来源；仅本地开发填写，逗号分隔 |
 | | `BUILD_SHA` | `dev`，健康接口原样返回 |
 | | `COMPANY_NAME` | 引导里不显示公司名 |
@@ -49,6 +49,9 @@ Compose 只把 `infra/docker-compose.yml` 中 `api.environment` 声明过的变�
 | | `MISSION_CARD_KNOWN_MISSIONS_FILE` | 起草时参考的已知本月任务；文件缺失照常起草 |
 | 服务令牌 | `ONTOLOGY_SERVICE_TOKEN` | 本体拉每周进展的只读令牌；不填时对应接口返回 503 |
 | | `INTERNAL_CHAT_TOKEN` | 独立 Chat 读确认会议（`/internal/confirmed-meetings`）的服务凭据；不填时接口一律 404 |
+| | `NEXUS_DRI_SERVICE_TOKEN`、`NEXUS_DRI_TENANT_ID` | Nexus → DRI 确认的接收端（`/api/integrations/nexus/dri/*`）：Nexus 调天枢用的服务凭据，和天枢这边的租户（请求的 `recipientTenant` 要等于它）。都填才开，不填时接口一律 404 |
+| | `NEXUS_DRI_AGENT_ID` | 请求里 `agentId` 要等于它；不填是 `tianshu-dri`（本地回放合成样例时换成样例里的值） |
+| | `NEXUS_DRI_CALLBACK_URL`、`NEXUS_DRI_CALLBACK_SECRET` | 本人确认后回调 Nexus 的地址和 HMAC 共享密钥（至少 32 字节）；不填就不发，确认记录留在待发，填上重启后补发 |
 | | `CHAT_SERVICE_URL` | 首页对话改走独立 Chat 服务的地址（预发 `http://chat:3101`），用 `INTERNAL_CHAT_TOKEN` 转发本人身份；不填时走天枢自己的对话，对象页对话不受影响 |
 | 对话分段 | `CHAT_SESSION_ROTATION` | 设为 `1` 才开首页分段：首页的 Chat 对话闲置满 12 小时或跨过北京时间凌晨 4 点新开一段，界面拼最近 7 天的几段；同时在 `/internal/home-cards` 末尾多给 Chat 一张「以前的对话」卡（上一段纪要 + 近 14 天目录，见 `docs/guides/chat-conversation-recall.md`） |
 | | `CONVERSATION_SEGMENTS` | 设为 `1` 才开天枢页面的对话分段：同一条规则换段，模型侧只带这一段，上一段经会话目录里的纪要交接，另给两个回看工具。缺省关，照旧闲置 12 小时只带摘要重开。两个分段开关都关时不跑会话纪要的后台任务 |
@@ -58,6 +61,7 @@ Compose 只把 `infra/docker-compose.yml` 中 `api.environment` 声明过的变�
 | | `TKOS_WORLD_INSTANCE_LOCAL_FILE` | 只合并人员对应（people），其余以仓库实例配置为准 |
 | | `TKOS_WORLD_TK_INSTANCE`、`TKOS_WORLD_TK_API_URL`、`TKOS_WORLD_TK_TOKEN_FILE` | 第二个只读实例，只接受 `tk`；不填就关闭。地址缺省沿用主实例，凭证只从文件读 |
 | | `TKOS_WORLD_PERIOD_GOAL_GATES` | 设为 `1` 才在签发月度计划后代记本体周期目标的门（签发时那一版草稿代 RU DRI 承诺，再代 CEO 确认；RU DRI 按实例配置的 `unit_dris` 逐域写明）；还要实例配置允许写。只管这一项，会议、周复盘等写入不受影响 |
+| | `MEETING_WORLD_WRITES_OFF` | 设为 `1` 只关会议写本体（会后链切到 Nexus 以后用）：会议卡照常生成、48 小时冻结，不再找人逐条确认（通知栏、等你、飞书都不出，会后判定归 Nexus），确认和冻结一律按「不写入」记，不再写会议事件和对象修改，网页收起「不写进本体」开关。不填照旧写；周复盘、周期目标等写入不受影响。改回去重启即恢复，关着期间定版的会不会自动补写 |
 | 公司事实与记忆 | `COMPANY_WORLD_ACCESS_FILE` | 按人授权的本体域，JSON `{"<personId>":["<domain_id>"]}`。公司事实只认本体：不填或读不到时如实说没读到，不用本地资料兜底 |
 | | `COMPANY_SYSTEM_PERSON_ID` | 后台服务（雷达、会前预审、预研、月度起草与复盘、任务卡起草）读本体用谁的授权；这个 personId 要在授权文件里有域。不填时这些服务如实说没读到本体 |
 | | `MEMORY_STORAGE_DIR` | 本体公司事实的只读投影写在 `<目录>/company`，可重建；不填用 `/tmp/warmap-company`。个人记忆存数据库，不在这里 |

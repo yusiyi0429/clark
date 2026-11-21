@@ -19,6 +19,7 @@ vi.mock("react", async (original) => ({ ...(await original<typeof import("react"
   useState: hooks.useState, useRef: hooks.useRef, useEffect: () => undefined, useCallback: (fn: unknown) => fn, useMemo: (fn: () => unknown) => fn() }));
 const api = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn(), post: vi.fn() }));
 vi.mock("@/lib/api/client", () => ({ browserApi: { GET: api.get, PUT: api.put, POST: api.post } }));
+vi.mock("@/lib/home/noEllipsis", () => ({ useNoEllipsis: () => false, useDots: () => (text: string) => text }));
 
 import { ActionItemRow } from "./ActionItemRow";
 import { CardItemMenu } from "./CardItemMenu";
@@ -148,6 +149,21 @@ describe("决策逐条确认的会议卡（10/28）", () => {
     hooks.values = []; hooks.refs = [];
     const frozen = render(decided({ confirmed: confirmedOf(draft()), sync: SYNCED }));
     expect(hasText(frozen, "周舟没有确认")).toBe(true);
+  });
+
+  it("会议写本体关着（worldWritesOff，会后判定归 Nexus）：不出确认、补归属，不标待谁确认、待接下；决策和行动项照常看得到", () => {
+    const item = { id: "act-1", text: "周五前出报价", ownerPersonId: "p2", dueDate: null, basisSectionIds: [], taskId: null, review: PENDING };
+    const owner = render(decided({ decisions: [DECISION, { ...DECISION, id: "dec-2", ownerPersonId: null }], actionItems: [item], viewerId: "p2", canEdit: false, worldWritesOff: true }));
+    expect(hasText(owner, "二期预算定为 80 万")).toBe(true);
+    expect(hasText(owner, "周五前出报价")).toBe(true);
+    expect(button(owner, "确认")).toBeUndefined();
+    expect(button(owner, "不对")).toBeUndefined();
+    expect(hasText(owner, "待周舟确认")).toBe(false);
+    expect(hasText(owner, "待接下")).toBe(false);
+    hooks.values = []; hooks.refs = [];
+    const host = render(decided({ decisions: [{ ...DECISION, ownerPersonId: null }], worldWritesOff: true }));
+    expect(host.some((node) => node.props?.["aria-label"] === "第 1 条决策交给谁确认")).toBe(false);
+    expect(hasText(host, "指定责任人")).toBe(false);
   });
 });
 
@@ -311,6 +327,18 @@ describe("会议卡：整卡编辑、确认、修改、同步状态", () => {
     const off = render(initial);
     expect(hasText(off, "未挂对象")).toBe(false);
     expect(button(off, "确认这份记录")!.props!.disabled).toBe(false);
+  });
+
+  it("会议写本体关着（worldWritesOff）：不出「不写进本体」开关，没挂对象也能确认，确认按不写入发", async () => {
+    const initial = view({ draft: draft({ relatedObjectRefs: [] }), worldWritesOff: true });
+    const tree = render(initial);
+    expect(tree.some((node) => node.props?.role === "switch")).toBe(false);
+    expect(hasText(tree, "不写进本体")).toBe(false);
+    expect(hasText(tree, "未挂对象")).toBe(false);
+    expect(button(tree, "确认这份记录")!.props!.disabled).toBe(false);
+    click(button(tree, "确认这份记录"));
+    await vi.waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
+    expect((api.post.mock.calls[0][1] as { body: unknown }).body).toMatchObject({ writeToWorld: false });
   });
 
   it("确认出错只显示标签：本体读不了是「本体暂不可用」，时间不对把时间标红", async () => {

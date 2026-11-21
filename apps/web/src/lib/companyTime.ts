@@ -36,7 +36,7 @@ export function companyMonth(date: Date): string {
 }
 
 const companyDay = (date: Date) => date.toLocaleDateString("sv-SE", { timeZone: COMPANY_TIMEZONE });
-const clock = (date: Date) => date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: COMPANY_TIMEZONE });
+export const clock = (date: Date) => date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: COMPANY_TIMEZONE });
 
 /** 封面卡片上那一行的时间：「今天 14:20」「昨天」「10 月 8 日」（不是今年的带年份）。 */
 export function dayLabel(iso: string | null | undefined, now = new Date()): string {

@@ -1,0 +1,11 @@
+/*
+ * 新首页一种字（本人 11/16）：没特别说的地方，字号、字重、行高都一样，类型只用深浅（--ink / --ink-muted / --ink-faint）区分。
+ * 外壳带 data-type-scale="one"（HomeShell）；浮层、侧滑页挂在 body 下，所以条件写在根上（同 scheme-dark.css）。老页面、登录页不受影响。
+ * 各模块原来写的字号、字重在新首页一律盖掉；要和别处不一样的，在自己的模块里设 --type-size / --type-weight / --type-lh（子孙跟着）：
+ * 左栏「项目」小一号、对话里的计划清单小 1px（本人说的两处），对话正文 Markdown 的加粗和标题（内容，不是界面）。
+ */
+:root:has([data-type-scale="one"]) body *:not(svg, svg *) {
+  font-size: var(--type-size, 15px) !important;
+  font-weight: var(--type-weight, 400) !important;
+  line-height: var(--type-lh, 1.5) !important;
+}

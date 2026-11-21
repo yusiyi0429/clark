@@ -35,14 +35,18 @@ vi.mock("react", () => ({
     });
   },
 }));
-import { useConversation, type Message } from "./useConversation";
+import type { Message } from "./useConversation";
+/** 每个测试像新打开的页面：这一页读过的对话（模块里记的）不带到下一个测试。 */
+let useConversation: typeof import("./useConversation").useConversation;
 
 type Pending = { url: string; init?: RequestInit; resolve: (value: unknown) => void; reject: (cause: unknown) => void; done: boolean };
 let requests: Pending[] = [];
 /** 服务端已经回了、网络层没理会取消：只能靠 hook 自己丢掉迟到的结果。 */
 let ignoreAbort = false;
 
-beforeEach(() => {
+beforeEach(async () => {
+  vi.resetModules();
+  ({ useConversation } = await import("./useConversation"));
   h.states = []; h.refs = []; h.memos = []; h.effects = [];
   requests = []; ignoreAbort = false;
   vi.stubGlobal("window", { dispatchEvent: vi.fn(), location: { assign: vi.fn() } });
@@ -152,6 +156,37 @@ describe("对话历史：载入中、真的没有、没读到是三种状态", (
     historyRequest().resolve(ok([user(1, "上次的问题")]));
     await flush();
     expect(render()).toMatchObject({ historyStatus: "ready", historyError: null, historyWaiting: null, messages: [user(1, "上次的问题")] });
+  });
+});
+
+describe("读过的对话记在页面里", () => {
+  it("读过的对话再挂上，当场有消息、不显示载入，随后照常刷新", async () => {
+    scope = "issue:remembered";
+    render();
+    historyRequest().resolve(ok([user(1, "上次的问题"), assistant(2, "上次的回答")]));
+    await flush();
+    unmount();
+    // 切走再切回来：新挂上的一份（状态从零开始）。
+    h.states = []; h.refs = []; h.memos = []; h.effects = [];
+    const reads = requests.filter((request) => !request.init?.method).length;
+    const again = render();
+    expect(again).toMatchObject({ historyStatus: "ready", historyError: null, messages: [user(1, "上次的问题"), assistant(2, "上次的回答")] });
+    // 照常去读一次；读的时候不切到载入中（不出「正在刷新对话记录…」），消息也不清。
+    expect(requests.filter((request) => !request.init?.method)).toHaveLength(reads + 1);
+    expect(render()).toMatchObject({ historyStatus: "ready", messages: [user(1, "上次的问题"), assistant(2, "上次的回答")] });
+    historyRequest().resolve(ok([user(1, "上次的问题"), assistant(2, "上次的回答"), user(3, "后来在别处问的")]));
+    await flush();
+    expect(render()).toMatchObject({ historyStatus: "ready", messages: [user(1, "上次的问题"), assistant(2, "上次的回答"), user(3, "后来在别处问的")] });
+  });
+
+  it("没读成过的对话挂上时照旧是载入中", async () => {
+    scope = "issue:never-read";
+    render();
+    historyRequest().resolve(failed(404));
+    await flush();
+    unmount();
+    h.states = []; h.refs = []; h.memos = []; h.effects = [];
+    expect(render()).toMatchObject({ historyStatus: "loading", messages: [] });
   });
 });
 
@@ -325,7 +360,8 @@ describe("发送后的重读失败", () => {
     await keepFailing((request) => request.resolve(failed(500)));
     const view = render();
     expect(view).toMatchObject({ status: "failed", error: "上一轮回答还没结束，请等它写完或点「停止」后再发。", historyStatus: "error", recovery: null });
-    expect(view.messages).toEqual([user(1, "早先的问题")]);
+    // 伙伴对话读回的本人那几句都算读到了（17.4 的两个勾）。
+    expect(view.messages).toEqual([{ ...user(1, "早先的问题"), receipt: "read" }]);
   });
 });
 
@@ -334,6 +370,24 @@ describe("首页切走、刷新回来：这一轮在服务端照常写，回来�
   const asked: Message = { sequence: 1, role: "user", content: "王总那边的进展？", runId: RUN };
   const followUrl = `/api/conversations/global/turns/${RUN}/stream`;
   const requestTo = (url: string) => requests.filter((request) => request.url === url).at(-1);
+  it("伙伴页面接上排队后才开始的回答，同一轮只订阅一次", async () => {
+    scope = "global";
+    page();
+    render();
+    historyRequest().resolve(ok([]));
+    await flush();
+    const view = render();
+    const refresh = view.followLatest();
+    const read = historyRequest();
+    await view.followLatest();
+    expect(historyRequest()).toBe(read);
+    read.resolve(ok([{ ...asked, running: true }]));
+    await refresh;
+    expect(requestTo(followUrl)).toBeDefined();
+    await render().followLatest();
+    expect(requests.filter(request => request.url === followUrl)).toHaveLength(1);
+    expect(requests.some(request => request.init?.method === "POST")).toBe(false);
+  });
   /** 页面前后台：visibilitychange 由测试触发。 */
   function page(visibility: "visible" | "hidden" = "visible") {
     const listeners = new Set<() => void>();
@@ -358,7 +412,7 @@ describe("首页切走、刷新回来：这一轮在服务端照常写，回来�
     await flush();
     // 不是一句光秃秃的提问：同样的进行中一行，停止可用。
     expect(render()).toMatchObject({ status: "streaming", streaming: true, startedAt, partial: "前半段" });
-    expect(render().messages).toEqual([{ ...asked, running: true }]);
+    expect(render().messages).toEqual([{ ...asked, running: true, receipt: "read" }]);
     turn.release();
     await flush();
     historyRequest().resolve(ok([asked, { sequence: 2, role: "assistant", content: "前半段，后半段", runId: RUN }]));

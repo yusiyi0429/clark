@@ -78,11 +78,6 @@
 .facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 3px 12px; margin: 0; font-size: 13px; line-height: 1.5; }
 .facts dt { color: var(--ink-faint); white-space: nowrap; }
 .facts dd { margin: 0; min-width: 0; color: var(--ink); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-.devices { display: grid; gap: 10px; }
-.device { display: grid; gap: 4px; }
-.device + .device { padding-top: 10px; border-top: 1px dashed var(--hairline); }
-.deviceName { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; margin: 0; color: var(--ink); font-size: 13px; font-weight: 600; }
-.deviceName span { color: var(--ink-faint); font-size: 12px; font-weight: 400; }
 
 .actions, .itemActions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .action.action { min-height: 30px; padding: 4px 11px; gap: 5px; border: 1px solid var(--hairline-strong); border-radius: var(--onboarding-pill-radius); color: var(--ink); font-size: 13px; font-weight: 500; }

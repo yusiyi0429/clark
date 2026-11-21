@@ -125,6 +125,9 @@
 /* 「设置 ›」：箭头靠右；二级开着时这一行保持按下的浅底。 */
 .item.item > svg.more { margin-left: auto; color: #8a95a6; }
 .item.item[data-settings][aria-expanded='true'] { background: rgb(255 255 255 / 58%); }
+/* 管理模式 / 工作模式：现在这个前面打勾，另一个留同样宽的空位；「工作模式」后面的数靠右。 */
+.item.item > .blank { flex: none; width: 16px; }
+.item.item > .count { margin-left: auto; color: #4f5a6b; font-size: 12.5px; font-variant-numeric: tabular-nums; }
 .rule { margin: 4px 8px; border: 0; border-top: 1px solid rgb(31 53 86 / 10%); }
 
 /* 不支持或不想要透明效果时：退回实色，字照样读得清。 */
@@ -184,3 +187,8 @@
 @media (pointer: coarse) {
   .chip.chip { height: 44px; min-height: 44px; border-radius: 22px; }
 }
+
+/* 新首页不出省略号（本人 11/18）：手机上「我」页头的账号名放不下就换行；旧界面照旧。 */
+:global(:root:has([data-type-scale="one"])) .name { white-space: normal; text-overflow: clip; overflow-wrap: anywhere; }
+/* 名字折行时胶囊跟着长高（旧界面的 40 / 44 只当最小高度）。 */
+:global(:root:has([data-type-scale="one"])) .chip.chip { height: auto; }

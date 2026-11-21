@@ -1,0 +1,38 @@
+/* 选伙伴的性格（components/buddy/PersonalityPicker）：四格两列，格子和选形象那四格同一套边框与选中框（coagent-skin-picker.module.css）。 */
+
+.options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+
+.option {
+  position: relative;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 14px 14px 15px;
+  border: 1px solid var(--hairline);
+  border-radius: 18px;
+  background: var(--surface);
+  cursor: pointer;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.option:hover { border-color: var(--hairline-strong); }
+.option[data-selected] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+
+/* 原生单选框留给键盘和读屏，眼睛看的是整格的选中框。 */
+.option input { position: absolute; opacity: 0; pointer-events: none; }
+.option:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
+.option:has(input:disabled) { cursor: default; }
+
+.label { color: var(--ink); font-size: 14px; font-weight: 600; }
+
+/* 示例是伙伴会说的一句话：一块浅色气泡，比名字小一号。 */
+.sample {
+  padding: 9px 11px;
+  border-radius: 4px 12px 12px 12px;
+  background: var(--default-soft);
+  color: var(--ink-muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+@media (max-width: 599px) { .options { grid-template-columns: minmax(0, 1fr); } }

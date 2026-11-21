@@ -36,14 +36,19 @@ function spawn(random: () => number, lobe?: Lobe): Lobe {
   return next;
 }
 
-export function SiriWave({ energy, className }: {
+export function SiriWave({ energy, className, still = false }: {
   /** 0–1：真实麦克风响度。 */
   energy: number;
   className?: string;
+  /** 停在当前这一帧不动（新首页页头、伙伴名片里空闲时）；变回 false 接着流动。 */
+  still?: boolean;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const energyRef = useRef(energy);
   useEffect(() => { energyRef.current = energy; }, [energy]);
+  const stillRef = useRef(still);
+  const restart = useRef<() => void>(() => {});
+  useEffect(() => { stillRef.current = still; restart.current(); }, [still]);
 
   useEffect(() => {
     const element = canvas.current;
@@ -75,7 +80,7 @@ export function SiriWave({ energy, className }: {
       element.height = Math.max(1, Math.round(height * ratio));
     };
     resize();
-    const observer = new ResizeObserver(() => { resize(); if (reduced) draw(); });
+    const observer = new ResizeObserver(() => { resize(); if (reduced || stillRef.current) draw(); });
     observer.observe(element);
 
     let level = 0.12 + energyRef.current * 0.88;
@@ -135,7 +140,8 @@ export function SiriWave({ energy, className }: {
       draw();
       frame = requestAnimationFrame(loop);
     };
-    const start = () => { cancelAnimationFrame(frame); if (reduced || document.visibilityState !== 'visible') return; last = performance.now(); frame = requestAnimationFrame(loop); };
+    const start = () => { cancelAnimationFrame(frame); if (reduced || stillRef.current || document.visibilityState !== 'visible') return; last = performance.now(); frame = requestAnimationFrame(loop); };
+    restart.current = start;
     const onVisibility = () => start();
     const onMotion = () => { reduced = motion.matches; start(); draw(); };
     draw();
@@ -143,6 +149,7 @@ export function SiriWave({ energy, className }: {
     document.addEventListener('visibilitychange', onVisibility);
     motion.addEventListener('change', onMotion);
     return () => {
+      restart.current = () => {};
       cancelAnimationFrame(frame);
       observer.disconnect();
       document.removeEventListener('visibilitychange', onVisibility);

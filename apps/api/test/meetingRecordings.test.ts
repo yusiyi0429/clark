@@ -319,6 +319,36 @@ describe("会议录音 → 会议记录候选", () => {
     }
   });
 
+  it("保留先确认的飞书版本，并把稍后完成的本机转写交给同场伙伴", async () => {
+    let t: TestApp;
+    let meetingId = "";
+    const original = { source:{format:"feishu_minutes", contentHash:"first-version"}, turns:[] };
+    const { deps } = fakeDeps({ async query() {
+      await t.sql(`UPDATE meetings SET transcript=$2::jsonb, status='held', minute_token='confirmed', minute_binding='source_id'
+        WHERE id=$1`, [meetingId, JSON.stringify(original)]);
+      return DONE;
+    }});
+    t = await newApp(deps);
+    try {
+      const created = await scheduledMeeting(t,"late-local");
+      meetingId = created.meetingId;
+      const { recordingId } = (await start(t,created.cookie,meetingId)).json();
+      await chunk(t,created.cookie,meetingId,recordingId,0,"A");
+      await finish(t,created.cookie,meetingId,recordingId);
+      await t.recordings!.idle();
+      const [meeting] = await t.sql("SELECT transcript,transcript_candidate FROM meetings WHERE id=$1",[meetingId]);
+      expect(meeting).toEqual({transcript:original,transcript_candidate:null});
+      const [recording] = await t.sql("SELECT status,transcript_candidate FROM meeting_recordings WHERE id=$1",[recordingId]);
+      expect(recording).toMatchObject({status:"done",transcript_candidate:{source:{format:"volc_asr"}}});
+      const read = await t.app.inject({ method:"GET",url:`/api/me/partner-meetings/${meetingId}/record?recordingId=${recordingId}`,
+        headers:{cookie:await t.memberCookie()} });
+      expect(read.statusCode).toBe(200);
+      expect(read.json().text).toContain("我周五前给排期。");
+    } finally {
+      await t.close();
+    }
+  });
+
   it("recovers on restart: resumes polling transcribing recordings, fails ones stuck mid-pipeline, leaves live recordings alone", async () => {
     const { deps, log } = fakeDeps({ query: async (taskId) => (log.queries.push(taskId), DONE) });
     const t = await newApp(deps);

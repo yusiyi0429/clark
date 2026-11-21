@@ -37,7 +37,7 @@ vi.mock("react", async (importOriginal) => {
 });
 vi.mock("@heroui/react", () => ({ TextArea: (props: NonNullable<typeof h.field>) => { h.field = props; return <textarea readOnly />; } }));
 vi.mock("@/components/HeroButton", () => ({ HeroButton: (props: { children?: ReactNode; "aria-label"?: string }) => <button aria-label={props["aria-label"]}>{props.children}</button> }));
-vi.mock("./useDictation", () => ({ useDictation: () => ({ active: false, polishing: false, live: true, phase: "idle", error: null, marks: [], clearError: vi.fn(), start: vi.fn(), cancel: vi.fn(), stop: vi.fn(), finish: vi.fn(), settle: vi.fn(), change: () => false, composition: vi.fn(), keyDown: () => false }),
+vi.mock("./useDictation", () => ({ useDictation: () => ({ active: false, polishing: false, live: true, phase: "idle", error: null, marks: [], levels: [], clearError: vi.fn(), start: vi.fn(), cancel: vi.fn(), stop: vi.fn(), finish: vi.fn(), settle: vi.fn(), change: () => false, composition: vi.fn(), keyDown: () => false }),
   withDictation: (input: string, text: string) => input + text }));
 vi.mock("./DictationControls", () => ({ DictationControls: () => null }));
 vi.mock("./references", () => ({ ReferenceTray: () => null }));

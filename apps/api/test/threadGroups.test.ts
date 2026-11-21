@@ -138,7 +138,7 @@ describe("议题与会议群", () => {
       expect((agentObject?.payload as { transcriptCandidate?: unknown } | undefined)?.transcriptCandidate).toBeNull();
       // 主持人的 Agent 看完整预审，但不含一号位追问。
       expect((agentObject?.payload as { preflight: { entries: { kind: string }[] } } | undefined)?.preflight.entries.some((entry) => entry.kind === "leader_lens")).toBe(false);
-      expect((await t.app.inject({ method: "GET", url: "/api/me/meetings", headers: { cookie: member } })).json().meetings[0]).toMatchObject({ meetingId: id, href: `/me/meetings/${id}` });
+      expect((await t.app.inject({ method: "GET", url: "/api/me/meetings", headers: { cookie: member } })).json().meetings[0]).toMatchObject({ meetingId: id, href: `/me/work/meetings/${id}` });
       expect((await t.app.inject({ method: "POST", url: `/api/threads/meeting/${id}/leave`, headers: { cookie: member, origin: t.publicOrigin } })).statusCode).toBe(409);
       expect((await t.app.inject({ method: "POST", url: `/api/threads/meeting/${id}/leave`, headers: { cookie: ceo, origin: t.publicOrigin } })).statusCode).toBe(204);
       expect((await t.app.inject({ method: "GET", url: `/api/threads/meeting/${id}`, headers: { cookie: ceo } })).statusCode).toBe(404);

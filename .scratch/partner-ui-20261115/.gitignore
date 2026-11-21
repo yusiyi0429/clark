@@ -1,0 +1,6 @@
+# Full runner payloads remain local; concise summaries and replay commands are retained.
+web-tests-v1.json
+web-tests-final.json
+versions/v1/src/
+versions/v2/src/
+versions/final/src/

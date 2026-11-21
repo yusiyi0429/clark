@@ -44,12 +44,21 @@ export function registerFeishuAuthRoutes(app: AppInstance, ctx: RouteContext, cl
   app.get("/api/auth/feishu/config", { schema: { response: { 200: FeishuAuthConfigResponse } } }, async () =>
     feishu && client ? { enabled: true, appId: feishu.appId, scopes: FEISHU_OAUTH_SCOPE.split(" ") } : { enabled: false });
 
-  app.get("/api/me/feishu", { preHandler: requirePerson, schema: { response: { 200: FeishuConnectionResponse } } }, async (req) =>
-    feishu && client ? {
-      enabled: true,
-      connected: await feishuConnected(q, feishu, req.person!.personId, now()),
-      calendar: await feishuConnected(q, feishu, req.person!.personId, now(), FEISHU_CALENDAR_SCOPES),
-    } : { enabled: false, connected: false, calendar: false });
+  // state（连接页）：没关联过是 not_connected；授权有效是 connected；关联过、授权过期或要重新授权（含缺权限）是 expired。
+  app.get("/api/me/feishu", { preHandler: requirePerson, schema: { response: { 200: FeishuConnectionResponse } } }, async (req) => {
+    if (!feishu || !client) return { enabled: false, connected: false, calendar: false, state: "not_connected" as const };
+    const personId = req.person!.personId;
+    const connected = await feishuConnected(q, feishu, personId, now());
+    const linked = connected || Boolean((await q("SELECT 1 FROM feishu_identities WHERE person_id = $1", [personId])).rowCount);
+    return { enabled: true, connected, calendar: await feishuConnected(q, feishu, personId, now(), FEISHU_CALENDAR_SCOPES),
+      state: connected ? "connected" as const : linked ? "expired" as const : "not_connected" as const };
+  });
+
+  // 断开（连接页）：删掉本人的飞书关联和授权（授权随关联级联删除）；天枢里已有的会议、妙记不动。之后推送、拿妙记都停，要用再连。没连过也是 204。
+  app.delete("/api/me/feishu", { preHandler: requirePerson }, async (req, reply) => {
+    await q("DELETE FROM feishu_identities WHERE person_id = $1", [req.person!.personId]);
+    return reply.status(204).send();
+  });
 
   if (!feishu || !client) return;
 
@@ -110,7 +119,7 @@ export function registerFeishuAuthRoutes(app: AppInstance, ctx: RouteContext, cl
       if (outcome.kind !== "ok") return reply.status(outcome.kind === "code_invalid" ? 400 : OUTCOME_STATUS[outcome.kind].status).send(failurePage(outcome.message));
       reply.header("set-cookie", [clearOAuthStateCookie(), sessionCookie(outcome)]);
       const target = outcome.onboarded ? verified.next : `/welcome?next=${encodeURIComponent(verified.next)}`;
-      return reply.send(page("正在进入天枢…", `<a href="${escapeHtml(target)}">没有自动跳转请点这里</a>`, target));
+      return reply.send(page("正在进入天枢", `<a href="${escapeHtml(target)}">没有自动跳转请点这里</a>`, target));
     },
   );
 

@@ -1,0 +1,140 @@
+/*
+ * 主对话一列（components/rail/ChatPane.tsx、ChatPage.tsx），照原型 v8.4 的 .bud：白底、居中一列，宽屏上气泡用对话层的浅色那一套。
+ * 输入条是现有的 ColumnComposer（原本 fixed 在右列底下），这里在本列里重新摆：两侧和正文对齐，离底 16。
+ */
+.pane {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--surface);
+  --gutter: max(24px, calc((100% - 760px) / 2));
+}
+.pane[data-variant="side"] { --gutter: 18px; }
+
+.head { flex: none; padding: 14px var(--gutter) 4px; }
+
+.log {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  padding: 12px var(--gutter) calc(var(--pane-composer, 52px) + 44px);
+}
+.inner { display: flow-root; }
+
+/*
+ * 新首页伙伴主线、项目对话（页头正中有在场，Presence；本人 11/18）：页头叠在对话上，没有整条实底，对话区一直延到面板顶。
+ * 停在最上面时对话上沿让出原来页头占的高（上 14 + 页头块 + 下 4 + 12），第一条完整出现在形象下面。
+ * 页头块：项目对话 48；主线 88，手机 72（presence.module.css）。页头只有自己的按钮、标题、形象接点击，别处的滚轮和点击落到对话上。
+ * 离开顶部只淡出这一层：标题那一行（14 + 48）看不见，往下 20 渐显；形象身后另垫一块底（presence.module.css）。
+ */
+.pane:has(.head [data-presence]) { --head-block: 48px; }
+.pane:has(.head [data-presence][data-stage]) { --head-block: 88px; }
+:global([data-phone]) .pane:has(.head [data-presence][data-stage]) { --head-block: 72px; }
+.pane:has(.head [data-presence]) > .head { position: absolute; top: 0; left: 0; right: 0; z-index: 2; pointer-events: none; }
+.pane:has(.head [data-presence]) > .head > * > * { pointer-events: auto; }
+/* 对话上沿让出页头实际的高（--head-h：ChatColumn 量的整块页头，含上 14 下 4），再空 12；标题折行、页头长高时跟着走。没量到时按页头块算。 */
+.pane:has(.head [data-presence]) > .log { padding-top: calc(var(--head-h, calc(var(--head-block) + 18px)) + 12px); }
+.pane:has(.head [data-presence]) .log[data-scrolled] {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 62px, black 82px);
+  mask-image: linear-gradient(to bottom, transparent 62px, black 82px);
+}
+/* 没有形象的页头（项目对话）：标题那几行都看不见，往下 20 渐显，跟着页头实际高度。 */
+.pane:has(.head [data-presence]:not([data-stage])) .log[data-scrolled] {
+  -webkit-mask-image: linear-gradient(to bottom, transparent calc(var(--head-h, 66px) - 4px), black calc(var(--head-h, 66px) + 16px));
+  mask-image: linear-gradient(to bottom, transparent calc(var(--head-h, 66px) - 4px), black calc(var(--head-h, 66px) + 16px));
+}
+
+/* 输入框那一块是实心底（同子会话）：从框上沿到窗口底边整条盖住，对话不从框下面透出来；框离底 16 加安全区。 */
+.composer [data-composer] {
+  position: absolute;
+  z-index: 3;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 0 var(--gutter) calc(16px + env(safe-area-inset-bottom, 0px));
+  background: var(--surface);
+  width: auto;
+  height: auto;
+  transform: none;
+  --composer-width: 100%;
+  --composer-shift: 0px;
+}
+.jump { position: absolute; left: 0; right: 0; bottom: calc(var(--pane-composer, 52px) + 30px); }
+
+/* 对话页：左上「对话」打开列表，正中是伙伴。 */
+.pageHead { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; min-height: 56px; }
+.listButton {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 12px 0 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 17px;
+  background: var(--surface);
+  box-shadow: 0 1px 2px #1018280d;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.listButton:hover { background: var(--neutral-wash); }
+.listButton em { display: grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--accent); color: #fff; font-size: 12px; font-weight: 700; font-style: normal; }
+.figure { display: grid; justify-items: center; }
+
+/* 对话列表（左上「对话」）：主对话、专题、已归档、新专题。 */
+.list { width: 320px; max-width: calc(100vw - 24px); padding: 12px; }
+.listHead { display: flex; align-items: center; gap: 8px; margin: 0 2px 8px; }
+.listHead b { flex: 1; font-size: 14px; }
+.row {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 7px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: var(--ink);
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.row:hover, .row[aria-current="page"] { background: var(--neutral-wash); }
+.row b { display: block; overflow: hidden; font-size: 14px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.row small { display: block; color: var(--ink-faint); font-size: 12px; }
+.topicDot { position: relative; width: 26px; height: 26px; border-radius: 8px; background: color-mix(in oklab, var(--accent) 12%, var(--surface)); }
+.topicDot::after { content: ""; position: absolute; inset: 9px; border-radius: 3px; background: var(--accent); }
+.groupLabel { margin: 10px 7px 4px; color: var(--ink-faint); font-size: 12px; }
+.none { margin: 2px 7px 4px; color: var(--field-placeholder); font-size: 12px; }
+.newForm { display: grid; gap: 8px; margin-top: 8px; padding: 8px 7px 2px; border-top: 1px solid var(--hairline); }
+.newForm input, .newForm select {
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--field-border);
+  border-radius: var(--r-control);
+  background: var(--field-bg);
+  color: var(--field-ink);
+  font: inherit;
+  font-size: 14px;
+}
+.newForm input:focus, .newForm select:focus { border-color: var(--field-border-focus); outline: 0; }
+.newActions { display: flex; justify-content: flex-end; gap: 6px; }
+
+/* Task 页左栏顶上的 Task 标签。 */
+.taskTag { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; height: 26px; padding: 0 10px; border-radius: 13px; background: var(--neutral-wash); color: var(--ink-muted); font-size: 12px; }
+.taskTag span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.taskTag i { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--c, var(--accent)); }
+.sideHead { display: flex; align-items: center; gap: 10px; min-height: 40px; }
+
+/* 新首页不出省略号（本人 11/18）：放不下就换行，长预览限高往下渐隐；只在新首页的外壳里生效，旧界面照旧。 */
+:global(:root:has([data-type-scale="one"])) .row b, :global(:root:has([data-type-scale="one"])) .taskTag span { overflow: visible; white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+:global(:root:has([data-type-scale="one"])) .taskTag { height: auto; min-height: 26px; padding-block: 2px; }

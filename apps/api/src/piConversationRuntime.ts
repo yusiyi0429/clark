@@ -29,6 +29,7 @@ import type { PeopleDirectory } from "./peopleDirectory.js";
 import { formalTermsDeep } from "./formalTerms.js";
 import type { ConversationRuntime } from "./conversations.js";
 import { CONVERSATION_WRITING_STYLE } from "./promptStyle.js";
+import { buddyPersona } from "./buddyPersona.js";
 import {
   TIER_GUIDANCE, TIER_SETTINGS, cleanThought, createEscalationWatch, hasWriteIntent, latestSummaryHeading, routeTurn, thinkingHeadline, toolProgressLabel, toolResultDetail, withNotice,
   type ConversationTier, type ThinkingTranslator, type ThoughtTranslator, type TierThinkingLevel, type TriageFn, type TurnRoute,
@@ -295,7 +296,7 @@ export type PiConversationRuntimeOptions = {
    */
   listBattlefields?: () => Promise<BattlefieldBrief[]>;
   /** 本体只读（按需工具 read_ontology，不进每轮上下文包）；没接本体时不提供。返回 null 表示本体暂时读不到。 */
-  readOntology?: (args: { part?: "company" | "strategy" | "battlefields"; battlefieldId?: string }) => Promise<Record<string, unknown> | null>;
+  readOntology?: (args: { part?: "company" | "strategy" | "battlefields" | "missions"; battlefieldId?: string }) => Promise<Record<string, unknown> | null>;
   /** 本体只读公司事实（按需工具 query_company，按人授权的域）；不提供时没有这个工具。 */
   company?: CompanyReader;
   listMissions?: (filters: { period?: string; battlefieldId?: string; capabilityId?: string; ownerId?: string }, viewer?: { personId: string; role: "ceo" | "member" }) => Promise<unknown[]>;
@@ -561,13 +562,13 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
     ...(options.readOntology ? [defineTool({
       name: "read_ontology",
       label: "读取本体",
-      description: "读取本体（tkos.world 业务世界）里登记的 Company、Strategy 与各战场的长期目标、本月目标（只读，带缓存，结果有截断）。part 只取一部分；battlefieldId 只取一个战场。",
+      description: "读取本体（tkos.world 业务世界）里登记的 Company、Strategy、各战场的长期目标、本月目标，以及 Mission、Task 清单（优先当月；标题、ref、状态、所属单元。只读，带缓存，结果有截断）。part 只取一部分；battlefieldId 只取一个战场。某个 Mission 或 Task 的正文和进展用 query_company 按名称查。",
       parameters: Type.Object({
-        part: Type.Optional(Type.Union([Type.Literal("company"), Type.Literal("strategy"), Type.Literal("battlefields")])),
+        part: Type.Optional(Type.Union([Type.Literal("company"), Type.Literal("strategy"), Type.Literal("battlefields"), Type.Literal("missions")])),
         battlefieldId: Type.Optional(Type.String()),
       }, { additionalProperties: false }),
       execute: async (_id, args) => {
-        const result = await options.readOntology!(args as { part?: "company" | "strategy" | "battlefields"; battlefieldId?: string });
+        const result = await options.readOntology!(args as { part?: "company" | "strategy" | "battlefields" | "missions"; battlefieldId?: string });
         // 本体读不到（D-48）：如实说没读到，不用本地资料补公司事实，并多记一条日志。
         if (!result) logEvent({ event: "world.ontology_unavailable", tool: "read_ontology", part: (args as { part?: string }).part ?? "all" });
         const value = result ?? { available: false, note: '这次没有读到本体：如实告诉用户没读到，不要用本地资料补公司事实，也不要说成本体里没有。' };
@@ -800,8 +801,8 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
         };
         const company = options.company;
         const knowledge = company ? terms.memory.map((query) => step("query_company", { query }, async () => {
-          const view = await company.read({ personId: input.viewer.personId, role: input.viewer.role }, { query }, input.signal);
-          return { query, status: view.status, entries: view.entries.map(({ title, text }) => ({ title, text })), ...(view.message ? { message: view.message } : {}) };
+          const view = await company.read({ personId: input.viewer.personId, role: input.viewer.role }, { query, locate: true }, input.signal);
+          return { query, status: view.status, entries: view.entries.map(({ ref, type, title, text }) => ({ ref, type, title, text })), ...(view.message ? { message: view.message } : {}) };
         })) : [];
         const web = terms.web.filter(() => searchCount < SEARCH_LIMIT).map((query) => {
           searchCount += 1;
@@ -845,7 +846,7 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
         ...(options.company ? [defineTool({
           name: "query_company",
           label: "查询本体公司事实",
-          description: "只读查询本人被授权读取的本体（World）公司事实正文。新查询带 query；续页只带上次返回的 cursor。status 不是 ready/empty 时表示这次没读到本体，按返回的 message 处理。",
+          description: "只读查询本人被授权读取的本体（World）公司事实正文。新查询带 query；续页只带上次返回的 cursor。status 不是 ready/empty 时表示这次没读到本体，按返回的 message 处理。每条带 ref（本体对象 id@版本）和 type；正文里不写 ref，出处标记和本人追问出处时照抄它。",
           parameters: Type.Object({ query: Type.Optional(Type.String({ maxLength: 1000 })), cursor: Type.Optional(Type.String({ maxLength: 20 })) }, { additionalProperties: false }),
           execute: async (_id, args) => {
             const request = args as { query?: string; cursor?: string };
@@ -853,11 +854,11 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
             if (request.cursor && !saved) return textResult({ status: "unavailable", entries: [], message: '分页位置不属于本轮，请重新查询。' });
             const query = saved ? saved.query : request.query;
             const view = await withRetrieve(RETRIEVE_SOURCES.worldCompany, () => ({ hasQuery: Boolean(query), page: Boolean(saved) }),
-              () => options.company!.read({ personId: input.viewer.personId, role: input.viewer.role }, { query, cursor: saved?.cursor }, input.signal),
+              () => options.company!.read({ personId: input.viewer.personId, role: input.viewer.role }, { query, cursor: saved?.cursor, locate: true }, input.signal),
               (result) => ({ status: result.status, entries: result.entries.length }));
             let nextCursor: string | undefined;
             if (view.nextCursor) { nextCursor = `CP${companyCursors.size + 1}`; companyCursors.set(nextCursor, { cursor: view.nextCursor, query }); }
-            return textResult({ status: view.status, entries: view.entries.map(({ title, text }) => ({ title, text })),
+            return textResult({ status: view.status, entries: view.entries.map(({ ref, type, title, text }) => ({ ref, type, title, text })),
               ...(view.message ? { message: view.message } : {}), ...(nextCursor ? { nextCursor } : {}) });
           },
         })] : []),
@@ -1252,9 +1253,15 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
       const prefetching = route.prefetch ? prefetch(route.prefetch) : Promise.resolve(undefined);
       // 系统提示与工具按档位、修改意图、本轮意图与页面裁剪（conversationPrompt.ts）。
       const shape = { tier: route.tier, writeIntent: route.writeIntent, anthropic, intents: promptIntents(routedMessage, route), materials: materialTools.length > 0 };
-      const basePrompt = personalCard ? `${isCeo ? SYSTEM_PROMPT : driSystemPrompt(input.viewer.displayName, true)}\n\n${MISSION_CARD_EDITING_PROMPT}`
+      const rolePromptBase = personalCard ? `${isCeo ? SYSTEM_PROMPT : driSystemPrompt(input.viewer.displayName, true)}\n\n${MISSION_CARD_EDITING_PROMPT}`
         : isCeo ? CEO_SYSTEM_PROMPT
         : driSystemPrompt(input.viewer.displayName);
+      // 本人选了伙伴：接上伙伴的人设（名字、性格、寒暄怎么接、底线），CEO 的提示词本来就不带本人名字。
+      // 「发消息的样子」只给主线和项目对话（网页在这两处把回复拆成气泡），对象页不带。
+      const texting = input.scope === "global" || input.scope.startsWith("project:");
+      const basePrompt = input.viewer.buddy
+        ? `${rolePromptBase}\n\n${buddyPersona(input.viewer.buddy, isCeo ? null : input.viewer.displayName, { texting })}`
+        : rolePromptBase;
       // 三层取用、深聊转议题的说明只在有这些工具时拼上（在表达要求之后，快答档裁剪检索条款时不受影响）。
       // 分段时以前的对话靠会话目录和两个回看工具：系统提示里那一句换成指向它们（只随开关变，不随轮次变）。
       const pastRules = input.pastConversations ? [PAST_CONVERSATION_RULES] : [];

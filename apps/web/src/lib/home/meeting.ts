@@ -1,0 +1,59 @@
+/**
+ * 伙伴台「开会」的几条小规矩（设计 2026-11-12 第二节）：默认标题、哪些已约的会现在能开、计时怎么写（开会默认不挂，11/16）。
+ * 只做计算，不碰接口和界面。
+ */
+import { COMPANY_TIMEZONE } from "@/lib/companyTime";
+
+/** 这场会的会议页（新首页里，旧的 /me/meetings/:id 会跳过来）。 */
+export const meetingHref = (id: string) => `/me/work/meetings/${encodeURIComponent(id)}`;
+
+/** 伙伴台上开会改了某场会（开始录、接着录、开完、录音整理完）：开着的会议页听到同一场就重取一次，不用手动刷新。 */
+export const MEETING_CHANGED = "tianshu:meeting-changed";
+export function announceMeeting(meetingId: string): void {
+  window.dispatchEvent(new CustomEvent<{ meetingId: string }>(MEETING_CHANGED, { detail: { meetingId } }));
+}
+
+/** 已约的会提前多久就能开。 */
+export const EARLY_MS = 15 * 60_000;
+/** 新的一场先占一小时（实际以按下「开完了」为准）。 */
+export const SLOT_MS = 60 * 60_000;
+
+const parts = (at: Date) => Object.fromEntries(new Intl.DateTimeFormat("en-GB", {
+  timeZone: COMPANY_TIMEZONE, month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false,
+}).formatToParts(at).map((part) => [part.type, part.value]));
+
+/** 「11月12日 15:30 的会」（公司时区）。 */
+export function defaultMeetingTitle(at: Date): string {
+  const p = parts(at);
+  return `${Number(p.month)}月${Number(p.day)}日 ${p.hour}:${p.minute} 的会`;
+}
+
+/** 「10:00–11:00」（公司时区）。 */
+export function meetingSpan(startsAt: string, endsAt: string | null): string {
+  const clock = (iso: string) => { const p = parts(new Date(iso)); return `${p.hour}:${p.minute}`; };
+  return `${clock(startsAt)}–${clock(endsAt ?? new Date(Date.parse(startsAt) + SLOT_MS).toISOString())}`;
+}
+
+type BookedMeeting = { meetingId: string | null; title: string; at: string; endsAt?: string | null; canStartRecording?: boolean; stage: string };
+
+/** 还在开会时间内，并且服务端允许本人录音；两位同名成员不会看到对方的操作。 */
+export function startableMeetings(meetings: readonly BookedMeeting[], now: number) {
+  return meetings
+    .filter((meeting): meeting is BookedMeeting & { meetingId: string } =>
+      !!meeting.meetingId && !!meeting.canStartRecording && (meeting.stage === "scheduled" || meeting.stage === "live"))
+    .filter((meeting) => {
+      const start = Date.parse(meeting.at);
+      const end = meeting.endsAt ? Date.parse(meeting.endsAt) : start + SLOT_MS;
+      return now >= start - EARLY_MS && now < end;
+    })
+    .sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+}
+
+/** 走秒：一小时内「12:34」，过了「1:02:34」。 */
+export function elapsed(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = String(total % 60).padStart(2, "0");
+  return h ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
+}

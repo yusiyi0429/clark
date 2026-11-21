@@ -5,20 +5,27 @@
  * - 只展示 plan，取数在 useHomePlan；节点的加、改名、删在 usePlanMarks（先画上再发请求）。快捷卡（actions）由外面给，plan 还没读到时也先出。
  * - 按 Mission 归组一律看 activity.missionId（任务卡没确认时 item.mission 为空）。
  * - 选中的 Task 默认是：有本周事项的第一个 Task，没有就第一个 Task，没有 Task 就「未归入 Task」；重取后选中的不在了也回到默认。
+ *   选中真 Task 时右边是它的交付物面板，执行事项三栏放在面板底部的「我的事项」（默认展开），新建键也在那一行。
  * - 同一时间最多一个浮层（ⓘ、月历上的「这一天」），开合与 Esc 由 ts-design Popover 管；它对着的 Task、Mission、节点重取后不在了，浮层就关掉或回到「看」。
  * - 点一天先看这一天（DayPopover）：关口、我的节点、这天截止；在里面加节点、改名、删，存了回到「看」。点月历上的节点直接开那一天并进入改名。
  * - 月历默认画本月；左右箭头翻到别的月份，那个月读 /api/me/plan-calendar，读到了再换（连点只认最后一次）；节点只能加在 Mission 所在的月份里。
  * - 版式按主区宽度（容器查询，见样式）：宽时顶行三张并排；窄一些时快捷变成一排小方块放最上面；再窄就一列。
+ * - /me?planTask=… 是飞书「请 X 看」的链接：计划读到后去掉这个参数，Task 在本人计划里就选中它的 Mission 和 Task、滚到面板并对一次表；
+ *   不在（认可人、战场负责人看别人的 Task）就打开 /me/plan-tasks/… 那个只读的二级页。
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useSearchParams } from "next/navigation";
 import { CircleAlert } from "lucide-react";
 import type { THomePlanActivity, THomePlanMark, THomePlanResponse, TPlanCalendarResponse } from "@warmap/contracts";
 import { DayPopover, type DayMode } from "./DayPopover";
+import { ActivityColumns } from "./ActivityColumns";
 import { MissionDetail } from "./MissionDetail";
 import { MissionList, UNPLACED } from "./MissionList";
 import { MonthCalendar } from "./MonthCalendar";
 import { LOOSE, TaskList, hasInfo } from "./TaskList";
 import { UnplacedDetail } from "./UnplacedDetail";
+import { TaskDeliverable } from "./deliverable/TaskDeliverable";
+import { StartTaskButton } from "@/components/tours/StartTaskButton";
 import { isPending, usePlanMarks } from "./usePlanMarks";
 import { readPlanCalendar } from "./useHomePlan";
 import type { Navigate } from "./planFormat";
@@ -41,6 +48,10 @@ export function HomePlan({ plan, actions, onNavigate }: { plan: THomePlanRespons
   /** 「这一天」浮层挂在那一天的格子下面。 */
   const dayRef = useRef<Element | null>(null);
   const planMarks = usePlanMarks(plan?.marks ?? NO_MARKS);
+  const linked = useSearchParams()?.get("planTask") ?? null;
+  const linkHandled = useRef<string | null>(null);
+  /** 从链接定位到的 Task：它的面板打开就对一次表。 */
+  const [linkedTask, setLinkedTask] = useState<string | null>(null);
 
   const missions = plan?.missions ?? [];
   // 跨月重取后原来聚焦的 Mission 可能不在了，就回到「全部」。
@@ -70,6 +81,28 @@ export function HomePlan({ plan, actions, onNavigate }: { plan: THomePlanRespons
     if (popover && !open) setPopover(null);
     else if (day && modeGone) setPopover({ ...day, mode: { kind: "view" } });
   }, [popover, open, day, modeGone]);
+
+  useEffect(() => {
+    if (!linked || !plan || linkHandled.current === linked) return;
+    linkHandled.current = linked;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("planTask");
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+    const target = plan.tasks.find((task) => task.taskId === linked);
+    if (!target) {
+      onNavigate(`/me/plan-tasks/${encodeURIComponent(linked)}`);
+      return;
+    }
+    setPicked(target.missionId);
+    setTaskId(target.taskId);
+    setPopover(null);
+    setLinkedTask(target.taskId);
+  }, [linked, plan, onNavigate]);
+  useEffect(() => {
+    if (!linkedTask) return;
+    const frame = window.requestAnimationFrame(() => document.querySelector(`[data-plan-task="${CSS.escape(linkedTask)}"]`)?.scrollIntoView({ block: "start" }));
+    return () => window.cancelAnimationFrame(frame);
+  }, [linkedTask]);
 
   const close = () => setPopover(null);
   /** 翻月：回到本月直接用 plan 里的；别的月份读到了再换，连点只认最后一次，没读到就留在原来那个月。 */
@@ -171,6 +204,11 @@ export function HomePlan({ plan, actions, onNavigate }: { plan: THomePlanRespons
                 close();
               }}
               onInfo={(next) => setPopover(next ? { kind: "info" } : null)} />
+          ) : null}
+          panel={selectedTask ? (
+            <TaskDeliverable key={selectedTask.taskId} task={selectedTask} activityCount={shown.length} newItem={<StartTaskButton onNavigate={onNavigate} missionId={selectedTask.missionId} taskId={selectedTask.taskId} />}
+              checkOnOpen={linkedTask === selectedTask.taskId}
+              activities={<ActivityColumns activities={shown} today={plan.today} weekStart={plan.weekStart} weekEnd={plan.weekEnd} onNavigate={onNavigate} />} />
           ) : null}
           activities={shown}
           today={plan.today}

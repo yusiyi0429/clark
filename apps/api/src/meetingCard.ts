@@ -20,10 +20,11 @@ import {
 import { enqueueJob } from "./jobs.js";
 import { confirmedView, currentConfirmation, draftChangeOf, MEETING_CARD_FREEZE_KIND, meetingRecordState, PENDING_REVIEW } from "./meetingCardConfirm.js";
 import { attendeesOf } from "./meetingDecisionView.js";
-import { getMeetingRow, type MeetingRow, type Query } from "./meetingStore.js";
+import { getMeetingRow, meetingTranscriptFormat, type MeetingRow, type Query } from "./meetingStore.js";
 import { appliedChanges, type AppliedChanges } from "./meetingObjectSync.js";
 import { meetingAnchorGroups } from "./meetingWorld.js";
 import { logEvent } from "./observability.js";
+import { canReadMeetingSource, type MinuteReader } from "./partnerMeetings.js";
 import { capturedAtOf, meetingTranscriptUrl, transcriptContentHash } from "./transcriptHash.js";
 import { projectPerson } from "./transcriptCandidate.js";
 import type { WorldClient } from "./worldClient.js";
@@ -41,6 +42,7 @@ import { anchorHead, recordedStart, type AnchorHeadClient } from "./worldMeeting
 /** 会议卡读本体用的接口：挂点解析加取对象（组件内容和版本）。 */
 export type CardWorld = AnchorHeadClient & Pick<WorldClient, "getObject">;
 export type MeetingCardDeps = {
+  minutes?: MinuteReader;
   /** 本体可写时才有；没有时挂点对象和修改目标都为空。 */
   world?: CardWorld;
   /** 没有飞书妙记的逐字稿，来源地址用天枢会议页。 */
@@ -51,6 +53,11 @@ export type MeetingCardDeps = {
   people?: () => TPersonResult[];
   /** 记录正文能不能写进本体（等斯一答复，MEETING_WORLD_RECORD_TEXT）：能时，没有决策的会生成后直接冻结写入。 */
   recordText?: boolean;
+  /**
+   * 会议写本体整个关掉了（MEETING_WORLD_WRITES_OFF，切到 Nexus）：视图带 worldWritesOff，网页收起「不写进本体」开关和逐条确认；
+   * 会后判定归 Nexus，天枢不再找人逐条确认（通知栏、等你、飞书都不出，已经在等的也不出），会议卡照常生成、48 小时冻结。
+   */
+  writesOff?: boolean;
 };
 export type Viewer = { personId: string; isCeo: boolean };
 type CardError = { status: number; code: string; message: string; fieldErrors?: Record<string, string>; view?: TMeetingCardView };
@@ -286,7 +293,8 @@ export function createMeetingCardService(pool: Pool, deps: MeetingCardDeps) {
   /** 读卡见 canReadMeetingCard；编辑只给主持人和创建人。 */
   async function access(meetingId: string, viewer: Viewer) {
     const meeting = await getMeetingRow(q, meetingId);
-    return meeting && canReadMeetingCard(meeting, viewer) ? { meeting, viewer, canEdit: isHostOrCreator(meeting, viewer.personId) } : null;
+    return meeting && canReadMeetingCard(meeting, viewer) && await canReadMeetingSource(q,deps.minutes,meeting,{personId:viewer.personId,role:viewer.isCeo?"ceo":"member"})
+      ? { meeting, viewer, canEdit: isHostOrCreator(meeting, viewer.personId) } : null;
   }
   type Access = NonNullable<Awaited<ReturnType<typeof access>>>;
 
@@ -338,7 +346,7 @@ export function createMeetingCardService(pool: Pool, deps: MeetingCardDeps) {
     return {
       draft: row?.draft ?? null, draftVersion: row?.draft_version ?? 0, draftStatus: row?.draft_status ?? "created", actionItems: row?.action_items ?? [],
       decisions: row?.decisions ?? null, hostId: meeting.lead_dri_id, viewerId: viewer.personId, writeToWorld: row?.write_to_world ?? true,
-      ...confirmedView(current), targetOptions, canEdit, draftChange: draftChangeOf(row?.draft ?? null, row?.action_items ?? [], current),
+      ...(deps.writesOff ? { worldWritesOff: true } : {}), ...confirmedView(current), targetOptions, canEdit, draftChange: draftChangeOf(row?.draft ?? null, row?.action_items ?? [], current),
       unmappedSpeakers: canEdit ? await openSpeakers(meetingId) : [],
     };
   }
@@ -553,24 +561,32 @@ export function createMeetingCardService(pool: Pool, deps: MeetingCardDeps) {
    */
   async function pendingFor(personId: string): Promise<{ meetings: TMyMeetingCard[]; confirms: TMyMeetingConfirm[] }> {
     const rows = (await q(
-      `SELECT m.id, m.title, m.lead_dri_id, m.created_by, COALESCE(m.ended_at, m.ends_at) AS ended_at, k.decisions, k.action_items, k.current_revision
+      `SELECT m.id, m.title, m.lead_dri_id, m.created_by, ${meetingTranscriptFormat("m.")} AS source_format,
+         COALESCE(m.ended_at, m.ends_at) AS ended_at, k.decisions, k.action_items, k.current_revision
          FROM meetings m JOIN meeting_cards k ON k.meeting_id = m.id
-        WHERE k.draft_status = 'draft_ready' AND (m.lead_dri_id = $1 OR COALESCE(m.created_by, m.lead_dri_id) = $1
+        WHERE k.draft_status = 'draft_ready' AND m.status<>'cancelled'
+          AND (${meetingTranscriptFormat("m.")} IS DISTINCT FROM 'feishu_minutes' OR m.minute_binding IN ('source_id','owner'))
+          AND NOT EXISTS (SELECT 1 FROM thread_members t WHERE t.object_type='meeting' AND t.object_id=m.id::text AND t.person_id=$1 AND t.left_at IS NOT NULL)
+          AND (m.lead_dri_id = $1 OR COALESCE(m.created_by, m.lead_dri_id) = $1
           OR EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(k.decisions, '[]'::jsonb) || k.action_items) e WHERE e ->> 'ownerPersonId' = $1))
         ORDER BY COALESCE(m.ended_at, m.ends_at) DESC`,
       [personId],
-    )).rows as (Pick<MeetingRow, "id" | "title" | "lead_dri_id" | "created_by"> & { ended_at: Date; decisions: TMeetingCardDecision[] | null;
+    )).rows as (Pick<MeetingRow, "id" | "title" | "lead_dri_id" | "created_by"> & { source_format:string|null; ended_at: Date; decisions: TMeetingCardDecision[] | null;
       action_items: TMeetingActionItem[]; current_revision: number | null })[];
     const meetings: TMyMeetingCard[] = [];
     const confirms: TMyMeetingConfirm[] = [];
     for (const row of rows) {
+      if (row.source_format === "feishu_minutes") {
+        const meeting = await getMeetingRow(q,row.id);
+        if (!meeting || !await canReadMeetingSource(q,deps.minutes,meeting,{personId,role:"member"})) continue;
+      }
       const mine = (item: { ownerPersonId: string | null; review?: { status: string } }) => item.review?.status === "pending" && (item.ownerPersonId ?? row.lead_dri_id) === personId;
       const at = { meetingId: row.id, title: row.title };
-      // 决策：有责任人的给责任人确认；没有的给主持人补归属。
-      if (!row.current_revision) for (const decision of (row.decisions ?? []).filter(mine)) {
+      // 决策：有责任人的给责任人确认；没有的给主持人补归属。会议写本体关掉了（切到 Nexus）不再找人逐条确认。
+      if (!deps.writesOff && !row.current_revision) for (const decision of (row.decisions ?? []).filter(mine)) {
         confirms.push({ ...at, kind: "decision", id: decision.id, text: decision.text, dueDate: null, needsOwner: !decision.ownerPersonId });
       }
-      for (const item of row.action_items.filter(mine)) confirms.push({ ...at, kind: "action", id: item.id, text: item.text, dueDate: item.dueDate, needsOwner: false });
+      if (!deps.writesOff) for (const item of row.action_items.filter(mine)) confirms.push({ ...at, kind: "action", id: item.id, text: item.text, dueDate: item.dueDate, needsOwner: false });
       if (!isHostOrCreator(row, personId) || !row.current_revision) continue;
       if ((await meetingRecordState(q, row.id, (id) => id)).status === "failed") meetings.push({ ...at, endedAt: new Date(row.ended_at).toISOString(), status: "failed" });
     }

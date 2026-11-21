@@ -3,6 +3,7 @@ import { ChangePasscodeRequest, DemoEntryResponse, LoginRequest, LoginResponse, 
 import { LOCK_AFTER_FAILURES, changePasscode, roleOf, verifyCredentials, type Rejected } from "../memberAccess.js";
 import { sessionClearCookie, sessionSetCookie } from "../session.js";
 import { hasCompletedOnboarding } from "../onboarding.js";
+import { readBuddy } from "../buddy.js";
 import { isAllowedOrigin, type AppInstance, type RouteContext } from "./shared.js";
 import { isAdmin } from "./admin.js";
 
@@ -94,6 +95,7 @@ export function registerAuthRoutes(app: AppInstance, ctx: RouteContext): void {
       canSwitchView: person.canSwitchView,
       ...(isAdmin(ctx, person.personId) ? { admin: true } : {}),
       onboarded: await hasCompletedOnboarding(q, person.personId),
+      buddy: await readBuddy(q, person.personId),
       ...(loginId ? { loginId } : {}),
     };
   }

@@ -1,7 +1,24 @@
-import type { TReadScopeParams } from "@warmap/contracts";
+import type { TReadScopeParams, TBuddyPlan, TBuddyUiEffect, TConversationCard } from "@warmap/contracts";
 
 export type ConversationEvent = {
-  type: "message" | "tool" | "step" | "usage" | "compaction" | "warning" | "error" | "done" | "route" | "thinking" | "escalation" | "recovery" | "scope";
+  type: "message" | "tool" | "step" | "usage" | "compaction" | "warning" | "error" | "done" | "route" | "thinking" | "escalation" | "recovery" | "scope"
+    | "receipt" | "plan" | "ui" | "card" | "buddy_reaction" | "model";
+  /** model：这一轮实际用的来源（Chat 配的接入方）和模型名（走 Chat 的对话，换了才再给）。 */
+  provider?: string;
+  model?: string;
+  /** receipt（17.4，伙伴对话）：本人这条消息 delivered 天枢收下了，read 伙伴读到了。 */
+  state?: "delivered" | "read";
+  /** receipt：天枢给本人这条消息的 id，两帧按它对上同一条。 */
+  messageId?: string;
+  /** plan（17.4）：伙伴这一轮的计划清单，后一条取代前一条。 */
+  plan?: TBuddyPlan;
+  /** ui（17.4）：伙伴动作在界面上的效果（切外观、打开某处、刷新哪几块）。 */
+  ui?: TBuddyUiEffect;
+  /** card（17.4）：伙伴这一轮出的卡（转达给同事的 buddy_message）。 */
+  card?: TConversationCard;
+  /** buddy_reaction：伙伴派活成功后在本人这一轮那句话（role 恒为 user，按 runId 认）上点的表情，emojis 是伙伴在这条上的整组。 */
+  role?: "user";
+  emojis?: string[];
   /** scope：跨对象读取的范围（三层取用）：params 是读取范围，choices 是点开调整时可选的人；label 复用下面的 label。 */
   params?: TReadScopeParams;
   choices?: { people: { id: string; name: string }[] };

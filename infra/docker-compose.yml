@@ -80,11 +80,17 @@ services:
       DATABASE_URL: postgres://warmap:${POSTGRES_PASSWORD}@postgres:5432/warmap
       PUBLIC_ORIGIN: https://${PUBLIC_DOMAIN:?PUBLIC_DOMAIN required}
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET required}
-      SESSION_MAX_AGE_SECONDS: ${SESSION_MAX_AGE_SECONDS:-2592000}
+      SESSION_MAX_AGE_SECONDS: ${SESSION_MAX_AGE_SECONDS:-7776000}
       EXTRA_ALLOWED_ORIGINS: ${EXTRA_ALLOWED_ORIGINS:-}
       DRI_SERVICE_TOKEN: ${DRI_SERVICE_TOKEN:?DRI_SERVICE_TOKEN required}
       ONTOLOGY_SERVICE_TOKEN: ${ONTOLOGY_SERVICE_TOKEN:-}
       INTERNAL_CHAT_TOKEN: ${INTERNAL_CHAT_TOKEN:-}
+      # Nexus → DRI 确认的接收端：凭据和租户都设才开；回调地址和密钥没设就不发（确认记录留在待发）。
+      NEXUS_DRI_SERVICE_TOKEN: ${NEXUS_DRI_SERVICE_TOKEN:-}
+      NEXUS_DRI_TENANT_ID: ${NEXUS_DRI_TENANT_ID:-}
+      NEXUS_DRI_AGENT_ID: ${NEXUS_DRI_AGENT_ID:-}
+      NEXUS_DRI_CALLBACK_URL: ${NEXUS_DRI_CALLBACK_URL:-}
+      NEXUS_DRI_CALLBACK_SECRET: ${NEXUS_DRI_CALLBACK_SECRET:-}
       CHAT_SERVICE_URL: ${CHAT_SERVICE_URL:-}
       # 对话分段：都是设为 1 才开，由生产、预发显式打开（首页分段开着时，回看经首页卡里的「以前的对话」交给 Chat）。
       CHAT_SESSION_ROTATION: ${CHAT_SESSION_ROTATION:-}
@@ -102,6 +108,8 @@ services:
       TKOS_WORLD_TK_TOKEN_FILE: ${TKOS_WORLD_TK_TOKEN_FILE:-}
       # 签发月度计划后代记本体周期目标的门：设为 1 才启用（缺省关）；只管这一项，其他本体写入照常。
       TKOS_WORLD_PERIOD_GOAL_GATES: ${TKOS_WORLD_PERIOD_GOAL_GATES:-}
+      # 只关会议写本体（会后链切到 Nexus 以后设为 1）：会议卡照常生成和确认，不再写会议事件；缺省不关，别的本体写入照常。
+      MEETING_WORLD_WRITES_OFF: ${MEETING_WORLD_WRITES_OFF:-}
       # 本体公司事实按人授权的域（容器内路径，如 /repo/seed/company-world-access.json）；留空时 query_company 如实回报读不到，不用本地资料兜底。
       COMPANY_WORLD_ACCESS_FILE: ${COMPANY_WORLD_ACCESS_FILE:-}
       # 公司事实只读投影目录（写在 <目录>/company，可重建）；留空用容器内 /tmp，填写时须是 uid 1000 可写的路径。

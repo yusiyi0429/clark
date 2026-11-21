@@ -311,6 +311,45 @@ describe("妙记 Markdown Transcript 候选", () => {
 });
 
 describe("meeting.confirm_transcript_candidate", () => {
+  it("confirms through the Action route with every speaker left unmapped, preserving names and participants", async () => {
+    const agent = fakeOutcomeAgent();
+    const t = await newApp(agent);
+    try {
+      const { cookie, meetingId } = await readyMeeting(t, "confirm-unmapped");
+      await upload(t, cookie, meetingId, MARKDOWN);
+      const before = (await t.sql("SELECT participants FROM meetings WHERE id = $1", [meetingId]))[0].participants;
+      const confirm = await actionId(t, cookie, meetingId, "meeting.confirm_transcript_candidate");
+      const input = { speakerMappings: [], confirmAddParticipants: true };
+
+      const response = await execute(t, cookie, confirm, input);
+      expect(response.statusCode).toBe(200);
+      const payload = response.json().cards[0].payload;
+      expect(payload.status).toBe("held");
+      expect(payload.transcriptCandidate).toBeNull();
+      expect(Value.Check(StoredTranscript, payload.transcript)).toBe(true);
+      expect(payload.transcript.unmappedSpeakers).toEqual([
+        { id: "speaker:1", name: "测试甲" },
+        { id: "speaker:2", name: "测试乙" },
+        { id: "speaker:3", name: "测试丙" },
+      ]);
+      expect(payload.transcript.turns.map((turn: { speakerId: string; text: string }) => [turn.speakerId, turn.text])).toEqual([
+        ["speaker:1", "我确认这个方向。"],
+        ["speaker:2", "我周五前给排期。"],
+        ["speaker:3", "我来跟进风险清单。"],
+      ]);
+      expect(payload.participants).toEqual(before);
+      expect(payload.outcome).toMatchObject({ status: "ready", error: null });
+      expect(agent.calls).toHaveLength(1);
+      expect(agent.calls[0].transcript.unmappedSpeakers).toEqual(payload.transcript.unmappedSpeakers);
+
+      const replay = await execute(t, cookie, confirm, input);
+      expect(replay.statusCode).toBe(200);
+      expect(agent.calls).toHaveLength(1);
+    } finally {
+      await t.close();
+    }
+  });
+
   it("validates the mappings before writing anything; speakers left unmapped no longer block", async () => {
     const t = await newApp();
     try {

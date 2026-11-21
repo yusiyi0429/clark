@@ -7,7 +7,7 @@
 .root { display: inline-flex; flex-direction: column; gap: 6px; min-width: 0; width: 100%; }
 .root { position: relative; }
 .proxy { position: absolute; left: 12px; bottom: 0; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0; pointer-events: none; }
-.label { color: #6a6f7c; font-size: 12px; line-height: 1.5; }
+.label { color: var(--ink-faint); font-size: 12px; line-height: 1.5; }
 
 .trigger.trigger {
   display: flex; align-items: center; gap: 8px; box-sizing: border-box; width: 100%; min-width: 0;
@@ -30,7 +30,7 @@
 }
 .value { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .value[data-placeholder] { color: var(--field-placeholder, #9197a0); }
-.leading, .chevron { flex: none; color: #8a909b; }
+.leading, .chevron { flex: none; color: var(--ink-faint); }
 .trigger.trigger[aria-expanded='true'] .chevron { transform: rotate(180deg); }
 
 /* 日期 + 时刻：日期占满剩下的宽度，时刻固定一小段。 */
@@ -41,8 +41,8 @@
 /* 电脑浮层。 */
 .popover {
   box-sizing: border-box; min-width: var(--trigger-width); max-width: min(420px, calc(100vw - 32px)); max-height: min(360px, var(--visual-viewport-height, 100vh));
-  overflow-y: auto; padding: 4px; border: 1px solid #e6eaf1; border-radius: 14px; background: #fff; color: var(--ink, #1c2030); outline: none;
-  box-shadow: 0 18px 48px -14px rgb(20 30 50 / 24%), 0 2px 6px rgb(20 30 50 / 5%);
+  overflow-y: auto; padding: 4px; border: 1px solid var(--hairline); border-radius: var(--r-card); background: var(--surface); color: var(--ink, #1c2030); outline: none;
+  box-shadow: var(--elev-3);
 }
 .popover[data-entering] { animation: pop 160ms cubic-bezier(.22, 1, .36, 1); }
 .popover[data-exiting] { animation: pop 110ms ease reverse; }
@@ -55,32 +55,32 @@
   display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 7px 10px; border-radius: 9px;
   color: var(--ink, #1c2030); font-size: 14px; line-height: 1.45; cursor: pointer; outline: none;
 }
-.item[data-focused], .item[data-hovered] { background: rgb(38 61 92 / 6%); }
+.item[data-focused], .item[data-hovered] { background: var(--default-soft); }
 .item[data-focus-visible] { box-shadow: inset 0 0 0 1px var(--field-border-focus, #3a3a40); }
 .item[data-selected] { font-weight: 560; }
-.item[data-disabled] { color: #b4bac4; cursor: default; }
+.item[data-disabled] { color: var(--ink-faint); opacity: .5; cursor: default; }
 .itemText { display: grid; flex: 1; min-width: 0; }
 .itemLabel { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.itemHint { color: #8a909b; font-size: 12px; font-weight: 400; line-height: 1.45; }
+.itemHint { color: var(--ink-faint); font-size: 12px; font-weight: 400; line-height: 1.45; }
 .check { flex: none; color: var(--onboarding-blue, #3e82f7); }
 .checkSpace { flex: none; width: 15px; }
 
 /* 手持：底部 sheet。 */
-.overlay { position: fixed; inset: 0; z-index: 1000; background: rgb(18 22 30 / 34%); }
+.overlay { position: fixed; inset: 0; z-index: 1000; background: var(--backdrop); }
 .overlay[data-entering] { animation: fade 180ms ease; }
 .overlay[data-exiting] { animation: fade 140ms ease reverse; }
 @keyframes fade { from { opacity: 0; } }
 .sheet {
   position: fixed; left: 0; right: 0; bottom: 0; box-sizing: border-box; max-height: min(78dvh, 640px); overflow-y: auto; overscroll-behavior: contain;
-  border-radius: 20px 20px 0 0; background: #fff; color: var(--ink, #1c2030); outline: none;
-  box-shadow: 0 -12px 40px rgb(20 30 50 / 18%);
+  border-radius: 20px 20px 0 0; background: var(--surface); color: var(--ink, #1c2030); outline: none;
+  box-shadow: var(--sheet-shadow);
 }
 .sheet[data-entering] { animation: rise 240ms cubic-bezier(.22, 1, .36, 1); }
 .sheet[data-exiting] { animation: rise 160ms ease reverse; }
 @keyframes rise { from { transform: translateY(100%); } }
 .sheetBody { padding: 8px 12px calc(14px + env(safe-area-inset-bottom, 0px)); }
-.handle { display: block; width: 36px; height: 4px; margin: 0 auto 10px; border-radius: 4px; background: #d6dbe3; }
-.sheetTitle { margin: 0 8px 8px; color: #6a6f7c; font-size: 13px; font-weight: 500; line-height: 1.5; }
+.handle { display: block; width: 36px; height: 4px; margin: 0 auto 10px; border-radius: 4px; background: var(--hairline-strong); }
+.sheetTitle { margin: 0 8px 8px; color: var(--ink-faint); font-size: 13px; font-weight: 500; line-height: 1.5; }
 .sheet .item { min-height: 48px; padding: 10px 12px; font-size: 16px; }
 .sheet .itemHint { font-size: 13px; }
 .dialog { outline: none; }
@@ -89,29 +89,29 @@
 .calendar { width: 100%; }
 .calHead { display: flex; align-items: center; gap: 2px; margin: 0 0 8px; padding-left: 6px; }
 .calTitle { flex: 1; margin: 0; font-size: 14px; font-weight: 600; line-height: 1.4; }
-.calNav { display: grid; place-items: center; width: var(--touch-hit, 28px); height: var(--touch-hit, 28px); padding: 0; border: 0; border-radius: 8px; background: none; color: #6a6f7c; cursor: pointer; outline: none; }
-.calNav[data-hovered] { background: rgb(38 61 92 / 6%); color: var(--ink, #1c2030); }
+.calNav { display: grid; place-items: center; width: var(--touch-hit, 28px); height: var(--touch-hit, 28px); padding: 0; border: 0; border-radius: 8px; background: none; color: var(--ink-faint); cursor: pointer; outline: none; }
+.calNav[data-hovered] { background: var(--default-soft); color: var(--ink, #1c2030); }
 .calNav[data-focus-visible] { box-shadow: inset 0 0 0 1px var(--field-border-focus, #3a3a40); }
 .calNav[data-disabled] { opacity: .35; cursor: default; }
 .calGrid { width: 100%; border-collapse: collapse; }
 .calGrid td { padding: 1px 0; }
-.calWeekday { padding: 0 0 6px; color: #a3a9b4; font-size: 11px; font-weight: 500; text-align: center; }
+.calWeekday { padding: 0 0 6px; color: var(--ink-faint); font-size: 11px; font-weight: 500; text-align: center; }
 .calDay {
   display: grid; place-items: center; width: 34px; height: 34px; margin: 0 auto; border-radius: 50%;
   color: var(--ink, #1c2030); font-size: 13px; font-variant-numeric: tabular-nums; cursor: pointer; outline: none;
   transition: background-color 120ms ease, color 120ms ease;
 }
-.calDay[data-hovered] { background: rgb(38 61 92 / 6%); }
+.calDay[data-hovered] { background: var(--default-soft); }
 .calDay[data-focus-visible] { box-shadow: inset 0 0 0 1px var(--field-border-focus, #3a3a40); }
 .calDay[data-today] { color: var(--onboarding-blue, #3e82f7); font-weight: 600; }
-.calDay[data-selected] { background: var(--onboarding-blue, #3e82f7); color: #fff; font-weight: 600; }
-.calDay[data-disabled], .calDay[data-unavailable] { background: none; color: #c8cdd5; font-weight: 400; cursor: default; }
+.calDay[data-selected] { background: var(--onboarding-blue, #3e82f7); color: var(--accent-foreground); font-weight: 600; }
+.calDay[data-disabled], .calDay[data-unavailable] { background: none; color: var(--ink-faint); opacity: .5; font-weight: 400; cursor: default; }
 .calDay[data-outside-month] { visibility: hidden; }
-.calFoot { display: flex; justify-content: space-between; gap: 8px; margin-top: 6px; padding: 6px 2px 0; border-top: 1px solid #eef1f5; }
+.calFoot { display: flex; justify-content: space-between; gap: 8px; margin-top: 6px; padding: 6px 2px 0; border-top: 1px solid var(--hairline); }
 .calLink { min-height: var(--touch-hit, 28px); padding: 0 8px; border: 0; border-radius: 8px; background: none; color: var(--onboarding-blue, #3e82f7); font: inherit; font-size: 13px; cursor: pointer; outline: none; }
-.calLink[data-hovered] { background: rgb(38 61 92 / 6%); }
+.calLink[data-hovered] { background: var(--default-soft); }
 .calLink[data-focus-visible] { box-shadow: inset 0 0 0 1px var(--field-border-focus, #3a3a40); }
-.calLink[data-disabled] { color: #c8cdd5; cursor: default; }
+.calLink[data-disabled] { color: var(--ink-faint); opacity: .5; cursor: default; }
 .sheet .calTitle { font-size: 16px; }
 .sheet .calWeekday { font-size: 13px; }
 .sheet .calDay { width: 44px; height: 44px; font-size: 16px; }
@@ -124,3 +124,6 @@
 @media (prefers-contrast: more) {
   .trigger.trigger { border-color: #8a929e; }
 }
+
+/* 新首页不出省略号（本人 11/18）：放不下就换行，长预览限高往下渐隐；只在新首页的外壳里生效，旧界面照旧。 */
+:global(:root:has([data-type-scale="one"])) .value, :global(:root:has([data-type-scale="one"])) .itemLabel { overflow: visible; white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }

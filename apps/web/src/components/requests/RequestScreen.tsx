@@ -11,6 +11,7 @@ import Markdown from "react-markdown";
 import { ArrowUp, Check, Sparkles } from "lucide-react";
 import { Button } from "ts-design/primitives";
 import type { TActionDescriptor, TPrepareRequestQuestionResponse, TRequestQuestionView, TRequestStep, TRequestView } from "@warmap/contracts";
+import { PersonAvatar } from "@/components/avatar/PersonAvatar";
 import { DetailFrame } from "@/components/shell/DetailFrame";
 import { useRegisterDetail, useWorkspace } from "@/components/shell/WorkspaceContext";
 import { Select } from "@/components/ui/Select";
@@ -195,7 +196,7 @@ export function DraftRequest({ request, onChange, onSent, compact = false, initi
               {people.map((person) => {
                 const on = chosen.includes(person.personId);
                 return <button key={person.personId} type="button" className={s.personChip} aria-pressed={on} disabled={busy !== null} onClick={() => toggle(person.personId)}>
-                  <span className={s.avatar} aria-hidden="true">{on ? <Check size={12} strokeWidth={3} /> : initial(person.displayName)}</span>{person.displayName}
+                  <PersonAvatar personId={on ? null : person.personId} className={s.avatar}>{on ? <Check size={12} strokeWidth={3} /> : initial(person.displayName)}</PersonAvatar>{person.displayName}
                 </button>;
               })}
               {addable.length ? <Select size="compact" className={s.addPerson} aria-label="添加收件人" placeholder="添加" value=""
@@ -250,7 +251,7 @@ function SentRequest({ request, onChange }: { request: TRequestView; onChange: (
         <ul className={s.rosterList}>
           {request.recipients.map((person) => (
             <li key={person.personId} data-status={person.status}>
-              <span className={s.avatar} aria-hidden="true">{person.status === "done" ? <Check size={12} strokeWidth={3} /> : initial(person.displayName)}</span>
+              <PersonAvatar personId={person.status === "done" ? null : person.personId} className={s.avatar}>{person.status === "done" ? <Check size={12} strokeWidth={3} /> : initial(person.displayName)}</PersonAvatar>
               <span className={s.rosterName}>{person.displayName}</span>
               <span className={s.rosterState}>{person.status === "done" ? monthDayTime(person.doneAt) : "待处理"}</span>
             </li>
@@ -285,11 +286,11 @@ export function QuestionThread({ request, busy, perform }: {
       <ol className={s.threadList}>
         {request.questions.map((question) => (
           <li key={question.id} className={s.qa}>
-            <Entry name={question.askerName} at={question.createdAt} tag={question.answer === null ? <span className={s.tag} data-tone="wait">待回答</span> : null}>
+            <Entry personId={question.askerId} name={question.askerName} at={question.createdAt} tag={question.answer === null ? <span className={s.tag} data-tone="wait">待回答</span> : null}>
               <p>{question.question}</p>
             </Entry>
             {question.answer !== null
-              ? <div className={s.answer}><Entry name={request.initiator.displayName} at={question.answeredAt} tag={question.mergedIntoBody ? <span className={s.tag} data-tone="done">已补进说明</span> : null}><p>{question.answer}</p></Entry></div>
+              ? <div className={s.answer}><Entry personId={request.initiator.personId} name={request.initiator.displayName} at={question.answeredAt} tag={question.mergedIntoBody ? <span className={s.tag} data-tone="done">已补进说明</span> : null}><p>{question.answer}</p></Entry></div>
               : actionOf(request, "request.answer", question.id)
                 ? <AnswerBox request={request} question={question} busy={busy} perform={perform} />
                 : null}
@@ -300,10 +301,10 @@ export function QuestionThread({ request, busy, perform }: {
   );
 }
 
-function Entry({ name, at, tag, children }: { name: string; at: string | null; tag?: ReactNode; children: ReactNode }) {
+function Entry({ personId, name, at, tag, children }: { personId: string; name: string; at: string | null; tag?: ReactNode; children: ReactNode }) {
   return (
     <div className={s.entry}>
-      <span className={s.avatar} aria-hidden="true">{initial(name)}</span>
+      <PersonAvatar personId={personId} className={s.avatar}>{initial(name)}</PersonAvatar>
       <div className={s.entryBody}>
         <div className={s.entryMeta}><strong>{name}</strong><time>{monthDayTime(at)}</time>{tag}</div>
         {children}

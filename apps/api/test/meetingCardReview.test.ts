@@ -201,6 +201,30 @@ describe("会议决策逐条确认", { timeout: 30_000 }, () => {
     }
   });
 
+  it("只关会议写本体（MEETING_WORLD_WRITES_OFF，切到 Nexus）：不找人逐条确认（已经在等的也不出），会议卡照常生成、48 小时冻结，只留天枢，不写会议事件", async () => {
+    const world = ontology();
+    const s = await setup(TWO_DECISIONS, { meetingWorldWritesOff: true }, V2);
+    try {
+      // 切换前生成的会，决策和行动项本来在等责任人、主持人：开关打开后通知栏（等你、飞书同源）里都没有了。
+      expect(await confirmsOf(s, s.owner)).toEqual([]);
+      expect(await confirmsOf(s, s.host)).toEqual([]);
+      const draft = await getCard(s.t, s.host, s.meetingId);
+      expect(draft.worldWritesOff).toBe(true);
+      expect(draft.decisions!.map((decision) => decision.text)).toEqual(["接口统一改成 v2", "验收按 4 家客户上线算"]);
+
+      await s.t.app.meetingFollowThrough.cardConfirm.freeze(s.meetingId);
+      await s.run();
+      const view = await getCard(s.t, s.host, s.meetingId);
+      expect(view.confirmed).toMatchObject({ confirmation: { revision: 1, confirmedBy: null }, payload: { decisions: [] } });
+      expect(view.sync).toMatchObject({ writeToWorld: false, event: { status: "skipped" } });
+      expect(world.events()).toEqual([]);
+      expect(world.revisions()).toEqual([]);
+      expect(await s.t.sql("SELECT count(*)::int AS n FROM jobs WHERE kind = 'meeting.world_sync'")).toEqual([{ n: 0 }]);
+    } finally {
+      await s.t.close();
+    }
+  });
+
   it("记录正文开关打开（MEETING_WORLD_RECORD_TEXT=1）：没有决策的会生成后直接冻结写入，事件带正文", async () => {
     const world = ontology();
     const s = await setup(cardAgent([], []), { meetingRecordText: true }, V2);

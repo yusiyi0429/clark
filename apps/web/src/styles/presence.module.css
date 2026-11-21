@@ -1,0 +1,77 @@
+/*
+ * 页头在场（设计 4.2、components/home/Presence.tsx）：新首页伙伴主线、项目对话的页头。
+ * 页头三栏：左边标题、正中伙伴、右边按钮；两边等宽，正中那一栏永远在正中，标题再长也只在左边那栏里换行。
+ * 状态胶囊绝对定位挂在形象下面，形象的位置不因它出现、变长短而挪；也不把页头撑高。
+ */
+/* 页头是尺寸容器：胶囊和它下面那一块最宽是页头的宽（对话栏两边留白以内；右边面板打开时跟着变窄），不按整个窗口。 */
+.head[data-flush] { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); container-type: inline-size; }
+.side { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.side[data-end] { justify-content: flex-end; }
+/* 没有形象的页头（项目对话）：标题占到右边按钮前面，不和右边平分（手机上原来只剩约 100 宽，长标题折成三行）；
+ * 在场槽（只挂状态胶囊）不占列，绝对定位在正中；跟着页头底部走：页头 48 高时离顶 4（位置照旧），
+ * 标题折行、页头长高时槽落到最后 44 里，挂在槽下面的胶囊在标题下面，不压字。 */
+.head[data-flush]:not(:has(> .presence[data-stage])) { position: relative; grid-template-columns: minmax(0, 1fr) auto; }
+.head[data-flush]:not(:has(> .presence[data-stage])) > .presence { position: absolute; top: calc(100% - 44px); left: 50%; }
+
+/* 在场槽 40 高（项目对话没有形象，页头照旧 48）：胶囊挂在它下面 6。 */
+.presence { position: relative; z-index: 4; display: grid; place-items: center; min-height: 40px; }
+
+.hang { position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; }
+
+/*
+ * 主线（data-stage，本人 11/18 方案 A）：页头这一块加高到 88（手机 72），标题和右边按钮留在最上面 48 那一行，位置不变；
+ * 形象在这一块里上下居中、左右正中（两边等宽，有没有右边按钮都在正中）。这一块浮在对话上（v2-chat.module.css，本人 11/18），对话滚动时从形象两侧和后面过。
+ * 形象大小只看这里的 --head-figure：圆的直径，不带单位（buddy-mark.module.css 换算）；横放胶囊按 96:36 跟着等比。
+ * 手机上另给 --head-capsule：胶囊缩 .625 成 80×30。
+ * 槽就是形象那么大，胶囊往上贴，压住形象下沿 6。
+ * 形象身后垫一块同形状、大一圈的底（实心多出约 4，再往外柔和约 12）：字从后面过去不透出来，默认胶囊底部是透明的。
+ */
+.head[data-flush]:has(> .presence[data-stage]) { --head-figure: 64; min-height: 88px; align-items: start; }
+:global([data-phone]) .head[data-flush]:has(> .presence[data-stage]) { --head-figure: 56; --head-capsule: .625; min-height: 72px; }
+.head[data-flush]:has(> .presence[data-stage]) > .side { height: var(--row-48); }
+.presence[data-stage] { align-self: center; min-height: 0; }
+.presence[data-stage] > .hang { top: calc(100% - 6px); }
+.presence[data-stage]::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 999px; background: var(--surface); box-shadow: 0 0 12px 10px var(--surface); }
+
+/* 磨砂：对话从它下面滚过去。 */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100cqw;
+  height: 30px;
+  padding: 0 6px 0 12px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--surface) 82%, transparent);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 0 0 1px var(--hairline), var(--elev-2);
+  color: var(--ink-muted);
+  white-space: nowrap;
+  animation: pillIn 260ms cubic-bezier(.32, .72, 0, 1);
+}
+.pill[data-rec] { padding-right: 12px; color: var(--counter); }
+.hit { display: inline-flex; align-items: center; min-width: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; white-space: pre; }
+.what { min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+button.hit { cursor: pointer; }
+.time { flex: none; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
+.pill[data-rec] .hit { font-variant-numeric: tabular-nums; }
+.stop { flex: none; padding: 3px 8px; border: 0; border-radius: 999px; background: none; color: var(--ink-faint); font: inherit; cursor: pointer; }
+.stop:hover { background: var(--default-soft-hover); color: var(--ink); }
+.hit:focus-visible, .stop:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 999px; }
+
+/* 点胶囊落下来的一小块：这一轮的步骤和思考摘要。 */
+.detail {
+  width: min(360px, 100cqw);
+  max-height: 50vh;
+  overflow-y: auto;
+  padding: 10px 14px;
+  border-radius: var(--r-inset);
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--hairline), var(--elev-2);
+  color: var(--ink-muted);
+}
+
+@keyframes pillIn { from { opacity: 0; transform: translateY(-4px) scale(.96); } }
+@media (prefers-reduced-motion: reduce) { .pill { animation: none; } }
+:global([data-reduce-motion='true']) .pill { animation: none; }

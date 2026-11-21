@@ -1,0 +1,324 @@
+/*
+ * 卡和专题的子会话页（components/cards/CardSession.tsx、components/topics/TopicSession.tsx），照原型 v8.4 的 .sess / .sHead / .sPane / .doc。
+ * 左边对话：白底、执行方是浅灰气泡、本人是淡蓝；右边结果：浅灰底一栏。只用现有 token。
+ */
+.page { display: grid; grid-template-rows: auto auto minmax(0, 1fr); height: 100%; min-height: 0; background: var(--surface); }
+.gone { display: grid; place-content: center; justify-items: center; gap: 8px; height: 100%; color: var(--ink-muted); }
+.gone a { color: var(--brand-deep); }
+
+.head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 14px; padding: 14px 18px 12px; border-bottom: 1px solid var(--hairline); }
+.back { display: inline-flex; align-items: center; gap: 4px; height: 32px; padding: 0 12px 0 8px; border: 1px solid var(--hairline); border-radius: 16px; background: var(--surface); color: var(--ink-muted); font-size: 14px; text-decoration: none; }
+.back:hover { background: var(--neutral-wash); color: var(--ink); }
+.title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.title b { overflow: hidden; font-size: 16px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.kind { display: inline-flex; flex: none; align-items: center; height: 20px; padding: 0 7px; border-radius: 6px; font-size: 12px; font-weight: 600; }
+.kind[data-kind="card"] { background: var(--confirmed-wash); color: var(--confirmed); }
+.kind[data-kind="topic"] { background: color-mix(in oklab, var(--accent) 10%, var(--surface)); color: var(--brand-deep); }
+.exec { display: flex; align-items: center; gap: 8px; color: var(--ink-faint); font-size: 12px; white-space: nowrap; }
+.ex { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 7px 0 3px; border-radius: 7px; background: var(--neutral-wash); color: var(--ink-muted); font-size: 12px; font-weight: 500; }
+.ex i { display: inline-grid; place-items: center; width: 15px; height: 15px; border-radius: 4px; background: var(--ink); color: var(--surface); font: 600 9px/1 var(--font-mono); font-style: normal; }
+.ex i[data-self] { border-radius: 50%; background: var(--surface); box-shadow: inset 0 0 0 1px var(--hairline-strong); color: var(--ink-muted); font-family: var(--font-sans); }
+.tag { display: inline-flex; flex: none; align-items: center; gap: 4px; height: 20px; padding: 0 8px; border-radius: 999px; background: color-mix(in oklab, var(--ink) 5%, transparent); color: var(--ink-muted); font-size: 12px; font-weight: 500; text-decoration: none; white-space: nowrap; }
+.tag[data-tone="wait"] { background: var(--accent); color: var(--accent-foreground); }
+.tag[data-tone="warn"] { background: color-mix(in oklab, var(--judgment) 10%, var(--surface)); color: var(--judgment); }
+.tag[data-tone="done"] { background: color-mix(in oklab, var(--confirmed) 9%, var(--surface)); color: var(--confirmed); }
+.tag[data-tone="ver"] { background: color-mix(in oklab, var(--brand-bright) 10%, var(--surface)); color: var(--brand-deep); }
+.tabs { display: none; }
+
+.body { display: grid; grid-template-columns: minmax(0, 1fr) 420px; min-height: 0; }
+.body[data-solo] { grid-template-columns: minmax(0, 1fr); }
+@media (max-width: 1279px) { .body { grid-template-columns: minmax(0, 1fr) 360px; } }
+.body:has(.pane[data-reading]) { grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); }
+
+.chat { position: relative; display: grid; grid-template-rows: minmax(0, 1fr) auto; min-width: 0; min-height: 0; --gl: max(20px, calc((100% - 680px) / 2)); }
+.scroll { min-height: 0; overflow-y: auto; scrollbar-width: thin; padding: 20px var(--gl) 16px; }
+.feed { display: flex; flex-direction: column; gap: 10px; }
+/*
+ * 长会话（流畅感第 5 条）：除了最后几行，屏幕外的行跳过排版和绘制；高度先按估计（画过一次后记住真实高度），
+ * 往上快速滚时滚动条长度会微调。最后几行（正在写、选项框、在跑那一行）照常画。
+ */
+.feed > :not(:nth-last-child(-n + 8)) { content-visibility: auto; contain-intrinsic-size: auto 72px; }
+.evt { align-self: center; max-width: 92%; color: var(--ink-faint); font-size: 12px; text-align: center; }
+.evt[data-level="error"] { color: var(--counter); }
+.evt[data-level="warn"] { color: var(--judgment); }
+.bubble, .permission { align-self: flex-start; display: grid; gap: 6px; max-width: 94%; padding: 11px 13px; border-radius: var(--r-card) var(--r-card) var(--r-card) 5px; background: var(--surface-hover); color: var(--ink); font-size: var(--text-sm); line-height: 1.6; } /* 待设计规范 */
+.bubble p, .permission p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+/* 执行方的回答按 Markdown 排（17.2 第 41 条）：字号行距跟着这条回答，标题不放大；表格、代码小一档（不小于最小那档字），放不下自己横向滚。 */
+/* 回答、交代、预览里的 Markdown 用伙伴对话的 .prose（conversation-transcript.module.css，一套排法）；这里只管在气泡里不撑宽、交代那句不按原样换行。 */
+.md { min-width: 0; overflow-wrap: anywhere; }
+/* 交代气泡里的 Markdown：气泡本身保留换行（pre-wrap），这里交给 Markdown 自己分段。 */
+.me .md { white-space: normal; }
+/* 「交出 文件名」里能点开看的文件名。 */
+.fileLink { padding: 0; border: 0; background: none; color: inherit; font: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.fileLink:hover { color: var(--ink); }
+.fileLink:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-bar); }
+.permission { border: 1px solid color-mix(in oklab, var(--ink) 10%, transparent); background: var(--surface); box-shadow: 0 1px 2px var(--sh-1), 0 8px 24px -12px var(--sh-3); }
+.who { display: block; margin-bottom: -2px; color: var(--ink-faint); font-size: 12px; font-weight: 600; }
+.me { align-self: flex-end; max-width: 86%; padding: 9px 12px; border-radius: 16px 16px 5px 16px; background: color-mix(in oklab, var(--accent) 13%, var(--surface)); color: var(--ink); font-size: 14px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+/*
+ * 工具调用行（设计 5.4.3）：连续的步骤折成一行（ChevronRight · N 步 · 最后一步 · 用时），点开一步一行、缩进 24；只有一步就直接是那一行。
+ * 一行是 状态图标 · 标题 · 时刻；云端时间线（CardSession 的 CloudTimeline）仍是 时刻 · 文字。字号和颜色在新首页里另见文件末尾。
+ */
+.step, .steps { font-size: 12px; line-height: 1.5; }
+.step { align-self: stretch; display: flex; align-items: center; gap: var(--space-2); min-width: 0; min-height: var(--row-28); padding: 0 var(--space-2); color: var(--ink-faint); }
+.feed > :is(.step, .steps) + :is(.step, .steps) { margin-top: -6px; }
+/* 本人那句话的回执贴着气泡（17.4）。 */
+.feed > .meReceipt { margin-top: -8px; }
+/* 先画出来、本机还没回的那句（发送中）：淡一点。 */
+.me[data-sending] { opacity: .6; }
+.step > svg { flex: none; color: var(--ink-faint); }
+.step time, .stepsTook { flex: none; color: var(--field-placeholder); font-variant-numeric: tabular-nums; }
+.stepText, .step > time + span, .stepsSummary { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.steps { align-self: stretch; display: grid; min-width: 0; }
+.stepsHead { display: flex; align-items: center; gap: var(--space-2); min-width: 0; height: var(--touch-hit, var(--row-28)); padding: 0 var(--space-2); border: 0; border-radius: var(--r-control); background: none; color: var(--ink-faint); font: inherit; text-align: left; cursor: pointer; transition: background-color var(--dur-fast) linear; }
+.stepsHead > svg { color: var(--ink-faint); }
+.stepsHead:hover { background: var(--default-soft); }
+.stepsHead:hover > svg { color: var(--ink-muted); }
+.stepsSummary { color: var(--ink-faint); }
+/* 展开、收起 --dur-base（箭头 140 用 home 的 .chevron）；减少动态效果时全局把过渡压成 0，直接切换。 */
+.stepsBody { display: grid; grid-template-rows: 0fr; transition: grid-template-rows var(--dur-base) var(--ease-swift); }
+.steps[data-open] .stepsBody { grid-template-rows: 1fr; }
+.stepsBody > div { min-height: 0; overflow: hidden; }
+.stepsBody .step { margin-top: 2px; padding-left: calc(var(--space-2) + var(--space-6)); }
+.permission[data-outside] { border-color: color-mix(in oklab, var(--counter) 40%, transparent); }
+.outside { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; color: var(--counter); font: 12px/1.5 var(--font-mono); overflow-wrap: anywhere; }
+.decided { font-size: 12px; color: var(--ink-faint); }
+.decided[data-decision="allow"] { color: var(--confirmed); }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 4px; }
+
+/* 底下的输入框（ComposerPill，5.4.3）：和首页、管线同一个；离底 16 加安全区。「N 个问题等你 / 回到最新」贴着它的上沿（PendingDock above）。 */
+.composerDock { position: relative; margin: 0 var(--gl) calc(16px + env(safe-area-inset-bottom, 0px)); }
+.composerDock textarea:disabled { cursor: not-allowed; }
+
+
+/* 新首页展示区里（embedded）：一行页头，没有返回键，下面一列；信息图标在对话和结果之间切。 */
+/* 单列 minmax(0, 1fr)：长标题、代码块不把这一列撑出展示区。 */
+.page[data-embedded] { grid-template-rows: auto minmax(0, 1fr); grid-template-columns: minmax(0, 1fr); min-width: 0; background: transparent; }
+/* 页头（5.4.3）：高 --row-48，4 的倍数；标题 14/20 600；右边状态 chip、模型 chip、「停止」「推翻」（弱按钮）、信息图标（HeroButton ghost）。 */
+.embedHead { display: flex; align-items: center; gap: var(--space-2); min-width: 0; min-height: var(--row-48); padding: 0 var(--space-4) 0 var(--space-6); }
+/* 「项目名 / [字母] 标题」一行（排查清单第 3 条）：上一级和标题各自出省略号，见 home.module.css 的 .crumb。 */
+.embedTitle { display: flex; flex: 1; align-items: center; min-width: 0; overflow: hidden; color: var(--ink); font-size: 14px; font-weight: 600; line-height: 20px; white-space: nowrap; }
+.embedName { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.embedHead .exec { flex: none; }
+.embedHead [data-pressed] { background: var(--default-soft-hover); }
+/* 状态 chip（5.4.3「状态 chip」）：高 20、胶囊、左右 8、12/16 400；中性、警告、等你（中性底，字前 8px 强调色圆点，字 --ink）。没有成功色。 */
+.stateChip { display: inline-flex; flex: none; align-items: center; gap: var(--space-1); height: 20px; padding: 0 var(--space-2); border-radius: var(--r-capsule); background: var(--neutral-wash); color: var(--ink-muted); font-size: var(--text-xs); font-weight: 400; line-height: 16px; white-space: nowrap; }
+.stateChip[data-tone="warn"] { background: var(--warning-soft); color: var(--warning); }
+.stateChip[data-tone="wait"] { color: var(--ink); }
+/* 「等你」的点和左栏同一种（47 条）：6px 黄。 */
+.stateChip i { width: 6px; height: 6px; border-radius: 50%; background: var(--warning); }
+/* 四条对话一样宽：正文 680，两边至少 24。 */
+.page[data-embedded] .chat { --gl: max(var(--space-6), calc((100% - 680px) / 2)); }
+.paneScroll { min-height: 0; overflow-y: auto; }
+.paneScroll > .pane { max-width: calc(680px + 2 * var(--space-6)); margin: 0 auto; overflow: visible; border-left: 0; background: transparent; }
+/* 手机：页头左右收窄，对话左右留白 16（5.7）。 */
+@media (max-width: 959px) { .embedHead { padding: 0 var(--space-2); } .page[data-embedded] .chat { --gl: var(--space-4); } }
+
+/* 右边结果。 */
+.pane { display: flex; flex-direction: column; gap: 12px; min-width: 0; min-height: 0; overflow-y: auto; padding: 16px 18px 24px; border-left: 1px solid var(--hairline); background: color-mix(in oklab, var(--ink) 1.5%, var(--surface)); }
+.brief { display: grid; justify-items: start; gap: 6px; }
+.lab { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--ink-faint); font-size: 12px; font-weight: 500; }
+.faint { color: var(--ink-faint); font-size: 12px; }
+.link { color: var(--ink-muted); font-size: 12px; text-decoration: none; }
+.link:hover { color: var(--brand-deep); }
+.meta { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; color: var(--ink-muted); font-size: 12px; }
+.text { margin: 0; color: var(--ink); font-size: 12px; line-height: 1.6; white-space: pre-wrap; }
+.crit { display: inline-grid; flex: none; place-items: center; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 6px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--hairline-strong); color: var(--ink-muted); font-size: 12px; font-weight: 600; }
+.sec { display: grid; gap: 8px; padding-top: 12px; border-top: 1px solid var(--hairline); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.choice { height: 28px; padding: 0 11px; border: 0; border-radius: 999px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--hairline-strong); color: var(--ink); font-size: 12px; cursor: pointer; }
+.choice[aria-checked="true"] { background: color-mix(in oklab, var(--accent) 9%, var(--surface)); box-shadow: inset 0 0 0 1.5px var(--accent); color: var(--brand-deep); font-weight: 600; }
+.choice:disabled { opacity: .5; cursor: default; }
+.plan, .goal { display: grid; gap: 4px; margin: 0; padding-left: 18px; color: var(--ink); font-size: 12px; }
+/* 本人原话（16.8）：引用样式，次级文字。 */
+.words { display: grid; gap: 4px; margin: 0; padding-left: 10px; border-left: 2px solid var(--hairline-strong); color: var(--ink-muted); font-size: 12px; line-height: 1.6; }
+.words p { margin: 0; white-space: pre-wrap; }
+/* 原话对不上的几处（16.8）：同「原话」的引用样式，每条一行：原话、标签、为什么。 */
+.wordIssues { display: grid; gap: 4px; margin: 0; padding: 0 0 0 10px; border-left: 2px solid var(--hairline-strong); list-style: none; color: var(--ink-muted); font-size: 12px; line-height: 1.6; }
+.wordIssues li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; }
+.wordIssues small { color: var(--ink-faint); font-size: 12px; }
+.issueTag { display: inline-flex; align-items: center; height: 19px; padding: 0 7px; border-radius: 999px; background: var(--neutral-wash); color: var(--ink-muted); font-size: 12px; }
+/* 计划清单照 Claude Code（本人 11/16）：不要序号，前面一颗状态图标（打勾 / 转圈 / 空圈），图标对齐第一行字的中线；做完的字变淡，不划线。 */
+.plan { padding-left: 0; list-style: none; }
+.plan li { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
+.plan li > [role="img"] { margin-top: calc((1lh - 16px) / 2); }
+.plan li[data-status="completed"] { color: var(--ink-faint); }
+.plan li[data-status="pending"] { color: var(--ink-muted); }
+/* 新首页一种字号的例外（本人 11/16）：对话里的计划清单小 1px（app/home-type.css）；在做的不加粗，只靠深浅和转圈。 */
+.plan { --type-size: 14px; --type-lh: 22px; }
+.plan li[data-status="in_progress"] { font-weight: 600; }
+.planFold { justify-self: start; padding: 0; border: 0; background: none; color: var(--ink-faint); font: inherit; font-size: 12px; cursor: pointer; }
+/* 「在做什么」那一行（照 Claude Code，本人 11/16，ActivityLine）：字同计划清单 14px；在做什么 --ink-muted，用时和 › --ink-faint。 */
+.activity { --type-size: 14px; --type-lh: 22px; }
+.activity :is(.stepsSummary, .stepText) { color: var(--ink-muted); }
+/* 字符动画：五个字竖排，一格一格往上推再推回来（同 Claude 桌面版 codeSpinnerSpin：1.2 秒、跳格、来回十拍）。 */
+.mark { display: inline-block; flex: none; width: 16px; height: 22px; overflow: hidden; color: var(--accent); text-align: center; line-height: 22px; user-select: none; }
+.mark > span { display: block; animation: markTurn 1.2s step-start infinite; }
+.mark i { display: block; height: 22px; font-style: normal; }
+@keyframes markTurn {
+  0%, 90% { transform: translateY(0); }
+  10%, 80% { transform: translateY(-22px); }
+  20%, 70% { transform: translateY(-44px); }
+  30%, 60% { transform: translateY(-66px); }
+  40%, 50% { transform: translateY(-88px); }
+}
+@media (prefers-reduced-motion: reduce) { .mark > span { animation: none; } }
+/* 「在做什么」完 */
+.verdicts { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.verdicts li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 8px; font-size: 12px; }
+.verdicts small { grid-column: 2; color: var(--ink-faint); font-size: 12px; }
+.verdict { display: inline-flex; align-items: center; height: 19px; padding: 0 7px; border-radius: 999px; background: var(--confirmed-wash); color: var(--confirmed); font-size: 12px; font-weight: 600; }
+.verdicts li[data-verdict="partial"] .verdict { background: var(--judgment-wash); color: var(--judgment); }
+.verdicts li[data-verdict="unmet"] .verdict { background: var(--counter-wash); color: var(--counter); }
+.reason { display: flex; flex-wrap: wrap; gap: 8px; }
+.reason input { flex: 1; min-width: 140px; height: 30px; padding: 0 10px; border: 1px solid var(--field-border); border-radius: var(--r-control); background: var(--field-bg); font: inherit; font-size: 12px; }
+.output { display: flex; align-items: center; gap: 7px; padding: 6px 8px; border-radius: 9px; background: color-mix(in oklab, var(--ink) 3.5%, transparent); font-size: 12px; }
+.outTag { padding: 0 5px; border-radius: 5px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--hairline); color: var(--ink-muted); font-size: 12px; font-weight: 600; }
+.outTitle { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 交出的文件那一行整行能点（在右边看）：正在看的那一份铺选中底。 */
+button.output { width: 100%; border: 0; color: inherit; font-family: inherit; text-align: left; cursor: pointer; }
+button.output:hover { background: var(--default-soft); }
+button.output[data-current] { background: var(--default-soft-hover); }
+button.output:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+/* 「改动的文件 N」（17.2 第 41 条）：一行字加箭头，默认收起；下面每个文件一行路径，太长从前面省略（文件名留着）；不在了的淡色、不能点。 */
+.filesHead { display: flex; align-items: center; gap: var(--space-1); margin: 0; padding: 0; border: 0; background: none; color: var(--ink-faint); font: inherit; font-size: var(--text-xs); line-height: 16px; text-align: left; cursor: pointer; }
+.filesHead:hover { color: var(--ink-muted); }
+.filesHead:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-bar); }
+.output[data-gone] { color: var(--ink-faint); text-decoration: line-through; }
+/* 一个改动的文件一行（第 71 条）：路径那一块能点，右边「恢复」；恢复不了的原因写在下面。 */
+.changedRow { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-1); }
+.changedRow > p { grid-column: 1 / -1; margin: 0 var(--space-2); }
+/* 现在不在了的文件（删掉的、新建后恢复掉的）：路径划线。 */
+.changedRow [data-gone] { color: var(--ink-faint); text-decoration: line-through; }
+/* 「恢复」：能悬停的设备上指着那一行、键盘聚焦进来时出（用透明度藏，Tab 还能走到）；触屏一直显示。 */
+@media (hover: hover) {
+  .changedRow .rowRestore { opacity: 0; }
+  .changedRow:hover .rowRestore, .changedRow:focus-within .rowRestore { opacity: 1; }
+}
+
+/* 文件预览（17.2 第 41 条）：子会话页右边一栏，顶上文件名和关闭，下面内容自己滚；手持上盖满整屏（下面的对话不卸，关了还在原来的位置）。 */
+.preview { display: grid; grid-template-rows: auto minmax(0, 1fr); min-width: 0; min-height: 0; box-shadow: inset 1px 0 0 var(--hairline); outline: 0; }
+@media (min-width: 960px) { .body:has(> .preview) { grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); } }
+/* 放大（第 72、73 条）：面板占满中间和右边（home.module.css .app[data-wide]），正文居中，行宽不超过 720px。 */
+.preview[data-wide] .previewBody > :is(article, pre) { max-width: 720px; margin-inline: auto; }
+@media (max-width: 959px) {
+  .preview { position: fixed; inset: 0; z-index: 41; padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px); background: var(--surface); box-shadow: none; }
+}
+.previewHead { display: flex; align-items: center; gap: var(--space-2); min-width: 0; min-height: var(--row-48); padding: 0 var(--space-2) 0 var(--space-4); box-shadow: inset 0 -1px 0 var(--hairline); }
+.previewHead b { min-width: 0; overflow: hidden; font-size: var(--text-base); font-weight: 600; line-height: var(--lh-row); text-overflow: ellipsis; white-space: nowrap; }
+.previewHead small { flex: none; color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; }
+.previewGap { flex: 1; }
+.previewBody { min-width: 0; min-height: 0; overflow: auto; padding: var(--space-4); scrollbar-width: thin; }
+/* 预览里的 Markdown 和回答同一套排法（.prose），字号行距照专题页的文档。 */
+.previewDoc { color: var(--ink); font-size: var(--text-base); line-height: 1.75; }
+.page[data-embedded] .previewDoc { font-size: 16px; line-height: 26px; }
+.previewCode { margin: 0; color: var(--ink); font-family: var(--font-mono); font-size: var(--text-base); line-height: var(--lh-row); white-space: pre; tab-size: 2; }
+.previewImage { display: block; max-width: 100%; height: auto; border-radius: var(--r-inset); }
+.previewOther { margin: 0; }
+.cost { margin: 0; color: var(--ink-faint); font-size: 12px; }
+.pulse { position: relative; display: inline-block; flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--confirmed); }
+
+/* 专题的文档。 */
+.docHead { position: sticky; top: -16px; z-index: 1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: -16px -18px 0; padding: 12px 18px; border-bottom: 1px solid var(--hairline); background: color-mix(in oklab, var(--ink) 1.5%, var(--surface)); }
+.docHead b { font-size: 14px; }
+.docHead small { color: var(--ink-faint); font-size: 12px; }
+.grow { flex: 1; }
+.versions { display: flex; flex-wrap: wrap; gap: 4px; }
+.versions button { height: 26px; padding: 0 10px; border: 0; border-radius: 999px; background: none; color: var(--ink-muted); font-size: 12px; cursor: pointer; }
+.versions button[aria-selected="true"] { background: var(--surface); box-shadow: inset 0 0 0 1px var(--hairline-strong); color: var(--ink); font-weight: 600; }
+.note { margin: 0; padding: 6px 8px; border-radius: 8px; background: var(--judgment-wash); color: var(--judgment); font-size: 12px; }
+.doc { max-width: 680px; color: var(--ink); font-size: 14px; line-height: 1.75; }
+.doc h1, .doc h2, .doc h3 { margin: 16px 0 4px; font-size: 14px; }
+.doc p { margin: 0 0 8px; }
+.doc ul, .doc ol { margin: 0 0 8px; padding-left: 20px; }
+.doc table { width: 100%; border-collapse: collapse; font-size: 12px; line-height: 1.55; }
+.doc th, .doc td { padding: 6px 8px; border-bottom: 1px solid var(--hairline); text-align: left; vertical-align: top; }
+.doc th { color: var(--ink-faint); font-weight: 500; }
+.doc[data-outline] p, .doc[data-outline] li { color: var(--ink-faint); }
+
+/* 「评审」那一版：分歧和建议，一块一张卡。 */
+.review { display: grid; gap: 10px; max-width: 680px; }
+.reviewHead { margin: 0; color: var(--ink); font-size: 16px; font-weight: 650; }
+.reviewBlock { display: grid; gap: 4px; padding: 12px 14px; border: 1px solid color-mix(in oklab, var(--ink) 10%, transparent); border-radius: 14px; background: var(--surface); }
+.reviewBlock h3 { margin: 0; color: var(--ink); font-size: 14px; font-weight: 650; }
+.reviewBlock[data-kind="split"] { border-left: 3px solid var(--judgment); }
+.reviewBlock[data-kind="advice"] { border-left: 3px solid var(--confirmed); }
+
+@media (max-width: 959px) {
+  .head { grid-template-columns: auto minmax(0, 1fr); border-bottom: 0; padding-inline: 14px; }
+  .exec { display: none; }
+  .back { padding: 0 8px; }
+  .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin: 0 14px 8px; padding: 3px; border-radius: 11px; background: var(--neutral-wash); }
+  .tabs button { height: 30px; border: 0; border-radius: 9px; background: none; color: var(--ink-muted); font-size: 14px; cursor: pointer; }
+  .tabs button[aria-selected="true"] { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px var(--sh-2); }
+  .body, .body:has(.pane[data-reading]) { grid-template-columns: minmax(0, 1fr); }
+  .body[data-tab="result"] .chat, .body[data-tab="chat"] .pane { display: none; }
+  .pane { border-left: 0; padding-inline: 16px; }
+  .chat { --gl: 16px; }
+  .docHead { margin-inline: -16px; padding-inline: 16px; }
+}
+
+/*
+ * 新首页里（data-embedded，设计 5.4.3「对话里谁在说」，仅新首页）：一个展示区里只有一种对话样子——
+ * worker 是正文（15/1.85，没有气泡、没有名字，是谁在说看页头）；本人是右对齐的中性气泡（圆角 20、内边距 8/16、最宽 82%）；
+ * 步骤和事件 13/20，时间淡色；输入框聚焦只换边色。
+ */
+.page[data-embedded] .feed { gap: var(--space-4); }
+.page[data-embedded] .feed > .meReceipt { margin-top: calc(2px - var(--space-4)); }
+.page[data-embedded] .bubble { align-self: stretch; max-width: none; padding: 0; border-radius: 0; background: none; font-size: 16px; line-height: 26px; }
+.page[data-embedded] .who { display: none; }
+.page[data-embedded] .me { max-width: 82%; padding: var(--space-2) var(--space-4); border-radius: var(--field-radius); background: var(--neutral-wash); font-size: 16px; line-height: 26px; }
+.page[data-embedded] .step, .page[data-embedded] .steps { font-size: var(--text-base); line-height: var(--lh-row); }
+.page[data-embedded] .step, .page[data-embedded] .stepsHead { color: var(--ink-muted); }
+.page[data-embedded] .step time, .page[data-embedded] .stepsTook { color: var(--ink-faint); font-size: var(--text-xs); }
+.page[data-embedded] .stepsHead:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.page[data-embedded] .evt { font-size: var(--text-xs); line-height: 16px; }
+/*
+ * 结果那一栏在新首页里（5.2、5.4.7）：字只用 12/13/14、字重 400/600；单条结论是图标——达到 = 勾（--ink-muted）、未达到 = 叉（--danger）、
+ * 部分达到 = 中性 chip；不用成功色。
+ */
+.page[data-embedded] .pane { gap: var(--space-3); padding: var(--space-4) var(--space-6) var(--space-6); }
+/* 新首页右栏里的会话详情（11/11）：右栏自己滚，这里不再套一层滚动、不画左边线和底色，留白跟右栏一样。 */
+.page[data-side] { display: block; height: auto; }
+.page[data-side] .pane { overflow: visible; padding: var(--space-3) var(--space-4) var(--space-4); border-left: 0; background: transparent; }
+.page[data-embedded] .lab { font-size: var(--text-xs); font-weight: 400; line-height: 16px; }
+.page[data-embedded] :is(.link, .meta, .text, .plan, .goal, .verdicts li, .output) { font-size: var(--text-base); line-height: var(--lh-row); }
+.page[data-embedded] .verdicts small, .page[data-embedded] .faint { font-size: var(--text-xs); line-height: 16px; }
+.page[data-embedded] :is(.crit, .outTag, .ex) { font-size: var(--text-xs); font-weight: 400; }
+.page[data-embedded] .plan li[data-status="in_progress"] { font-weight: 600; }
+.page[data-embedded] .verdict { gap: var(--space-1); height: 20px; padding: 0 var(--space-2); background: var(--neutral-wash); color: var(--ink-muted); font-size: var(--text-xs); font-weight: 400; }
+.page[data-embedded] .verdict[data-verdict] { padding: 0; background: none; }
+.page[data-embedded] .verdicts li[data-verdict] .verdict { background: none; color: var(--ink-muted); }
+.page[data-embedded] .verdicts li[data-verdict="partial"] .verdict { padding: 0 var(--space-2); background: var(--neutral-wash); }
+.page[data-embedded] .verdicts li[data-verdict="unmet"] .verdict { color: var(--danger); }
+.page[data-embedded] .pulse { width: 6px; height: 6px; background: var(--accent); }
+.page[data-embedded] .docHead b { font-size: 14px; font-weight: 600; }
+.page[data-embedded] .doc { font-size: 16px; line-height: 26px; }
+/* 等本人处理的框钉在输入框上方（第 54 条）：贴着输入框上沿，太高时自己滚。 */
+.pinned { display: grid; gap: var(--space-2); max-height: min(50vh, 420px); margin-bottom: var(--space-3); overflow-y: auto; scrollbar-width: thin; }
+
+/* 卡的约定（主循环第 60 条）：会话详情里改交代和完成标准；改前改后各一块。只用现有令牌。 */
+.agreeField { width: 100%; min-width: 0; min-height: var(--row-32); padding: var(--space-1) var(--space-2); border: 1px solid var(--field-border); border-radius: var(--r-control); background: var(--field-bg); color: var(--field-ink); font: inherit; font-size: var(--text-base); line-height: var(--lh-row); outline: none; resize: vertical; }
+.agreeField:hover { border-color: var(--field-border-hover); }
+.agreeField:focus { border-color: var(--field-border-focus); }
+/* 超长的那一条：同复盘备注框的错误样式。 */
+.agreeField[aria-invalid="true"] { border-color: var(--warning); }
+.agreeList { display: grid; gap: var(--space-1); margin: 0; padding-left: 18px; }
+.agreeList li { padding-left: var(--space-1); }
+.agreeList li .agreeField { width: calc(100% - 36px); vertical-align: middle; }
+.agreeGrow { flex: 1; }
+.agreeChanges { display: grid; gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
+.agreeChanges li { display: grid; gap: var(--space-1); }
+.agreeSide { display: grid; gap: 2px; }
+@media (max-width: 959px), (pointer: coarse) { .agreeField { font-size: 16px; } }
+
+/* 停下那一行（主循环第 65 条）：对话末尾，淡色小字写原因，行尾弱按钮「接着做」。 */
+.stopLine { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-height: var(--row-28); color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; }
+/* 右边 thread 视图里的窄面板模式（设计 6.6）：一直单列，详情、文件、当前版本都就地换掉对话来看（盖过上面按内容分两栏的几条）。 */
+.page[data-pane] > .body[data-solo] { grid-template-columns: minmax(0, 1fr); }
+
+/* 新首页不出省略号（本人 11/18）：放不下就换行，长预览限高往下渐隐；只在新首页的外壳里生效，旧界面照旧。 */
+:global(:root:has([data-type-scale="one"])) .title b, :global(:root:has([data-type-scale="one"])) .stepText, :global(:root:has([data-type-scale="one"])) .step > time + span, :global(:root:has([data-type-scale="one"])) .stepsSummary, :global(:root:has([data-type-scale="one"])) .embedName, :global(:root:has([data-type-scale="one"])) .outTitle, :global(:root:has([data-type-scale="one"])) .previewHead b { overflow: visible; white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+:global(:root:has([data-type-scale="one"])) .stepsHead { height: auto; min-height: var(--touch-hit, var(--row-28)); }
+/* 子会话页头标题折成多行时上下留空，字不贴屏幕上沿；空留在标题上（页头加的话，手机 44 高的返回键会把一行的页头撑到 52），一行时照旧 48 高。 */
+:global(:root:has([data-type-scale="one"])) .embedTitle { padding-block: var(--space-1); }

@@ -53,7 +53,7 @@ const preflightAgent: PreflightAgent = { async generate(input: PreflightAgentInp
  * 建会、导入逐字稿、生成会议卡。缺省造一张 10/28 之前的会议卡（整卡确认、带对象修改）：去掉逐条确认，主持人把 agent 的修改加到草稿上
  * （目标不在候选里的当未定）；extra.v2 留着生成出来的逐条确认会议卡。
  */
-export async function setup(agent: PostMeetingAgent = cardAgent(), env: Pick<AppEnv, "internalChatToken" | "feishu" | "meetingRecordText"> = {},
+export async function setup(agent: PostMeetingAgent = cardAgent(), env: Pick<AppEnv, "internalChatToken" | "feishu" | "meetingRecordText" | "meetingWorldWritesOff"> = {},
   extra: { meetingFollowThroughAgents?: { minutesApi?: FeishuMinutesApi }; v2?: boolean } = {}) {
   const { v2, ...agents } = extra;
   const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED, ...worldEnv, ...env }, undefined, { preflightAgent, outcomeAgent: agent, ...agents });

@@ -21,7 +21,7 @@ const selfReview = (text = "已按证据完成，待补充判断"): TMonthlyRevi
   nextFocus: { text: "下周期重点输入", sources: [] }, escalations: { text: "无", sources: [] },
 });
 const fields = PERSONAL_REVIEW_FIELDS.map((field) => ({ field, text: selfReview()[field].text }));
-async function fixture(owners = [TEST_MEMBER.personId, TEST_CEO.personId] as string[]) {
+async function fixture(owners = [TEST_MEMBER.personId, TEST_CEO.personId] as string[], monthlyCycle = true) {
   const dir = await mkdtemp(join(tmpdir(), "personal-review-test-"));
   let now = START;
   const draftCalls: MonthlyReviewDraftInput[] = [], personalCalls: PersonalReviewDraftInput[] = [];
@@ -32,7 +32,7 @@ async function fixture(owners = [TEST_MEMBER.personId, TEST_CEO.personId] as str
     summarize: { async generate() { return { candidate: {} }; } },
     personal: { async generate(input) { personalCalls.push(input); return { candidate: await generate(input) }; } },
   };
-  const t = await createTestApp({ conversationAttachmentStorageDir: dir }, undefined,
+  const t = await createTestApp({ conversationAttachmentStorageDir: dir, tianshuMonthlyCycle: monthlyCycle }, undefined,
     { monthlyReviewAgents: agents, monthlyReviewRetryDelayMs: 0, monthlyNow: () => now });
   await t.sql("UPDATE battlefield_config SET owner_id=$1 WHERE id='growth'", [TEST_MEMBER.personId]);
   await t.sql("INSERT INTO capability_config(id,version,code,name,six_month_outcome) VALUES ('cap-personal',1,'01','能力','能力目标')");
@@ -226,6 +226,20 @@ describe("个人复盘 Action 和 Co-Agent", () => {
 });
 
 describe("个人复盘 MCP", () => {
+  it("天枢自己的月末复盘关着（缺省）：已开着的个人复盘不进 list_pending，也不给复盘工具和用法", async () => {
+    const f = await fixture([TEST_MEMBER.personId], false);
+    try {
+      const token = (await f.call(f.member, "POST", "/api/me/tokens", { name: "review-off", client: "codex", expiresInDays: null })).json().token;
+      await f.open();
+      expect((await f.board()).rows).toHaveLength(1);
+      const rpc = async (method: string, params?: object) => (await f.t.app.inject({ method: "POST", url: "/mcp/me",
+        headers: { authorization: `Bearer ${token}`, accept: "application/json, text/event-stream" }, payload: { jsonrpc: "2.0", id: 1, method, params } })).json().result;
+      expect(JSON.parse((await rpc("tools/call", { name: "list_pending", arguments: {} })).content[0].text)).toEqual({ items: [] });
+      expect((await rpc("tools/list")).tools.map((tool: { name: string }) => tool.name)).not.toContain("get_my_review");
+      expect((await rpc("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "1" } })).instructions).not.toContain("个人复盘待起草");
+    } finally { await f.close(); }
+  });
+
   it("读取本人材料、发现待办、保存可重放草稿并返回 PUBLIC_ORIGIN 链接，拒绝提交和锁定状态", async () => {
     const f = await fixture([TEST_MEMBER.personId]);
     vi.stubEnv("PUBLIC_ORIGIN", testEnv.publicOrigin);

@@ -80,9 +80,12 @@ describe("飞书会议入口", () => {
     return renderToStaticMarkup(<MeetingCard card={card} collection={[card]} onCard={() => undefined} onNavigate={() => undefined} readOnly />);
   };
 
-  it("还没约上（pending）的会不出飞书入口", () => {
+  it("还没约上时显示创建进度，即使残留旧链接也不提供入会", () => {
     viewer.id = "someone-else";
-    expect(render(feishu("pending"))).not.toContain("飞书");
+    const html = render(feishu("pending", { joinUrl: "https://vc.feishu.cn/j/old" }));
+    expect(html).toContain("正在飞书创建日程");
+    expect(html).not.toContain("进入飞书会议");
+    expect(html).not.toContain("https://vc.feishu.cn/j/old");
   });
 
   it("等连飞书：都看到「未同步到飞书日历」，只有约的人本人看到「连接飞书」", () => {
@@ -94,13 +97,16 @@ describe("飞书会议入口", () => {
     expect(render(feishu("waiting_auth"))).toContain("未同步到飞书日历");
   });
 
-  it("没约上：主持人看到短状态和「重试」，别人看不到", () => {
+  it("没约上双方都看到原因，只有持有对应动作的主持人能重试", () => {
     viewer.id = "p1";
     const html = render(feishu("failed"), retry);
     expect(html).toContain("飞书未约上");
     expect(html).toMatch(/<button[^>]*>重试<\/button>/);
     viewer.id = "someone-else";
-    expect(render(feishu("failed"), retry)).not.toContain("飞书未约上");
+    const attendee = render(feishu("failed", { joinUrl: "https://vc.feishu.cn/j/old" }), retry);
+    expect(attendee).toContain("飞书未约上");
+    expect(attendee).not.toMatch(/<button[^>]*>重试<\/button>/);
+    expect(attendee).not.toContain("https://vc.feishu.cn/j/old");
   });
 });
 
@@ -211,7 +217,7 @@ describe("在飞书约上的会跟着飞书会议开始和结束", () => {
     expect(missed).not.toContain("会议中");
     expect(current(missed)).toContain('data-step="waiting" data-state="current" data-tone="fail"');
     expect(current(missed)).toContain("没开成");
-    expect(missed).toMatch(/data-step="record" data-state="todo"[^>]*>.*?等妙记</);
+    expect(missed).not.toContain('data-state="todo"');
     expect(headerEnd(missed)).toContain("重新安排会议");
     expect(missed).not.toContain("进入飞书会议");
     expect(missed).toContain("结束会议");

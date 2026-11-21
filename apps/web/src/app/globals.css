@@ -4,6 +4,10 @@
 @import "@heroui/styles";
 /* 「tianshu」主题：html[data-theme="tianshu"] 下生效（layout.tsx 服务端写入）。 */
 @import "./heroui-tianshu.css";
+/* 新首页的深色：只在外壳带 data-scheme="auto" 时在根上生效。 */
+@import "./scheme-dark.css";
+/* 新首页一种字号：只在外壳带 data-type-scale="one" 时在根上生效。 */
+@import "./home-type.css";
 
 /* ---------------------------------------------------------------------------
    设计 token：与 clark-main `src/app/globals.css` 的 :root 同值，只保留 CEO 工作面
@@ -37,6 +41,9 @@
   --counter-wash: color-mix(in oklab, var(--counter) 6%, var(--surface));
   --factual-wash: color-mix(in oklab, var(--factual) 7%, var(--surface));
   --neutral-wash: color-mix(in oklab, var(--ink) 4%, var(--surface));
+  /* 改过的地方（设计第 72 条）：只有这一种底色；strong 是指着、点开时的。 */
+  --mark: color-mix(in oklab, var(--judgment) 15%, var(--surface));
+  --mark-strong: color-mix(in oklab, var(--judgment) 24%, var(--surface));
   --wash-hover: color-mix(in oklab, var(--ink) 5%, transparent);
 
   /* 发丝线 */
@@ -121,6 +128,14 @@
   --space-6: 24px;
   --space-8: 32px;
 
+  /* 行（新首页设计 5.2）：14 号字配 20 行高（--text-base 自带的行高合 24.5）；四档行高；手机底部抽屉的阴影（朝上，--elev-3 都朝下）。 */
+  --lh-row: 20px;
+  --row-28: 28px;
+  --row-32: 32px;
+  --row-36: 36px;
+  --row-48: 48px;
+  --sheet-shadow: 0 -12px 40px rgb(20 30 50 / 18%);
+
   /*
    * 材料排印（docs/superpowers/specs/2026-10-12-issue-page-typography.md）：二级页读材料用的一套字号、字重、墨色。
    * 议题页只用两级 16 / 13 + 标签专用 12（--doc-type-title 20 议题页已不用，目前只剩月度计划页的一处在用）；字重只有 400 / 600；
@@ -135,19 +150,21 @@
   --doc-lh-section: 24px;
   --doc-type-body: 16px;
   --doc-lh-body: 28px;
-  --doc-type-meta: 13px;
-  --doc-lh-meta: 20px;
+  /* 字号只用 12、14、16 三档（新首页设计 14.1）：辅助字 12/16。 */
+  --doc-type-meta: 12px;
+  --doc-lh-meta: 16px;
   --doc-type-tag: 12px;
   --doc-lh-tag: 18px;
   --doc-weight-regular: 400;
   --doc-weight-strong: 600;
   /* 墨色：主（正文、标题）17:1 · 次（说明、摘录）7.6:1 · 弱（日期、出处、编号、标签）5.3:1；强调色只给可点的字。 */
-  --doc-ink-1: #17171b;
-  --doc-ink-2: #535358;
-  --doc-ink-3: #6b6b70;
-  --doc-ink-accent: #3c66bf;
-  --doc-tag-wash: color-mix(in oklab, #17171b 6%, transparent);
-  --doc-rule: color-mix(in oklab, #17171b 9%, transparent);
+  /* 读主墨三级和辅助蓝（取值相同），深色下跟着变。 */
+  --doc-ink-1: var(--ink);
+  --doc-ink-2: var(--ink-muted);
+  --doc-ink-3: var(--ink-faint);
+  --doc-ink-accent: var(--tianshu-blue-secondary, #3c66bf);
+  --doc-tag-wash: color-mix(in oklab, var(--ink) 6%, transparent);
+  --doc-rule: color-mix(in oklab, var(--ink) 9%, transparent);
   /* 行长：正文 16px 每行约 37 字（二级页左侧阅读列统一 600，见深度讨论 spec 末节）。 */
   --doc-measure: 600px;
 }
@@ -213,21 +230,22 @@
   --radius-2xl: calc(var(--radius) * 1.8);
 }
 
-/* 字号尺与字重：与 clark 一致。medium 重定义为 600（Windows 微软雅黑请求 500 会落回 400）。 */
+/* 字号尺与字重：medium 重定义为 600（Windows 微软雅黑请求 500 会落回 400）。
+   字号只用 12、14、16 三档（新首页设计 14.1，旧界面已放弃、不再单独留 11、13、15、17）：micro、meta、sm 都是 12，base 14，md、read、lg 16。 */
 @theme {
-  --text-micro: 0.6875rem;
+  --text-micro: 0.75rem;
   --text-micro--line-height: 1.45;
   --text-meta: 0.75rem;
   --text-meta--line-height: 1.55;
-  --text-sm: 0.8125rem;
+  --text-sm: 0.75rem;
   --text-sm--line-height: 1.7;
   --text-base: 0.875rem;
   --text-base--line-height: 1.75;
-  --text-md: 0.9375rem;
+  --text-md: 1rem;
   --text-md--line-height: 1.7;
   --text-read: 1rem;
   --text-read--line-height: 1.85;
-  --text-lg: 1.0625rem;
+  --text-lg: 1rem;
   --text-lg--line-height: 1.6;
   --text-xl: 1.3125rem;
   --text-xl--line-height: 1.5;
@@ -316,6 +334,19 @@
 :where(input:not([type]), input[type="text"], input[type="search"], input[type="email"], input[type="password"], input[type="url"], input[type="tel"], input[type="number"], input[type="date"], input[type="time"], input[type="datetime-local"], input[type="month"], textarea, select):where(:focus-visible) {
   outline: none;
 }
+/*
+ * react-aria 管焦点的元素（HeroUI 的按钮、菜单、菜单项、列表项、选项卡、选择框、开关，Dropdown.Trigger 等，都带 data-rac）
+ * 只在 react-aria 判定是键盘时（data-focus-visible）画焦点框（设计 17.2 第 39 条）。整页重新载入后（锁屏回来就是）第一次用鼠标点开菜单，
+ * 焦点由程序挪到菜单上，Chrome 也把它算成 :focus-visible：菜单、菜单项、关掉后焦点回到的那一行都会多一圈框。这里把浏览器原生那一半关掉：
+ * 全局的 2px 外框、各处 .xxx:focus-visible 的外框、HeroUI 用 box-shadow 画的环（--tw-ring-*）都不画。键盘走过来时 react-aria 会标
+ * data-focus-visible，照样有框。文字输入不在内（打字时照旧有聚焦边）；不是 react-aria 管的普通元素不动。不分层，压过分层的 base 和组件样式。
+ */
+[data-rac]:focus-visible:not([data-focus-visible], input, textarea) {
+  outline: none;
+  --tw-ring-shadow: 0 0 #0000;
+  --tw-ring-offset-shadow: 0 0 #0000;
+}
+
 /*
  * HeroUI / ts-design 的文本框（Input、TextArea、Select 触发器）。它们的样式在 @layer components（分层），
  * 所以这里用不分层的规则对齐：边、悬停边、聚焦边、占位字已经通过 --field-* 同名变量带过来了（见上方注释），
@@ -473,17 +504,22 @@ html[data-notice-transition="close"]::view-transition-new(*) { animation-duratio
   }
 }
 
-/* 滚动条：细、圆头、无箭头、透明轨道，轨道上下（横向为左右）各让出 18px，
-   圆角弹窗和卡片里的滚动条不顶进圆角（Chromium / Safari）。
+/* 滚动条：细、圆头、无箭头、透明轨道（Chromium / Safari）。
    Chromium 121+ 只要元素设了 scrollbar-width / scrollbar-color，就不认 ::-webkit-scrollbar，所以这里统一改回 auto；
    要隐藏滚动条的地方都另写了 ::-webkit-scrollbar { display: none }。Firefox 不支持这个选择器，保留各处的 thin。 */
 @supports selector(::-webkit-scrollbar) {
   * { scrollbar-width: auto !important; scrollbar-color: auto !important; }
-  ::-webkit-scrollbar { width: 12px; height: 12px; background: transparent; }
-  ::-webkit-scrollbar-track { background: transparent; margin: 18px; }
-  ::-webkit-scrollbar-thumb { border: 4px solid transparent; border-radius: 999px; background: rgb(120 132 150 / 32%) padding-box; }
-  ::-webkit-scrollbar-thumb:hover { background-color: rgb(120 132 150 / 55%); }
+  /* 全站细滚动条（新首页设计 14.1）：6px，平时透明，鼠标进到能滚动的区域才出现（--hairline-strong），悬停变 --ink-faint。 */
+  ::-webkit-scrollbar { width: 6px; height: 6px; background: transparent; }
+  ::-webkit-scrollbar-track { background: transparent; margin: 4px; }
+  ::-webkit-scrollbar-thumb { border-radius: 999px; background: transparent; }
+  :hover::-webkit-scrollbar-thumb { background: var(--hairline-strong); }
+  ::-webkit-scrollbar-thumb:hover { background: var(--ink-faint); }
   ::-webkit-scrollbar-button, ::-webkit-scrollbar-corner { display: none; background: transparent; }
+}
+/* Firefox：细滚动条，颜色同上。 */
+@supports not selector(::-webkit-scrollbar) {
+  * { scrollbar-width: thin; scrollbar-color: var(--hairline-strong) transparent; }
 }
 
 /* 天枢标志默认用深色渐变（与 favicon 一致，#2459C5 → #3980F8）。:where 零优先级：各处给标志单独设的 --brand-* 仍然生效；不改全站的品牌色。 */

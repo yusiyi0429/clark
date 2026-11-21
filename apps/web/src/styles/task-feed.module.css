@@ -1,0 +1,21 @@
+/*
+ * Task 管线里网页插进去的话（components/home/TaskFeed.tsx，设计 5.4.3、14.1）：
+ * - 结果那一句是管线说的话：正文 16/26 --ink，没有图标；鼠标移上去（或键盘进来）句尾出「推翻」（弱按钮）。
+ * - 子会话转来的提问、批准（14.3）：框顶上一行 12 --ink-faint 写子会话名。
+ */
+.sentence { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-height: var(--row-32); margin: var(--space-2) 0; color: var(--ink); font-size: 16px; line-height: 26px; }
+.sentenceLink { min-width: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; overflow-wrap: anywhere; cursor: pointer; }
+.sentenceLink:hover { text-decoration: underline; text-decoration-color: var(--hairline-strong); text-underline-offset: 4px; }
+.sentenceLink:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-control); }
+.more { min-width: 0; color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; }
+.undo { opacity: 0; transition: opacity var(--dur-fast) linear; }
+.sentence:hover .undo, .sentence:focus-within .undo { opacity: 1; }
+@media (hover: none) { .undo { opacity: 1; } }
+
+.ask { margin: var(--space-3) 0; }
+.ask > [data-decision], .ask > [data-resolved] { margin-top: var(--space-1); }
+.askFrom { margin: 0; color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; white-space: normal; overflow-wrap: anywhere; }
+/* 月中 Task 改了（16.4）：选项框里列出还没做完的那几个子会话。 */
+.goalSessions { display: grid; gap: 2px; margin: 0; padding-left: var(--space-4); color: var(--ink-muted); font-size: var(--text-base); line-height: var(--lh-row); }
+/* 要你出手的那一块处理完了（设计 4.3）：收成一行淡色字。 */
+.settled { margin: var(--space-2) 0; color: var(--ink-faint); overflow-wrap: anywhere; }

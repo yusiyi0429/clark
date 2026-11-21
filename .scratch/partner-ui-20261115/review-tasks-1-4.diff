@@ -1,0 +1,530 @@
+diff --git a/apps/web/src/components/home/Conversations.tsx b/apps/web/src/components/home/Conversations.tsx
+index eba1dc3f..b3d519fa 100644
+--- a/apps/web/src/components/home/Conversations.tsx
++++ b/apps/web/src/components/home/Conversations.tsx
+@@ -41,18 +41,18 @@ import { chatModelLabel } from "@/lib/local/runModel";
+ import { PermissionModeMenu, ProjectModeContext, useProjectMode } from "@/components/cards/PermissionMode";
+ import { showWorkspaceToast } from "@/lib/toast";
+ import { FolderMenu, FolderText, FootText } from "./InputFooter";
+ import { PipelineModelMenu } from "./PipelineModel";
+ import { SubSessionSummary } from "./SubSessionSummary";
+ import { WorkIntakeQueue, useQueueWorkInput } from "./WorkIntake";
+ import { usePartnerWorkEvents } from "./PartnerWorkEvents";
+ import { usePartnerTeam } from "./PartnerTeam";
+-import { PartnerMeetingInbox } from "./PartnerMeetings";
+-import { MeetingWorkHandoffs, MeetingWorkFeedEntry } from "../meeting/MeetingWorkHandoffs";
++import { usePartnerMeetingFeed } from "./PartnerMeetings";
++import { useMeetingWorkHandoffFeed, MeetingWorkFeedEntry } from "../meeting/MeetingWorkHandoffs";
+ 
+ /** 首页输入框发来、等着进对话的一句。 */
+ /** files：首页输入框带的附件，到了那条对话再传（14.5）。 */
+ export type OutboxEntry = { id: number; target: "main" | string; text: string; files: File[]; team?: boolean };
+ /** 排着的几句（按发出的先后），每条对话只取给自己的。 */
+ export type Outbox = OutboxEntry[];
+ 
+ /** 同一条对话里换了模型（67 条）：在换的那一处画一行「换成 来源 · 模型」，样子同「11 月目标」那条分隔线。 */
+@@ -95,16 +95,17 @@ function ChatInput({ data, placeholder, onHeight, context, footer, intercept, du
+   data: ConversationData; placeholder: string; onHeight: (height: number) => void; context?: { label: string; onClear: () => void } | null; footer?: { left?: ReactNode; right?: ReactNode };
+   intercept?: TeamIntercept; durable?: boolean;
+ }) {
+   const [fill, setFill] = useState<{ text: string; nonce: number } | null>(null);
+   const queueWorkInput = useQueueWorkInput();
+   useAnswerOptionFill(data.scope, (text) => setFill({ text, nonce: Date.now() }));
+   return (
+     <InputBar placeholder={placeholder} busy={data.streaming} interruptible={durable || data.interruptible} onStop={data.stop} textRequired={!intercept} onHeight={onHeight} fill={fill} context={context} footer={footer}
++      dock={durable ? <WorkIntakeQueue key={data.scope} scope={data.scope} refreshHistory={data.followLatest} /> : null}
+       draftKey={`tianshu-home-draft-v1:${data.scope}`}
+       onSend={async (text, files) => {
+         if (intercept && await intercept(text,files)) return true;
+         const message = context ? `${context.label}\n\n${text}` : text;
+         const ok = durable ? Boolean(await queueWorkInput(data.scope,message,files)) : await sendWithFiles(data,message,files);
+         if (ok) context?.onClear();
+         return ok;
+       }} />
+@@ -138,36 +139,38 @@ function useEscStopsReply(data: ConversationData) {
+ export function BuddyView({ buddy, outbox, consume, onSpeaking, projects, other, waiting, go, context = null, onClearContext }: {
+   buddy: Buddy | null; outbox: Outbox; consume: (id: number) => void; onSpeaking: (speaking: boolean) => void; context?: string | null; onClearContext?: () => void;
+   projects: Project[]; other: SubSession[]; waiting: WaitingItem[]; go: (href: string) => void;
+ }) {
+   const data = useConversation("global");
+   const chrome = useViewChrome();
+   const team = usePartnerTeam();
+   const events = usePartnerWorkEvents(waiting, go);
++  const meetingFeed = usePartnerMeetingFeed();
++  const handoffFeed = useMeetingWorkHandoffFeed();
+   useOutbox(data, "main", outbox, consume, team.intercept, team.composing);
+   useEscStopsReply(data);
+   useEffect(() => { onSpeaking(data.streaming); return () => onSpeaking(false); }, [data.streaming, onSpeaking]);
+   const name = buddy?.name?.trim() || "伙伴";
+   return (
+     <PendingBoxes>
+       <div className={h.convo} data-testid="buddy-view">
+         <ChatColumn data={data} buddy={buddy} tone="light"
+           head={(
+             <>
+               <header className={h.viewHead} data-flush="">
+                 {chrome.lead}
+                 <h1 className={h.viewTitle} tabIndex={-1}>{name}</h1>
+                 {chrome.trail}
+               </header>
+               <SubSessionSummary projects={projects} other={other} go={go} />
++              {meetingFeed.scheduled}
+             </>
+           )}
+-          timeline={(current) => <><WorkTimeline data={current} blocks={[...team.blocks, ...events]} modelRule={modelRule} /><PartnerMeetingInbox /><MeetingWorkHandoffs />
+-            <WorkIntakeQueue scope={data.scope} refreshHistory={data.followLatest} /></>}
++          timeline={(current) => <>{meetingFeed.notice}{handoffFeed.notice}<WorkTimeline data={current} blocks={[...team.blocks, ...events, ...meetingFeed.blocks, ...handoffFeed.blocks]} modelRule={modelRule} /></>}
+           dock={(latest) => <>{team.composer}<PendingDock latest={latest} /></>}
+           input={(onHeight) => <ChatInput data={data} placeholder={`与${name}讨论…`} onHeight={onHeight} intercept={team.intercept} footer={{ left: team.launcher, right: <ModelText data={data} /> }}
+             context={context ? { label: context, onClear: () => onClearContext?.() } : null} />} />
+       </div>
+     </PendingBoxes>
+   );
+ }
+ 
+@@ -400,18 +403,17 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
+                 <h1 className={h.viewTitle} tabIndex={-1}>{project.name}</h1>
+                 {pull}
+                 {trail}
+                 {chrome.trail}
+               </header>
+               <SubSessionSummary projects={[project]} grouped={false} go={go} />
+             </>
+           )}
+-          timeline={(current) => <><WorkTimeline data={current} blocks={blocks} modelRule={modelRule} />
+-            {api.live && !readOnly ? <WorkIntakeQueue scope={data.scope} refreshHistory={data.followLatest} /> : null}</>}
++          timeline={(current) => <WorkTimeline data={current} blocks={blocks} modelRule={modelRule} />}
+           dock={(latest) => <PendingDock latest={latest} />}
+           input={readOnly ? () => null : (onHeight) => <ChatInput data={data} durable={api.live} placeholder={handheld ? "说点什么…" : `与${project.name}讨论…`} onHeight={onHeight} footer={{
+             left: folder,
+             right: <><PipelineModelMenu projectId={project.id} fallback={<ModelText data={data} />} sheet={handheld} />{mode ? <PermissionModeMenu modes={mode.modes} value={mode.value} sheet={handheld} onChange={mode.set} /> : null}</>,
+           }} />} />
+       </div>
+     </PendingBoxes>
+     </ProjectModeContext.Provider>
+diff --git a/apps/web/src/components/home/PartnerTeamCard.tsx b/apps/web/src/components/home/PartnerTeamCard.tsx
+index 94bf5168..fc0272b2 100644
+--- a/apps/web/src/components/home/PartnerTeamCard.tsx
++++ b/apps/web/src/components/home/PartnerTeamCard.tsx
+@@ -1,11 +1,11 @@
+ "use client";
+ 
+-import { useId, useRef, useState } from "react";
++import { useEffect, useId, useRef, useState } from "react";
+ import { ExternalLink, FileText, Forward, MessageSquare, Repeat2, Send } from "lucide-react";
+ import type { TReplyTeamDeliveryRequest, TRequestListItem, TTeamDelivery, TTeamDeliveryAttachment, TTeamDeliveryRecipient, TTeamDeliveryReply } from "@warmap/contracts";
+ import { monthDayTime } from "@/lib/companyTime";
+ import { sizeText } from "@/lib/home/attachments";
+ import { publicLink } from "@/lib/home/teamIntent";
+ import { replyTeamDelivery, retryRecipient, teamError } from "@/lib/home/teamDelivery";
+ import { emptyTeamFiles, TeamFilePicker, type TeamFiles } from "./PartnerTeamFiles";
+ import s from "./partnerTeam.module.css";
+@@ -103,47 +103,81 @@ function Recipient({ delivery, person, sent, onSaved, onForward }: {
+   };
+   const question = delivery.kind === "question";
+   return <li className={s.person}>
+     <div className={s.personHeading}><strong>{sent ? person.displayName : "我的进度"}</strong>
+       <span className={s.status} data-failed={person.status === "failed" || undefined}>{STATUS[person.status]}</span></div>
+     {person.error ? <p className={s.error}>{person.error}</p> : null}
+     {error ? <p className={s.error} role="alert">{error}</p> : null}
+     {sent && person.status === "failed" ? <button className={s.linkButton} type="button" disabled={retrying} onClick={() => void retry()}>{retrying ? "正在重试…" : "重试给" + person.displayName + "的投递"}</button> : null}
+-    {person.replies.length ? <ol className={s.replies} aria-label={person.displayName + "的往来"}>
+-      {person.replies.map((reply) => <li key={reply.id} id={"team-reply-" + reply.id}>
+-        <div className={s.replyHead}><b>{reply.status === "clarification" ? delivery.sender.displayName : person.displayName} · {REPLY_LABEL[reply.status]}</b><Clock at={reply.createdAt} /></div>
+-        {reply.text ? <p className={s.body}>{reply.text}</p> : null}
+-        <Attachments files={reply.attachments} />
+-        {sent && reply.status !== "clarification" && reply.text.trim() ? <button type="button" className={s.linkButton} onClick={() => onForward({ text: reply.text })}><Forward size={14} aria-hidden />转发这条回复</button> : null}
+-      </li>)}
+-    </ol> : null}
+     {writing ? <ReplyForm key={writing} deliveryId={delivery.id} recipientId={person.personId} kind={writing} onSaved={onSaved} onClose={() => setWriting(null)} /> :
+       question && person.status !== "failed" ? <div className={s.rowTools}>
+         {!sent ? <>
+           <button type="button" className={s.secondary} onClick={() => setWriting("answered")}>{person.status === "answered" ? "追加回复" : "回复"}</button>
+           <button type="button" className={s.linkButton} onClick={() => setWriting("needs_info")}>缺材料或需澄清</button>
+         </> : person.status === "needs_info" ? <button type="button" className={s.secondary} onClick={() => setWriting("clarification")}>给{person.displayName}补充说明</button> : null}
+       </div> : null}
++    {person.replies.length ? <details className={s.history}>
++      <summary className={s.historySummary}>{person.replies.length} 条往来<span>查看回复与附件</span></summary>
++      <ol className={s.replies} aria-label={person.displayName + "的往来"}>
++        {person.replies.map((reply) => <li key={reply.id} id={"team-reply-" + reply.id} tabIndex={-1}>
++          <div className={s.replyHead}><b>{reply.status === "clarification" ? delivery.sender.displayName : person.displayName} · {REPLY_LABEL[reply.status]}</b><Clock at={reply.createdAt} /></div>
++          {reply.text ? <p className={s.body}>{reply.text}</p> : null}
++          <Attachments files={reply.attachments} />
++          {sent && reply.status !== "clarification" && reply.text.trim() ? <button type="button" className={s.linkButton} onClick={() => onForward({ text: reply.text })}><Forward size={14} aria-hidden />转发这条回复</button> : null}
++        </li>)}
++      </ol>
++    </details> : null}
+   </li>;
+ }
+ 
+ export function TeamDeliveryCard({ delivery, sent, onSaved, onForward }: {
+   delivery: TTeamDelivery; sent: boolean; onSaved: (item: TTeamDelivery) => void; onForward: (content: TeamForward) => void;
+ }) {
++  const card = useRef<HTMLElement>(null);
++  // Reply lists can arrive after hydration. Retry the current hash only when their identities change.
++  const replyIds = delivery.recipients.flatMap((person) => person.replies.map((reply) => reply.id)).join("\n");
++  useEffect(() => {
++    let frame: number | undefined;
++    const locateReply = () => {
++      if (frame !== undefined) window.cancelAnimationFrame(frame);
++      let anchor: string;
++      try { anchor = decodeURIComponent(window.location.hash.slice(1)); }
++      catch { return; }
++      if (!anchor.startsWith("team-reply-")) return;
++      const target = document.getElementById(anchor);
++      if (!target || !card.current?.contains(target)) return;
++      // A surrounding timeline may also use disclosures; open every ancestor before scrolling.
++      for (let parent = target.parentElement; parent; parent = parent.parentElement) {
++        if (parent.tagName === "DETAILS") (parent as HTMLDetailsElement).open = true;
++      }
++      frame = window.requestAnimationFrame(() => {
++        target.focus({ preventScroll: true }); target.scrollIntoView({ block: "center" });
++      });
++    };
++    locateReply();
++    window.addEventListener("hashchange", locateReply);
++    return () => {
++      if (frame !== undefined) window.cancelAnimationFrame(frame);
++      window.removeEventListener("hashchange", locateReply);
++    };
++  }, [delivery.id, replyIds]);
+   const question = delivery.kind === "question";
+   const title = (sent ? "我" : delivery.sender.displayName) + (question ? "发起的征集" : "分享的资料");
+   const source = delivery.sourceUrl && publicLink(delivery.sourceUrl);
+   const askAccess = (name: string) => onForward({ recipientIds: [delivery.sender.personId], text: "请给我一份可以打开的「" + name + "」。" });
+-  return <article id={teamAnchor(delivery.id)} tabIndex={-1} className={s.card} aria-label={title}>
++  return <article ref={card} id={teamAnchor(delivery.id)} tabIndex={-1} className={s.card} aria-label={title}>
+     <header className={s.cardHead}>{question ? <MessageSquare size={16} aria-hidden /> : <Send size={16} aria-hidden />}<h3>{title}</h3><Clock at={delivery.createdAt} /></header>
+     {delivery.text ? <p className={s.body}>{delivery.text}</p> : null}
+     {source ? <div className={s.source}><a href={source} target="_blank" rel="noreferrer"><ExternalLink size={13} aria-hidden />{source}</a>
+       {!sent ? <button className={s.linkButton} type="button" onClick={() => askAccess("来源资料")}>向发送人申请可读版本</button> : null}</div> : null}
+-    <Attachments files={delivery.attachments} onAccess={sent ? undefined : askAccess} />
++    {delivery.attachments.length ? <details className={s.history}>
++      <summary className={s.historySummary}>附件 · {delivery.attachments.length}<span>打开原文件</span></summary>
++      <Attachments files={delivery.attachments} onAccess={sent ? undefined : askAccess} />
++    </details> : null}
+     {delivery.dueAt ? <p className={s.note}>回复截止 <Clock at={delivery.dueAt} />（北京时间）</p> : null}
+     {sent || question ? <ul className={s.recipients} aria-label="按收件人查看进度">{delivery.recipients.map((p) =>
+       <Recipient key={p.personId} delivery={delivery} person={p} sent={sent} onSaved={onSaved} onForward={onForward} />)}</ul> : null}
+     {!sent && !question && (delivery.text || source) ? <button type="button" className={s.linkButton}
+       onClick={() => onForward({ text: delivery.text, ...(source ? { sourceUrl: source } : {}) })}><Forward size={14} aria-hidden />转发文字和来源</button> : null}
+   </article>;
+ }
+ 
+diff --git a/apps/web/src/components/home/SubSessionSummary.tsx b/apps/web/src/components/home/SubSessionSummary.tsx
+index 2a240950..685a972a 100644
+--- a/apps/web/src/components/home/SubSessionSummary.tsx
++++ b/apps/web/src/components/home/SubSessionSummary.tsx
+@@ -15,37 +15,39 @@ export function SubSessionSummary({ projects, other = [], grouped = true, go }:
+   projects: readonly ProjectSessions[];
+   other?: readonly SubSession[];
+   grouped?: boolean;
+   go: (href: string) => void;
+ }) {
+   const groups = projects.filter((project) => project.subSessions.length);
+   const all = [...groups.flatMap((project) => project.subSessions), ...other];
+   if (!all.length) return null;
+-  const running = all.filter((sub) => sub.state === "running" || sub.state === "failed").length;
++  const running = all.filter((sub) => sub.state === "running").length;
++  const reworking = all.filter((sub) => sub.state === "failed").length;
+   const waiting = all.filter((sub) => sub.state === "waiting" && sub.waiting).length;
+   const rows = (subs: readonly SubSession[]) => {
+     const letters = subLetters([...subs]);
+     return <ul className={s.list}>{subs.map((sub) => (
+       <li key={subKey(sub)}>
+         <button type="button" className={s.row} onClick={() => go(subHref(sub))} data-state={sub.state}>
+-          <StateIcon {...subIcon(sub)} />
++          <StateIcon {...subIcon(sub)} {...(sub.state === "failed" ? { label: "重做中" } : {})} />
+           {letters.has(subKey(sub)) ? <SubLetter letter={letters.get(subKey(sub))!} /> : <span />}
+           <span className={s.title}>{sub.title}</span>
+           <span className={s.stage} data-attention={sub.state === "waiting" && sub.waiting ? "" : undefined}>{subStage(sub)}</span>
+         </button>
+       </li>
+     ))}</ul>;
+   };
+   return (
+     <details className={s.root} data-testid="sub-session-summary">
+       <summary className={s.toggle}>
+         <ChevronRight size={14} aria-hidden className={s.chevron} />
+         <span>子会话 {all.length}</span>
+         {running ? <span className={s.count}>{running} 进行中</span> : null}
++        {reworking ? <span className={s.count}>{reworking} 重做中</span> : null}
+         {waiting ? <span className={s.attention}>{waiting} 等你</span> : null}
+       </summary>
+       <div className={s.body}>
+         {groups.map((project) => <section key={project.id} aria-label={grouped ? project.name : "本项目子会话"}>
+           {grouped ? <h2 className={s.project}>{project.name}</h2> : null}
+           {rows(project.subSessions)}
+         </section>)}
+         {other.length ? <section aria-label="其他子会话"><h2 className={s.project}>其他</h2>{rows(other)}</section> : null}
+diff --git a/apps/web/src/components/home/WorkIntake.tsx b/apps/web/src/components/home/WorkIntake.tsx
+index 58c93965..07ec08d4 100644
+--- a/apps/web/src/components/home/WorkIntake.tsx
++++ b/apps/web/src/components/home/WorkIntake.tsx
+@@ -2,17 +2,18 @@
+ 
+ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+ import type { TCreateWorkIntake, TWorkIntakeChange, TWorkIntakeEntry } from "@warmap/contracts";
+ import { sha256Hex } from "@/components/memory/memoryModel";
+ import { useWorkspace } from "@/components/shell/WorkspaceContext";
+ import { uploadToConversation } from "@/lib/home/attachments";
+ import { showWorkspaceToast } from "@/lib/toast";
+ import { HeroButton } from "@/components/HeroButton";
+-import h from "@/styles/home.module.css";
++import { ChevronRight } from "lucide-react";
++import s from "./work-intake.module.css";
+ 
+ const CHANGED = "tianshu:work-intake";
+ const URL = "/api/me/work-intake";
+ 
+ async function request<T>(url: string, method = "GET", body?: unknown): Promise<T> {
+   const response = await fetch(url, { method, cache: "no-store", ...(body === undefined ? {} :
+     {headers: {"content-type":"application/json"},body: JSON.stringify(body)}) });
+   if (!response.ok) {
+@@ -100,16 +101,18 @@ export function useViewerQueueWorkInput(viewerId: string | null) {
+ 
+ export function useQueueWorkInput() {
+   return useViewerQueueWorkInput(useWorkspace().viewerId);
+ }
+ 
+ export function WorkIntakeQueue({ scope, refreshHistory }: { scope: string; refreshHistory: () => void }) {
+   const [items, setItems] = useState<TWorkIntakeEntry[]>([]);
+   const [error, setError] = useState("");
++  const [busyId, setBusyId] = useState<string | null>(null);
++  const changing = useRef(false);
+   const refresh = useRef(refreshHistory);
+   refresh.current = refreshHistory;
+   const load = useRef<() => void>(() => {});
+   useEffect(() => {
+     let active = true;
+     let sequence = 0;
+     let last: string | null = null;
+     setItems([]);
+@@ -131,23 +134,58 @@ export function WorkIntakeQueue({ scope, refreshHistory }: { scope: string; refr
+     const changed = (event: Event) => { if (event.type !== CHANGED || (event as CustomEvent).detail?.scope === scope) void read(); };
+     const timer = window.setInterval(() => { if (document.visibilityState === "visible") void read(); },5000);
+     window.addEventListener(CHANGED,changed);
+     window.addEventListener("focus",changed);
+     void read();
+     return () => { active = false; window.clearInterval(timer); window.removeEventListener(CHANGED,changed); window.removeEventListener("focus",changed); };
+   },[scope]);
+   const change = useCallback(async (item: TWorkIntakeEntry,action: TWorkIntakeChange["action"]) => {
++    if (changing.current) return;
++    changing.current = true;
++    setBusyId(item.id);
+     try { await request(URL + "/" + encodeURIComponent(item.id), "PATCH", {action}); }
+     catch (cause) { showWorkspaceToast({text: cause instanceof Error ? cause.message : "没有改成"}); }
++    finally { changing.current = false; setBusyId(null); }
+     load.current();
+   },[]);
++  return <WorkIntakeQueueView items={items} error={error} busyId={busyId} onReload={() => load.current()} onChange={change} />;
++}
++
++/** 输入附近的待发回执；完整正文和操作按需展开，失败始终有提示。 */
++export function WorkIntakeQueueView({ items, error, busyId = null, onReload, onChange }: {
++  items: readonly TWorkIntakeEntry[]; error: string; busyId?: string | null;
++  onReload: () => void; onChange: (item: TWorkIntakeEntry, action: TWorkIntakeChange["action"]) => void;
++}) {
+   if (!items.length && !error) return null;
+-  return <section aria-label="待发需求">
+-    {error ? <p role="status">{error} <HeroButton variant="ghost" size="sm" onPress={() => load.current()}>重试</HeroButton></p> : null}
+-    {items.map(item => <div key={item.id} className={h.line}>
+-      <span>{item.state === "failed" ? "发送失败" : item.state === "sending" ? "递送中" : item.priority ? "优先待发" : "排队中"} · {item.message}{item.error ? " · " + item.error : ""}</span>
+-      {item.state === "failed" ? <HeroButton size="sm" variant="ghost" onPress={() => void change(item,"retry")}>重试</HeroButton> : null}
+-      {item.state === "queued" && !item.priority ? <HeroButton size="sm" variant="ghost" onPress={() => void change(item,"first")}>优先发送</HeroButton> : null}
+-      {item.state !== "sending" ? <HeroButton size="sm" variant="ghost" onPress={() => void change(item,"cancel")}>撤回</HeroButton> : null}
+-    </div>)}
++  const failed = items.filter(item => item.state === "failed").length;
++  const sending = items.filter(item => item.state === "sending").length;
++  const queued = items.filter(item => item.state === "queued").length;
++  return <section className={s.root} aria-label="待发需求" data-testid="work-intake-queue">
++    {error ? <div className={s.error} role="status"><span>{error}</span><HeroButton className={s.action} variant="ghost" size="sm" onPress={onReload}>重新读取</HeroButton></div> : null}
++    {items.length ? <details className={s.queue} open={failed > 0 || undefined}>
++      <summary className={s.summary}>
++        <ChevronRight size={14} aria-hidden className={s.chevron} />
++        <span>待发需求 {items.length}</span>
++        <span className={s.counts}>
++          {failed ? <span className={s.failed}>{failed} 发送失败</span> : null}
++          {sending ? <span>{sending} 递送中</span> : null}
++          {queued ? <span>{queued} 排队中</span> : null}
++        </span>
++      </summary>
++      <ol className={s.list}>
++        {items.map(item => <li key={item.id} className={s.item} aria-busy={busyId === item.id}>
++          <span className={s.state} data-failed={item.state === "failed" ? "" : undefined}>{item.state === "failed" ? "发送失败" : item.state === "sending" ? "递送中" : item.priority ? "优先待发" : "排队中"}</span>
++          <details className={s.message}>
++            <summary className={s.preview}><span>{item.message}</span><span className={s.more}>全文</span></summary>
++            <p className={s.fullText}>{item.message}</p>
++          </details>
++          {item.error ? <p className={s.failure}>{item.error}</p> : null}
++          <div className={s.actions}>
++            {item.state === "failed" ? <HeroButton className={s.action} size="sm" variant="secondary" isDisabled={busyId !== null} onPress={() => onChange(item,"retry")}>重试发送</HeroButton> : null}
++            {item.state === "queued" && !item.priority ? <HeroButton className={s.action} size="sm" variant="ghost" isDisabled={busyId !== null} onPress={() => onChange(item,"first")}>优先发送</HeroButton> : null}
++            {item.state !== "sending" ? <HeroButton className={s.action} size="sm" variant="ghost" isDisabled={busyId !== null} onPress={() => onChange(item,"cancel")}>撤回</HeroButton> : null}
++          </div>
++        </li>)}
++      </ol>
++    </details> : null}
+   </section>;
+ }
+diff --git a/apps/web/src/components/home/partnerTeam.module.css b/apps/web/src/components/home/partnerTeam.module.css
+index 015e4eeb..f84644b7 100644
+--- a/apps/web/src/components/home/partnerTeam.module.css
++++ b/apps/web/src/components/home/partnerTeam.module.css
+@@ -36,16 +36,27 @@
+ .source { display: grid; gap: var(--space-1); justify-items: start; }
+ .card a, .fixedChoice a { color: var(--ink); text-underline-offset: 3px; }
+ .source a, .attachment a { display: inline-flex; align-items: baseline; gap: var(--space-1); }
+ .source svg, .attachment svg { flex: none; align-self: center; }
+ .attachment { display: grid; justify-items: start; min-width: 0; }
+ .recipients, .replies, .fileList { display: grid; list-style: none; margin: 0; padding: 0; gap: var(--space-2); }
+ .recipients { border-top: 1px solid var(--hairline); padding-top: var(--space-2); }
+ .person { display: grid; gap: var(--space-1); }
++.person + .person { border-top: 1px solid var(--hairline); padding-top: var(--space-2); }
++.personHeading { justify-content: space-between; }
++.personHeading > strong { min-width: 0; }
++.history { min-width: 0; }
++.historySummary {
++  min-height: 44px; padding-block: var(--space-2); box-sizing: border-box; cursor: pointer;
++  color: var(--ink-muted); font-size: var(--text-xs); overflow-wrap: anywhere;
++}
++.historySummary > span { margin-left: var(--space-2); }
++.history[open] > .historySummary { color: var(--ink); }
++.history > .fileList { padding-bottom: var(--space-2); }
+ .replyHead, .personHeading, .rowTools, .fileTools { flex-wrap: wrap; }
+ .replies { border-left: 2px solid var(--hairline-strong); margin-block: var(--space-1); padding-left: var(--space-3); }
+ .replies li { display: grid; gap: var(--space-1); }
+ .replyHead b { font-size: var(--text-xs); color: var(--ink-muted); font-weight: 600; }
+ .status[data-failed], .card .error, .dialog .error, .feedError { color: var(--danger); font-size: var(--text-xs); }
+ .feedError, .linkButton, .icon, .secondary, .primary, .modes button { font: inherit; cursor: pointer; }
+ .linkButton, .icon, .feedError {
+   display: inline-flex; justify-self: start; align-items: center; gap: var(--space-1);
+@@ -99,13 +110,22 @@
+ .files > legend { margin: 0; padding: 0 var(--space-1); }
+ .fileTools { column-gap: var(--space-3); }
+ .fileList li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-width: 0; }
+ .fileList li > span { flex: 1; }
+ .original { color: var(--ink-muted); font-size: var(--text-xs); }
+ .original summary { cursor: pointer; }
+ .actions { justify-content: flex-end; flex-wrap: wrap; }
+ .replyForm { border-left: 2px solid var(--hairline); padding-left: var(--space-3); }
++.card .linkButton, .card .secondary, .card .primary, .card .attachment a, .card .source a {
++  min-height: 44px; min-width: 44px; max-width: 100%; box-sizing: border-box; white-space: normal;
++}
++.card .linkButton, .card .secondary, .card .primary { padding-block: var(--space-2); text-align: start; }
++.card .source a, .card .attachment a { align-items: center; min-width: 0; }
++.card .attachment a > span { min-width: 0; }
++.card .rowTools { column-gap: var(--space-3); }
++.card .field { box-sizing: border-box; }
+ @media (max-width: 600px) {
+   .dialog { max-height: 88dvh; padding: var(--space-3); }
+   .card { padding: var(--space-3); }
+   .modes button, .linkButton, .icon, .secondary, .choice { min-height: var(--row-36); }
++  .card .linkButton, .card .secondary, .card .primary { min-height: 44px; }
+ }
+diff --git a/apps/web/src/components/home/partnerTeam.test.tsx b/apps/web/src/components/home/partnerTeam.test.tsx
+index 14407a22..3d1077e0 100644
+--- a/apps/web/src/components/home/partnerTeam.test.tsx
++++ b/apps/web/src/components/home/partnerTeam.test.tsx
+@@ -56,16 +56,33 @@ describe("伙伴主对话的团队指令", () => {
+     const draft = { ...newTeamDraft(), recipientIds: ["p-lin"], text: "只给这一段", sourceUrl: "https://example.org/doc", sources: [{ ...attachment, createdAt: at }] };
+     expect(draftPayload(draft)).toEqual({ clientId: draft.clientId, recipientIds: ["p-lin"], kind: "share", text: "只给这一段", sourceUrl: draft.sourceUrl,
+       sourceAttachments: [{ id: "a", sha256: attachment.sha256 }] });
+     expect(draftPayload({ ...draft, sourceUrl: "javascript:void(0)" })).toBeNull();
+   });
+ });
+ 
+ describe("伙伴自己的时间线", () => {
++  it("多成员进度留在首层，默认只收起历史与原文件，历史里的转发仍可到达", () => {
++    const html = card({ ...delivery, recipients: [
++      { ...member, status: "answered", replies: [{ id: "history", status: "answered", text: "很长的中文反馈".repeat(30), attachments: [attachment], createdAt: at }] },
++      { ...member, personId: "p-wang", displayName: "小王", status: "needs_info" },
++      { ...member, personId: "p-zhou", displayName: "小周", status: "pending" },
++    ] }, true);
++    const disclosures = [...html.matchAll(/<details\b([^>]*)>([\s\S]*?)<\/details>/g)];
++    expect(disclosures).toHaveLength(2);
++    disclosures.forEach((disclosure) => expect(disclosure[1]).not.toMatch(/\bopen(?:=|\s|$)/));
++    expect(disclosures[0][2]).toContain("附件 · 1");
++    expect(disclosures[0][2]).toContain(attachment.href);
++    expect(disclosures[1][2]).toContain("1 条往来");
++    expect(disclosures[1][2]).toContain("转发这条回复");
++    const firstLevel = html.replace(/<details\b[^>]*>[\s\S]*?<\/details>/g, "");
++    for (const word of ["客户希望下一版改什么？", "https://example.org/report", "小林", "小王", "小周", "已回复", "需补充", "待回复", "给小王补充说明"]) expect(firstLevel).toContain(word);
++  });
++
+   it("发起人看同一征集的分人结果、失败项的单独重试、按人澄清和可选的回复文字", () => {
+     const html = card({ ...delivery, recipients: [
+       { ...member, status: "needs_info", replies: [{ id: "r1", status: "needs_info", text: "还缺成本范围", attachments: [attachment], createdAt: at }] },
+       { ...member, personId: "p-wang", displayName: "小王", status: "failed", error: "此成员暂不能接收" },
+     ] }, true);
+     for (const word of ["team-request-q", "客户希望下一版改什么？", "team-reply-r1", "需补充", "给小林补充说明", "转发这条回复", "送达失败", "此成员暂不能接收", "重试给小王的投递", "回复截止", attachment.href]) expect(html).toContain(word);
+     expect(html).not.toContain("重试给小林的投递");
+     expect(html).not.toContain("追加回复");
+diff --git a/apps/web/src/components/home/subSessionSummary.test.tsx b/apps/web/src/components/home/subSessionSummary.test.tsx
+index c79b3c02..b9ceabc0 100644
+--- a/apps/web/src/components/home/subSessionSummary.test.tsx
++++ b/apps/web/src/components/home/subSessionSummary.test.tsx
+@@ -30,21 +30,33 @@ describe("主管线的子会话摘要", () => {
+       sub("返工", { state: "failed" }), sub("验收过且合回", { state: "done" }),
+     ])], grouped: false });
+     expect(html).toContain("做完一轮");
+     expect(html).toContain("已停下");
+     expect(html).toContain("等你合回");
+     expect(html).toContain("等你补");
+     expect(html).toContain("重做中");
+     expect(html.match(/>已完成</g)).toHaveLength(1);
+-    expect(html).toContain("1 进行中");
++    expect(html).not.toContain("进行中");
++    expect(html).toContain("1 重做中");
+     expect(html).toContain("2 等你");
+     expect(html).not.toContain('<h2');
+   });
+ 
++  it("运行与验收返工分别计数，不能用汇总暗示返工已有运行进程", () => {
++    const html = render({ projects: [project("天枢", [
++      sub("正在执行", { state: "running" }), sub("验收返工", { state: "failed" }),
++      sub("等批准", { state: "waiting", waiting: "approval" }),
++    ])] });
++    expect(html).toContain("1 进行中");
++    expect(html).toContain("1 重做中");
++    expect(html).toContain("1 等你");
++    expect(html).not.toContain("2 进行中");
++  });
++
+   it("排队显示实际原因和占着文件夹的会话，不冒充正在运行", () => {
+     const html = render({ projects: [project("天枢", [sub("下一件", { state: "queued", queueReason: "folder_busy", heldBy: { id: "prior", kind: "card", letter: "B", title: "改登录页" } })])] });
+     expect(html).toContain("已排队 · 等 B 改登录页 这一轮做完");
+     expect(html).not.toContain("进行中");
+   });
+ 
+   it("没有子会话不占主对话空间；项目摘要只列调用方传入的本项目", () => {
+     expect(render({ projects: [project("空项目", [])] })).toBe("");
+diff --git a/apps/web/src/styles/sub-session-summary.module.css b/apps/web/src/styles/sub-session-summary.module.css
+index 29693e1c..a7f09fdd 100644
+--- a/apps/web/src/styles/sub-session-summary.module.css
++++ b/apps/web/src/styles/sub-session-summary.module.css
+@@ -1,22 +1,22 @@
+ .root { margin: 0 0 4px; border: 1px solid var(--hairline); border-radius: var(--r-control); color: var(--ink); }
+-.toggle { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-height: 36px; padding: 6px 10px; list-style: none; font-size: var(--text-xs); cursor: pointer; }
++.toggle { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-height: 44px; padding: 6px 10px; list-style: none; font-size: var(--text-xs); cursor: pointer; }
+ .toggle::-webkit-details-marker { display: none; }
+ .toggle:hover { background: var(--default-soft); }
+ .toggle:focus-visible, .row:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+ .chevron { flex: none; color: var(--ink-muted); }
+ .root[open] > .toggle .chevron { transform: rotate(90deg); }
+ .count { color: var(--ink-muted); }
+ .attention, .stage[data-attention] { color: var(--warning); }
+ .body { max-height: min(35dvh, 260px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; padding: 0 6px 6px; }
+ .body section + section { margin-top: 8px; }
+ .project { margin: 6px 6px 4px; color: var(--ink-muted); font-size: var(--text-xs); font-weight: 500; overflow-wrap: anywhere; }
+ .list { margin: 0; padding: 0; list-style: none; }
+-.row { display: grid; grid-template-columns: 16px 22px minmax(0, 1fr) auto; align-items: center; gap: 6px; width: 100%; min-height: 36px; padding: 6px; border: 0; border-radius: var(--r-control); background: none; color: var(--ink); font: inherit; font-size: var(--text-xs); line-height: 1.5; text-align: left; cursor: pointer; }
++.row { display: grid; grid-template-columns: 16px 22px minmax(0, 1fr) auto; align-items: center; gap: 6px; width: 100%; min-height: 44px; padding: 6px; border: 0; border-radius: var(--r-control); background: none; color: var(--ink); font: inherit; font-size: var(--text-xs); line-height: 1.5; text-align: left; cursor: pointer; }
+ .row:hover { background: var(--default-soft); }
+ .title { min-width: 0; overflow-wrap: anywhere; }
+ .stage { max-width: 240px; color: var(--ink-muted); font-size: var(--text-xs); overflow-wrap: anywhere; }
+ .row[data-state="done"] .title { color: var(--ink-muted); }
+ @media (max-width: 640px) {
+   .toggle, .row, .project, .stage { font-size: 13px; }
+   .row { grid-template-columns: 16px 22px minmax(0, 1fr); }
+   .stage { grid-column: 3; max-width: none; }

@@ -17,6 +17,7 @@ import type { TMeetingFeishuEvent, TMeetingMinutesFailure, TMeetingMinutesStatus
 import { signActionId, type ActionScope } from "./actionToken.js";
 import { attendeesOf, minutesManualImport, minutesStatusOf, projectMeetingDecision, type MeetingDecisionRow } from "./meetingDecisionView.js";
 import { computeStaleInputs, type GroupInputVersions } from "./preflightStaleness.js";
+import { meetingJoinUrl } from "./feishu/calendar.js";
 
 export type Query = (sql: string, params?: unknown[]) => Promise<QueryResult>;
 
@@ -56,6 +57,11 @@ export type MeetingRow = {
   group_inputs?: GroupInputVersions | null;
   /** 妙记与实际参会名单（086）。 */
   feishu_meeting_id?: string | null;
+  feishu_live_meeting_id?: string | null;
+  minute_source_meeting_id?: string | null;
+  minute_binding?: "source_id" | "owner" | "unverified" | null;
+  invited_person_ids?: string[] | null;
+  minutes_error?: string | null;
   minute_token?: string | null;
   minutes_status?: TMeetingMinutesStatus;
   /** 妙记读取失败的原因（200）；不是 failed 时为 null。 */
@@ -88,6 +94,7 @@ const MEETING_COLUMNS = [
   "participants", "issue_ids", "preflight", "draft", "materials", "transcript", "transcript_candidate", "outcome", "origin_ref", "external_id",
   "request_fingerprint", "action_fingerprints", "created_at", "updated_at",
   "feishu_meeting_id", "minute_token", "minutes_status", "minutes_failure", "minutes_waiting_since", "attendees_actual",
+  "feishu_live_meeting_id", "minute_source_meeting_id", "minute_binding", "invited_person_ids", "minutes_error",
   "created_by", "world_anchors",
   "feishu_event_status", "feishu_calendar_id", "feishu_event_id", "feishu_event_join_url", "feishu_event_organizer_id", "feishu_event_error",
 ];
@@ -125,6 +132,23 @@ const cardConfirmedColumn = (prefix: string) =>
      AND (k.current_revision IS NOT NULL OR jsonb_path_exists(k.action_items, '$[*] ? (@.taskId != null)'))) AS card_confirmed`;
 export const meetingColumns = (prefix = "") => [...MEETING_COLUMNS.map((column) => `${prefix}${column}`), latestRecordingColumn(prefix), groupInputsColumn(prefix), decisionsColumn(prefix),
   cardConfirmedColumn(prefix)].join(", ");
+/** 旧逐字稿可能没有 source；若已关联过妙记，不能把这份未知来源的快照当成本地上传。 */
+export const meetingTranscriptFormat = (prefix = "") =>
+  `COALESCE(${prefix}transcript#>>'{source,format}', CASE WHEN ${prefix}transcript IS NOT NULL
+    AND (${prefix}minute_token IS NOT NULL OR ${prefix}minute_binding IS NOT NULL) THEN 'feishu_minutes' END)`;
+
+/** 首页只取来源格式和状态，正文和说话人逐条留给鉴权后的阅读接口。 */
+export const partnerMeetingColumns = () => [
+  ...["id","title","status","scheduled_at","ends_at","ended_at","started_at","lead_dri_id","ceo_participant_id","created_by",
+    "participants","attendees_actual","invited_person_ids","preflight","minute_token","minute_binding","minutes_status","minutes_failure",
+    "minutes_error","feishu_event_status","feishu_event_join_url","feishu_event_id"].map(key => `m.${key}`),
+  "m.transcript IS NOT NULL AS has_transcript",`${meetingTranscriptFormat("m.")} AS transcript_format`,
+  "m.transcript#>>'{source,url}' AS transcript_url","m.transcript_candidate IS NOT NULL AS has_candidate",
+  "m.outcome->>'status' AS outcome_status", latestRecordingColumn("m."), groupInputsColumn("m."),
+  `(SELECT COALESCE(jsonb_agg(r.id ORDER BY r.created_at DESC),'[]'::jsonb) FROM meeting_recordings r
+    WHERE r.meeting_id=m.id AND r.status='done' AND r.transcript_candidate IS NOT NULL AND
+      r.transcript_candidate#>>'{source,contentHash}' IS DISTINCT FROM m.transcript#>>'{source,contentHash}') AS recording_sources`,
+].join(", ");
 
 export const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export type MeetingActionError = { status: number; code: string; message: string; fieldErrors?: Record<string, string> };
@@ -152,7 +176,7 @@ export function emptyDraft(): TMeetingDraft {
 }
 
 /** 预审投影：去掉误存的 staleInputs，ready 时按当前群输入重新计算过期提示。 */
-function projectPreflight(row: MeetingRow): TMeetingPreflight {
+export function projectPreflight(row: Pick<MeetingRow,"preflight"|"group_inputs">): TMeetingPreflight {
   const { staleInputs: _stored, ...preflight } = row.preflight;
   if (preflight.status !== "ready" || !row.group_inputs) return preflight;
   const stale = computeStaleInputs(preflight.inputCoverage?.evidence, row.group_inputs);
@@ -285,7 +309,7 @@ export function projectMeetingCard(row: MeetingRow, secret: string, at = new Dat
       minutesManualImport: minutesManualImport(row, at),
       attendees: attendeesOf(row),
       feishuEvent: row.feishu_event_status
-        ? { status: row.feishu_event_status, joinUrl: row.feishu_event_join_url ?? null, organizerId: row.feishu_event_organizer_id ?? row.created_by ?? row.lead_dri_id }
+        ? { status: row.feishu_event_status, joinUrl: row.feishu_event_status === "booked" ? meetingJoinUrl(row.feishu_event_join_url) : null, organizerId: row.feishu_event_organizer_id ?? row.created_by ?? row.lead_dri_id }
         : null,
       // 旧会议的逐条决定只读。
       decisions: (row.decisions ?? []).map((decision) => projectMeetingDecision(decision, row.participants, false)),

@@ -1,0 +1,77 @@
+"use client";
+
+/**
+ * 项目页的几块（新首页设计 16.3）：
+ * - 页头右边：「详情」（文件夹在输入框下面一行的左边）；
+ * - 目标条（项目信息页上方的「本月目标」，20 条）：每件挂着的本月 Task 一行，写名字、截止、「标准 1/3」，点开逐条看；负责人不是本人（交接过来的）时名字前画他的头像；没有目标时不画；
+ * - 对话里换月份的分隔线「11 月目标：{Task 名}」。
+ * 标准逐条达没达到读 GET /api/plan-tasks/:taskId/check（evidenced 算达到）；读不到就只写「标准 N 条」。
+ */
+import { useEffect, useState } from "react";
+import { Check, ChevronRight, Circle, Info } from "lucide-react";
+import { browserApi } from "@/lib/api/client";
+import { PersonAvatar } from "@/components/avatar/PersonAvatar";
+import { projectInfoHref, type Project, type ProjectGoal } from "@/lib/home/projects";
+import { ICON } from "./StateIcon";
+import { useSideDetail } from "./SideDetail";
+import h from "@/styles/home.module.css";
+
+type Criterion = { text: string; met: boolean };
+
+/** 一件 Task 的完成标准和达没达到：先用计划里的标准，对表读到了换成逐条的结论。 */
+function useCriteria(taskId: string, fallback: string[]): { criteria: Criterion[]; checked: boolean } {
+  const [checked, setChecked] = useState<Criterion[] | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void browserApi.GET("/api/plan-tasks/{taskId}/check", { params: { path: { taskId } } }).then(({ data }) => {
+      if (alive && data) setChecked(data.criteria.map((entry) => ({ text: entry.text, met: entry.status === "evidenced" })));
+    }, () => undefined);
+    return () => { alive = false; };
+  }, [taskId]);
+  return checked ? { criteria: checked, checked: true } : { criteria: fallback.map((text) => ({ text, met: false })), checked: false };
+}
+
+function GoalLine({ goal, criteria: planned }: { goal: ProjectGoal; criteria: string[] }) {
+  const [open, setOpen] = useState(false);
+  const { criteria, checked } = useCriteria(goal.taskId, planned);
+  const met = criteria.filter((entry) => entry.met).length;
+  return (
+    <li className={h.goal}>
+      <button type="button" className={h.goalMain} aria-expanded={open} onClick={() => setOpen(!open)} disabled={!criteria.length} data-testid="project-goal">
+        <ChevronRight size={14} strokeWidth={1.8} aria-hidden className={h.chevron} data-open={open ? "" : undefined} />
+        {goal.responsible ? <span title={goal.responsible.name} data-testid="goal-responsible"><PersonAvatar personId={goal.responsible.personId} className={h.itemAvatar}>{null}</PersonAvatar></span> : null}
+        <span className={h.goalName}>{goal.name}</span>
+        {goal.due ? <span className={`${h.goalMeta} ${h.num}`}>{goal.due} 验收</span> : null}
+        {criteria.length ? <span className={`${h.goalMeta} ${h.num}`}>{checked ? `标准 ${met}/${criteria.length}` : `标准 ${criteria.length} 条`}</span> : null}
+      </button>
+      {open ? (
+        <ul className={h.criteria}>
+          {criteria.map((entry, index) => (
+            <li key={`${index}:${entry.text}`} data-met={entry.met ? "" : undefined}>{entry.met ? <Check {...ICON} aria-label="达到" /> : <Circle {...ICON} aria-label="还没达到" />}{entry.text}</li>
+          ))}
+        </ul>
+      ) : null}
+    </li>
+  );
+}
+
+/** 目标条（项目信息页的「本月目标」）：本月挂着的 Task 一件一行（标准原文是首页数据里的）。 */
+export function GoalBar({ project }: { project: Project }) {
+  if (!project.current.length) return null;
+  return (
+    <ul className={h.goalBar} aria-label="本月目标" data-testid="goal-bar">
+      {project.current.map((goal) => <GoalLine key={goal.taskId} goal={goal} criteria={goal.criteria} />)}
+    </ul>
+  );
+}
+
+/** 页头右边：「详情」。 */
+export function ProjectTrail({ project, go }: { project: Project; go: (href: string) => void }) {
+  // 新首页桌面上在右栏打开详情（SideDetail），对话留着；手机上照旧去详情页。
+  const side = useSideDetail();
+  return (
+    <button type="button" className={h.icon} aria-label="详情" title="详情" aria-pressed={side ? side.open : undefined}
+      onClick={() => (side ? side.toggle() : go(projectInfoHref(project.id)))} data-testid="project-detail"><Info {...ICON} /></button>
+  );
+}
+

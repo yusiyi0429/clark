@@ -14,9 +14,9 @@ export default async function WelcomePage({ searchParams }: { searchParams: Prom
   if (!session) redirect("/access?next=/welcome");
   const params = await searchParams;
   const next = typeof params.next === "string" ? validNextPath(session.role, params.next) : null;
-  if (session.onboarded) redirect(next ?? homePath(session.role));
+  if (session.onboarded && session.buddy !== null) redirect(next ?? homePath(session.role));
   const { data, response } = await serverApi.GET("/api/me/onboarding", { headers: { cookie } });
   if (response.status === 401) redirect("/access?next=/welcome");
   if (!response.ok || !data) throw new Error("暂时无法读取引导，请重试。");
-  return <WelcomeFlow data={data} nextPath={next ?? undefined} />;
+  return <WelcomeFlow data={data} nextPath={next ?? undefined} buddy={session.buddy} buddyOnly={session.onboarded} />;
 }

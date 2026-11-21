@@ -2,6 +2,7 @@ import { Type, type Static } from "@sinclair/typebox";
 import { MeetingOutcomeState, StoredTranscript, TranscriptCandidateProjection } from "./transcript.js";
 import { MeetingAttendees, MeetingDecisionView, MeetingMinutesFailure, MeetingMinutesStatus, PickedWorldAnchor } from "./meetingDecisions.js";
 import { RequestPerson } from "./requests.js";
+import { NullableInteger } from "./nullable.js";
 
 export const MeetingStatus = Type.Union([
   Type.Literal("scheduled"),
@@ -157,8 +158,8 @@ export const PreflightStaleMaterial = Type.Object(
     fileName: Type.String({ minLength: 1 }),
     objectType: Type.Union([Type.Literal("meeting"), Type.Literal("issue")]),
     objectId: Type.String({ minLength: 1 }),
-    usedVersion: Type.Union([Type.Integer({ minimum: 1 }), Type.Null()]),
-    currentVersion: Type.Union([Type.Integer({ minimum: 1 }), Type.Null()]),
+    usedVersion: NullableInteger({ minimum: 1 }),
+    currentVersion: NullableInteger({ minimum: 1 }),
     change: Type.Union([Type.Literal("updated"), Type.Literal("added"), Type.Literal("removed")]),
   },
   { additionalProperties: false },
@@ -629,7 +630,7 @@ export const CreateMeetingRequest = Type.Object(
 );
 
 /**
- * 预约建会（POST /api/meetings）：带起止、挂点（1..10）；只存天枢，不写本体。
+ * 预约建会（POST /api/meetings）：带起止、挂点（0..10，不挂时会议页照主持人的单元、公司回退）；只存天枢，不写本体。
  * 成员只能给自己建（leadDriId 缺省或等于本人）；CEO 必须从 DRI 里指定主持人。
  */
 export const MeetingBookingRequest = Type.Object(
@@ -639,7 +640,7 @@ export const MeetingBookingRequest = Type.Object(
     endsAt: IsoDateTime,
     leadDriId: Type.Optional(PersonId),
     participants: Type.Optional(Type.Array(PersonId, { maxItems: 50 })),
-    anchors: Type.Array(PickedWorldAnchor, { minItems: 1, maxItems: 10 }),
+    anchors: Type.Array(PickedWorldAnchor, { maxItems: 10 }),
     /** 从对话里的会议卡约（卡上的 draftId）：同一张卡只建一场会，再约返回已建的那场。 */
     draftId: Type.Optional(Type.String({ format: "uuid" })),
   },

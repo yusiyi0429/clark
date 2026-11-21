@@ -1,0 +1,178 @@
+import { describe, expect, it } from "vitest";
+import { CASES, IDS, flips, judge, type Attempt, type ToolCall } from "../scripts/buddy-dispatch-judge.js";
+
+/** 伙伴主线端到端评测的判定（scripts/buddy-dispatch-judge.ts）：喂假的工具轨迹和回话，看判对判错、翻转算对。 */
+const WRITES = new Set(["open_session", "tell_session", "start_sub_session", "message_project", "set_task_due_date", "send_message"]);
+const call = (name: string, args: Record<string, unknown> = {}, extra: Partial<ToolCall> = {}): ToolCall =>
+  ({ name, args, write: WRITES.has(name), ok: true, code: null, ...extra });
+const home = call("read_work_home");
+const attempt = (calls: ToolCall[], reply = "好的，看了一下。", stop: Attempt["stop"] = "reply"): Attempt => ({ calls, reply, stop });
+const verdict = (id: number, value: Attempt) => judge(CASES.find((entry) => entry.id === id)!, value);
+const tell = (id: string, extra: Partial<ToolCall> = {}) => call("tell_session", { kind: "topic", id, text: "再试一次" }, extra);
+const startLogin = (extra: Partial<ToolCall> = {}) => call("start_sub_session", { kind: "card", id: IDS.loginCard }, extra);
+const notStarted = { ok: false, code: "NOT_STARTED" };
+
+describe("伙伴主线评测的用例", () => {
+  it("13 条，文字照需求", () => {
+    expect(CASES.map((entry) => entry.id)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
+    expect(CASES[3]!.message).toBe("比对桌面「合同」文件夹里那十几份");
+    expect(CASES[2]!.message.startsWith("比对这两份合同\n\n合同甲：")).toBe(true);
+    expect(CASES[12]!.message).toBe("让登录页那张卡接着做");
+  });
+});
+
+describe("判定", () => {
+  it("自己做的几条：不调写动作算对，调了算错", () => {
+    for (const id of [1, 2, 3]) {
+      expect(verdict(id, attempt([home])).pass).toBe(true);
+      const wrong = verdict(id, attempt([call("open_session", { scratch: true, title: "查", brief: "查" })], "在「随手」里开了「查」。"));
+      expect(wrong.pass).toBe(false);
+      expect(wrong.reasons.join()).toContain("open_session");
+    }
+  });
+
+  it("12（本人 11/19）：自己查完回话、问本人、放进「随手」会话都算对；开进别的项目、转给项目算错", () => {
+    expect(verdict(12, attempt([home])).pass).toBe(true);
+    expect(verdict(12, attempt([call("ask_user", { questions: [] })], "")).pass).toBe(true);
+    expect(verdict(12, attempt([call("open_session", { scratch: true, title: "查首发路线", brief: "查" })], "在「随手」里开了「查首发路线」。")).pass).toBe(true);
+    const project = verdict(12, attempt([call("open_session", { projectId: IDS.tianshu, title: "查首发路线", brief: "查" })], "在「天枢新版」里开了「查首发路线」。"));
+    expect(project.pass).toBe(false);
+    expect(project.reasons.join()).toContain("open_session");
+    expect(verdict(12, attempt([call("message_project", { projectId: IDS.tianshu, text: "查" })], "转给了项目对话。")).pass).toBe(false);
+    // 带 scratch 的也要做成，同第 4、5 条。
+    expect(verdict(12, attempt([call("open_session", { scratch: true, title: "查首发路线", brief: "查" }, { ok: false, code: "INVALID_ARGS" })], "没开成。")).pass).toBe(false);
+  });
+
+  it("4、5：开会话要放对地方，而且要做成", () => {
+    const scratch = call("open_session", { scratch: true, title: "比对合同", brief: "比对" });
+    expect(verdict(4, attempt([scratch])).pass).toBe(true);
+    expect(verdict(4, attempt([call("open_session", { projectId: IDS.tianshu, title: "比对合同", brief: "比对" })])).pass).toBe(false);
+    expect(verdict(4, attempt([{ ...scratch, ok: false, code: "INVALID_ARGS" }], "没开成。")).pass).toBe(false);
+    expect(verdict(5, attempt([call("open_session", { projectId: IDS.chat, title: "修流式重试", brief: "修" })])).pass).toBe(true);
+    expect(verdict(5, attempt([call("open_session", { projectId: IDS.tianshu, title: "修流式重试", brief: "修" })])).pass).toBe(false);
+  });
+
+  it("4（本人 11/19 随手收到幕后）：先 ask_user 再开会话算没过；回话里有「随手」算没过", () => {
+    const scratch = call("open_session", { scratch: true, title: "比对合同", brief: "先看文件夹里的合同再比对" });
+    const ask = call("ask_user", { questions: [] });
+    expect(verdict(4, attempt([home, scratch], "开了个会话「比对合同」去看。")).pass).toBe(true);
+    const askedFirst = verdict(4, attempt([ask, scratch], "开了个会话「比对合同」去看。"));
+    expect(askedFirst.pass).toBe(false);
+    expect(askedFirst.reasons.join()).toContain("ask_user");
+    // 只问、没开会话：同样没过（算对那条本来就不满足，这条也记上）。
+    expect(verdict(4, attempt([ask], "")).reasons.join()).toContain("ask_user");
+    // 开了会话之后再问的不算「先问」。
+    expect(verdict(4, attempt([scratch, ask], "开了个会话「比对合同」去看。")).pass).toBe(true);
+    const named = verdict(4, attempt([scratch], "在项目「随手」里开了「比对合同」。"));
+    expect(named.pass).toBe(false);
+    expect(named.reasons.join()).toContain("随手");
+    expect(CASES[3]!.forbid).toBe("在 open_session 之前调了 ask_user；回话里出现「随手」");
+  });
+
+  it("6：不调写动作，回话里要提到「首页改版」", () => {
+    expect(verdict(6, attempt([home, call("read_project", { projectId: IDS.tianshu })], "「首页改版」已经做完一轮，下一步把本月页挪出去。")).pass).toBe(true);
+    expect(verdict(6, attempt([home], "「首页改版」上一轮已经把首页改成只留「等你」，已经让字号统一成一种。")).pass).toBe(true);
+    expect(verdict(6, attempt([home], "天枢新版在推进。")).reasons.join()).toContain("首页改版");
+    expect(verdict(6, attempt([home, tell(IDS.topicA)], "「首页改版」在跑。")).pass).toBe(false);
+  });
+
+  const running = { ok: false, code: "ALREADY_RUNNING" };
+  const start = (id: string, extra: Partial<ToolCall> = {}) => call("start_sub_session", { kind: "topic", id }, extra);
+
+  it("7：tell_session 给首页改版；不能有做成的转给项目、开工；开工撞 409 再改对算过", () => {
+    expect(verdict(7, attempt([home, tell(IDS.topicA)])).pass).toBe(true);
+    expect(verdict(7, attempt([home, tell(IDS.topicB)])).pass).toBe(false);
+    expect(verdict(7, attempt([home, tell(IDS.topicA), call("message_project", { projectId: IDS.tianshu, text: "改蓝" })])).pass).toBe(false);
+    expect(verdict(7, attempt([home, start(IDS.topicA), tell(IDS.topicA)])).pass).toBe(false);
+    expect(verdict(7, attempt([home, start(IDS.topicA, running), tell(IDS.topicA)])).pass).toBe(true);
+  });
+
+  it("8：B 和 C 各说一次；少一个、多一次、做成了开工都算错；开工撞 409 再改对算过，撞了就放弃算没过", () => {
+    expect(verdict(8, attempt([home, tell(IDS.topicB), tell(IDS.topicC)])).pass).toBe(true);
+    expect(verdict(8, attempt([home, tell(IDS.topicB)])).pass).toBe(false);
+    expect(verdict(8, attempt([home, tell(IDS.topicB), tell(IDS.topicB), tell(IDS.topicC)])).pass).toBe(false);
+    expect(verdict(8, attempt([home, tell(IDS.topicB), tell(IDS.topicC), start(IDS.topicB)])).pass).toBe(false);
+    expect(verdict(8, attempt([home, start(IDS.topicB, running), start(IDS.topicC, running), tell(IDS.topicB), tell(IDS.topicC)])).pass).toBe(true);
+    const gaveUp = verdict(8, attempt([home, start(IDS.topicB, running), start(IDS.topicC, running)], "两个会话都停着等下一句，这次没让它们重跑，没做成。"));
+    expect(gaveUp.pass).toBe(false);
+    expect(gaveUp.reasons.join()).toContain("tell_session");
+    expect(gaveUp.reasons.join()).not.toContain("回话");
+  });
+
+  it("9：改约定转给天枢新版；不能有做成的 tell_session", () => {
+    const forward = call("message_project", { projectId: IDS.tianshu, text: "首页改版的完成标准加一条「手机上也要能用」" });
+    expect(verdict(9, attempt([home, forward])).pass).toBe(true);
+    expect(verdict(9, attempt([home, call("message_project", { projectId: IDS.chat, text: "加一条" })])).pass).toBe(false);
+    expect(verdict(9, attempt([home, forward, tell(IDS.topicA)])).pass).toBe(false);
+    expect(verdict(9, attempt([home, tell(IDS.topicA, { ok: false, code: "INVALID_ARGS" }), forward])).pass).toBe(true);
+  });
+
+  it("10：截止日存在「首页改版」上、日期 2026-11-25", () => {
+    const due = (dueDate: string) => call("set_task_due_date", { projectId: IDS.tianshu, taskId: IDS.homeTask, dueDate });
+    expect(verdict(10, attempt([home, due("2026-11-25")])).pass).toBe(true);
+    expect(verdict(10, attempt([home, due("2025-11-25")])).pass).toBe(false);
+  });
+
+  it("11：开在天枢新版、问本人、或让登录页卡开工都算对", () => {
+    expect(verdict(11, attempt([home, call("open_session", { projectId: IDS.tianshu, title: "做登录页设计稿", brief: "做" })])).pass).toBe(true);
+    expect(verdict(11, attempt([home, call("ask_user", { questions: [] })], "")).pass).toBe(true);
+    expect(verdict(11, attempt([home, startLogin()])).pass).toBe(true);
+    expect(verdict(11, attempt([home, call("open_session", { scratch: true, title: "做登录页设计稿", brief: "做" })])).pass).toBe(false);
+  });
+
+  it("13：先说一句被 409 挡回、再开工，或者直接开工；只被挡回却说让它接着做了，算错", () => {
+    expect(verdict(13, attempt([home, tell(IDS.loginCard, notStarted), startLogin()], "让「登录页」开工了。")).pass).toBe(true);
+    expect(verdict(13, attempt([home, startLogin()], "让「登录页」开工了。")).pass).toBe(true);
+    const lied = verdict(13, attempt([home, tell(IDS.loginCard, notStarted)], "已经让它接着做了。"));
+    expect(lied.pass).toBe(false);
+    expect(lied.reasons.join()).toContain("已经");
+  });
+});
+
+describe("每条回话都查", () => {
+  const selfDone = (reply: string, stop: Attempt["stop"] = "reply") => verdict(1, attempt([home], reply, stop));
+  it("省略号", () => {
+    expect(selfDone("我看了一下…").pass).toBe(false);
+    expect(selfDone("我看了一下...").pass).toBe(false);
+    expect(selfDone("我看了一下。").pass).toBe(true);
+  });
+  it("许诺以后自己回报", () => {
+    for (const reply of ["交给它了，做完我再来告诉你。", "稍后汇报。", "有结果了我会通知你。", "我会再来告诉你进展。",
+      "做完后会通知你。", "有进展会告诉你。", "完成后会同步给你。", "之后会告诉你。"]) {
+      expect(verdict(7, attempt([home, tell(IDS.topicA)], reply)).pass, reply).toBe(false);
+    }
+    expect(verdict(7, attempt([home, tell(IDS.topicA)], "把话转给了「首页改版」。它做完一轮主线里会自动出一行。")).pass).toBe(true);
+  });
+  it("没有做成的写动作时不说已经做了", () => {
+    expect(selfDone("我已经把话转给了「首页改版」。").pass).toBe(false);
+    expect(selfDone("已转给项目对话。").pass).toBe(false);
+    expect(verdict(7, attempt([home, tell(IDS.topicA)], "已经把话转给了「首页改版」。")).pass).toBe(true);
+    for (const reply of ["已经把「首页改版」的验收挪到 11/25。", "已在项目「天枢新版」里开了「做登录页设计稿」。", "已经开了一个会话。", "已经让它们再跑一次了。",
+      "已经让它们再跑了。", "已经让 A 再跑了。", "已经交给项目对话了。", "已经派给「首页改版」了。", "已经新开了一个会话。", "已经开了会话。",
+      "已经把验收挪到下周三。", "已经把截止定成周五。", "已经登记了开工。"]) {
+      expect(selfDone(reply).pass, reply).toBe(false);
+    }
+  });
+  it("已知取舍：描述现状的「已经续上」「已经接着做」照样算说已经做了；带「过」「上一轮」的历史句不算", () => {
+    for (const reply of ["会话已经续上了，正在跑。", "C 已经接着做了。"]) expect(selfDone(reply).pass, reply).toBe(false);
+    for (const reply of ["B 已经重跑过一次但又出错了。", "上一轮已经重跑了两次。"]) expect(selfDone(reply).pass, reply).toBe(true);
+  });
+  it("描述会话进度的「已经」不算说自己做了", () => {
+    for (const reply of ["「首页改版」已经开工了，还在跑。", "它上一轮已经把按钮挪到右边了。", "A 已提交了一版。", "上一轮已经把字号定成一种。"]) {
+      expect(selfDone(reply).pass, reply).toBe(true);
+    }
+  });
+  it("没给最后回话", () => {
+    expect(selfDone("", "rounds").pass).toBe(false);
+    expect(selfDone("", "error").pass).toBe(false);
+    expect(selfDone("").pass).toBe(false);
+  });
+});
+
+describe("翻转", () => {
+  it("上次全过这次有没过的、上次有没过这次全过的，按用例号列；上次没有的不算", () => {
+    const before = [{ id: 1, passed: 2, runs: 2 }, { id: 2, passed: 1, runs: 2 }, { id: 3, passed: 2, runs: 2 }, { id: 4, passed: 0, runs: 2 }];
+    const after = [{ id: 1, passed: 1, runs: 2 }, { id: 2, passed: 2, runs: 2 }, { id: 3, passed: 2, runs: 2 }, { id: 4, passed: 1, runs: 2 }, { id: 5, passed: 0, runs: 2 }];
+    expect(flips(before, after)).toEqual({ regressed: [1], fixed: [2] });
+  });
+});

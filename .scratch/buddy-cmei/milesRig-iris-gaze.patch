@@ -1,0 +1,53 @@
+--- a/apps/web/src/components/coagent/milesRig.ts
++++ b/apps/web/src/components/coagent/milesRig.ts
+@@ -181,11 +181,18 @@
+   const shell = (node: Element, origin: string) => { const g = wrap(node, ""); g.style.transformBox = "fill-box"; g.style.transformOrigin = origin; return g; };
+   const eyes = [part("eye-l"), part("eye-r")];
+   const closedEyes = [part("eye-l-closed"), part("eye-r-closed")];
+-  const gaze = document.createElementNS(NS, "g");
+-  gaze.setAttribute("class", classes.gaze);
+-  gaze.style.transformBox = "view-box";
+-  eyes[0].parentNode?.insertBefore(gaze, eyes[0]);
+-  [...eyes, ...closedEyes].forEach((node) => gaze.appendChild(node));
++  // 目光：画里有眼珠（iris-l、iris-r，套在眼眶的裁切里）时只移眼珠，眼眶留在原处；豆豆眼没有眼珠，整只眼睛跟着移。
++  const irisL = art.querySelector('[data-part="iris-l"]'), irisR = art.querySelector('[data-part="iris-r"]');
++  const gazes: SVGGElement[] = [];
++  if (irisL && irisR) gazes.push(wrap(irisL, classes.gaze), wrap(irisR, classes.gaze));
++  else {
++    const gaze = document.createElementNS(NS, "g");
++    gaze.setAttribute("class", classes.gaze);
++    gaze.style.transformBox = "view-box";
++    eyes[0].parentNode?.insertBefore(gaze, eyes[0]);
++    [...eyes, ...closedEyes].forEach((node) => gaze.appendChild(node));
++    gazes.push(gaze);
++  }
+   const eyeShells = eyes.map((node) => shell(node, "center"));
+   const mouth = part("mouth"), mouthOpenPart = part("mouth-open");
+   const mouthShell = shell(mouthOpenPart, "50% 20%");
+@@ -348,7 +355,7 @@
+     const at = (x: number, y: number) => `translate(calc(var(--g) * ${x}), calc(var(--g) * ${y}))`;
+     const base = at(...LISTEN_GAZE);
+     const to = at(dx, dy);
+-    play(gaze, [{ transform: base }, { transform: to, offset: 0.16 }, { transform: to, offset: 0.84 }, { transform: base }], { duration: hold + 380, easing: "ease-in-out", fill: "none" });
++    gazes.forEach((node) => play(node, [{ transform: base }, { transform: to, offset: 0.16 }, { transform: to, offset: 0.84 }, { transform: base }], { duration: hold + 380, easing: "ease-in-out", fill: "none" }));
+     play(look, [{ transform: "rotate(0deg)" }, { transform: `rotate(${turn}deg)`, offset: 0.2 }, { transform: `rotate(${turn}deg)`, offset: 0.8 }, { transform: "rotate(0deg)" }], { duration: hold + 380, easing: "ease-in-out", fill: "none" });
+   };
+   const greet = () => {
+@@ -401,7 +408,7 @@
+     setPose(next) {
+       if (next === pose) return;
+       pose = next;
+-      cancelOn(gaze, look);
++      cancelOn(...gazes, look);
+     },
+     setLevel(next) {
+       inputLevel = Math.max(0, Math.min(1, next));
+@@ -411,7 +418,7 @@
+       out = false;
+       timers.forEach((timer) => window.clearTimeout(timer));
+       timers.clear();
+-      cancelOn(gaze, look, wiggle);
++      cancelOn(...gazes, look, wiggle);
+       if (reduced) { rise.style.transform = `translateY(${SINK}px)`; return; }
+       play(rise, [{ transform: "translateY(0px)" }, { transform: `translateY(${SINK}px)` }], { duration: 260, easing: "cubic-bezier(.4,0,1,1)" });
+       play(lip, [{ opacity: 1 }, { opacity: 0.5 }], { duration: 250 });

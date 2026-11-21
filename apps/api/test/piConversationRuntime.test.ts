@@ -12,6 +12,7 @@ import { loadPeopleDirectory } from "../src/peopleDirectory.js";
 import { createPiConversationRuntime } from "../src/piConversationRuntime.js";
 import type { ConversationRuntime } from "../src/conversations.js";
 import type { Pool } from "pg";
+import type { TBuddyPersonality } from "@warmap/contracts";
 import { createFakeWebSearchAdapter, createTestApp, testEnv } from "./helpers.js";
 import { createObjectMaterial, getObjectMaterialDetail, readObjectMaterial } from "../src/objectMaterials.js";
 import { createMaterialAnnotationAgent } from "../src/materialAnnotationAgent.js";
@@ -978,5 +979,44 @@ describe("controlled Pi conversation adapter public behavior", () => {
     } finally {
       await runtime.close?.();
     }
+  });
+});
+
+describe("伙伴的名字和性格进人设（spec 5.5、伙伴性格设计稿）", () => {
+  async function prompts(viewer: { personId: string; displayName: string; role: "ceo" | "member"; buddy?: { name: string; personality: TBuddyPersonality } },
+    scope = "signal:11111111-1111-4111-8111-111111111111") {
+    const seen: string[] = [];
+    const runtime = await createPiConversationRuntime({ peopleDirectory: loadPeopleDirectory(testEnv),
+      baseUrl: "https://provider.invalid/v1/responses", apiKey: "test-key", modelId: "fake-light",
+      streamSimple: (_model, context) => { seen.push(context.systemPrompt ?? ""); return stream(message([{ type: "text", text: "在。" }], "stop")); } });
+    try {
+      await runtime.run({ scope, viewer, message: "你叫什么", currentObject: null,
+        referencesSnapshot: [], runtimeEntries: [], piSessionId: randomUUID(), signal: new AbortController().signal, emit: () => undefined });
+    } finally { await runtime.close?.(); }
+    return seen.join("\n");
+  }
+
+  it("有伙伴时提示里写明它叫什么、是谁的伙伴、按哪种性格说话、寒暄怎么接和底线；CEO 写「本人的伙伴」；没有伙伴时都不写", async () => {
+    const member = await prompts({ ...MEMBER_VIEWER, buddy: { name: "团团", personality: "steady" } });
+    expect(member).toContain("你叫团团，是测试乙的伙伴");
+    expect(member).toContain("# 说话的样子：沉稳靠谱");
+    expect(member).toContain("# 寒暄、托付和心情");
+    expect(member).toContain("坏消息一定说");
+    expect(member).not.toContain("温和体贴");
+    const ceo = await prompts({ ...CEO_VIEWER, buddy: { name: "圆圆", personality: "direct" } });
+    expect(ceo).toContain("你叫圆圆，是本人的伙伴");
+    expect(ceo).toContain("# 说话的样子：直言不讳");
+    const plain = await prompts(MEMBER_VIEWER);
+    expect(plain).not.toContain("# 说话的样子");
+    expect(plain).not.toContain("的伙伴，一直跟着");
+  });
+
+  it("本机对话：主线、项目带，对象页不带", async () => {
+    const buddy = { ...MEMBER_VIEWER, buddy: { name: "团团", personality: "steady" as const } };
+    expect(await prompts(buddy, "global")).toContain("# 发消息的样子");
+    expect(await prompts(buddy, "project:11111111-1111-4111-8111-111111111111")).toContain("# 发消息的样子");
+    const object = await prompts(buddy);
+    expect(object).toContain("你叫团团");
+    expect(object).not.toContain("# 发消息的样子");
   });
 });

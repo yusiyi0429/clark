@@ -67,6 +67,15 @@
 /* 主按钮「对话天枢」：一颗毛玻璃胶囊——半透明白底加背景模糊（底下的卡片滚过时隐约透出颜色），顶边一道高光、极细的边、一层很淡的浮起阴影；深灰字（主题蓝只留给约会议）。 */
 .dock .entryButton { height:100%; min-height:44px; display:flex; align-items:center; justify-content:center; gap:8px; padding:0 24px 0 20px; border:0; border-radius:24px; background:rgba(255,255,255,.62); -webkit-backdrop-filter:blur(18px) saturate(1.6); backdrop-filter:blur(18px) saturate(1.6); box-shadow:inset 0 1px 0 rgba(255,255,255,.95), 0 0 0 1px #1d243314, 0 8px 22px #1d24331a, 0 1px 2px #1d243312; color:var(--ink,#17171b); font:inherit; font-size:15px; font-weight:500; letter-spacing:.2px; white-space:nowrap; cursor:pointer; user-select:none; -webkit-user-select:none; transition:background 160ms ease, box-shadow 200ms ease, transform 120ms ease; }
 .dock .entryButton svg { flex:none; }
+/* Miles、C妹 不占胶囊里的位置，从上沿探出来，所以左右内边距一样。 */
+.dock .entryButton { position:relative; }
+.dock .entryButton:has([data-skin="miles"], [data-skin="cmei"]) { padding:0 22px; }
+/* Miles 从入口上沿探出约 48（C妹 连呆毛约 56）：输入条上方那行字（在全局讨论 · N）收着时让到它上面。 */
+.layer:has(.dock[data-mode="entry"] [data-skin="miles"]) .contextLabel { bottom:calc(100% + 57px); }
+.layer:has(.dock[data-mode="entry"] [data-skin="cmei"]) .contextLabel { bottom:calc(100% + 66px); }
+/* 默认、生命感、熊猫：主按钮就是伙伴那颗胶囊（BuddyMark 按原尺寸铺满），外面不再套白胶囊。 */
+.dock .entryButton:not([data-skin="miles"], [data-skin="cmei"]),
+.dock .entryButton:not([data-skin="miles"], [data-skin="cmei"]):hover { padding:0; background:none; -webkit-backdrop-filter:none; backdrop-filter:none; box-shadow:none; }
 .dock .entryButton:hover { background:rgba(255,255,255,.8); box-shadow:inset 0 1px 0 #fff, 0 0 0 1px #1d24331a, 0 10px 26px #1d243322, 0 1px 2px #1d243314; }
 .dock .entryButton:active { transform:scale(.96); }
 .wave { display:flex; align-items:center; justify-content:center; gap:2.5px; width:20px; height:22px; color:#fff; }
@@ -116,11 +125,11 @@
 .layer[data-moving=true]{transition:none}
 .layer[data-issue-context=true]{width:calc(var(--issue-chat-width) - 32px)}
 .layer[data-issue-context=true]{--composer-width:100%}
-.contextLabel{position:absolute;bottom:calc(100% + 8px);max-width:100%;font-size:11px;line-height:18px;color:#77777c;white-space:nowrap;text-overflow:ellipsis;overflow:hidden;pointer-events:none}
+.contextLabel{position:absolute;bottom:calc(100% + 8px);max-width:100%;font-size:11px;line-height:18px;color:var(--ink-faint);white-space:nowrap;text-overflow:ellipsis;overflow:hidden;pointer-events:none}
 .referenceContext{display:flex;align-items:center;gap:8px;width:100%;overflow:visible}
 .referenceContext>span{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis}
-.referenceContext>button{display:flex;align-items:center;gap:3px;flex:none;margin-left:auto;padding:3px 5px;border:0;border-radius:6px;background:transparent;color:#4b6e99;font-size:11px;line-height:18px;pointer-events:auto;transition:background 160ms ease,color 160ms ease}
-.referenceContext>button:hover,.referenceContext>button:focus-visible{background:#007aff0a;color:#006edc}
+.referenceContext>button{display:flex;align-items:center;gap:3px;flex:none;margin-left:auto;padding:3px 5px;border:0;border-radius:6px;background:transparent;color:var(--tianshu-blue-secondary);font-size:11px;line-height:18px;pointer-events:auto;transition:background 160ms ease,color 160ms ease}
+.referenceContext>button:hover,.referenceContext>button:focus-visible{background:var(--accent-soft);color:var(--tianshu-blue-secondary)}
 .layer[data-issue-closing=true],.layer[data-issue-closing=true] .dock{transition-duration:250ms;transition-timing-function:cubic-bezier(.4,0,.2,1)}
 @media(max-width:959px){.layer[data-issue-context=true]{right:16px;width:calc(100% - 32px)}}
 @media(prefers-reduced-motion:reduce){.layer{transition:none}}
@@ -254,6 +263,26 @@
 }
 @media(prefers-reduced-motion:reduce){.layer .dock .entryButton{transition:none;transform:none}}
 @media(prefers-contrast:more){.dock .entryButton{box-shadow:inset 0 0 0 1px #8e8e93}}
+
+/*
+ * 收着时伙伴有没看过的新话（data-attention）：白胶囊外缘一圈胶囊同色（青、紫、粉，同引导胶囊的光晕）的细光慢慢转，
+ * 外面一层很淡的光跟着换色、轻轻呼吸。只描外缘、不染里面；打开对话层就消。减少动效时停在一圈静止的淡光。
+ */
+@property --attention-turn { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+.dock .entryButton[data-attention] { position: relative; animation: attentionGlow 7.2s ease-in-out infinite; }
+.dock .entryButton[data-attention]::before {
+  content: ""; position: absolute; inset: -1.5px; padding: 1.5px; border-radius: 999px; pointer-events: none;
+  background: conic-gradient(from var(--attention-turn), #4ee6ff, #9b7dff, #ff86d2, #4ee6ff);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+  opacity: .72; animation: attentionTurn 6s linear infinite;
+}
+@keyframes attentionTurn { to { --attention-turn: 360deg; } }
+@keyframes attentionGlow {
+  0%, 100% { box-shadow: inset 0 1px 0 rgba(255,255,255,.95), 0 0 0 1px #1d243310, 0 8px 22px #1d24331a, 0 0 16px 1px #4ee6ff30; }
+  33% { box-shadow: inset 0 1px 0 rgba(255,255,255,.95), 0 0 0 1px #1d243310, 0 8px 22px #1d24331a, 0 0 22px 3px #9b7dff3a; }
+  66% { box-shadow: inset 0 1px 0 rgba(255,255,255,.95), 0 0 0 1px #1d243310, 0 8px 22px #1d24331a, 0 0 16px 1px #ff86d230; }
+}
+@media(prefers-reduced-motion:reduce){.dock .entryButton[data-attention],.dock .entryButton[data-attention]::before{animation:none}}
 
 /*
  * 宽屏的对话记录是贴右边的一栏（app-shell .historySheet，输入条宽 + 左右各 16）：打开时输入条停在原位，

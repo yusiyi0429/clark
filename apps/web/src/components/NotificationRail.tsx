@@ -27,7 +27,9 @@ import { useFeishuEvents, type FeishuEvent } from "./meeting/useFeishuEvents";
 import d from "@/styles/meeting-record-drop.module.css";
 import { RADAR_ORIGIN_LABEL, RadarOriginIcon } from "./OriginTag";
 import { preflightInFlight } from "@/cards/meetingIssueModel";
+import { railBackgroundProps, useRailBackground } from "./railBackground/useRailBackground";
 import n from "@/styles/notifications.module.css";
+import rb from "@/styles/rail-background.module.css";
 
 type RailKind = "decisions" | "meetings" | "research";
 type Tone = "red" | "amber" | "neutral";
@@ -283,6 +285,7 @@ export function NotificationRail({
   const feishuEvents = useFeishuEvents();
   const groups = railGroups(cards, now, viewerId, feishuEvents).filter((group) => !(m2Available && group.kind === "decisions"));
   const rail = useRef<HTMLElement>(null);
+  const railBackground = useRailBackground(viewerId);
   const positions = useRef(new Map<string, number>());
   const layoutKey = groups.map((group) => `${group.kind}:${group.items.length}`).join("|");
 
@@ -314,7 +317,7 @@ export function NotificationRail({
   }, [layoutKey]);
 
   return (
-    <aside className={n.rail} ref={rail} tabIndex={-1} aria-label="通知与日程">
+    <aside className={`${n.rail} ${rb.bg}`} {...railBackgroundProps(railBackground)} ref={rail} tabIndex={-1} aria-label="通知与日程">
       <RailClock
         onHome={() => onHome?.()}
         homeActive={homeActive}

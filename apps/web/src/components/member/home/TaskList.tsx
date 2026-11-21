@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Mission 详情卡左边的 Task 列：每个 Task 一张小卡——名字、「已完成 a / b」、最近的未完成截止日、一条细进度线。
+ * Mission 详情卡左边的 Task 列：每个 Task 一张小卡——名字、最近的未完成截止日、交付物走到哪了（未开始 / 评审中 / 迭代中 · 50 / 可以交付 / 已交付）。
  * 选中的卡浮起来；它有完成定义或验收标准时右上角一个 ⓘ，点开小浮层（ts-design Popover，和会议页的编辑浮层同一个样子）。
  * 最后一项「未归入 Task」（N 为 0 不出）：这个 Mission 下没挂 Task、或挂的 Task 不在这个 Mission 里的执行事项。
  * 卡片窄时（见样式）整列变成详情卡顶上一排可横滑的小卡。
@@ -10,6 +10,7 @@ import { TianshuPortalTheme } from "ts-design";
 import { Button, Popover } from "ts-design/primitives";
 import type { THomePlanActivity, THomePlanTask } from "@warmap/contracts";
 import { shortDate } from "./planFormat";
+import { statusChip } from "./deliverable/deliverableFormat";
 import s from "@/styles/home-plan.module.css";
 
 /** 「未归入 Task」那一项。 */
@@ -17,11 +18,9 @@ export const LOOSE = "loose";
 
 export const hasInfo = (task: THomePlanTask) => task.doneDefinition !== null || task.criteria.length > 0;
 
-/** 一个 Task 下的进度：已完成几件、一共几件、没做完的里最早的截止日。 */
-function taskProgress(activities: THomePlanActivity[]) {
-  const done = activities.filter((activity) => activity.column === "done").length;
-  const due = activities.flatMap(({ item, column }) => (column !== "done" && item.dueDate ? [item.dueDate] : [])).sort()[0] ?? null;
-  return { done, total: activities.length, due };
+/** 一个 Task 下没做完的事项里最早的截止日。 */
+function nextDue(activities: THomePlanActivity[]) {
+  return activities.flatMap(({ item, column }) => (column !== "done" && item.dueDate ? [item.dueDate] : [])).sort()[0] ?? null;
 }
 
 export function TaskList({ tasks, activitiesOf, loose, selected, infoOpen, onPick, onInfo }: {
@@ -38,16 +37,16 @@ export function TaskList({ tasks, activitiesOf, loose, selected, infoOpen, onPic
     <div className={s.tasks} data-task-list role="group" aria-label="Task">
       {tasks.map((task) => {
         const chosen = selected === task.taskId;
-        const { done, total, due } = taskProgress(activitiesOf(task.taskId));
+        const due = nextDue(activitiesOf(task.taskId));
+        const chip = statusChip(task.deliverable);
         return (
           <div key={task.taskId} className={s.task} data-selected={chosen || undefined}>
             <button type="button" className={s.taskHit} data-task={task.taskId} aria-pressed={chosen} onClick={() => onPick(task.taskId)}>
               <span className={s.taskName}>{task.name}</span>
               <span className={s.taskMeta}>
-                <span>已完成 {done} / {total}</span>
-                {due ? <span>{shortDate(due)}</span> : null}
+                <span>{due ? shortDate(due) : null}</span>
+                <span className={s.chip} data-tone={chip.tone}>{chip.label}</span>
               </span>
-              <span className={s.bar} aria-hidden="true"><span style={{ width: `${total ? Math.round((done / total) * 100) : 0}%` }} /></span>
             </button>
             {chosen && hasInfo(task) && (
               <Popover isOpen={infoOpen} onOpenChange={onInfo}>

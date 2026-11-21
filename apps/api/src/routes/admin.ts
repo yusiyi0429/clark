@@ -1,8 +1,9 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { AdminActionRequest, AdminOverviewResponse, UsageQuery, UsageResponse } from "@warmap/contracts";
+import { AdminActionRequest, AdminOverviewResponse, UsageQuery, UsageResponse, WorkCountsResponse } from "@warmap/contracts";
 import { executeAdminAction, readAdminOverview } from "../admin.js";
 import { personDisplayNames } from "../people.js";
 import { isWeekStart, readUsage, usageMarkdown } from "../usage.js";
+import { readWorkCounts } from "../workCounts.js";
 import { isAllowedOrigin, type AppInstance, type RouteContext } from "./shared.js";
 
 /** 管理员：TIANSHU_ADMIN_PERSON_IDS 里的人。 */
@@ -44,4 +45,10 @@ export function registerAdminRoutes(app: AppInstance, ctx: RouteContext): void {
     const found = await usage(req, reply);
     return found ? reply.type("text/markdown; charset=utf-8").send(usageMarkdown(found.report)) : reply;
   });
+  // 使用计数（第 70 条）：week 是周一（北京时间），不传为本周（到现在为止），都现算。
+  app.get("/api/admin/work-counts", { preValidation: requireAdmin, schema: { querystring: UsageQuery, response: { 200: WorkCountsResponse } } },
+    async (req: UsageRequest, reply) => {
+      if (req.query.week && !isWeekStart(req.query.week)) return fail(reply, 400, "INVALID_WEEK", "week 要是某一周的周一");
+      return readWorkCounts(q, peopleDirectory, req.query.week, ctx.now());
+    });
 }

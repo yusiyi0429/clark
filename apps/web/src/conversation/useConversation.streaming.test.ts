@@ -13,7 +13,7 @@ vi.mock("react", () => ({
     }];
   },
 }));
-import { useConversation } from "./useConversation";
+import { latestModel, useConversation } from "./useConversation";
 
 beforeEach(() => {
   state.values = []; state.refs = [];
@@ -38,7 +38,7 @@ describe("真实 SSE 分段进入对话", () => {
     expect(await snapshot().send(input, [])).toBe(true);
     const failed = snapshot();
     expect(failed).toMatchObject({ status: "failed", partial: "", lastReply: null });
-    expect(failed.messages).toEqual([{ sequence: 1, role: "user", content: input }]);
+    expect(failed.messages).toEqual([{ sequence: 1, role: "user", content: input, receipt: "read" }]);
     expect(failed.error).toBe("模型服务没有受理这次请求（内容审核未通过）。问题已保留，可以换个说法后重试。");
     // 换个说法才有用：不给「重新回答」。
     expect(failed.recovery).toBeNull();
@@ -178,5 +178,90 @@ describe("带引用发送：提问气泡立刻带上引用", () => {
     const pending = pendingUserMessage(0, "问一句", [{ cardId: "c", version: 1, kind: "issue", title: "议题甲" }], [{ id: "a", fileName: "纪要.md", mimeType: "text/markdown" }]);
     const merged = withPendingTurn([{ sequence: 4, role: "assistant", content: "上一轮" }], pending);
     expect(merged.at(-1)).toMatchObject({ sequence: 5, content: "问一句", referencesSnapshot: [{ title: "议题甲" }], attachments: [{ fileName: "纪要.md" }] });
+  });
+});
+
+describe("伙伴对话流里的回执、计划清单、界面效果、卡（17.4）", () => {
+  it("计划清单后一条取代前一条；ui 事件发给页面；卡挂在这一轮上；读回的本人那句是已读", async () => {
+    const events = [
+      { type: "receipt", state: "delivered", messageId: "m1" }, { type: "receipt", state: "read", messageId: "m1" },
+      { type: "plan", plan: { entries: [{ content: "归档", status: "in_progress" }, { content: "转达", status: "pending" }], collapsed: false } },
+      { type: "plan", plan: { entries: [{ content: "归档", status: "completed" }, { content: "转达", status: "in_progress" }], collapsed: false } },
+      { type: "ui", ui: { kind: "appearance", appearance: "dark" } },
+      { type: "card", card: { kind: "buddy_message", draftId: "00000000-0000-4000-8000-0000000000a1" } },
+      { type: "message", delta: "好的" }, { type: "done", status: "completed" },
+    ].map((event) => `data: ${JSON.stringify({ ...event, runId: "r1" })}\n\n`).join("");
+    let sent = false;
+    const response = { ok: true, status: 200, body: { getReader: () => ({ read: async () => (sent ? { done: true, value: undefined } : (sent = true, { done: false, value: new TextEncoder().encode(events) })) }) } };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(response).mockResolvedValueOnce({
+      ok: true, json: async () => ({ messages: [{ sequence: 1, role: "user", content: "归档再转达" }, { sequence: 2, role: "assistant", content: "好的", runId: "r1" }] }),
+    }));
+    expect(await snapshot().send("归档再转达", [])).toBe(true);
+    const view = snapshot();
+    expect(view.plan?.entries.map((entry) => entry.status)).toEqual(["completed", "in_progress"]);
+    expect(view.turnCards).toEqual([{ kind: "buddy_message", draftId: "00000000-0000-4000-8000-0000000000a1" }]);
+    const ui = (window.dispatchEvent as ReturnType<typeof vi.fn>).mock.calls.map(([event]) => event as CustomEvent).find((event) => event.type === "buddy-ui");
+    expect(ui?.detail).toEqual({ kind: "appearance", appearance: "dark" });
+    expect(view.messages[0]).toMatchObject({ role: "user", receipt: "read" });
+  });
+});
+
+describe("这一轮实际用的来源和模型（契约 b2673bb4）", () => {
+  it("流里报了 model 就用它（换了取后一条）；没报的取历史里最后一条带 model 的回答", async () => {
+    const events = [
+      { type: "model", provider: "tokenhub", model: "qwen3.8-flash" }, { type: "model", provider: "tokenhub", model: "deepseek-v4" },
+      { type: "message", delta: "好" }, { type: "done", status: "completed" },
+    ].map((event) => `data: ${JSON.stringify({ ...event, runId: "r1" })}
+
+`).join("");
+    let sent = false;
+    const response = { ok: true, status: 200, body: { getReader: () => ({ read: async () => (sent ? { done: true, value: undefined } : (sent = true, { done: false, value: new TextEncoder().encode(events) })) }) } };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(response).mockResolvedValueOnce({
+      ok: true, json: async () => ({ messages: [{ sequence: 1, role: "user", content: "问" }, { sequence: 2, role: "assistant", content: "好", runId: "r1" }] }),
+    }));
+    expect(snapshot().model).toBeNull();
+    expect(await snapshot().send("问", [])).toBe(true);
+    expect(snapshot().model).toEqual({ provider: "tokenhub", model: "deepseek-v4" });
+    expect(latestModel([{ sequence: 1, role: "assistant", content: "早", model: { provider: "tokenhub", model: "a" } },
+      { sequence: 2, role: "user", content: "问" }, { sequence: 3, role: "assistant", content: "没报" }])).toEqual({ provider: "tokenhub", model: "a" });
+    expect(latestModel([{ sequence: 1, role: "user", content: "问" }])).toBeNull();
+  });
+});
+
+describe("两个勾的取法（17.4，契约 06e5ae77）", () => {
+  const frame = (event: Record<string, unknown>) => new TextEncoder().encode(`data: ${JSON.stringify(event)}
+
+`);
+  const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  it("中途插话：delivered（不带 runId）先亮第一个勾，新一轮开了 read（带 runId）亮第二个，两帧按 messageId 对上", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const frames = [frame({ type: "receipt", state: "delivered", messageId: "m2" }), frame({ type: "receipt", state: "read", messageId: "m2", runId: "r2" }),
+      frame({ type: "message", delta: "好", runId: "r2" }), frame({ type: "done", status: "completed", runId: "r2" })];
+    let step = 0;
+    const read = async () => {
+      if (step === 1) await gate;
+      const value = frames[step++];
+      return value ? { done: false, value } : { done: true, value: undefined };
+    };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce({ ok: true, status: 200, body: { getReader: () => ({ read }) } })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ messages: [{ sequence: 1, role: "user", content: "停一下" }] }) }));
+    const sending = snapshot().send("停一下", []);
+    await tick();
+    expect(snapshot().messages.at(-1)).toMatchObject({ role: "user", receipt: "delivered", messageId: "m2" });
+    release();
+    await sending;
+    expect(snapshot().messages[0]).toMatchObject({ role: "user", receipt: "read" });
+  });
+
+  it("delivered 以后没开成（流里一帧 error，不带 runId）：撤掉第一个勾，这句标成 failed（旁边给「重发」）", async () => {
+    const frames = [frame({ type: "receipt", state: "delivered", messageId: "m3" }), frame({ type: "error", code: "CHAT_UNAVAILABLE", message: "对话服务暂时不可用" })];
+    let step = 0;
+    const read = async () => { const value = frames[step++]; return value ? { done: false, value } : { done: true, value: undefined }; };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce({ ok: true, status: 200, body: { getReader: () => ({ read }) } })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ messages: [{ sequence: 1, role: "user", content: "停一下" }] }) }));
+    await snapshot().send("停一下", []);
+    expect(snapshot().messages).toEqual([{ sequence: 1, role: "user", content: "停一下", receipt: "failed", messageId: "m3" }]);
   });
 });

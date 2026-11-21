@@ -1,20 +1,22 @@
 "use client";
 
-import { Fragment, memo, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
-import ReactMarkdown from "react-markdown";
+import { Fragment, createContext, memo, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactElement, type ReactNode, type RefObject } from "react";
+import ReactMarkdown, { type Components } from "react-markdown";
+import type { PluggableList } from "unified";
 import remend from "remend";
-import { ArrowDown, ArrowRight, Paperclip, Quote } from "lucide-react";
+import { ArrowDown, ArrowRight, Check, Paperclip, Quote } from "lucide-react";
 import { WorkspaceContext } from "@/components/shell/WorkspaceContext";
-import type { TReadScope } from "@warmap/contracts";
+import type { TConversationLocalTurn, TReadScope } from "@warmap/contracts";
 import { ScopeChip } from "./ScopeChip";
 import { HeroButton } from "@/components/HeroButton";
 import { StepList, StepToggle, type Step } from "@/components/steps/StepList";
-import { VIA_LABEL, feishuWaiting, type Message, type ThinkingStage, type TurnProgress, type TurnThought } from "./useConversation";
+import { VIA_LABEL, feishuWaiting, isReportPrompt, type Message, type ThinkingStage, type TurnProgress, type TurnThought } from "./useConversation";
 import { QuoteChips } from "./QuoteChips";
-import { pageContextBattlefield, readQuotedMessage } from "./quotes";
+import { isReplyQuote, pageContextBattlefield, readQuotedMessage } from "./quotes";
+import { SentReply } from "./replyTo";
 import { createArrivalLog, rehypeArrival, type ArrivalLog } from "./arrival";
 import { parseAnswerOptions } from "./answerOptions";
-import { AnswerRecord } from "./AskPanel";
+import { AnswerRecord, AskContext } from "./AskPanel";
 import { splitStableBlocks, useSmoothText } from "./smoothText";
 import { CITATION_MARKDOWN, MemoryUsedProvider } from "./citations";
 import { holdOpenLink, remarkCitationMarks } from "./citationMarks";
@@ -22,18 +24,30 @@ import { RichPre, RichSkeleton } from "./richBlocks/RichBlocks";
 import { CONVERSATION_REHYPE_PLUGINS, CONVERSATION_REMARK_PLUGINS, holdOpenMath } from "./richBlocks/markdown";
 import { RichStreamProvider } from "./richBlocks/surface";
 import { afterResize, resizing } from "./resizeGate";
+import { modelLine } from "@/lib/local/runModel";
+import { BuddyReactions, useMessageReaction } from "./Reactions";
+import { AnswerOptions, QuickReplyContext } from "./AnswerOptionRow";
+import { BubbleContext, ReplyBubbles, UserBubble } from "./ReplyBubbles";
 import s from "@/styles/conversation-transcript.module.css";
+import b from "@/styles/conversation-bubbles.module.css";
 import c from "@/styles/card-references.module.css";
 
 const seconds = (ms: number) => `${Math.max(1, Math.round(ms / 1000))} 秒`;
+/** 现场行的用时（5.4.3）：过 60 秒写「1 分 12 秒」。 */
+export const liveClock = (ms: number) => { const total = Math.max(1, Math.round(ms / 1000)); return total < 60 ? `${total} 秒` : `${Math.floor(total / 60)} 分${total % 60 ? ` ${total % 60} 秒` : "钟"}`; };
+/** 预计：不到 1 分钟写「约 40 秒」，再长写「约 3 分钟」。 */
+const aboutText = (sec: number) => (sec < 60 ? `约 ${sec} 秒` : `约 ${Math.round(sec / 60)} 分钟`);
 
-/** 助手这一轮的实际用时：与前一条用户消息的创建时间差（历史里没有单独记录）。 */
+/**
+ * 助手这一轮的实际用时：与前一条用户消息的创建时间差（历史里没有单独记录）。
+ * 回答不晚于提问（Chat 给两条的都是这一轮的开始时间）就不写，不写错的数。
+ */
 function turnMs(messages: Message[], index: number): number | undefined {
   const reply = messages[index];
   const question = [...messages.slice(0, index)].reverse().find((message) => message.role === "user");
   if (!reply?.createdAt || !question?.createdAt) return undefined;
   const ms = Date.parse(reply.createdAt) - Date.parse(question.createdAt);
-  return Number.isFinite(ms) && ms >= 0 ? ms : undefined;
+  return Number.isFinite(ms) && ms > 0 ? ms : undefined;
 }
 
 /** 稳定下来的块多久以后把到达 span 合并掉：淡入 150ms（conversation-transcript.module.css arrivalFade），多留一点。 */
@@ -45,6 +59,13 @@ const TURN_MARKDOWN = { ...CITATION_MARKDOWN, components: { ...CITATION_MARKDOWN
 const TURN_REMARK_PLUGINS = [...CONVERSATION_REMARK_PLUGINS, remarkCitationMarks];
 
 /**
+ * 正文用哪一套 Markdown 部件。伙伴对话是 TURN_PARTS（出处标记、公式、富内容块）；子会话传自己的（不认出处和公式，
+ * 行内代码、链接对得上本会话的文件就能点开）。传进来的要是稳定的引用（模块常量），不然每次重画都重新解析。
+ */
+export type MarkdownParts = { components: Components; remarkPlugins: PluggableList; rehypePlugins: PluggableList };
+export const TURN_PARTS: MarkdownParts = { components: TURN_MARKDOWN.components, remarkPlugins: TURN_REMARK_PLUGINS, rehypePlugins: CONVERSATION_REHYPE_PLUGINS };
+
+/**
  * 流式正文的一个顶层块：自己的到达记录（新放出的字淡入，旧字不重播）；文字没变就不重画、不重新解析。
  * `open`：还在长的最后一块，先用 remend（Streamdown 的未闭合 Markdown 补全）把没写完的加粗、代码、链接补齐再解析，
  * 块结构不在「** 原样」与「粗体」之间来回跳；末尾没写完的链接先不显示（holdOpenLink），句末的出处写完直接以标记出现。
@@ -53,7 +74,7 @@ const TURN_REMARK_PLUGINS = [...CONVERSATION_REMARK_PLUGINS, remarkCitationMarks
  * 不再是还在长的最后一块以后，淡入播完（ARRIVAL_SETTLE_MS）就不再按到达切：一段段 span 合并回普通文字
  * （每个 span 都带着播完的动画，数量一多，每帧的样式与排版都更贵）。外层节点与非 span 元素的 key 不变，富内容块、链接不重挂。
  */
-const ArrivalBlock = memo(function ArrivalBlock({ text, open }: { text: string; open: boolean }) {
+const ArrivalBlock = memo(function ArrivalBlock({ text, open, parts }: { text: string; open: boolean; parts: MarkdownParts }) {
   const arrival = useRef<ArrivalLog | null>(null);
   arrival.current ??= createArrivalLog();
   // 合并时的原文：原文再变（极少），就重新按到达切。
@@ -68,7 +89,7 @@ const ArrivalBlock = memo(function ArrivalBlock({ text, open }: { text: string; 
   if (merged) {
     return (
       <RichStreamProvider open={false}>
-        <ReactMarkdown remarkPlugins={TURN_REMARK_PLUGINS} rehypePlugins={CONVERSATION_REHYPE_PLUGINS} {...TURN_MARKDOWN}>{text}</ReactMarkdown>
+        <ReactMarkdown remarkPlugins={parts.remarkPlugins} rehypePlugins={parts.rehypePlugins} components={parts.components} urlTransform={TURN_MARKDOWN.urlTransform}>{text}</ReactMarkdown>
       </RichStreamProvider>
     );
   }
@@ -76,7 +97,7 @@ const ArrivalBlock = memo(function ArrivalBlock({ text, open }: { text: string; 
   const source = open ? remend(holdOpenLink(held.text), { linkMode: "text-only" }) : text;
   return (
     <RichStreamProvider open={open}>
-      <ReactMarkdown remarkPlugins={TURN_REMARK_PLUGINS} rehypePlugins={[...CONVERSATION_REHYPE_PLUGINS, rehypeArrival(arrival.current, text)]} {...TURN_MARKDOWN}>
+      <ReactMarkdown remarkPlugins={parts.remarkPlugins} rehypePlugins={[...parts.rehypePlugins, rehypeArrival(arrival.current, text)]} components={parts.components} urlTransform={TURN_MARKDOWN.urlTransform}>
         {source}
       </ReactMarkdown>
       {held.pending ? <RichSkeleton title="公式" /> : null}
@@ -89,24 +110,27 @@ const ArrivalBlock = memo(function ArrivalBlock({ text, open }: { text: string; 
  * 在这里流式过的那条（同一个节点）：到达的文字按字匀速放出（useSmoothText，积压多就快、结束尽快补齐），
  * 按顶层块分开画——只有最后一块随出字重新解析，前面的块不动；新出现的字轻淡入。
  * 结束后这个节点继续这样画，结束那一刻不换内部节点、不打断淡入。
+ * fresh：整段一次到的（子会话还没有逐字草稿时，页面开着时刚到的那段）也这样画：短的按字放出、长的整段淡入。
+ * 伙伴对话、子会话共用（子会话传自己的 parts）。
  */
-const MarkdownBody = memo(function MarkdownBody({ text, streaming }: { text: string; streaming: boolean }) {
-  const streamed = useRef(streaming);
+export const MarkdownBody = memo(function MarkdownBody({ text, streaming, fresh = false, parts = TURN_PARTS }: { text: string; streaming: boolean; fresh?: boolean; parts?: MarkdownParts }) {
+  const streamed = useRef(streaming || fresh);
   if (streaming) streamed.current = true;
   const shown = useSmoothText(text, streamed.current, streaming);
-  if (!streamed.current) return <ReactMarkdown remarkPlugins={TURN_REMARK_PLUGINS} rehypePlugins={CONVERSATION_REHYPE_PLUGINS} {...TURN_MARKDOWN}>{text}</ReactMarkdown>;
+  if (!streamed.current) return <ReactMarkdown remarkPlugins={parts.remarkPlugins} rehypePlugins={parts.rehypePlugins} components={parts.components} urlTransform={TURN_MARKDOWN.urlTransform}>{text}</ReactMarkdown>;
   const catchingUp = shown.length < text.length;
   const blocks = splitStableBlocks(shown);
   return (
     <>
       {blocks.map((block, index) => (
-        <ArrivalBlock key={index} text={block} open={index === blocks.length - 1 && (streaming || catchingUp)} />
+        <ArrivalBlock key={index} text={block} open={index === blocks.length - 1 && (streaming || catchingUp)} parts={parts} />
       ))}
     </>
   );
 });
 
 const NO_MEMORY: readonly string[] = [];
+const NO_OPTIONS: string[] = [];
 
 /** 已经收起的思考摘要：正文开始以后挂在这条回答的「用时」一行，点开看全文。 */
 type SettledThought = { text: string; seconds: number };
@@ -122,11 +146,35 @@ export function sameTurn(previous: TurnProps, next: TurnProps): boolean {
     && previous.thought?.text === next.thought?.text && previous.thought?.seconds === next.thought?.seconds
     && sameList(previous.steps, next.steps, (step) => `${step.id}:${step.status}:${step.result ?? ""}`)
     && a.role === b.role && a.content === b.content
-    && a.recoveryNote?.text === b.recoveryNote?.text && a.recoveryNote?.detail === b.recoveryNote?.detail
     && (a.memoryUsed ?? []).join("|") === (b.memoryUsed ?? []).join("|")
     && a.readScope?.label === b.readScope?.label && a.kind === b.kind && a.via === b.via && a.meta?.href === b.meta?.href && a.answers?.askId === b.answers?.askId
+    && a.receipt === b.receipt && sameList(a.reactions, b.reactions, (item) => `${item.part}:${item.emoji}`) && (a.buddyReactions ?? []).join("|") === (b.buddyReactions ?? []).join("|")
     && sameList(a.attachments, b.attachments, (item) => item.id)
     && sameList(a.referencesSnapshot, b.referencesSnapshot, (item) => `${item.cardId}@${item.version}`);
+}
+
+/** 「重发」（17.4）：伙伴对话里收下了却没开成的那句，旁边一个小按钮，样式同失败行的「重试」。由对话时间线给出重发的办法。 */
+export const ResendContext = createContext<((message: Message) => void) | null>(null);
+/** 本人那句话旁的两个小勾（17.4）：送达亮第一个，读到亮第二个。伙伴对话和子会话共用。 */
+export function ReceiptTicks({ state, className }: { state: "delivered" | "read"; className?: string }) {
+  return (
+    <span className={className ? `${s.receipt} ${className}` : s.receipt} data-receipt={state} role="img" aria-label={state === "read" ? "已读" : "已送达"} data-testid="message-receipt">
+      <Check size={12} strokeWidth={2.2} aria-hidden /><Check size={12} strokeWidth={2.2} aria-hidden />
+    </span>
+  );
+}
+/** 子会话里先画出来、本机还没回的那句：勾的位置写「发送中」。 */
+export function ReceiptSending({ className }: { className?: string }) {
+  return <span className={className ? `${s.receipt} ${className}` : s.receipt} data-testid="message-sending"><span className={s.receiptNote}>发送中</span></span>;
+}
+/** 收下了却没读到：在勾的位置写「没读到」加「重发」（子会话）；伙伴对话只给「重发」。 */
+export function ReceiptFailed({ label, onResend, className }: { label?: string; onResend?: () => void; className?: string }) {
+  return <span className={className ? `${s.receipt} ${className}` : s.receipt} data-testid="message-resend">{label ? <span className={s.receiptNote}>{label}{onResend ? " ·" : ""}</span> : null}{onResend ? <HeroButton variant="ghost" size="sm" onPress={onResend}>重发</HeroButton> : null}</span>;
+}
+function ResendLine({ message }: { message: Message }) {
+  const resend = useContext(ResendContext);
+  if (!resend) return null;
+  return <ReceiptFailed onResend={() => resend(message)} />;
 }
 
 /** 首页留痕行（转议题之后）：「已转到议题 X」，点击直达议题页。像聊天里的系统行，居中、浅灰、不占一条回答的版面。 */
@@ -145,6 +193,49 @@ function TraceLine({ message }: { message: Message }) {
 }
 
 /** 一条消息（clark `ConversationTurn`）：不显示角色名，读屏读「你 / 天枢」。 */
+/**
+ * 一轮回答用的模型（主循环第 67 条）：「来源 · 模型」，同 modelLine。本机跑的（ranOn = local）云端只记了执行方，不当来源写，只写模型。没带模型的为 null。
+ */
+export function turnModel(message: Pick<Message, "ranOn" | "model">): string | null {
+  if (!message.model) return null;
+  return modelLine({ source: message.ranOn === "local" ? null : message.model.provider, model: message.model.model });
+}
+
+/**
+ * 换了模型的地方（67 条）：每条回答上方不再标模型；一条回答的模型和前一条带模型的回答不一样时，在这一轮本人那句前面（没有就在回答前面）画「换成 …」。
+ * 第一条带模型的回答不画。返回 消息下标 → 换成的「来源 · 模型」。
+ */
+export function modelSwitches(messages: readonly Pick<Message, "role" | "ranOn" | "model">[]): Map<number, string> {
+  const at = new Map<number, string>();
+  let last: string | null = null;
+  let asked: number | null = null;
+  messages.forEach((message, index) => {
+    if (message.role === "user") { asked ??= index; return; }
+    const label = turnModel(message);
+    if (label && last && label !== last) at.set(asked ?? index, label);
+    if (label) last = label;
+    asked = null;
+  });
+  return at;
+}
+
+/**
+ * 项目对话正在本人电脑上跑、还没写进历史的那一轮（localTurn）：别的页面、手机上先画本人那一句和「正在回答」，写进来后换成那一轮。
+ * 第一版这里停不了。
+ */
+export function LocalTurnRow({ turn }: { turn: TConversationLocalTurn }) {
+  return (
+    <>
+      <ConversationTurn message={{ sequence: -2, role: "user", content: turn.message, createdAt: turn.startedAt }} />
+      <div className={s.thinking} data-testid="conversation-local-turn">
+        <span className={s.pulse} aria-hidden />
+        <span role="status">正在回答</span>
+        <span className={s.time}>{turn.source}</span>
+      </div>
+    </>
+  );
+}
+
 export const ConversationTurn = memo(function ConversationTurn({ message, ms, streaming = false, thought, steps }: TurnProps) {
   if (message.kind === "trace") return <TraceLine message={message} />;
   return <ConversationTurnBody message={message} ms={ms} streaming={streaming} thought={thought} steps={steps} />;
@@ -152,6 +243,8 @@ export const ConversationTurn = memo(function ConversationTurn({ message, ms, st
 
 function ConversationTurnBody({ message, ms, streaming = false, thought, steps }: TurnProps) {
   const user = message.role === "user";
+  // 新首页的伙伴主线、项目对话（BubbleContext）：回复成气泡和卡片，本人的话是本人气泡；「用时 / 步骤」那一排挪到这一组气泡下面，一轮结束后才有。
+  const bubbles = useContext(BubbleContext);
   const [thoughtOpen, setThoughtOpen] = useState(false);
   const [stepsOpen, setStepsOpen] = useState(false);
   const stepsId = useId();
@@ -166,17 +259,34 @@ function ConversationTurnBody({ message, ms, streaming = false, thought, steps }
   ) : null;
   const attachments = message.attachments ?? [];
   // 回答末尾的选项块（answerOptions）在进 Markdown、remend 与到达淡入之前就拿掉，流式中没写完的也不露出。
-  const quoted = useMemo(() => (user ? readQuotedMessage(message.content) : { message: parseAnswerOptions(message.content, streaming).body, quotes: [] }),
-    [user, message.content, streaming]);
+  const quoted = useMemo(() => {
+    if (user) return { ...readQuotedMessage(message.content), options: NO_OPTIONS };
+    const { body, options } = parseAnswerOptions(message.content, streaming);
+    return { message: body, quotes: [], options };
+  }, [user, message.content, streaming]);
   const battlefield = user ? pageContextBattlefield(message.content) : null;
   const memoryKey = streaming ? "" : (message.memoryUsed ?? []).join("|");
   const memoryUsed = useMemo(() => (memoryKey ? memoryKey.split("|") : NO_MEMORY), [memoryKey]);
+  // 新首页的对话里回答提问的那一句不另画：提问卡原处收成了一行（AskContext.inline）。
+  const ask = useContext(AskContext);
+  // 新首页的两种对话：最新一条回答的选项是最后一个气泡下面的一排小胶囊（设计 6.4）；表情挂在气泡底边上（6.5）。
+  const quick = useContext(QuickReplyContext);
+  const reaction = useMessageReaction(streaming ? null : message, bubbles);
+  if (user && message.answers && ask?.inline) return null;
+  const details = (
+    <>
+      {thought && thoughtOpen ? <div className={s.thoughtFull} data-testid="conversation-thought-full">{thought.text}</div> : null}
+      {steps?.length && stepsOpen ? <StepList steps={steps} id={stepsId} className={s.settledSteps} /> : null}
+    </>
+  );
+  const prose = <MarkdownBody text={quoted.message} streaming={streaming} />;
+  const chips = bubbles ? quoted.quotes.filter((quote) => !isReplyQuote(quote)) : quoted.quotes;
   return (
-    <article className={user ? s.user : s.assistant} data-chat-role={message.role} aria-label={user ? "你" : "天枢"}
-      data-testid={streaming ? "conversation-streaming-turn" : undefined} aria-busy={streaming || undefined}>
-      {!user && ms !== undefined ? (
+    <article className={bubbles ? (user ? b.userTurn : b.turn) : user ? s.user : s.assistant} data-chat-role={message.role} aria-label={user ? "你" : "天枢"}
+      data-testid={streaming ? "conversation-streaming-turn" : undefined} aria-busy={streaming || undefined} {...reaction?.target}>
+      {bubbles ? null : !user && ms !== undefined ? (
         <div className={s.meta}>
-          <span>用时 {seconds(ms)}</span>
+          <span className={s.time}>用时 {seconds(ms)}</span>
           {thoughtToggle}
         </div>
       ) : !user && thoughtToggle ? (
@@ -188,8 +298,7 @@ function ConversationTurnBody({ message, ms, streaming = false, thought, steps }
           <span>用时</span>
         </div>
       ) : null}
-      {thought && thoughtOpen ? <div className={s.thoughtFull} data-testid="conversation-thought-full">{thought.text}</div> : null}
-      {steps?.length && stepsOpen ? <StepList steps={steps} id={stepsId} className={s.settledSteps} /> : null}
+      {bubbles ? null : details}
       {user && message.referencesSnapshot?.length ? (
         <details className={c.sentReferences}>
           <summary>
@@ -216,20 +325,41 @@ function ConversationTurnBody({ message, ms, streaming = false, thought, steps }
         </details>
       ) : null}
       {battlefield ? <div className={s.pageTag}>战场 · {battlefield}</div> : null}
-      {user && message.via ? <div className={s.pageTag} data-testid={`conversation-via-${message.via}`}>{VIA_LABEL[message.via]}</div> : null}
-      {quoted.quotes.length ? <QuoteChips quotes={quoted.quotes} sent /> : null}
+      {user && message.via && message.via !== "report" ? <div className={s.pageTag} data-testid={`conversation-via-${message.via}`}>{VIA_LABEL[message.via]}</div> : null}
+      {/* 新首页的两种对话：回复是气泡上方一行淡色摘要（本人 11/18），别的引用照旧是胶囊。 */}
+      {bubbles ? quoted.quotes.filter(isReplyQuote).map((quote) => <SentReply key={quote.id} text={quote.text} />) : null}
+      {chips.length ? <QuoteChips quotes={chips} sent /> : null}
       {/* 回答 Agent 提问的那一句：画成紧凑的问答记录，不显示原文。 */}
-      {user && message.answers ? <AnswerRecord record={message.answers} /> : (
+      {user && message.answers ? <AnswerRecord record={message.answers} /> : bubbles ? (
+        user ? (
+          <UserBubble>
+            <div className={s.prose}>{prose}</div>
+            {/* 两个勾在气泡里右下角，不另占一行。 */}
+            {message.receipt && message.receipt !== "failed" ? <ReceiptTicks state={message.receipt} className={b.tick} /> : null}
+            {message.buddyReactions?.length || reaction?.view ? (
+              <div className={b.edge}>{message.buddyReactions?.length ? <BuddyReactions emojis={message.buddyReactions} /> : null}{reaction?.view?.(0, 1)}</div>
+            ) : null}
+            {reaction?.actions?.(0, 1, quoted.message)}
+          </UserBubble>
+        ) : <MemoryUsedProvider value={memoryUsed}><ReplyBubbles markdown={quoted.message} streaming={streaming} at={message.createdAt} edge={reaction?.view} actions={reaction?.actions} /></MemoryUsedProvider>
+      ) : (
         <div className={s.prose}>
           <MemoryUsedProvider value={memoryUsed}>
-            <MarkdownBody text={quoted.message} streaming={streaming} />
+            {prose}
           </MemoryUsedProvider>
         </div>
       )}
-      {/* 这一轮用了备用模型或走过恢复：末尾一行很淡的小字，悬停看具体一点的说明（不写模型名和英文原文）。 */}
-      {!user && !streaming && message.recoveryNote?.text ? (
-        <p className={s.recoveryNote} title={message.recoveryNote.detail || undefined} data-testid="conversation-recovery-note">{message.recoveryNote.text}</p>
+      {bubbles && !user && !streaming && quick?.sequence === message.sequence ? <AnswerOptions options={quoted.options} send={quick.send} /> : null}
+      {bubbles && !user && !streaming && (ms !== undefined || thoughtToggle) ? (
+        <div className={b.meta}>
+          {ms !== undefined ? <span>用时 {seconds(ms)}</span> : null}
+          {thoughtToggle}
+        </div>
       ) : null}
+      {bubbles && !streaming ? details : null}
+      {/* 伙伴对话的回执（17.4）：两个小勾，送达亮第一个，读到亮第二个。 */}
+      {user && message.receipt ? (message.receipt === "failed" ? <ResendLine message={message} /> : bubbles ? null : <ReceiptTicks state={message.receipt} />) : null}
+      {bubbles ? null : reaction?.view?.(0, 1)}
     </article>
   );
 }
@@ -250,8 +380,10 @@ function CarriedDivider({ message }: { message: Message }) {
  * 状态区紧贴在正在写的文字下面，正文第一个字就出现在思考原来的位置；卡先做好就先在下面淡入，正文往下长时把卡往下推。
  * 状态区占的是完成后选项（footer）的位置，卡的位置不变，读回历史时卡不重挂。
  */
-export function ConversationTurns({ messages, partial = "", footer, after, trailing, thought, steps, status }: {
+export function ConversationTurns({ messages, partial = "", footer, after, insertions, trailing, thought, steps, status, modelRule, lastReply }: {
   messages: Message[]; partial?: string;
+  /** 这一页刚收完的那一轮（useConversation 的 lastReply）：同一个 runId 的回答，用时用网页自己量到的数。 */
+  lastReply?: { ms: number; runId?: string } | null;
   /** 本轮的步骤（正文开始后才给）：与思考摘要一样，流式中挂在正在写的那条，结束后挂在最后一条回答上。 */
   steps?: Step[] | null;
   /** 进行中这一轮的状态区（思考、进度、停止）：放在正在写的那条之后、本轮的卡之前。给了就表示这一轮还在进行。 */
@@ -262,44 +394,60 @@ export function ConversationTurns({ messages, partial = "", footer, after, trail
   footer?: (index: number) => ReactNode;
   /** 第 index 条消息之后插的内容（提案卡）。 */
   after?: (index: number) => ReactNode;
+  /** 独立事件：-1 为首条消息之前；每项需有全局唯一 key，与消息同层，换位置时保留交互状态。 */
+  insertions?: (index: number) => readonly ReactElement[];
   /** 当前输出之后的内容（流式中本轮的提案卡）。 */
   trailing?: ReactNode;
+  /** 画「换成 …」那一行的办法（67 条）：新首页的对话给（分隔线同「11 月目标」那一种）；别处不给，就不画。 */
+  modelRule?: (label: string) => ReactNode;
 }) {
-  return (
-    <>
-      {messages.map((message, index) => (
-        <Fragment key={`turn-${index}`}>
-          {message.kind === "carried" && messages[index - 1]?.kind !== "carried" ? <CarriedDivider message={message} /> : null}
-          <ConversationTurn message={message} ms={message.role === "assistant" ? turnMs(messages, index) : undefined}
+  const switches = modelRule ? modelSwitches(messages) : null;
+  // Every independent event belongs to this one flat array, including leading
+  // events. A per-turn or nested array parent would remount it when its bucket
+  // changes (e.g. timed history → an untimed optimistic message → timed history).
+  // Namespace event outlets so caller keys cannot collide with turn-N/waiting.
+  const insertedAt = (index: number) => (insertions?.(index) ?? []).map(node => <Fragment key={`insertion:${node.key}`}>{node}</Fragment>);
+  const rows: ReactNode[] = [...insertedAt(-1)];
+  messages.forEach((message, index) => {
+    rows.push(
+      <Fragment key={`turn-${index}`}>
+        {switches?.has(index) ? modelRule!(switches.get(index)!) : null}
+        {message.kind === "carried" && messages[index - 1]?.kind !== "carried" ? <CarriedDivider message={message} /> : null}
+        {isReportPrompt(message) ? null : (
+          <ConversationTurn key="turn" message={message} ms={message.role !== "assistant" ? undefined
+            : lastReply?.runId && message.runId === lastReply.runId ? lastReply.ms : turnMs(messages, index)}
             thought={!partial && thought && index === messages.length - 1 && message.role === "assistant" ? thought : undefined}
             steps={!partial && steps?.length && index === messages.length - 1 && message.role === "assistant" ? steps : undefined} />
-          {footer?.(index) ?? null}
-          {after?.(index) ?? null}
-        </Fragment>
-      ))}
-      {/* 飞书或微信里刚问、还在答：这里先占一行，答完读回历史时换成回答。 */}
-      {!partial && !status && feishuWaiting(messages) ? (
-        <div className={s.thinking} data-testid="conversation-feishu-waiting">
-          <span className={s.pulse} aria-hidden />
-          <span role="status">正在回答{VIA_LABEL[messages.at(-1)!.via!]}里的提问</span>
-        </div>
-      ) : null}
-      {partial || trailing || status ? (
-        <Fragment key={`turn-${messages.length}`}>
-          {partial ? <ConversationTurn message={{ sequence: -1, role: "assistant", content: partial }} streaming thought={thought ?? undefined} steps={steps?.length ? steps : undefined} /> : null}
-          {/* 与上面 footer 同一个位置（流式中没有选项，这里放状态区）：完成后提案卡仍在同一位置，不重挂。 */}
-          {status ?? null}
-          {trailing ?? null}
-        </Fragment>
-      ) : null}
-    </>
+        )}
+        {footer?.(index) ?? null}
+        {after?.(index) ?? null}
+      </Fragment>,
+      ...insertedAt(index),
+    );
+  });
+  // 飞书或微信里刚问、还在答：这里先占一行，答完读回历史时换成回答。
+  if (!partial && !status && feishuWaiting(messages)) rows.push(
+    <div key="waiting" className={s.thinking} data-testid="conversation-feishu-waiting">
+      <span className={s.pulse} aria-hidden />
+      <span role="status">{isReportPrompt(messages.at(-1)!) ? "正在看子会话的回报" : `正在回答${VIA_LABEL[messages.at(-1)!.via as keyof typeof VIA_LABEL]}里的提问`}</span>
+    </div>,
   );
+  if (partial || trailing || status) rows.push(
+    <Fragment key={`turn-${messages.length}`}>
+      {partial ? <ConversationTurn key="turn" message={{ sequence: -1, role: "assistant", content: partial }} streaming thought={thought ?? undefined} steps={steps?.length ? steps : undefined} /> : null}
+      {/* 与上面 footer 同一个位置（流式中没有选项，这里放状态区）：完成后提案卡仍在同一位置，不重挂。 */}
+      {status ?? null}
+      {trailing ?? null}
+    </Fragment>,
+  );
+  return <>{rows}</>;
 }
 
-export const STAGE_COPY: Record<ThinkingStage, string> = { understanding: "正在理解问题", thinking: "正在思考", researching: "正在查资料", answering: "正在整理回答",
+/** 现场行的阶段（新首页设计 5.4.3）：拿到具体阶段以前（刚发出、模型在想）只有呼吸点，不写「正在思考」这类笼统的词。 */
+export const STAGE_COPY: Record<ThinkingStage, string | null> = { understanding: null, thinking: null, researching: "正在查资料", answering: "正在整理回答",
   connecting: "正在连接", offline: "等待网络" };
 /** 深度档（重要的战略问题），以及中途升级后的非深度档：进度行用同一口径。 */
-export const DEEP_STAGE_COPY: Record<ThinkingStage, string> = { ...STAGE_COPY, thinking: "正在深入思考" };
+export const DEEP_STAGE_COPY: Record<ThinkingStage, string | null> = { ...STAGE_COPY, thinking: "深入分析" };
 
 /**
  * 进度行的细节（系统生成）：查证时是最近一步在查什么 / 读到了什么；思考时是推理摘要里的中文要点，没有就沿用最近读到的内容；
@@ -333,11 +481,14 @@ export function ThinkingStream({ text }: { text: string }) {
 }
 
 /**
- * 回答进行中的一行（clark `ConversationThinking`）：脉冲点、阶段、在查什么 / 思考要点、已用秒数（深度档另附预计用时）、停止。
- * 非深度档中途升级时，上方多一行「这个问题需要更深入的分析，预计还需约 X 秒。」；正文开始后整行淡化。
+ * 回答进行中的一行（clark `ConversationThinking`）：脉冲点、阶段、在查什么 / 思考要点、用时 / 预计（深度档、中途升级才有预计）、停止。
+ * 非深度档中途升级（服务端给「预计还需约 X 秒」）不另起一行解释：阶段写「深入分析」，用时后面接「/ 约 N 秒」（升级那一刻的用时加 X）；
+ * 正文开始后不再写预计，整行淡化。
  */
-export function ConversationThinking({ stage, startedAt, onStop, route, progress, steps = [], thought, readScope }: {
+export function ConversationThinking({ stage, startedAt, onStop, route, progress, steps = [], thought, readScope, row = true }: {
   stage: ThinkingStage; startedAt: number; onStop: () => void;
+  /** false：现场那一行和步骤由调用方画（新首页对话的「在做什么」那一行，WorkTimeline），这里只留思考摘要和读取范围。 */
+  row?: boolean;
   route?: { tier: "quick" | "grounded" | "deep"; expectSeconds: number } | null;
   progress?: TurnProgress;
   /** 服务端给的步骤：有步骤时替代进度行的单行文字和计数；正文开始后收成一个勾和步数。 */
@@ -354,25 +505,35 @@ export function ConversationThinking({ stage, startedAt, onStop, route, progress
     return () => clearInterval(timer);
   }, [startedAt]);
   const deep = route?.tier === "deep";
-  const escalation = !deep && stage !== "answering" ? progress?.escalation : null;
+  const escalated = deep ? null : progress?.escalation ?? null;
+  // 升级那一刻的用时：预计写整轮（用时 / 约 N 秒），服务端给的是「还需约 X 秒」。按这一轮（startedAt）记，换轮、重挂载不会把预计越推越后。
+  const escalationKey = escalated ? `${startedAt}:${escalated.expectSeconds}:${escalated.notice}` : null;
+  const [escalatedAt, setEscalatedAt] = useState(() => ({ key: escalationKey, ms: elapsed }));
+  if (escalatedAt.key !== escalationKey) setEscalatedAt({ key: escalationKey, ms: elapsed });
+  const answering = stage === "answering";
+  const escalation = answering ? null : escalated;
   const stepped = steps.length > 0;
   const detail = stepped ? null : progressDetail(stage, progress);
-  const answering = stage === "answering";
+  const phase = (deep || escalation ? DEEP_STAGE_COPY : STAGE_COPY)[stage];
+  // 没有可信的预计就不写：用时过了预计（深度档 2 分钟）就不再写。
+  const expectTotal = escalation ? Math.ceil((escalatedAt.ms / 1000 + escalation.expectSeconds) / 10) * 10 : null;
+  const estimate = answering ? null : deep ? (elapsed < 120_000 ? "约 1–2 分钟" : null)
+    : expectTotal !== null && elapsed / 1000 < expectTotal ? aboutText(expectTotal) : null;
   return (
     <div className={s.thinkingGroup} data-stage={stage} data-steps={stepped && !answering ? "" : undefined}>
-      {escalation ? <p className={s.thinkingNote} data-testid="conversation-escalation" aria-live="polite">{escalation.notice}</p> : null}
       {thought?.text && thought.seconds === null && stage !== "answering" ? <ThinkingStream text={thought.text} /> : null}
-      <div className={s.thinking} data-testid="conversation-thinking" data-tier={route?.tier} data-stage={stage}>
+      {row ? <div className={s.thinking} data-testid="conversation-thinking" data-tier={route?.tier} data-stage={stage}>
         <span className={s.pulse} aria-hidden />
-        <span role="status">{(deep || escalation ? DEEP_STAGE_COPY : STAGE_COPY)[stage]}</span>
+        {/* 状态区一直在（读屏才念得到后来出现的阶段）；没有阶段时视觉上藏起。 */}
+        <span role="status">{phase ?? ""}</span>
         {detail ? <span className={s.progressDetail} data-testid="conversation-progress">{detail}</span> : null}
-        <span className={s.elapsed}>{seconds(elapsed)}{deep && stage !== "answering" ? " · 预计 1–2 分钟" : ""}</span>
+        <span className={s.elapsed}>{phase || detail ? "· " : ""}{liveClock(elapsed)}{estimate ? ` / ${estimate}` : ""}</span>
         <HeroButton variant="ghost" size="sm" onPress={onStop} aria-label="停止本次回答">
           停止
         </HeroButton>
-      </div>
+      </div> : null}
       {readScope && !answering ? <div className={s.liveScope}><ScopeChip scope={readScope} /></div> : null}
-      {stepped && !answering ? <StepList steps={steps} /> : null}
+      {row && stepped && !answering ? <StepList steps={steps} /> : null}
     </div>
   );
 }

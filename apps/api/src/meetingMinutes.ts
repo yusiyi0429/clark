@@ -4,10 +4,10 @@ import type { TMeetingMinutesFailure, TMeetingMinutesFetchResponse, TMeetingMinu
 import type { PeopleDirectory } from "./peopleDirectory.js";
 import type { FeishuEnv } from "./feishu/config.js";
 import { FeishuApiError } from "./feishu/client.js";
-import { activeUserAccessToken, MINUTES_NOT_READY_CODE, type FeishuMinuteInfo, type FeishuMinutesApi } from "./feishu/minutes.js";
+import { activeUserAccessToken, isMeetingMinute, MINUTES_NOT_READY_CODE, type FeishuMinuteInfo, type FeishuMinutesApi } from "./feishu/minutes.js";
 import { enqueueJob, type JobHandler, type RecurringJob } from "./jobs.js";
 import { MINUTES_GIVE_UP_MS, MINUTES_RECENT_MS, minutesStatusOf } from "./meetingDecisionView.js";
-import { getMeetingRow, meetingColumns, type MeetingRow, type Query } from "./meetingStore.js";
+import { getMeetingRow, meetingColumns, meetingTranscriptFormat, type MeetingRow, type Query } from "./meetingStore.js";
 import { logEvent } from "./observability.js";
 import type { PostMeetingAgent } from "./outcome.js";
 import { buildTranscriptCandidate, executeConfirmTranscriptCandidate, saveTranscriptCandidate, suggestByAttendees } from "./transcriptCandidate.js";
@@ -22,7 +22,7 @@ import { FEISHU_TRANSCRIPT_PARSER_VERSION, parseFeishuTranscriptText } from "./t
  * - 全文取 /artifacts 的 data.transcript（与 lark-cli 读到的逐字相同，来源记下摘要值）；读取失败记 failed 和原因，
  *   原文还没好（not_ready）的照常跟着轮询和事件再取，主持人或创建人也可以「再读一次」或贴妙记链接；
  * - 拿到逐字稿先生成候选（与手动上传同一条路），直接确认并开始解读纪要：对得上人的说话人对到那个人，对不上的保留飞书原名（FR-4.2，不做发言人纠正）；
- * - 用户自己上传了（有候选或逐字稿）的会不再自动去拿，也不覆盖用户上传的内容；
+ * - 已有确认记录或上传候选的，保留原稿，把同一原始场次的妙记作为第二份来源；
  * - 实际参会名单从飞书会议拿（中途加入的也算），拿不到就退回手填的参会人；
  * - 在飞书约上的会跟着飞书会议真实开始和结束（「会议开始 / 会议结束」事件）：开始记 started_at，结束记 ended_at 并马上排一次轮询；
  *   到点没开始的不进等妙记（页面上是还没开、过了预约结束 30 分钟是没开成），但预约结束后 2 小时内照样找妙记，防事件丢了、会其实开过。
@@ -91,10 +91,6 @@ function isTransient(error: unknown): boolean {
   return !(error instanceof FeishuApiError) || (error.httpStatus ?? 0) >= 500;
 }
 
-/** 会议已有飞书会议号、妙记来自别的飞书会议：不自动挂。 */
-const sourceConflicts = (meeting: Pick<MeetingRow, "feishu_meeting_id">, minuteMeetingId: string | null) =>
-  Boolean(meeting.feishu_meeting_id && minuteMeetingId && minuteMeetingId !== meeting.feishu_meeting_id);
-
 /** 妙记链接里的 token：只认 https://<租户>.feishu.cn/minutes/<token>，token 只收小写字母和数字；不对时为 null。 */
 function minuteTokenFromUrl(url: string): string | null {
   let parsed: URL;
@@ -125,6 +121,7 @@ export function minuteFromEvent(payload: Record<string, unknown>): { minuteToken
   const token = event.minute_token ?? (event.minute as { token?: unknown } | undefined)?.token;
   if (typeof token !== "string" || !token) return null;
   const source = (event.generated_source ?? event.minute_source) as { source_type?: unknown; source_entity_id?: unknown } | undefined;
+  if (source?.source_type && source.source_type !== "meeting") return null;
   return { minuteToken: token, feishuMeetingId: typeof source?.source_entity_id === "string" && source.source_entity_id ? source.source_entity_id : null };
 }
 
@@ -163,12 +160,12 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
   const tokenFor = (personId: string) => (feishu ? activeUserAccessToken(q, feishu.env, personId, now()) : Promise.resolve(null));
 
   /** 拿妙记用谁的授权：先主持人，再建会的人（没记或同一人时只有主持人）；只留关联了飞书、授权还能用的。 */
-  async function fetchers(meeting: { lead_dri_id: string; created_by?: string | null }): Promise<{ openId: string; token: string }[]> {
-    const found: { openId: string; token: string }[] = [];
+  async function fetchers(meeting: { lead_dri_id: string; created_by?: string | null }): Promise<{ personId: string; openId: string; token: string }[]> {
+    const found: { personId: string; openId: string; token: string }[] = [];
     for (const personId of new Set([meeting.lead_dri_id, meeting.created_by ?? meeting.lead_dri_id])) {
       const person = await identity(personId);
       const token = person ? await tokenFor(personId) : null;
-      if (person && token) found.push({ openId: person.open_id, token });
+      if (person && token) found.push({ personId, openId: person.open_id, token });
     }
     return found;
   }
@@ -226,7 +223,6 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
     return [...await waitingMeetings(), ...unstarted];
   }
 
-  /** 实际参会名单：飞书会议的参会人 open_id 换成天枢的人；一个都对不上时不改（退回手填名单）。 */
   /** 飞书会议的实际参会人：认得的（连过飞书的）换成 person_id，认不得的只记个数（排除法要求名单里每个人都认得）。 */
   async function actualAttendees(token: string, feishuMeetingId: string): Promise<{ personIds: string[]; unknown: number } | null> {
     if (!feishu) return null;
@@ -261,18 +257,86 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
     }
   }
 
+  /** 原始场次吻合时挂上第二份来源；人工记录/本机候选的内容和版本不动。 */
+  async function linkSupplement(meeting: MeetingRow, minute: FeishuMinuteInfo, sourceId: string, token: string): Promise<void> {
+    const linked = await q(`UPDATE meetings SET minute_token=$2, minute_source_meeting_id=$3, minute_binding='source_id'
+      WHERE id=$1 AND feishu_live_meeting_id=$3 AND status<>'cancelled'
+        AND (minute_token IS NULL OR minute_token=$2) AND (transcript IS NOT NULL OR transcript_candidate IS NOT NULL)
+        AND (minute_token=$2 OR COALESCE(${meetingTranscriptFormat()},transcript_candidate#>>'{source,format}','') <> 'feishu_minutes')
+        AND NOT EXISTS (SELECT 1 FROM meetings m WHERE m.id<>$1 AND m.status<>'cancelled' AND m.feishu_live_meeting_id=$3)
+        AND NOT EXISTS (SELECT 1 FROM meetings m WHERE m.id<>$1 AND m.minute_token=$2)`, [meeting.id, minute.token, sourceId]);
+    if (!linked.rowCount) return;
+    const attendees = await actualAttendees(token, sourceId);
+    if (attendees) await q("UPDATE meetings SET attendees_actual=$2::jsonb WHERE id=$1 AND minute_token=$3", [meeting.id, JSON.stringify(attendees.personIds), minute.token]);
+    await q("UPDATE feishu_minute_inbox SET status='attached',meeting_id=$1,updated_at=now() WHERE minute_token=$2 AND status='pending'", [meeting.id, minute.token]);
+  }
+
+  function readFailure(error: unknown) {
+    const reason = minutesFailureOf(error);
+    if (reason === "no_permission") return { status: 403, code: "FEISHU_NO_PERMISSION", message: "你在飞书里没有这份妙记的权限" } as const;
+    if (reason === "not_ready") return { status: 409, code: "MINUTES_NOT_READY", message: "妙记还在生成" } as const;
+    if (reason === "not_found") return { status: 404, code: "MINUTES_NOT_FOUND", message: "飞书里找不到这份妙记" } as const;
+    return { status: 502, code: "FEISHU_UNAVAILABLE", message: "飞书暂时读不到" } as const;
+  }
+
+  // List polling checks metadata only. Cache with the same current user token for a short time; opening text always goes back to the source.
+  const metadataCache = new Map<string, { token: string; until: number; minute: FeishuMinuteInfo }>();
+  async function checkMinute(personId: string, minuteToken: string, ownerOnly = false, forListing = false) {
+    if (!feishu) return { error: { status: 503, code: "FEISHU_UNAVAILABLE", message: "飞书未连接" } } as const;
+    const token = await tokenFor(personId);
+    if (!token) return { error: { status: 403, code: "FEISHU_NOT_CONNECTED", message: "需要连接你的飞书账号" } } as const;
+    try {
+      const key = JSON.stringify([personId,minuteToken]);
+      const hit = forListing && metadataCache.get(key);
+      const at = now().getTime();
+      const minute = hit && hit.token === token && hit.until > at ? hit.minute : await feishu.api.getMinute(token, minuteToken);
+      if (ownerOnly && (!minute.ownerOpenId || minute.ownerOpenId !== (await identity(personId))?.open_id))
+        return { error: { status: 404, code: "MINUTE_NOT_FOUND", message: "妙记不存在" } } as const;
+      if (forListing && (!hit || hit.token !== token || hit.until <= at)) {
+        if (metadataCache.size >= 1000) metadataCache.delete(metadataCache.keys().next().value!);
+        metadataCache.set(key, { token, until: at + 60_000, minute });
+      }
+      return { minute, token };
+    } catch (error) { return { error: readFailure(error) }; }
+  }
+
+  /** 每次用请求人自己的用户授权取正文。源文不回退到主持人曾经读到的副本。 */
+  async function readMinuteFor(personId: string, minuteToken: string, ownerOnly = false) {
+    const access = await checkMinute(personId, minuteToken, ownerOnly);
+    if (access.error) return { error: access.error };
+    try {
+      const text = await readFullText(feishu!.api, "partner", access.token, minuteToken);
+      if (!text.trim()) return { error: readFailure(new FeishuApiError(MINUTES_NOT_READY_CODE, "逐字稿尚未就绪")) };
+      return { title: access.minute.title || "飞书会议", text, sourceUrl: access.minute.url ?? (feishuWebOrigin ? `${feishuWebOrigin}/minutes/${encodeURIComponent(minuteToken)}` : null) };
+    } catch (error) { return { error: readFailure(error) }; }
+  }
+
+  async function checkMinuteFor(personId: string, minuteToken: string, ownerOnly = false, forListing = false) {
+    const access = await checkMinute(personId, minuteToken, ownerOnly, forListing);
+    return access.error ? { error: access.error } : { sourceUrl: access.minute.url ?? (feishuWebOrigin ? `${feishuWebOrigin}/minutes/${encodeURIComponent(minuteToken)}` : null) };
+  }
+
   /**
    * 拿到妙记：先把妙记记到这场会上（同一份妙记只对一场会；贴链接时可以换掉原来对上的那份）→ 读逐字稿全文 → 记下飞书会议与实际参会名单
    * → 生成候选（来源带地址、标题、摘要值和读取时刻）→ 直接确认并解读纪要。读不到或解析不了记 failed 和原因；
    * 自动拉取遇到临时故障不改状态（下一轮再取）；读的过程中用户自己上传了候选的，不覆盖。候选没能写进去时把妙记还回去，不让它锁在这场会上。
    */
   async function ingest(api: FeishuMinutesApi, meeting: MeetingRow, minute: FeishuMinuteInfo, token: string, feishuMeetingId: string | null,
-    { replace = false, manual = false }: { replace?: boolean; manual?: boolean } = {}): Promise<IngestResult> {
+    { replace = false, manual = false, ownerSelected = false }: { replace?: boolean; manual?: boolean; ownerSelected?: boolean } = {}): Promise<IngestResult> {
+    const sourceId = feishuMeetingId ?? minute.meetingId;
+    const checked = meeting.minute_token === minute.token && (meeting.minute_binding === "owner" || meeting.minute_binding === "source_id");
+    // Only the live calendar/VC event is meeting-side evidence. An earlier poll copied its guess into feishu_meeting_id.
+    const sameSource = Boolean(sourceId && sourceId === meeting.feishu_live_meeting_id && (!minute.meetingId || sourceId === minute.meetingId));
+    if (!checked && !ownerSelected && !sameSource) return { kind: "taken" };
     const claimed = await q(
-      `UPDATE meetings SET minute_token = $2, feishu_meeting_id = COALESCE($3, feishu_meeting_id)
+      `UPDATE meetings SET minute_token = $2, feishu_meeting_id = COALESCE(feishu_meeting_id, $3),
+          minute_source_meeting_id = COALESCE($3, minute_source_meeting_id),
+          minute_binding = CASE WHEN $5 OR (minute_token=$2 AND minute_binding='owner') THEN 'owner' ELSE 'source_id' END
         WHERE id = $1 AND (minute_token IS NULL OR minute_token = $2 OR $4)
+          AND status <> 'cancelled' AND ($5 OR (minute_token=$2 AND minute_binding='owner') OR
+            (feishu_live_meeting_id=$3 AND NOT EXISTS(SELECT 1 FROM meetings other WHERE other.id<>$1 AND other.status<>'cancelled' AND other.feishu_live_meeting_id=$3)))
           AND NOT EXISTS (SELECT 1 FROM meetings other WHERE other.minute_token = $2 AND other.id <> $1)`,
-      [meeting.id, minute.token, feishuMeetingId ?? minute.meetingId, replace],
+      [meeting.id, minute.token, sourceId, replace, ownerSelected],
     );
     if (!claimed.rowCount) return { kind: "taken" };
     // 待整理里有这份妙记的：已挂上，不再提示。
@@ -294,7 +358,7 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
     if (!parsed.ok) return fail(meeting.id, "fetch_failed", `妙记逐字稿解析失败：${parsed.error.message}`);
     const meetingRef = feishuMeetingId ?? minute.meetingId;
     const attendees = meetingRef ? await actualAttendees(token, meetingRef) : null;
-    if (attendees?.personIds.length) await q("UPDATE meetings SET attendees_actual = $2::jsonb WHERE id = $1", [meeting.id, JSON.stringify(attendees.personIds)]);
+    if (attendees) await q("UPDATE meetings SET attendees_actual = $2::jsonb WHERE id = $1 AND minute_token=$3", [meeting.id, JSON.stringify(attendees.personIds), minute.token]);
 
     const bytes = Buffer.from(text, "utf8");
     const title = minute.title || meeting.title;
@@ -305,7 +369,7 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
       sha256: createHash("sha256").update(bytes).digest("hex"),
       parserVersion: FEISHU_TRANSCRIPT_PARSER_VERSION,
       timeAnchor: parsed.startedAt ?? minute.createdAt?.toISOString() ?? meeting.scheduled_at.toISOString(),
-      ...(feishuWebOrigin ? { url: `${feishuWebOrigin}/minutes/${encodeURIComponent(minute.token)}` } : {}),
+      ...((minute.url || feishuWebOrigin) ? { url: minute.url ?? `${feishuWebOrigin}/minutes/${encodeURIComponent(minute.token)}` } : {}),
       title: title.slice(0, 300),
       contentHash: transcriptContentHash(text),
       capturedAt,
@@ -314,7 +378,13 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
     const candidate = suggestByAttendees(buildTranscriptCandidate(parsed.transcript.turns, people, source), attendees, people);
     const saved = await saveTranscriptCandidate(pool, meeting.id, candidate, undefined, { keepExisting: !manual });
     if (!("row" in saved)) {
-      await q("UPDATE meetings SET minute_token = $3 WHERE id = $1 AND minute_token = $2", [meeting.id, minute.token, meeting.minute_token]);
+      const current = await getMeetingRow(q, meeting.id);
+      // A concurrent ingestion may have confirmed this source, or a local recording may have won the primary slot.
+      // The confirmed record keeps its version, and the proven Feishu source stays available on that meeting.
+      if (current?.status !== "cancelled" && current?.minute_token === minute.token
+        && (current.transcript || current.transcript_candidate)) return { kind: "ready" };
+      await q("UPDATE meetings SET minute_token = $3, minute_binding=$4, minute_source_meeting_id=$5 WHERE id = $1 AND minute_token = $2",
+        [meeting.id, minute.token, meeting.minute_token, meeting.minute_binding, meeting.minute_source_meeting_id]);
       // 妙记还回去了、也没有别的会挂着：回到待整理。
       await q(`UPDATE feishu_minute_inbox SET status = 'pending', meeting_id = NULL, updated_at = now()
         WHERE minute_token = $1 AND status = 'attached' AND NOT EXISTS (SELECT 1 FROM meetings WHERE minute_token = $1)`, [minute.token]);
@@ -335,12 +405,13 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
   }
 
   /** 按 token 读（再读一次、贴链接）：先取妙记详情（标题、开会时刻），谁的授权先读得到就用谁的，再走 ingest。 */
-  async function ingestByToken(api: FeishuMinutesApi, meeting: MeetingRow, readers: { token: string }[], minuteToken: string, replace: boolean): Promise<IngestResult> {
+  async function ingestByToken(api: FeishuMinutesApi, meeting: MeetingRow, readers: { token: string; personId?: string; openId?: string }[], minuteToken: string, replace: boolean, selectedBy?: string): Promise<IngestResult> {
     let lastError: unknown;
-    for (const { token } of readers) {
+    for (const { token, personId, openId } of readers) {
       try {
         const minute = await api.getMinute(token, minuteToken);
-        return ingest(api, meeting, minute, token, minute.meetingId, { replace, manual: true });
+        const ownerSelected = Boolean(selectedBy && selectedBy === personId && openId && openId === minute.ownerOpenId);
+        return ingest(api, meeting, minute, token, minute.meetingId, { replace, manual: true, ownerSelected });
       } catch (error) {
         lastError = error;
       }
@@ -348,21 +419,14 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
     return fail(meeting.id, minutesFailureOf(lastError), (lastError as Error).message);
   }
 
-  /** 妙记和会议对得上：同一个主持人名下，开始时刻离计划开始最近（3 小时以内）。 */
-  function closest(meeting: MeetingRow, minutes: FeishuMinuteInfo[]): FeishuMinuteInfo | null {
-    const start = meeting.scheduled_at.getTime();
-    const scored = minutes
-      .filter((minute) => minute.createdAt && Math.abs(minute.createdAt.getTime() - start) <= MATCH_WINDOW_MS)
-      .sort((a, b) => Math.abs(a.createdAt!.getTime() - start) - Math.abs(b.createdAt!.getTime() - start));
-    return scored[0] ?? null;
-  }
-
-  /** 这个人名下、这场会前后的妙记里开始时刻最近的一份（已对到别的会的、来自别的飞书会议的不算）。 */
+  /** 时间窗口用于发现，原始场次标识或所有者的明确选择决定归属。 */
   async function findMinute(api: FeishuMinutesApi, meeting: MeetingRow, openId: string, token: string): Promise<FeishuMinuteInfo | null> {
     const listed = await api.listMinutes(token, { openId }, {
       start: new Date(meeting.scheduled_at.getTime() - MATCH_WINDOW_MS), end: new Date(meeting.ends_at.getTime() + MATCH_WINDOW_MS) });
     const used = new Set((await q("SELECT minute_token FROM meetings WHERE minute_token IS NOT NULL AND id <> $1", [meeting.id])).rows.map((row) => row.minute_token as string));
-    return closest(meeting, listed.filter((item) => !used.has(item.token) && !sourceConflicts(meeting, item.meetingId)));
+    return listed.find((item) => !used.has(item.token) && isMeetingMinute(item)
+      && (item.ownerOpenId === null || item.ownerOpenId === openId)
+      && (item.meetingId === meeting.feishu_live_meeting_id || (item.token === meeting.minute_token && meeting.minute_binding === "owner"))) ?? null;
   }
 
   /** 按授权顺序找：谁名下先找到就用谁的授权；都没找到时，只有每个人都出错才带上错误（否则算妙记还没生成）。 */
@@ -386,6 +450,14 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
   async function poll(): Promise<void> {
     if (!feishu) return;
     await pollMeetings(await searchedMeetings());
+    // 收到本机记录后，漏掉的妙记事件仍由轮询补上。不会因此覆盖原先的记录。
+    const recent = (await q(`SELECT ${meetingColumns()} FROM meetings WHERE status <> 'cancelled' AND minute_token IS NULL
+      AND feishu_live_meeting_id IS NOT NULL AND (transcript IS NOT NULL OR transcript_candidate IS NOT NULL)
+      AND COALESCE(ended_at,ends_at) BETWEEN $1 AND $2`, [new Date(now().getTime()-MINUTES_RECENT_MS), now()])).rows as MeetingRow[];
+    for (const meeting of recent) {
+      const found = await findFirst(feishu.api, meeting, await fetchers(meeting));
+      if (found.minute?.meetingId) await linkSupplement(meeting, found.minute, found.minute.meetingId, found.token);
+    }
   }
 
   /** 刚开完的会（开始等妙记 15 分钟以内）：每 30 秒单独找一次，妙记一般会后 1–3 分钟就有；找到了、过了 15 分钟就回到 5 分钟一次。 */
@@ -416,23 +488,28 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
     }
   }
 
-  /**
-   * 「妙记生成」事件：先按飞书会议 id 对；对不上就拿每场 waiting 的会的主持人（再是建会的人）授权去读这份妙记，
-   * 读得到、属于这个人、开始时刻对得上、不是别的飞书会议的就是它。
-   */
+  /** 妙记事件通过 VC 会议标识关联已知会议。没有明确归属的妙记留给所有者。 */
   async function onMinuteGenerated(payload: Record<string, unknown>): Promise<void> {
     if (!feishu) return;
     const found = minuteFromEvent(payload);
     if (!found) return;
     const byFeishuId = found.feishuMeetingId
-      ? (await q(`SELECT ${meetingColumns()} FROM meetings WHERE feishu_meeting_id = $1 AND transcript IS NULL AND transcript_candidate IS NULL LIMIT 1`, [found.feishuMeetingId])).rows[0] as MeetingRow | undefined
+      ? (await q(`SELECT ${meetingColumns()} FROM meetings WHERE feishu_live_meeting_id = $1 AND status <> 'cancelled' LIMIT 2`, [found.feishuMeetingId])).rows as MeetingRow[]
       : undefined;
-    const candidates = byFeishuId ? [byFeishuId] : await waitingMeetings();
+    if (byFeishuId && byFeishuId.length > 1) return;
+    const candidates = byFeishuId?.length ? byFeishuId : await waitingMeetings();
     for (const meeting of candidates) {
       for (const { openId, token } of await fetchers(meeting)) {
         const minute = await feishu.api.getMinute(token, found.minuteToken).catch(() => null);
-        if (!minute || (minute.ownerOpenId && minute.ownerOpenId !== openId)) continue;
-        if (!byFeishuId && (!closest(meeting, [minute]) || sourceConflicts(meeting, minute.meetingId ?? found.feishuMeetingId))) break;
+        if (!minute || (!byFeishuId?.length && minute.ownerOpenId && minute.ownerOpenId !== openId)) continue;
+        if (found.feishuMeetingId && minute.meetingId && found.feishuMeetingId !== minute.meetingId) continue;
+        const sourceId = minute.meetingId ?? found.feishuMeetingId;
+        if (!sourceId || sourceId !== meeting.feishu_live_meeting_id || (minute.sourceType && minute.sourceType !== "meeting")) continue;
+        if (meeting.transcript || meeting.transcript_candidate) {
+          if (meeting.minute_token === minute.token && (meeting.minute_binding === "source_id" || meeting.minute_binding === "owner")) return;
+          await linkSupplement(meeting, minute, sourceId, token);
+          return;
+        }
         const result = await ingest(feishu.api, meeting, { ...minute, meetingId: minute.meetingId ?? found.feishuMeetingId }, token, found.feishuMeetingId);
         if (result.kind !== "taken") return;
         break;
@@ -442,11 +519,16 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
 
   /** 事件对上的会（还没开完的 scheduled 会）：先按日程 id，对不上再按入会链接（https://vc.feishu.cn/j/<会议号>）的会议号；都对不上为 null。 */
   async function liveMeetingId(found: FeishuMeetingEvent): Promise<string | null> {
-    const byCalendar = found.calendarEventId
-      ? (await q("SELECT id FROM meetings WHERE feishu_event_id = $1 AND status = 'scheduled' LIMIT 1", [found.calendarEventId])).rows[0] : undefined;
-    if (byCalendar || !found.meetingNo) return (byCalendar?.id as string | undefined) ?? null;
-    return ((await q("SELECT id FROM meetings WHERE substring(feishu_event_join_url from '/j/([0-9]+)') = $1 AND status = 'scheduled' LIMIT 1",
-      [found.meetingNo])).rows[0]?.id as string | undefined) ?? null;
+    const lookup = async (test: string, id: string) => (await q(`SELECT id FROM meetings
+      WHERE status='scheduled' AND ${test}
+        AND ($2::text IS NULL OR feishu_live_meeting_id IS NULL OR feishu_live_meeting_id=$2) LIMIT 2`, [id,found.feishuMeetingId])).rows;
+    if (found.calendarEventId) {
+      const calendar = await lookup("feishu_event_id=$1", found.calendarEventId);
+      if (calendar.length) return calendar.length === 1 ? calendar[0].id : null;
+    }
+    if (!found.meetingNo) return null;
+    const rooms = await lookup("substring(feishu_event_join_url from '/j/([0-9]+)')=$1", found.meetingNo);
+    return rooms.length === 1 ? rooms[0].id : null;
   }
 
   /**
@@ -459,7 +541,7 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
     if (!found || !meetingId) return;
     await q(`UPDATE meetings SET minutes_status = 'none', minutes_waiting_since = NULL, minutes_failure = NULL, minutes_error = NULL
       WHERE id = $1 AND started_at IS NULL AND minutes_status <> 'none' AND transcript IS NULL AND transcript_candidate IS NULL`, [meetingId]);
-    await q("UPDATE meetings SET started_at = COALESCE(started_at, $2), feishu_meeting_id = COALESCE($3, feishu_meeting_id) WHERE id = $1",
+    await q("UPDATE meetings SET started_at = COALESCE(started_at, $2), feishu_meeting_id = COALESCE($3, feishu_meeting_id), feishu_live_meeting_id=COALESCE($3,feishu_live_meeting_id), minute_binding=CASE WHEN minute_token IS NOT NULL AND $3=minute_source_meeting_id AND minute_binding='unverified' THEN 'source_id' ELSE minute_binding END WHERE id = $1",
       [meetingId, found.startTime ?? now(), found.feishuMeetingId]);
   }
 
@@ -472,7 +554,8 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
     const meetingId = found && await liveMeetingId(found);
     if (!found || !meetingId) return;
     await q(
-      `UPDATE meetings SET ended_at = COALESCE(ended_at, $2), feishu_meeting_id = COALESCE($3, feishu_meeting_id),
+      `UPDATE meetings SET ended_at = COALESCE(ended_at, $2), feishu_meeting_id = COALESCE($3, feishu_meeting_id), feishu_live_meeting_id=COALESCE($3,feishu_live_meeting_id),
+         minute_binding=CASE WHEN minute_token IS NOT NULL AND $3=minute_source_meeting_id AND minute_binding='unverified' THEN 'source_id' ELSE minute_binding END,
          minutes_waiting_since = CASE WHEN ended_at IS NULL AND minutes_status = 'waiting' THEN $2 ELSE minutes_waiting_since END
        WHERE id = $1`,
       [meetingId, found.endTime ?? now(), found.feishuMeetingId],
@@ -483,20 +566,24 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
   /** 主持人和建会的人（没记时按主持人算）能再读、贴链接；别人一律当会议不存在。 */
   async function fetchableMeeting(meetingId: string, viewerId: string): Promise<MeetingRow | null> {
     const meeting = await getMeetingRow(q, meetingId);
-    return meeting && (meeting.lead_dri_id === viewerId || (meeting.created_by ?? meeting.lead_dri_id) === viewerId) ? meeting : null;
+    return meeting && (meeting.lead_dri_id === viewerId || (meeting.created_by ?? meeting.lead_dri_id) === viewerId)
+      && !(await q("SELECT 1 FROM thread_members WHERE object_type='meeting' AND object_id=$1 AND person_id=$2 AND left_at IS NOT NULL",[meetingId,viewerId])).rowCount ? meeting : null;
   }
 
   /** 妙记已经对到别的会上：说出是哪场会（会名和开会时刻），对不上就只说已经用过。 */
-  async function takenMessage(meetingId: string, minuteToken: string | undefined): Promise<string> {
-    const other = minuteToken
-      ? (await q("SELECT title, scheduled_at FROM meetings WHERE minute_token = $1 AND id <> $2 LIMIT 1", [minuteToken, meetingId])).rows[0] as { title: string; scheduled_at: Date } | undefined
+  async function takenMessage(meetingId: string, minuteToken?: string, viewerId?: string): Promise<string> {
+    const other = minuteToken && viewerId
+      ? (await q(`SELECT title, scheduled_at FROM meetings m WHERE minute_token=$1 AND id<>$2 AND status<>'cancelled'
+        AND (lead_dri_id=$3 OR created_by=$3 OR attendees_actual ? $3 OR (attendees_actual IS NULL AND $3=ANY(invited_person_ids)))
+        AND NOT EXISTS(SELECT 1 FROM thread_members t WHERE t.object_type='meeting' AND t.object_id=m.id::text AND t.person_id=$3 AND t.left_at IS NOT NULL) LIMIT 1`,
+        [minuteToken,meetingId,viewerId])).rows[0] as { title: string; scheduled_at: Date } | undefined
       : undefined;
     return other ? `这份妙记已经用在「${other.title}」（${monthDayTime(other.scheduled_at)}）上了，一份妙记只能对一场会` : "这份妙记已经用在别的会上了，一份妙记只能对一场会";
   }
 
-  async function respond(meetingId: string, result: IngestResult, minuteToken?: string): Promise<MinutesFetchResult> {
+  async function respond(meetingId: string, result: IngestResult, minuteToken?: string, viewerId?: string): Promise<MinutesFetchResult> {
     if (result.kind === "rejected") return { error: { status: result.status, code: result.code, message: result.message } };
-    if (result.kind === "taken") return { error: { status: 409, code: "MINUTE_TAKEN", message: await takenMessage(meetingId, minuteToken) } };
+    if (result.kind === "taken") return { error: { status: 409, code: "MINUTE_TAKEN", message: await takenMessage(meetingId, minuteToken, viewerId) } };
     const row = (await getMeetingRow(q, meetingId))!;
     const status = minutesStatusOf(row);
     return { minutesStatus: status, minutesFailure: status === "failed" ? row.minutes_failure ?? null : null };
@@ -530,7 +617,7 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
     if (meeting.status !== "scheduled") return { error: NOT_SCHEDULED };
     const readers = await fetchers(meeting);
     if (!feishu || !readers.length) return respond(meeting.id, await fail(meeting.id, "no_permission", NO_AUTH));
-    return respond(meeting.id, await ingestByToken(feishu.api, meeting, readers, minuteToken, true), minuteToken);
+    return respond(meeting.id, await ingestByToken(feishu.api, meeting, readers, minuteToken, true, viewerId), minuteToken, viewerId);
   }
 
   /**
@@ -539,11 +626,16 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
    */
   async function ingestForOwner(meetingId: string, minuteToken: string, ownerId: string): Promise<"ready" | "not_ready" | "fetch_failed" | "failed" | "taken" | "rejected"> {
     const meeting = await getMeetingRow(q, meetingId);
-    if (!meeting || meeting.status !== "scheduled" || meeting.transcript || meeting.transcript_candidate || meeting.minute_token !== minuteToken) return "rejected";
+    if (!meeting || meeting.status === "cancelled" || (meeting.minute_binding !== "owner" && meeting.minute_binding !== "source_id") || meeting.minute_token !== minuteToken) return "rejected";
     const token = await tokenFor(ownerId);
     if (!feishu || !token) {
       await fail(meetingId, "no_permission", "妙记所有者没有可用的飞书授权");
       return "failed";
+    }
+    if (meeting.transcript || meeting.transcript_candidate) {
+      const actual = meeting.minute_source_meeting_id && await actualAttendees(token,meeting.minute_source_meeting_id);
+      if (actual) await q("UPDATE meetings SET attendees_actual=$2::jsonb WHERE id=$1 AND minute_token=$3",[meetingId,JSON.stringify(actual.personIds),minuteToken]);
+      return "ready";
     }
     const result = await ingestByToken(feishu.api, meeting, [{ token }], minuteToken, false);
     if (result.kind !== "failed") return result.kind;
@@ -577,7 +669,8 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
   async function transcriptFor(meetingId: string, personId: string): Promise<TranscriptRead | { error: { status: 403 | 404 | 409 | 502 | 503; code: string; message: string } }> {
     const meeting = await getMeetingRow(q, meetingId);
     const minuteToken = meeting?.minute_token;
-    if (!meeting || !minuteToken) return { error: { status: 404, code: "NO_FEISHU_MINUTES", message: "这场会没有飞书妙记" } };
+    if (!meeting || !minuteToken || meeting.status === "cancelled" || (meeting.minute_binding !== "source_id" && meeting.minute_binding !== "owner"))
+      return { error: { status: 404, code: "NO_FEISHU_MINUTES", message: "这场会没有已核对的飞书妙记" } };
     if (!feishu) return { error: { status: 503, code: "FEISHU_UNAVAILABLE", message: "飞书没接" } };
     const token = await tokenFor(personId);
     if (!token) return { error: { status: 403, code: "FEISHU_NOT_CONNECTED", message: "提问人没有可用的飞书授权" } };
@@ -591,7 +684,8 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
       if (failure === "not_found") return { error: { status: 404, code: "MINUTES_NOT_FOUND", message: "飞书里找不到这份妙记" } };
       return { error: { status: 502, code: "FEISHU_UNAVAILABLE", message: "飞书暂时读不到" } };
     }
-    const source = meeting.transcript?.source;
+    const primary = meeting.transcript?.source;
+    const source = primary?.format === "feishu_minutes" ? primary : null;
     return {
       meetingId,
       source: { url: source?.url ?? (feishuWebOrigin ? `${feishuWebOrigin}/minutes/${encodeURIComponent(minuteToken)}` : null), title: source?.title ?? meeting.title },
@@ -602,6 +696,8 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
   }
 
   return {
+    checkMinuteFor,
+    readMinuteFor,
     markEnded,
     poll,
     pollRecent,

@@ -150,6 +150,11 @@ export type MeetingCardConfirmDeps = {
   view: (meetingId: string, viewer: Viewer) => Promise<{ view: TMeetingCardView } | { error: { status: number; code: string; message: string } }>;
   /** 记录正文能不能写进本体（等斯一答复，MEETING_WORLD_RECORD_TEXT，默认不能）：不能时会议事件只带已确认的决策和行动项，没有已确认决策的会不写。 */
   recordText?: boolean;
+  /**
+   * 会议写本体整个关掉了（MEETING_WORLD_WRITES_OFF，会后链切到 Nexus 以后）：这时 meetingWorld、objectSync 都没有，读挂点的 world 还在。
+   * 整卡确认、修改不管选没选写入都按「不写入」记（不然回执停在「写入中」却没有任务去写）；重试写入没有可重试的。
+   */
+  writesOff?: boolean;
   now?: () => Date;
 };
 
@@ -208,7 +213,8 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
   const logReadFailure = (meetingId: string, error: unknown) =>
     logEvent({ event: "meeting_card.world_read", objectRef: `meeting:${meetingId}`, status: "failed", errorCode: (error as { code?: string }).code ?? "WORLD_READ_FAILED" });
 
-  async function confirm(meetingId: string, viewer: Viewer, input: TMeetingCardConfirmRequest): Promise<ConfirmResult> {
+  async function confirm(meetingId: string, viewer: Viewer, request: TMeetingCardConfirmRequest): Promise<ConfirmResult> {
+    const input = deps.writesOff ? { ...request, writeToWorld: false } : request;
     if (!UUID_PATTERN.test(meetingId)) return NOT_FOUND;
     const meeting = await getMeetingRow(q, meetingId);
     if (!meeting || !isHostOrCreator(meeting, viewer.personId)) return NOT_FOUND;
@@ -481,7 +487,7 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
     const meeting = await getMeetingRow(q, meetingId);
     if (!meeting || !isHostOrCreator(meeting, viewer.personId)) return NOT_FOUND;
     const current = await currentConfirmation(q, meetingId);
-    if (!current || !await requeue(meetingId, current.revision, ["failed", "pending"])) {
+    if (deps.writesOff || !current || !await requeue(meetingId, current.revision, ["failed", "pending"])) {
       return { error: { status: 409, code: "NOTHING_TO_RETRY", message: "当前确认版没有要重试的写入" } };
     }
     return { view: await latestView(meetingId, viewer) };

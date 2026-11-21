@@ -4,7 +4,9 @@ import { listPlanItems, milestoneDate, type PlanItem } from "./monthPlan.js";
 import { companyPeriod } from "./monthlyPlans.js";
 import { listPlanMarks } from "./planMarks.js";
 import { listUnplacedTasks } from "./tasks.js";
-import { readPlanTasks, type PlanTaskSource } from "./planTasks.js";
+import { readPlanTasks, type PlanTaskMission, type PlanTaskSource } from "./planTasks.js";
+import { effectiveDueDates } from "./taskDueDates.js";
+import { deliverableStatuses } from "./taskDeliverables.js";
 import { isWorkday, monthDays, weekOf } from "./workCalendar.js";
 import { shanghaiDate } from "./workdays.js";
 
@@ -13,7 +15,7 @@ const MISSION_COLORS = ["#2f63b0", "#2f8a7a", "#8a5cc2", "#c26a2f"];
 /** 签定关口开头的日期（YYYY-MM-DD 或 M/D）连同后面的空白和分隔符（：: 、 -）。 */
 const LEADING_DATE = /^(?:\d{4}-\d{2}-\d{2}|\d{1,2}\/\d{1,2})[\s：:、-]*/;
 
-type MissionRow = { id: string; code: string; title: string; card_id: string | null; milestones: string[];
+export type MissionRow = { id: string; code: string; title: string; card_id: string | null; milestones: string[];
   source_revision: number; world_scope_id: string | null; world_object_id: string | null; world_domain_id: string | null;
   world_status: string | null; world_status_label: string | null; world_read_at: Date | null; world_gaps: string[] };
 
@@ -21,7 +23,7 @@ type MissionRow = { id: string; code: string; title: string; card_id: string | n
  * 本人这个月的 Mission（不含占位的），不要求任务卡已确认；本月一个都没有时回退到之前最近一个有 Mission 的月份。
  * 这个月已经从本体载入过（表里有本月的本体行）就不回退：本体里没有本人的就显示空，不拿上个月顶（斯一 10/24）。
  */
-async function ownMissions(q: Query, ownerId: string, current: string): Promise<{ period: string; fallbackFrom: string | null; rows: MissionRow[] }> {
+export async function ownMissions(q: Query, ownerId: string, current: string): Promise<{ period: string; fallbackFrom: string | null; rows: MissionRow[] }> {
   const select = `SELECT id,code,title,personal_mission_card_id::text AS card_id,milestones,source_revision,
       world_scope_id,world_object_id,world_domain_id,world_status,world_status_label,world_read_at,world_gaps
     FROM missions WHERE owner_id=$1 AND period=$2 AND NOT placeholder ORDER BY code`;
@@ -33,6 +35,10 @@ async function ownMissions(q: Query, ownerId: string, current: string): Promise<
   if (!previous) return { period: current, fallbackFrom: null, rows: [] };
   return { period: previous, fallbackFrom: previous, rows: (await q(select, [ownerId, previous])).rows as MissionRow[] };
 }
+
+/** 读 Task 用的 Mission：从本体载入的带本体身份。 */
+export const planTaskMissions = (rows: MissionRow[]): PlanTaskMission[] => rows.map((m) => ({ id: m.id, code: m.code,
+  world: m.world_scope_id && m.world_object_id && m.world_domain_id ? { scopeId: m.world_scope_id, objectId: m.world_object_id, domainId: m.world_domain_id } : null }));
 
 /** 落在 month 里的签定关口；「M/D」按 Mission 所在月份（period）的年份解析。 */
 function gatesIn(rows: MissionRow[], period: string, month: string): THomePlanGate[] {
@@ -93,14 +99,16 @@ export async function readHomePlan(q: Query, person: { personId: string }, now: 
   // 月历按真实的本月画，关口只留落在本月里的；Mission 回退时也一样。
   const gates = gatesIn(rows, period, current);
   const [tasks, items, marks, unplaced] = await Promise.all([
-    readPlanTasks(deps.planTasks, rows.map((m) => ({ id: m.id, code: m.code,
-      world: m.world_scope_id && m.world_object_id && m.world_domain_id ? { scopeId: m.world_scope_id, objectId: m.world_object_id, domainId: m.world_domain_id } : null }))),
+    readPlanTasks(deps.planTasks, planTaskMissions(rows)),
     listPlanItems(q, person.personId, rows.map((m) => m.id), windowStart, windowEnd, deps.names, { period, doneFrom: `${current}-01`, doneTo: monthEnd }),
     listPlanMarks(q, person.personId, rows.map((m) => m.id)),
     listUnplacedTasks(q, person.personId, deps.names),
   ]);
   const shown = new Set(rows.map((m) => m.id));
-  return { period, fallbackFrom, today, weekStart, weekEnd, days, missions, gates, marks, tasks,
+  const [deliverables, dueDates] = await Promise.all([deliverableStatuses(q, tasks.map((task) => task.taskId)), effectiveDueDates(q, tasks, now)]);
+  return { period, fallbackFrom, today, weekStart, weekEnd, days, missions, gates, marks,
+    tasks: tasks.map((task) => ({ ...task, responsibleId: task.responsibleId ?? null, deliverable: deliverables.get(task.taskId) ?? { status: "none", score: null, version: null },
+      dueDate: dueDates.get(task.taskId) ?? null })),
     activities: items.map((entry) => ({ ...placeActivity(entry, weekStart, weekEnd, entry.missionId !== null && !shown.has(entry.missionId)),
       ...activitySignal(entry.item, today) })), unplaced };
 }

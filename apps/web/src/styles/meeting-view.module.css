@@ -1,0 +1,67 @@
+/*
+ * 来源：ts-design 0.4.0 dist/components.css 的 .ts-detail（滚动、底部留白）、.ts-row、.ts-between；
+ * 基础字号行高照老外壳（ts-design/styles.css 带进来的页面基础样式，16px / 1.6）。不抄背景。
+ * 会议屏幕挪进新首页后只在这一页的根上生效：整份 ts-design/styles.css 引进新首页会带变别的页面，所以只抄这几条。
+ * ts-design 升级时对照这几条跟着改。
+ */
+/* 工作区自带 z-index: 70（老界面要盖住总览）：这里关在自己的层里，展示区左上角的收起按钮（z-index: 6）露在会议页上面、点得到（本人 11/18）。 */
+.root { isolation: isolate; font-size: 16px; line-height: 1.6; }
+/* 高度由 detail-frame 的 .reader（flex: 1）给，这里不写 height。 */
+.root :global(.ts-detail) { overflow: auto; overscroll-behavior: contain; padding: 0 0 var(--ts-content-bottom, 24px); scroll-padding-bottom: var(--ts-content-bottom, 24px); outline: none; }
+.root :global(.ts-row) { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.root :global(.ts-between) { justify-content: space-between; }
+
+/*
+ * 看材料（本人 11/18）：预览框占满页头下面到窗口底部，和正文同宽。阅读页从上往下一路排成竖的 flex（阅读区 → 材料列 → 材料区 → 阅读器 → 文档），
+ * 最里面的预览框（iframe）把剩下的高度都占了；材料比窗口长时照旧整页滚。阅读器左右不再另缩一圈，底部留白交给阅读页。
+ */
+.root :global(.ts-detail:has([data-material-scroll])) { display: flex; flex-direction: column; }
+.root :global(.ts-detail:has([data-material-scroll]) > :not(header)) { display: flex; flex: 1 0 auto; flex-direction: column; padding-bottom: 0; }
+.root :global(.ts-detail:has([data-material-scroll]) :is([data-material-column], [data-material-scope], [data-material-scroll], [data-material-scroll] > article:has(> iframe))) { display: flex; flex: 1 0 auto; flex-direction: column; width: 100%; }
+.root :global(.ts-detail:has([data-material-scroll]) [data-material-scroll] > article > iframe) { flex: 1 0 auto; }
+.root :global(.ts-detail [data-material-scroll]) { padding-inline: 0; padding-bottom: 0; }
+
+/*
+ * 新首页深色：阅读页底色（顶栏渐变 header-capsule 的 ::before 也读它）换成新首页的面板色。
+ * 会议页自己在 .ts-detail 上写死了 #fff（meeting-workspace），框架上又带 data-theme="light"（HeroUI 浅色把 --surface 改回白），
+ * 所以先在根上记下新首页的 --surface，再交给 .ts-detail；不然深色下顶栏是一条白带。
+ * 会议页的 .workspace 也把 --ink-muted 写死成浅色用的 #63686f，一起换回新首页的。
+ * 减少透明度时 header-capsule 写死的 #fcfdfe 也在这里接住。浅色和老页面不变。
+ */
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .root { --meeting-home-surface: var(--surface); --meeting-home-muted: var(--ink-muted); }
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .root :global(.ts-detail) { --ts-reading-surface: var(--meeting-home-surface); --ink-muted: var(--meeting-home-muted); }
+/* 顶栏底色变深以后，顶栏里写死的深色字（标题、返回、选中的那一段）换成新首页的字色。 */
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .root :global(.ts-detail-header > h1) { color: var(--ink); }
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .root :global([data-timeline=ended] .ts-detail-header > h1),
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .root :global(.ts-detail-header > .ts-row > .button:first-child) { color: var(--ink-muted); }
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .root :global(.ts-detail-header [aria-checked='true']) { color: var(--tianshu-blue-secondary); }
+@media (prefers-reduced-transparency: reduce) {
+  :global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .root :global(.ts-detail-header)::before { background: var(--ts-reading-surface); }
+}
+
+/*
+ * 新首页深色：输入框、文本框、下拉。会议框架上的 [data-ts-theme] 把 --field-* 重新写成浅色取值（globals.css），
+ * 先在根上记下新首页的，再交回框架里；照 globals 基础样式和这套变量走的框都会跟着变深。写死颜色的几处在下面单独接。
+ */
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .root {
+  --meeting-home-field-bg: var(--field-bg); --meeting-home-field-ink: var(--field-ink); --meeting-home-field-placeholder: var(--field-placeholder);
+  --meeting-home-field-border: var(--field-border); --meeting-home-field-border-hover: var(--field-border-hover); --meeting-home-field-border-focus: var(--field-border-focus);
+  /* 次要按钮照新首页的 tertiary（HeroUI）：底 --default、字 --default-foreground、悬停 --default-hover；各模块的深色覆盖读这几个。 */
+  --meeting-home-default: var(--default); --meeting-home-default-fg: var(--default-foreground); --meeting-home-default-hover: var(--default-hover); --meeting-home-default-soft: var(--default-soft);
+  /* 卡片和进度行用的细边、浅一级字色（框架里可能被重写，一并记下）。 */
+  --meeting-home-hairline: var(--hairline); --meeting-home-faint: var(--ink-faint);
+  /* 记录候选留在会议页 DOM 内（showModal 只把它升到顶层），和上传、错误提示共用这些深色值。 */
+  --meeting-home-ink: var(--ink); --meeting-home-warning: var(--judgment); --meeting-home-warning-wash: var(--judgment-wash);
+  --meeting-home-danger: var(--counter); --meeting-home-danger-wash: var(--counter-wash);
+  --meeting-home-danger-border: color-mix(in oklab, var(--counter) 35%, transparent);
+  --meeting-home-link: var(--tianshu-blue-secondary); --meeting-home-backdrop: var(--backdrop);
+}
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .root :global([data-ts-theme]) {
+  --field-bg: var(--meeting-home-field-bg); --field-ink: var(--meeting-home-field-ink); --field-placeholder: var(--meeting-home-field-placeholder);
+  --field-border: var(--meeting-home-field-border); --field-border-hover: var(--meeting-home-field-border-hover); --field-border-focus: var(--meeting-home-field-border-focus);
+}
+/* ActionFeedback 用全局类名：只接住新首页会议页内的反馈，不改变其他页面。 */
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .root :global(.action-error) { background: var(--meeting-home-danger-wash); color: var(--meeting-home-danger); }
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .root :global(.action-conflict) { background: var(--meeting-home-warning-wash); color: var(--meeting-home-warning); }
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .root :global(:is(.action-error, .action-conflict) button) { border-color: var(--meeting-home-hairline); background: var(--meeting-home-default); color: var(--meeting-home-default-fg); }
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .root :global(:is(.action-error, .action-conflict) button:hover) { background: var(--meeting-home-default-hover); }

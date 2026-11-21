@@ -1,3 +1,5 @@
+import { cutText } from "./textCut.js";
+
 /**
  * 对话分档（模型路由方案 docs/superpowers/specs/2026-10-13-model-routing.md §4.3–§4.5 的最小可用版）：
  * 每轮先定档位，再按档位定思考强度、整轮时限和回答篇幅。
@@ -502,7 +504,7 @@ export function mostlyChinese(text: string): boolean {
 export function cleanThought(text: string): string | undefined {
   const value = text.split(/\n/)[0].trim().replace(/[。.！!；;，,]+$/, "").replace(/^[「『“"'*]+|[」』”"'*]+$/g, "").replace(/[。.！!；;，,]+$/, "").trim();
   if ((value.match(/[一-龥]/g)?.length ?? 0) < 2 || FORBIDDEN_IN_NOTICE.test(value) || /用户/.test(value)) return undefined;
-  return value.length > 30 ? `${value.slice(0, 30)}…` : value;
+  return cutText(value, 30);
 }
 
 /** 推理摘要里最新的一个完整小标题（「**标题**」），不论中英文；没有返回 undefined。 */
@@ -554,7 +556,7 @@ function shortTitle(value: unknown, max = 24): string | undefined {
   if (typeof value !== "string") return undefined;
   const text = value.replace(/\s+/g, " ").trim();
   if (!text || !READABLE_TITLE.test(text)) return undefined;
-  return text.length > max ? `${text.slice(0, max)}…` : text;
+  return cutText(text, max);
 }
 
 /** 工具结果的结构化部分：自定义工具放在 details，否则是 content 里的一段 JSON。 */
@@ -621,7 +623,7 @@ export function thinkingHeadline(summary: string): string | undefined {
   if (cjk < latin) return undefined;
   const text = candidate.replace(/[。.]+$/, "");
   if (FORBIDDEN_IN_NOTICE.test(text)) return undefined;
-  return text.length > 30 ? `${text.slice(0, 30)}…` : text;
+  return cutText(text, 30);
 }
 
 /**

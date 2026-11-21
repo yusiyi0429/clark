@@ -1,8 +1,13 @@
 import { Type, type Static } from "@sinclair/typebox";
 import { WorldAnchor } from "./meetingDecisions.js";
+import { BuddyAskQuestion, BuddyPlan, BuddyUiEffect } from "./buddyActions.js";
 
+/**
+ * 对话的 scope。project:<projectId> 是新首页的项目对话（本人和这个项目的那条伙伴对话，projects.ts；原来的 Task 管线并进来了），
+ * 和总管线 global 各是各的历史；task:<id> 是执行事项详情页的对话，不是它。
+ */
 export const ConversationScope = Type.String({
-  pattern: "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
+  pattern: "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128}|project:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
   description: "global 或稳定对象 scope",
 });
 
@@ -175,13 +180,22 @@ export const AnchorSelection = Type.Object(
   { additionalProperties: false },
 );
 
+/**
+ * 项目对话这一轮为什么在云端跑（17.2 第 38 条，见 projectLocalTurns.ts）：本该在本机跑，local_unavailable 本机起不来，local_quota 本机那家订阅额度用完。
+ */
+export const LocalFallbackReason = Type.Union([Type.Literal("local_unavailable"), Type.Literal("local_quota")]);
+
 export const ConversationMessageRequest = Type.Object(
   {
     message: Type.String({ minLength: 1, maxLength: 20_000 }),
+    /** 本人已提交的排队消息。同一标识重试保留正在运行的工作。 */
+    queuedInputId: Type.Optional(Type.String({ format: "uuid" })),
     /** 当前页面上聚焦的那张卡；不带时对象页聚焦页面对象本身，首页没有聚焦项。 */
     anchorSelection: Type.Optional(AnchorSelection),
     /** 回答 Agent 的提问：带了它，这一句的原文由服务端按提问卡和答案重写。 */
     answers: Type.Optional(AskAnswerInput),
+    /** 这一句是在回答伙伴的哪个选项框（ConversationCard 的 buddy_question）：那张标成 answered，不是 dismissed。原文照发，不改写。 */
+    buddyQuestionId: Type.Optional(Type.String({ format: "uuid" })),
     references: Type.Optional(Type.Array(CardReference, { maxItems: 20 })),
     attachments: Type.Optional(Type.Array(ConversationAttachmentRef, { maxItems: 10 })),
     /** 工单 09：页面左侧正在看的那份材料；必须属于这个 scope 的对象。 */
@@ -195,6 +209,8 @@ export const ConversationMessageRequest = Type.Object(
     scopeOverride: Type.Optional(ReadScopeParams),
     /** 本人此刻所在页面的路径（如 /me/task-quality）：首页对话据此告诉 Agent 这是哪个页面、能做什么。 */
     pagePath: Type.Optional(Type.String({ minLength: 1, maxLength: 200, pattern: "^/" })),
+    /** 只在项目对话：这一句本该在本机跑、本机没跑成，改发云端（见 LocalFallbackReason）。读回历史时这一轮的回答带同样的 fallback。 */
+    fallback: Type.Optional(LocalFallbackReason),
   },
   { additionalProperties: false },
 );
@@ -215,6 +231,37 @@ const MeetingDraftPerson = Type.Object({ personId: Type.String({ minLength: 1 })
  * 卡上的状态（是否已发出、草稿进度）由界面按 id 读最新的对象，发出仍走各对象自己的 Action。href 是对象页面的地址。
  */
 export const ConversationCard = Type.Union([
+  /** 伙伴要发给同事的一句话（17.4 send_message）：本人在卡上看一眼、点「发出」才由天枢机器人转达（GET /api/me/buddy-messages/:draftId）。 */
+  Type.Object({ kind: Type.Literal("buddy_message"), draftId: Type.String({ format: "uuid" }) }, { additionalProperties: false }),
+  /**
+   * 伙伴的选项框（18 节第 9 条，伙伴调 ask_user 出的）：跟着出它的那一轮画在对话记录里，不钉在输入框上方。每题给选项（recommended 的在第一个），网页另带「自己填」。
+   * status：open 还在等本人；answered 本人点选项答了；dismissed 本人没答、发了别的话。本人在这个对话（伙伴台或那个项目对话）里发出任何一条新消息，
+   * 云端就把还 open 的那张标成 dismissed（网页发出时也可以先收起，读历史以云端为准）；只有 open 的画成能点的框，answered、dismissed 的不画或只留一行淡字，由网页定。
+   * 作答：网页把选择拼成一句话当作本人的新消息发出（如「部署方式：只发预发（推荐）；时间：本周五」），请求带 buddyQuestionId，那张标成 answered。
+   */
+  Type.Object({
+    kind: Type.Literal("buddy_question"),
+    questionId: Type.String({ format: "uuid" }),
+    questions: Type.Array(BuddyAskQuestion, { minItems: 1, maxItems: 4 }),
+    status: Type.Union([Type.Literal("open"), Type.Literal("answered"), Type.Literal("dismissed")]),
+  }, { additionalProperties: false }),
+  /**
+   * 派活卡（本人 11/18）：伙伴在主线派出去的活。open_session 开了哪个项目的哪个会话（sub），或 message_project 转给了哪个项目的对话（sub 为 null）。
+   * 跟着出它的那一轮画在对话记录里，读历史时也在那一轮的回答上。项目名、会话名照现在的；会话被真删以后 sub.id 为 null，名字是派活时存下的那份。
+   * state 由云端算好，网页照它画：
+   * - 开的会话：在用 active；已归档或进了回收站 archived；被真删了 gone。
+   * - 转给项目对话的（sub 为 null）：项目归档了 archived，否则 active。
+   */
+  Type.Object({
+    kind: Type.Literal("buddy_dispatch"),
+    dispatchId: Type.String({ format: "uuid" }),
+    projectId: Type.String({ format: "uuid" }),
+    projectName: Type.String(),
+    /** 开出来的会话；转给项目对话（message_project）时为 null。会话被真删了 id 为 null。 */
+    sub: Type.Union([Type.Object({ kind: Type.Literal("topic"), id: Type.Union([Type.String({ format: "uuid" }), Type.Null()]), title: Type.String() },
+      { additionalProperties: false }), Type.Null()]),
+    state: Type.Union([Type.Literal("active"), Type.Literal("archived"), Type.Literal("gone")]),
+  }, { additionalProperties: false }),
   /** 复盘草稿：摘要与「打开修改」。 */
   Type.Object({ kind: Type.Literal("review"), personalReviewId: Type.String({ minLength: 1 }), href: Type.String({ minLength: 1 }) }, { additionalProperties: false }),
   /** 周复盘草稿：摘要与「打开修改」。 */
@@ -224,7 +271,7 @@ export const ConversationCard = Type.Union([
     kind: Type.Literal("todo_pick"),
     question: Type.String({ minLength: 1, maxLength: 1000 }),
     candidates: Type.Array(Type.Object({
-      requestId: Type.String({ minLength: 1 }), title: Type.String(), initiatorName: Type.String(), sentAt: Type.String(), href: Type.String({ minLength: 1 }),
+      requestId: Type.String({ minLength: 1 }), title: Type.String(), initiatorId: Type.Optional(Type.String()), initiatorName: Type.String(), sentAt: Type.String(), href: Type.String({ minLength: 1 }),
     }, { additionalProperties: false }), { minItems: 2, maxItems: 4 }),
   }, { additionalProperties: false }),
   /** 已整理好的问题，等本人点「发送」。 */
@@ -262,6 +309,15 @@ export const ConversationCard = Type.Union([
   }, { additionalProperties: false }),
 ]);
 
+/**
+ * 这一轮实际用的模型（项目对话、伙伴台走 Chat 的回答）：provider 是来源（Chat 配的接入方，如 tokenhub），model 是模型名。只记这两样，不记钥匙、地址。
+ * 一轮里调了几次模型时取最后一次。Chat 没报（老版本、天枢自己的对话）的没有。
+ */
+export const ConversationModel = Type.Object(
+  { provider: Type.String({ minLength: 1, maxLength: 60 }), model: Type.String({ minLength: 1, maxLength: 120 }) },
+  { additionalProperties: false },
+);
+
 export const ConversationMessage = Type.Object(
   {
     sequence: Type.Integer({ minimum: 1 }),
@@ -275,8 +331,22 @@ export const ConversationMessage = Type.Object(
     recoveryNote: Type.Optional(ConversationRecoveryNote),
     /** 只在助手回答上：这一轮实际装进上下文的个人记忆 id。回答里的记忆标记只认这里有的。 */
     memoryUsed: Type.Optional(Type.Array(Type.String())),
-    /** 只在助手回答上：这一轮工具生成的卡（排在回答后面）。 */
-    cards: Type.Optional(Type.Array(ConversationCard, { maxItems: 4 })),
+    /** 只在助手回答上：这一轮工具生成的卡（排在回答后面），最多 12 张；多了先截别的卡，伙伴的选项框（buddy_question）一张不截。 */
+    cards: Type.Optional(Type.Array(ConversationCard, { maxItems: 12 })),
+    /** 只在助手回答上：这一轮伙伴最后一张计划清单（17.4，见 buddyActions.ts 的 BuddyPlan）；没出清单的没有这个字段。 */
+    plan: Type.Optional(BuddyPlan),
+    /**
+     * 只在助手回答上：这一轮实际用的来源和模型（见 ConversationModel）；不知道的没有这个字段。
+     * 项目对话在本机跑的那一轮（ranOn = local）：provider 是执行方（「Claude Code」「Codex」），model 是给人看的模型名（「Opus 5.5」）。
+     */
+    model: Type.Optional(ConversationModel),
+    /**
+     * 只在项目对话的助手回答上（17.2 第 38 条）：这一轮在哪跑，cloud 云端、local 本人电脑上。项目对话以外没有这个字段。
+     * 网页底部胶囊、轮次旁的来源按它和 model 写：「本机 · Opus 5.5」「云端 · claude-opus-5-5」。
+     */
+    ranOn: Type.Optional(Type.Union([Type.Literal("cloud"), Type.Literal("local")])),
+    /** 只在项目对话的助手回答上：这一轮本该在本机、没跑成改在云端（同 ConversationMessageRequest.fallback）。网页在旁边写一行这一轮用的是云端。 */
+    fallback: Type.Optional(LocalFallbackReason),
     /** 只在助手回答上：这一轮跨对象读取的范围（最后一次）。 */
     readScope: Type.Optional(ReadScope),
     /** 只在本人的作答消息上：回答 Agent 提问的问答记录。 */
@@ -286,14 +356,61 @@ export const ConversationMessage = Type.Object(
      * 普通消息没有这个字段。
      */
     kind: Type.Optional(Type.Union([Type.Literal("carried"), Type.Literal("trace")])),
-    /** 这一轮是在飞书私聊机器人或微信 ClawBot 里说的（问与答都标）；网页里不标的就是在天枢里说的。 */
-    via: Type.Optional(Type.Union([Type.Literal("feishu"), Type.Literal("wechat")])),
+    /**
+     * 这一轮是在飞书私聊机器人或微信 ClawBot 里说的（问与答都标）；buddy 是伙伴从伙伴台转来的（项目对话里本人那一句，17.4 message_project，只标本人那句）；
+     * report 是子会话停了、云端替本人给项目主管线发的那句（18 节第 10 条，只标那一句；报告本身是项目动态里的 sub_session_report，网页不把这句画成本人的气泡）；
+     * 网页里不标的就是在天枢里说的。
+     */
+    via: Type.Optional(Type.Union([Type.Literal("feishu"), Type.Literal("wechat"), Type.Literal("buddy"), Type.Literal("report")])),
     /** 只在本人的提问上：这一轮服务端还在回答（首页对话走独立 Chat 时）。切走、刷新回来据此接上这一轮。 */
     running: Type.Optional(Type.Boolean()),
     meta: Type.Optional(Type.Object(
       { issueId: Type.Optional(Type.String()), title: Type.Optional(Type.String()), href: Type.Optional(Type.String()) },
       { additionalProperties: false },
     )),
+    /**
+     * 本人挂在这条消息上的表情，按块一块一个（只在伙伴台和项目对话；见 ConversationReaction）；没挂的没有这个字段。
+     * part 是第几块（伙伴回答拆成的气泡或卡片，从 0 数；本人的话只有第 0 块），-1 是老数据，网页当成最后一块。
+     */
+    reactions: Type.Optional(Type.Array(Type.Object(
+      { part: Type.Integer({ minimum: -1 }), emoji: Type.String({ minLength: 1, maxLength: 16 }) },
+      { additionalProperties: false },
+    ))),
+    /** 伙伴点在这条消息上的表情（派活成功后在本人那句话上点 👍）；和本人的分开存，本人改自己的不动它。没点的没有这个字段。 */
+    buddyReactions: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 16 }), { maxItems: 3 })),
+  },
+  { additionalProperties: false },
+);
+
+/** 一条消息上伙伴最多点几个表情。 */
+export const MESSAGE_REACTION_MAX = 3;
+/**
+ * 本人给伙伴台、项目对话里一条消息的一块挂的表情：每块一个，写的时候换掉这一块原来的，emoji 为 null 是取消；返回存下的。
+ * 只是本人自己的标记：不送给模型、不通知别人。消息按 runId + role 认（一轮里本人一句、回答一句；序号读历史时会重排，不拿它认），
+ * part 同 ConversationMessage.reactions 的 part（-1 是老数据那一块）。
+ */
+export const ConversationReaction = Type.Object(
+  {
+    runId: Type.String({ minLength: 1, maxLength: 200 }),
+    role: Type.Union([Type.Literal("user"), Type.Literal("assistant")]),
+    part: Type.Integer({ minimum: -1 }),
+    emoji: Type.Union([Type.String({ minLength: 1, maxLength: 16 }), Type.Null()]),
+  },
+  { additionalProperties: false },
+);
+
+/**
+ * 项目对话正在本人电脑上跑的那一轮（17.2 第 38 条）：还没写进对话历史，读历史时单独给。手机、别的页面据此画「正在回答」和本人那一句；
+ * 本机这台电脑上的网页直接从本机读实时内容。turnId 是这一轮的 id（结束后历史里那一轮的 runId 就是它）。
+ */
+export const ConversationLocalTurn = Type.Object(
+  {
+    turnId: Type.String({ format: "uuid" }),
+    message: Type.String(),
+    startedAt: Type.String({ format: "date-time" }),
+    deviceName: Type.String(),
+    /** 在哪跑、用的什么：「本机 · Claude Code · Opus 5.5」。 */
+    source: Type.String(),
   },
   { additionalProperties: false },
 );
@@ -302,6 +419,8 @@ export const ConversationHistory = Type.Object(
   {
     scope: ConversationScope,
     messages: Type.Array(ConversationMessage),
+    /** 只在项目对话：本机正占着的那一轮（见 ConversationLocalTurn）；没有不带。 */
+    localTurn: Type.Optional(ConversationLocalTurn),
   },
   { additionalProperties: false },
 );
@@ -355,6 +474,31 @@ export const ConversationSseEvent = Type.Union([
     },
     { additionalProperties: false },
   ),
+  /**
+   * 伙伴的计划清单（17.4）：伙伴调 update_plan 时天枢插进这一轮；同一轮后一条取代前一条。collapsed=true 是本人中途发来新消息、这张清单收起。
+   */
+  Type.Object({ ...StreamBase, type: Type.Literal("plan"), plan: BuddyPlan }, { additionalProperties: false }),
+  /** 伙伴动作在界面上的效果（17.4）：切外观、打开某一处、刷新哪几块（见 buddyActions.ts 的 BuddyUiEffect）。动作做完时天枢插进这一轮。 */
+  Type.Object({ ...StreamBase, type: Type.Literal("ui"), ui: BuddyUiEffect }, { additionalProperties: false }),
+  /** 伙伴这一轮出的卡（17.4：send_message 的 buddy_message）：动作做完时天枢插进这一轮的流，界面接在回答后面；读回历史时在这条回答的 cards 里。 */
+  Type.Object({ ...StreamBase, type: Type.Literal("card"), card: ConversationCard }, { additionalProperties: false }),
+  /**
+   * 伙伴点的表情：派活成功（拆卡、开工、转话、重开、转给项目对话）后天枢在本人这一轮那句话上点 👍，插进这一轮的流。
+   * emojis 是伙伴在这条消息上的整组（同历史里的 buddyReactions）；消息按 runId + role 认。
+   */
+  Type.Object({ ...StreamBase, type: Type.Literal("buddy_reaction"), role: Type.Literal("user"),
+    emojis: Type.Array(Type.String({ minLength: 1, maxLength: 16 }), { minItems: 1, maxItems: 3 }) }, { additionalProperties: false }),
+  /**
+   * 本人这条消息的回执（17.4，伙伴对话：scope 为 global 和 project:<id>，网页发的才有）：delivered 天枢收下了（第一个勾），read 伙伴读到了（第二个勾）。
+   * messageId 是天枢给这条消息的 id，两帧按它对上同一条消息。两帧都在这条消息自己的响应流里，排在最前面。
+   * - 没在回复时发的：伙伴马上开始这一轮，两帧几乎同时到，都带 runId。
+   * - 伙伴正在回上一轮时本人再发（中途插话）：不再回 409 TURN_IN_PROGRESS。天枢先开流、立即写 delivered（这时还没有这一轮，不带 runId），
+   *   再停掉上一轮（上一轮的流以 done aborted 结束，计划清单收起），拿这条开新的一轮；新一轮第一帧到了写 read（带 runId）。
+   *   给了 delivered 以后还是没开成（上一轮停不下来、对话服务拒收或连不上），在这条流里给一帧 error（code 同开流前的拒绝：TURN_IN_PROGRESS、
+   *   RESUME_NOT_FOUND、CHAT_UNAVAILABLE、CHAT_FAILED 等，不带 runId）就结束，界面把第一个勾撤掉、这条消息可以重发。
+   */
+  Type.Object({ runId: Type.Optional(Type.String()), scope: StreamBase.scope, sequence: StreamBase.sequence, type: Type.Literal("receipt"),
+    state: Type.Union([Type.Literal("delivered"), Type.Literal("read")]), messageId: Type.String({ minLength: 1 }) }, { additionalProperties: false }),
   /** 跨对象读取的范围标签（三层取用）：界面显示成可以点开调整的标签；同一轮后一条取代前一条。 */
   Type.Object({ ...StreamBase, type: Type.Literal("scope"), label: ReadScope.properties.label, params: ReadScopeParams, choices: ReadScope.properties.choices }, { additionalProperties: false }),
   /** 本轮档位：快答 / 检索问答 / 深度；检索问答与深度档带一句开场说明（notice），界面先显示它和预计用时。 */
@@ -387,6 +531,9 @@ export const ConversationSseEvent = Type.Union([
     },
     { additionalProperties: false },
   ),
+  /** 这一轮实际用的来源和模型（走 Chat 的对话，Chat 每次调完模型报一次；换了才再给）。网页画在回答下面，读历史时在 ConversationMessage.model。 */
+  Type.Object({ ...StreamBase, type: Type.Literal("model"), provider: ConversationModel.properties.provider, model: ConversationModel.properties.model },
+    { additionalProperties: false }),
   Type.Object(
     {
       ...StreamBase,
@@ -435,10 +582,12 @@ export const ConversationSseEvent = Type.Union([
    * 这一轮没能完成。message 是给一号位的中文说明（原因 + 已保留什么 + 下一步）；
    * resume：continue = 有已写出的部分，可以从断点续写；retry = 没写出正文，可以用已查到的材料重答；没有 = 不建议直接再试（如凭证失效）。
    * partial：已写出的部分已存进这条对话（读回历史就能看到）。
+   * runId：只有中途插话给了 delivered 以后、新一轮没开成时不带（见 receipt）。
    */
   Type.Object(
     {
       ...StreamBase,
+      runId: Type.Optional(Type.String()),
       type: Type.Literal("error"),
       code: Type.String(),
       message: Type.String(),
@@ -478,4 +627,8 @@ export type TConversationMessage = Static<typeof ConversationMessage>;
 export type TConversationCard = Static<typeof ConversationCard>;
 export type TConversationHistory = Static<typeof ConversationHistory>;
 export type TConversationRecoveryNote = Static<typeof ConversationRecoveryNote>;
+export type TConversationModel = Static<typeof ConversationModel>;
+export type TLocalFallbackReason = Static<typeof LocalFallbackReason>;
+export type TConversationLocalTurn = Static<typeof ConversationLocalTurn>;
 export type TConversationSseEvent = Static<typeof ConversationSseEvent>;
+export type TConversationReaction = Static<typeof ConversationReaction>;

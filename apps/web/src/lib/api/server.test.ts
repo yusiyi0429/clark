@@ -6,8 +6,8 @@ vi.mock("next/headers", () => ({ cookies: async () => ({ toString: cookie }) }))
 vi.mock("next/navigation", () => ({ redirect: (path: string) => { throw new Error(`redirect:${path}`); }, notFound: vi.fn() }));
 import { readSession, requireCeo, requireMember } from "./server";
 
-function session(role: "ceo" | "member", onboarded?: boolean) {
-  get.mockResolvedValue({ response: { ok: true }, data: { authenticated: true, personId: "person", displayName: "测试", role, onboarded } });
+function session(role: "ceo" | "member", onboarded?: boolean, buddy?: { name: string; form: string } | null) {
+  get.mockResolvedValue({ response: { ok: true }, data: { authenticated: true, personId: "person", displayName: "测试", role, onboarded, buddy } });
 }
 beforeEach(() => { get.mockReset(); cookie.mockReturnValue("warmap_session=test"); });
 
@@ -35,5 +35,15 @@ describe("引导会话守卫", () => {
     await expect(requireCeo("/radar")).rejects.toThrow("redirect:/me");
     session("ceo", false);
     await expect(requireMember("/me")).rejects.toThrow("redirect:/");
+  });
+  it("引导过但还没选伙伴的也先去引导，保留深链；旧 API 缺少 buddy 时当作已经有了", async () => {
+    session("ceo", true, null);
+    await expect(requireCeo("/radar")).rejects.toThrow("redirect:/welcome?next=%2Fradar");
+    session("member", true, null);
+    await expect(requireMember("/me/tasks/t-1")).rejects.toThrow("redirect:/welcome?next=%2Fme%2Ftasks%2Ft-1");
+    session("member", true, { name: "团团", form: "panda" });
+    expect(await requireMember("/me")).toMatchObject({ session: { buddy: { name: "团团", form: "panda" } } });
+    session("ceo", true);
+    expect(await requireCeo("/radar")).toBe("warmap_session=test");
   });
 });

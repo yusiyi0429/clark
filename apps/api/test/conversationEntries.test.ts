@@ -168,8 +168,8 @@ describe("帮我问问（⑨）：定位待办 → 查有没有人问过 → 整
     const pick = await say("杰哥昨天发的那个表帮我问问截止时间", (entries) => entries.askAboutTodo({ question: "截止时间是哪天" }));
     expect(pick.result).toMatchObject({ found: "choose", total: 2 });
     expect(pick.cards).toEqual([{ kind: "todo_pick", question: "截止时间是哪天", candidates: [
-      { requestId: first, title: "填备案信息表", initiatorName: "唐巨杰", sentAt: "2026-09-29T08:20:00.000Z", href: `/me/requests/${first}` },
-      { requestId: second, title: "核对报销表", initiatorName: "唐巨杰", sentAt: "2026-09-29T03:00:00.000Z", href: `/me/requests/${second}` },
+      { requestId: first, title: "填备案信息表", initiatorId: JUJIE, initiatorName: "唐巨杰", sentAt: "2026-09-29T08:20:00.000Z", href: `/me/requests/${first}` },
+      { requestId: second, title: "核对报销表", initiatorId: JUJIE, initiatorName: "唐巨杰", sentAt: "2026-09-29T03:00:00.000Z", href: `/me/requests/${second}` },
     ] }]);
     expect(pick.steps.find((step) => step.status !== "pending" && step.id === "todo-locate" && step.result)).toEqual(
       { id: "todo-locate", label: "定位待办", status: "active", result: "对上 2 件，等你选" });

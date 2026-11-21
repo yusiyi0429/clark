@@ -4,7 +4,8 @@
  * 约会议（FR-4.1）：顶栏或首页「约会议」打开的右侧浮出面板（SidePanel，形状同通知栏），页头和二级页同一个（DetailFrame）。
  * 外壳一直挂着它、每次打开换一个 key：表单从空白开始，关时面板能原路滑出。
  * 名称、日期 + 起止、主持人（成员只能是本人，CEO 从 DRI 里选）、参会人（可空）、挂到（一个）。
- * 挂到：选项到了就默认挂上自己本月的第一个 Mission（没有就空着、直接展开去挑），收起时一行写着挂点和「我的 Mission / PO …」，右边「换」；
+ * 挂到：约会议默认不挂（本人 11/16，同开会弹层）：一行「不挂」，右边「选择」；挂上后一行写着挂点和「我的 Mission / PO …」，右边「更换」「不挂」。
+ * 整理会议照旧：选项到了就默认挂上自己本月的第一个 Mission（没有就空着、直接展开去挑）。
  * 换的时候是 WorldAnchorPicker，挑了 Mission、LTO 就收起，挑了 PO 不收（下面展开它的 Mission 可以再往下挑）。
  * 「约好」建会（只存天枢，不写本体），成功后跳到会议页。
  * 材料（可不传）：拖进来或点选，可多份；约好拿到会议 id 后一份一份传进这场会的群材料，传不上的提示一句，会照样约好。
@@ -68,13 +69,13 @@ export function MeetingBookingSheet({ open, onClose, viewer, organize, initialPa
   /** 登录的人（整理飞书会时没有 viewer，用工作台的）：挂点默认挂他的 Mission。 */
   const me = viewer?.personId ?? workspaceViewer ?? "";
   const role = viewer?.role;
-  const [title, setTitle] = useState(organize?.minute.title ?? draft?.title ?? "");
+  const [title, setTitle] = useState(() => organize?.minute.title ?? draft?.title ?? "");
   const [slot, setSlot] = useState(() => (draft ? slotOf(draft) : nextSlot()));
   const [leadDriId, setLeadDriId] = useState(viewer?.role === "member" ? viewer.personId : draft?.leadDriId ?? "");
   const [participants, setParticipants] = useState<string[]>(() => (draft?.participants ?? initialParticipants).filter((id) => id !== viewer?.personId));
   const [anchors, setAnchors] = useState<TWorldAnchor[]>(draft?.anchors ?? []);
-  /** 草稿没挂（CEO 的会议卡默认不挂）：不替他默认挂自己的 Mission。 */
-  const autoAnchor = !draft || draft.anchors.length > 0;
+  /** 只有整理会议默认挂自己的 Mission；约会议（含会议卡的「改」）默认不挂。 */
+  const autoAnchor = Boolean(organize);
   const [options, setOptions] = useState<TWorldAnchorOption[] | null>(null);
   /** 人员名册（选参会人）；CEO 另取带角色的目录选主持人。 */
   const [people, setPeople] = useState<{ personId: string; displayName: string }[]>([]);
@@ -89,16 +90,20 @@ export function MeetingBookingSheet({ open, onClose, viewer, organize, initialPa
   /** 约好后正在传第几份（按钮上显示）。 */
   const [uploadingAt, setUploadingAt] = useState(0);
   const [feishu, setFeishu] = useState<{ enabled: boolean; calendar: boolean } | null>(null);
+  const [revision, setRevision] = useState(0);
+  const [peopleError, setPeopleError] = useState(false);
   const period = organize ? companyMonth(new Date(organize.minute.startsAt)) : slot.date.slice(0, 7);
+  const heading = organize ? "整理会议" : "约会议";
 
   // 整理会议不取人员名册（参会人取自妙记）。
   useEffect(() => {
     if (!open || !role) return;
     let live = true;
-    void listPersonDirectory().then((next) => { if (live) setPeople(next); }, () => undefined);
-    if (role === "ceo") void listPeople().then((next) => { if (live) setHosts(next.filter((person) => person.roles.includes("dri"))); }, () => undefined);
+    setPeopleError(false);
+    void listPersonDirectory().then((next) => { if (live) setPeople(next); }, () => { if (live) setPeopleError(true); });
+    if (role === "ceo") void listPeople().then((next) => { if (live) setHosts(next.filter((person) => person.roles.includes("dri"))); }, () => { if (live) setPeopleError(true); });
     return () => { live = false; };
-  }, [open, role]);
+  }, [open, role, revision]);
   // 本人的飞书能不能在日历约会：打开时读一次；在新标签页连完回来（窗口拿回焦点）再读。整理会议不在飞书约，不读。
   useEffect(() => {
     if (!open || organize) return;
@@ -107,7 +112,7 @@ export function MeetingBookingSheet({ open, onClose, viewer, organize, initialPa
     load();
     window.addEventListener("focus", load);
     return () => { live = false; window.removeEventListener("focus", load); };
-  }, [open, organize]);
+  }, [open, organize, revision]);
   // 挂点按开会那个月取：换了月份先收起旧选项再重取，已选的不在新选项里就去掉。
   useEffect(() => {
     if (!open) return;
@@ -125,13 +130,13 @@ export function MeetingBookingSheet({ open, onClose, viewer, organize, initialPa
       });
     }, () => { if (live) setOptionsError(true); });
     return () => { live = false; };
-  }, [open, period, me, autoAnchor]);
+  }, [open, period, me, autoAnchor, revision]);
 
   const nameOf = (personId: string) => people.find((person) => person.personId === personId)?.displayName ?? "";
   const anchorOption = (anchor: TWorldAnchor) => options?.find((option) => option.kind === anchor.kind && option.id === anchor.id);
   const valid = organize
     ? Boolean(title.trim() && options && anchors.length)
-    : Boolean(title.trim() && slot.date && slot.start && slot.end && slot.end > slot.start && leadDriId && options && anchors.length);
+    : Boolean(title.trim() && leadDriId && options && slot.date && slot.start && slot.end && slot.end > slot.start);
   const submitOrganize = async ({ minute, meetingBase, onOrganized }: NonNullable<typeof organize>) => {
     setBusy(true); setError("");
     try {
@@ -163,6 +168,7 @@ export function MeetingBookingSheet({ open, onClose, viewer, organize, initialPa
     onDrop: (event: DragEvent<HTMLLabelElement>) => { event.preventDefault(); setDragging(false); addFiles([...event.dataTransfer.files]); },
   };
   const submit = async (viewer: Viewer) => {
+    if (!valid || busy) return;
     setBusy(true); setError("");
     try {
       const result = await bookMeeting({
@@ -185,7 +191,7 @@ export function MeetingBookingSheet({ open, onClose, viewer, organize, initialPa
       window.dispatchEvent(new Event("meeting-changed"));
       refreshWorkspace();
       onClose();
-      navigate(result.card.navigation?.[0]?.href ?? `${viewer.role === "ceo" ? "" : "/me"}/meetings/${result.card.objectRef.id}`);
+      navigate(result.card.navigation?.[0]?.href ?? `${viewer.role === "ceo" ? "" : "/me/work"}/meetings/${result.card.objectRef.id}`);
     } catch {
       setError("没有约成");
     } finally {
@@ -195,10 +201,11 @@ export function MeetingBookingSheet({ open, onClose, viewer, organize, initialPa
   };
 
   const invitable = people.filter((person) => person.personId !== leadDriId && !participants.includes(person.personId));
+  const retryRead = () => setRevision((value) => value + 1);
 
   return (
-    <SidePanel open={open} onClose={onClose} label={organize ? "整理会议" : "约会议"}>
-      <DetailFrame title={organize ? "整理会议" : "约会议"} onBack={onClose} backLabel="关闭">
+    <SidePanel open={open} onClose={onClose} label={heading}>
+      <DetailFrame title={heading} onBack={onClose} backLabel="关闭">
         <div className={d.booking}>
           <label className={d.bookField}>
             <span>名称</span>
@@ -248,6 +255,7 @@ export function MeetingBookingSheet({ open, onClose, viewer, organize, initialPa
             ) : null}
             {organize ? null : <Select aria-label="添加参会人" value="" placeholder="添加参会人" options={invitable.map((person) => ({ value: person.personId, label: person.displayName }))}
               onChange={(personId) => { if (personId) setParticipants((current) => [...current, personId]); }} />}
+            {peopleError ? <p className={d.worldError} role="alert">没有读到人员目录 <button type="button" onClick={retryRead}>重试</button></p> : null}
           </div>
           <div className={d.bookField}>
             <span>所属</span>
@@ -258,13 +266,20 @@ export function MeetingBookingSheet({ open, onClose, viewer, organize, initialPa
                   <small>{anchorOption(anchors[0]) ? anchorRole(anchorOption(anchors[0])!, me, nameOf) : ""}</small>
                 </span>
                 <button type="button" onClick={() => setPicking(true)}>更换</button>
+                {organize ? null : <button type="button" onClick={() => setAnchors([])}>不挂</button>}
               </div>
             ) : null}
-            {options && (picking || !anchors.length) ? (
+            {options && !anchors.length && !picking && !organize ? (
+              <div className={d.bookAnchor} data-anchor-row>
+                <span>不挂</span>
+                <button type="button" onClick={() => setPicking(true)}>选择</button>
+              </div>
+            ) : null}
+            {options && (picking || (organize && !anchors.length)) ? (
               <WorldAnchorPicker options={options} value={anchors} viewerId={me} nameOf={nameOf} company={role === "ceo"}
                 onChange={(next) => { setAnchors(next); if (next[0]?.kind !== "po") setPicking(false); }} />
             ) : null}
-            {optionsError ? <p className={d.worldError} role="alert">没有读到对象</p> : null}
+            {optionsError ? <div className={d.worldError}><span role="alert">没有读到对象</span> <button type="button" onClick={retryRead}>重试</button></div> : null}
           </div>
           {organize ? null : <div className={d.bookField}>
             <span>材料</span>

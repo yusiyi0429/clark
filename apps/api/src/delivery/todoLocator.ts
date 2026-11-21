@@ -33,7 +33,7 @@ export const TODO_KIND_LABELS: Record<TRequestKind, string> = { relay: "传话",
 /** 本人手上没完成的待办：发给本人、已发出、本人那一行还没标记完成的请求，新的在前。 */
 export async function listOpenTodos(q: Query, personId: string, names: Map<string, string>, limit = 50): Promise<OpenTodo[]> {
   const rows = (await q(`SELECT r.id, r.kind, r.title, r.body, r.initiator_id, r.sent_at FROM request_recipients rr JOIN requests r ON r.id = rr.request_id
-    WHERE rr.person_id = $1 AND rr.status = 'pending' AND r.status <> 'draft' ORDER BY r.sent_at DESC, r.id LIMIT ${Math.max(1, Math.floor(limit))}`, [personId])).rows as
+    WHERE rr.person_id = $1 AND rr.status = 'pending' AND r.team_kind IS NULL AND r.status <> 'draft' ORDER BY r.sent_at DESC, r.id LIMIT ${Math.max(1, Math.floor(limit))}`, [personId])).rows as
     { id: string; kind: TRequestKind; title: string; body: string; initiator_id: string; sent_at: Date }[];
   return rows.map((row) => ({ requestId: row.id, kind: row.kind, title: row.title, body: row.body, initiatorId: row.initiator_id,
     initiatorName: names.get(row.initiator_id) ?? row.initiator_id, sentAt: row.sent_at }));

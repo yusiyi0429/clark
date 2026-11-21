@@ -323,3 +323,30 @@
   .scope :global(.ts-detail-header) { box-shadow: inset 0 -1px 0 #5b6b85; }
   .scope :global(.ts-detail-header)::before { -webkit-mask-image: none; mask-image: none; inset: 0; }
 }
+
+/*
+ * 新首页不出省略号（本人 11/18）：会议页等 DetailFrame 页头的标题整段换行，页头只有最小高度、跟着标题长高，不压正文。
+ * 标题折行时上下留空（同子会话 .embedTitle）：空留在标题上、不加在页头上，单行时页头仍 48。
+ * 键盘定位、滚动定位让开的是页头实际高度（DetailFrame 量出来写进 --detail-head-h），不是写死的 48。
+ * 旧界面（CEO 管理模式等同一个 DetailFrame）照旧，只在新首页的外壳里生效。
+ */
+:global(:root:has([data-type-scale="one"])) .scope :global(.ts-detail-header) { height: auto; min-height: var(--detail-header-height); }
+:global(:root:has([data-type-scale="one"])) .scope :global(.ts-detail-header > h1),
+:global(:root:has([data-type-scale="one"])) .scope :global(.ts-detail-header:has(> .ts-row > [data-header-lead]) > h1) {
+  display: block;
+  -webkit-line-clamp: none;
+  white-space: normal;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+  padding-block: var(--space-1);
+}
+:global(:root:has([data-type-scale="one"])) .scope :global(.ts-detail) { scroll-padding-top: calc(var(--detail-head-h, var(--detail-header-height)) + 10px); }
+:global(:root:has([data-type-scale="one"])) .scope :global(.ts-detail-header > .ts-eyebrow) { white-space: normal; text-overflow: clip; overflow-wrap: anywhere; }
+/*
+ * ≤1250 宽带计划时段的页头（手机也在内）：时段在上、标题在下叠成两行，本来就超过 48。留白加在页头上下，标题不再加，
+ * 时段那一行不贴顶、不被裁。单行页头照旧留白在标题上（上面那条），单行时仍 48。
+ */
+@media (max-width: 1250px) {
+  :global(:root:has([data-type-scale="one"])) .scope :global(.ts-detail-header:has(> .ts-row > [data-header-lead])) { padding-block: var(--space-1); }
+  :global(:root:has([data-type-scale="one"])) .scope :global(.ts-detail-header:has(> .ts-row > [data-header-lead]) > h1) { padding-block: 0; }
+}

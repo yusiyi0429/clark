@@ -1,0 +1,94 @@
+.heading, .rowBody, .actions, .organize {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.heading { justify-content: space-between; flex-wrap: wrap; }
+.actions { flex-wrap: wrap; min-width: 0; }
+.inbox, .rows, .row, .subject, .detail { min-width: 0; }
+.inbox { margin-block: var(--space-3); }
+.rows { list-style: none; padding: 0; margin: 0; }
+.row { padding: var(--space-2); }
+.row + .row { border-top: 1px solid var(--hairline); }
+.event { margin-block: var(--space-2); padding: var(--space-3); border: 1px solid var(--hairline); border-radius: var(--r-inset); background: var(--surface); }
+.rowBody { align-items: baseline; justify-content: space-between; flex-wrap: wrap; }
+.subject { flex: 1 1 200px; }
+.title { display: inline-block; color: var(--ink); font: inherit; font-weight: 600; text-decoration: none; overflow-wrap: anywhere; }
+a.title:hover, .preflight:hover, .link:hover { text-decoration: underline; text-underline-offset: 3px; }
+.meta, .preflight, .detail, .later, .error, .status, .sources {
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+.meta { margin: 2px 0 0; color: var(--ink-muted); overflow-wrap: anywhere; }
+.status { margin: var(--space-1) 0 0; color: var(--ink); overflow-wrap: anywhere; }
+.row[data-stage="attention"] .status { color: var(--danger); }
+.status[data-needs-action] { font-weight: 600; }
+.preflight { display: inline-block; color: var(--tianshu-blue-secondary); text-decoration: none; overflow-wrap: anywhere; }
+.link {
+  display: inline-flex; align-items: center; min-height: var(--row-28); padding: 0 var(--space-1);
+  border: 0; border-radius: var(--r-control); background: none; color: var(--tianshu-blue-secondary);
+  font: inherit; font-size: var(--text-sm); text-align: left; text-decoration: none; cursor: pointer;
+}
+.link:disabled { color: var(--ink-faint); cursor: default; }
+.primary { min-height: 44px; box-sizing: border-box; justify-content: center; padding-inline: var(--space-3); background: var(--accent-soft); color: var(--tianshu-blue-secondary); font-weight: 600; overflow-wrap: anywhere; }
+.primary:hover { background: var(--default-soft); }
+.sources { margin-top: var(--space-2); color: var(--ink-muted); }
+.sources summary { width: fit-content; min-height: 44px; align-content: center; cursor: pointer; overflow-wrap: anywhere; }
+.sourceBody { display: grid; gap: var(--space-1); padding: 0 var(--space-2) var(--space-2); }
+.later { margin-top: var(--space-1); color: var(--ink-muted); }
+.later > summary { width: fit-content; min-height: 44px; box-sizing: border-box; align-content: center; padding: var(--space-1) var(--space-2); cursor: pointer; }
+.later > .rows { max-height: min(30dvh, 240px); overflow-y: auto; overscroll-behavior: contain; }
+.later summary span { margin-inline-start: var(--space-1); font-variant-numeric: tabular-nums; }
+.detail { margin: var(--space-2) 0 0; padding: var(--space-2); background: var(--default-soft); color: var(--ink); border-radius: var(--r-control); }
+.transcript { max-height: 42vh; padding: var(--space-1); overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.organize { flex-wrap: wrap; }
+.organize > :first-child { max-width: 100%; min-width: min(220px, 100%); }
+.error { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); margin: 0; padding-inline: var(--space-2); color: var(--danger); overflow-wrap: anywhere; }
+.error button { min-height: 44px; }
+.receipt { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); margin: 0; padding: var(--space-2); font-size: var(--text-sm); color: var(--ink-muted); overflow-wrap: anywhere; }
+.row:focus-visible, .row :focus-visible, .later summary:focus-visible, .error button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-control); }
+.inlineSlot { display: inline-flex; align-items: center; }
+.modeHead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+/* 会议页（11/16 重新设计第 5 节）：两种行共用一套列（钟点栏 64 | 内容 | 行尾），标题左沿对齐。
+   接下来：钟点 14/600 等宽，内容左边一条竖线贯穿当天；已开完：钟点栏空着，状态点骑在竖线的位置上。差别放在结构和字重上，不靠字色。 */
+.day + .day { margin-top: var(--space-2); }
+.dayLabel { margin: var(--space-2) 0 var(--space-1); padding: 0 var(--space-2); color: var(--ink-faint); font-size: var(--text-sm); line-height: 16px; }
+.timeline { margin: 0; padding: 0; list-style: none; }
+.line { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; align-items: stretch; min-height: var(--row-48); border-radius: var(--r-control); }
+.line:hover { background: var(--default-soft); }
+.clock { display: flex; align-items: center; justify-content: flex-end; padding-right: var(--space-3); font-size: var(--text-base); font-weight: 600; font-variant-numeric: tabular-nums; }
+.lineBody { display: grid; align-content: center; min-width: 0; padding: 6px var(--space-3); }
+.line[data-row="upcoming"] .lineBody { border-left: 1px solid var(--hairline); }
+.lineTitle { color: var(--ink); font-size: var(--text-base); font-weight: 600; line-height: var(--lh-row); text-decoration: none; white-space: normal; overflow-wrap: anywhere; }
+.line[data-row="done"] .lineTitle { font-weight: 400; }
+a.lineTitle:hover { text-decoration: underline; text-underline-offset: 3px; }
+.lineMeta { color: var(--ink-faint); font-size: var(--text-sm); line-height: 16px; white-space: normal; overflow-wrap: anywhere; }
+.lineMeta [data-tone="danger"] { color: var(--danger); }
+.lineActs { display: flex; align-items: center; gap: var(--space-1); padding-right: var(--space-2); }
+.lineActs:empty { display: none; }
+.lineDetail { grid-column: 2 / -1; padding: 0 var(--space-2) var(--space-2) var(--space-3); }
+.out { display: inline-flex; align-items: center; justify-content: center; width: var(--row-32); height: var(--row-32); border-radius: var(--r-control); color: var(--ink-muted); }
+.out:hover { background: var(--default-soft); }
+.liveDot { width: 6px; height: 6px; border-radius: 50%; background: var(--danger); }
+/* 状态点骑在竖线的位置（钟点栏右沿）：待处理 6px --warning，转写中转圈，有记录打勾，其余 4px 淡点。 */
+.line[data-row="done"] .clock { justify-content: flex-end; padding-right: 0; }
+.line[data-row="done"] .mark { transform: translateX(50%); }
+.mark { display: inline-flex; align-items: center; justify-content: center; width: 4px; height: 4px; border-radius: 50%; background: var(--ink-faint); color: var(--ink-muted); }
+.mark[data-tone="attention"] { width: 6px; height: 6px; background: var(--warning); }
+.mark[data-tone="ready"] { width: 12px; height: 12px; background: none; }
+.mark[data-tone="processing"] { width: 10px; height: 10px; border: 1.5px solid var(--hairline-strong); border-top-color: var(--ink-muted); background: none; animation: meeting-spin 1s linear infinite; }
+@keyframes meeting-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .mark[data-tone="processing"] { animation: none; } }
+.line :focus-visible, .out:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-control); }
+@media (max-width: 959px), (pointer: coarse) {
+  .line { grid-template-columns: 56px minmax(0, 1fr) auto; }
+  .lineActs button, .out { min-height: 44px; min-width: 44px; }
+}
+@media (max-width: 959px), (pointer: coarse) {
+  .inbox { margin-block: var(--space-2); }
+  .row .link, .row a.title, .preflight, .later summary, .heading button, .modeHead button { min-height: 44px; }
+  .row a.title, .preflight { align-content: center; }
+  .rowBody { column-gap: var(--space-1); row-gap: 0; }
+  .actions:empty { display: none; }
+  .later summary { align-content: center; }
+}

@@ -1,19 +1,24 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { Type } from "@sinclair/typebox";
 import type { TMeetingParticipant } from "@warmap/contracts";
+import { readBuddy } from "../buddy.js";
+import { buddyPersona } from "../buddyPersona.js";
 import { ChatServiceError } from "../chatService.js";
 import { afterIssueDraftCreated, ChatDecideIssueBody, ChatProposeIssueBody, decideChatIssueDraft, proposeChatIssueDraft } from "../issueDrafts.js";
 import { listPendingIssueSummaries } from "../issues.js";
 import { logEvent } from "../observability.js";
 import type { Viewer } from "../meetingCard.js";
-import { listConfirmedMeetings, PayloadHashMismatchError, readConfirmedMeeting } from "../meetingCardRead.js";
+import { canOpenConfirmedMeetingSource, listConfirmedMeetings, PayloadHashMismatchError, readConfirmedMeeting } from "../meetingCardRead.js";
 import { DraftMeetingParams, draftMeeting, draftTimeLabel, type DraftMeetingArgs } from "../meetingDraft.js";
 import { meetingHasEnded } from "../meetingStore.js";
-import { canUseMemberView, roleOf, type SessionRole } from "../memberAccess.js";
+import { canEnterMemberView, roleOf, type SessionRole } from "../memberAccess.js";
 import { MISSION_PLAN_TIMEOUT_MS, readMissionPlans, type MissionPlanWorld, type MissionPlanWorldOff } from "../missionPlanRead.js";
 import { companyPeriod } from "../monthlyPlans.js";
 import { isRealPerson, personDisplayNames } from "../people.js";
 import { WorldClient, worldConfigured } from "../worldClient.js";
+import { planTaskViewer } from "../planTaskAccess.js";
+import { checkTask, openPlanTask } from "../taskAgreements.js";
+import { DeliverableError } from "../taskDeliverables.js";
 import { readHomeSnapshots } from "./cards.js";
 import type { AppInstance, RouteContext } from "./shared.js";
 
@@ -35,6 +40,7 @@ const recallSearchQuery = Type.Object({
 }, { additionalProperties: false });
 const segmentParams = Type.Object({ segmentId: Type.String({ minLength: 1, maxLength: 64 }) }, { additionalProperties: false });
 const recallReadQuery = Type.Object({ cursor: Type.Optional(Type.String({ minLength: 1, maxLength: 24 })) }, { additionalProperties: false });
+const planTaskParams = Type.Object({ taskId: Type.String({ minLength: 1 }) }, { additionalProperties: false });
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 type View = { personId: string; role: SessionRole };
@@ -66,7 +72,7 @@ export function registerInternalMeetingRoutes(app: AppInstance, ctx: RouteContex
       fail(reply, 404, ownerMissing.code, ownerMissing.message);
       return null;
     }
-    if (role === "ceo" ? roleOf(person) !== "ceo" : !canUseMemberView(person)) {
+    if (role === "ceo" ? roleOf(person) !== "ceo" : !canEnterMemberView(person)) {
       fail(reply, 403, "VIEW_NOT_ALLOWED", "本人用不了这个视角");
       return null;
     }
@@ -83,14 +89,14 @@ export function registerInternalMeetingRoutes(app: AppInstance, ctx: RouteContex
     if (!view) return reply;
     const { from, to } = req.query;
     if ([from, to].some((value) => value !== undefined && Number.isNaN(Date.parse(value)))) return fail(reply, 400, "INVALID_INPUT", "from / to 要是 ISO 时间");
-    return { meetings: await listConfirmedMeetings(q, meetingViewer(view), req.query) };
+    return { meetings: await listConfirmedMeetings(q, meetingViewer(view), req.query, app.meetingFollowThrough.minutes) };
   });
 
   app.get("/internal/confirmed-meetings/:meetingId", { onRequest, schema: { params: meetingParams } }, async (req, reply) => {
     const view = viewOf(req, reply, meetingNotFound);
     if (!view) return reply;
     try {
-      return await readConfirmedMeeting(q, meetingViewer(view), req.params.meetingId) ?? notFound(reply);
+      return await readConfirmedMeeting(q, meetingViewer(view), req.params.meetingId, app.meetingFollowThrough.minutes) ?? notFound(reply);
     } catch (error) {
       if (error instanceof PayloadHashMismatchError) return fail(reply, 500, error.code, "会议确认版正文和摘要值对不上");
       throw error;
@@ -102,7 +108,7 @@ export function registerInternalMeetingRoutes(app: AppInstance, ctx: RouteContex
     const view = viewOf(req, reply, meetingNotFound);
     if (!view) return reply;
     try {
-      if ((await readConfirmedMeeting(q, meetingViewer(view), req.params.meetingId))?.status !== "confirmed") return notFound(reply);
+      if (!await canOpenConfirmedMeetingSource(q,meetingViewer(view),req.params.meetingId)) return notFound(reply);
     } catch (error) {
       if (error instanceof PayloadHashMismatchError) return fail(reply, 500, error.code, "会议确认版正文和摘要值对不上");
       throw error;
@@ -178,16 +184,27 @@ export function registerInternalMeetingRoutes(app: AppInstance, ctx: RouteContex
           : !meetingHasEnded(row, now) ? "in_progress" : "awaiting_record",
         startsAt: row.scheduled_at.toISOString(), endsAt: row.ends_at.toISOString(), endedAt: row.ended_at?.toISOString() ?? null,
         host: person(row.lead_dri_id), participants: row.participants.map((item) => person(item.personId)),
-        issueIds: row.issue_ids, href: hrefOf(view, `/meetings/${row.id}`),
+        issueIds: row.issue_ids, href: view.role === "ceo" ? `/meetings/${row.id}` : `/me/work/meetings/${row.id}`,
       })),
     };
+  });
+
+  // 伙伴：名字、性格和接在角色提示后面的人设（和天枢本地对话同一段，buddyPersona.ts）；没选伙伴时是 null。
+  app.get("/internal/buddy", { onRequest }, async (req, reply) => {
+    const view = viewOf(req, reply);
+    if (!view) return reply;
+    reply.header("Cache-Control", "no-store");
+    const buddy = await readBuddy(q, view.personId);
+    if (!buddy) return null;
+    const owner = view.role === "ceo" ? null : personDisplayNames(peopleDirectory).get(view.personId) ?? view.personId;
+    return { name: buddy.name, personality: buddy.personality, persona: buddyPersona(buddy, owner) };
   });
 
   // 首页卡片：和对话 read_anchor 的首页同一份（CEO 公司首页的 Card；成员我的工作台上本人的东西），不带 Action。
   app.get("/internal/home-cards", { onRequest }, async (req, reply) => {
     const view = viewOf(req, reply);
     if (!view) return reply;
-    const cards = await readHomeSnapshots(ctx, view);
+    const cards = await readHomeSnapshots(ctx, view, app.meetingFollowThrough.minutes);
     // 首页分段开着时多给一张「以前的对话」（第一版回看：Chat 还没接会话目录和两个工具，借首页卡交给模型）；读不到不影响首页卡。
     const past = env.chatSessionRotation === true ? await ctx.conversationRecall.homeCard(view).catch((error: unknown) => {
       logEvent({ event: "conversation.catalog_card_unavailable", error: (error as Error)?.message });
@@ -228,6 +245,29 @@ export function registerInternalMeetingRoutes(app: AppInstance, ctx: RouteContex
     if (!view) return reply;
     const period = companyPeriod(ctx.now());
     return { viewerRole: view.role, period, missions: await readMissionPlans(q, view.personId, period, planWorld) };
+  });
+
+  // 约定与对表（V1 设计第 6、10 节）：给伙伴只读，和网页 GET /api/plan-tasks/:taskId/agreement、/check 同一份，看得到的人也一样
+  // （负责人、Mission 负责人、战场负责人、CEO、约定里的认可人；CEO 按人员目录认，不看视角）。看不到的当找不到（404 NOT_FOUND）。
+  const openTask = async (reply: FastifyReply, view: View, taskId: string) => {
+    try {
+      return await openPlanTask(q, ctx.planTasks, planTaskViewer(peopleDirectory, view.personId), ctx.now(), taskId, personDisplayNames(peopleDirectory));
+    } catch (error) {
+      if (error instanceof DeliverableError) { fail(reply, error.status, error.code, error.message); return null; }
+      throw error;
+    }
+  };
+  app.get("/internal/plan-tasks/:taskId/agreement", { onRequest, schema: { params: planTaskParams } }, async (req, reply) => {
+    const view = viewOf(req, reply);
+    if (!view) return reply;
+    const opened = await openTask(reply, view, req.params.taskId);
+    return opened ? opened.agreement : reply;
+  });
+  app.get("/internal/plan-tasks/:taskId/check", { onRequest, schema: { params: planTaskParams } }, async (req, reply) => {
+    const view = viewOf(req, reply);
+    if (!view) return reply;
+    const opened = await openTask(reply, view, req.params.taskId);
+    return opened ? checkTask(q, opened.access, opened.agreement, ctx.now()) : reply;
   });
 
   // 首页对话里约会议（10/28 与人豪定：Chat 的 book_meeting 工具调这里）：把本人一句话里的时间、人名换成一张会议卡，只读不写库；

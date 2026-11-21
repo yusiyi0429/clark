@@ -1,0 +1,293 @@
+{
+  "schema_version": "1.0",
+  "updated_at": "2026-11-14T17:42:06.7404747Z",
+  "judgments": [
+    {
+      "id": "J-INTERNAL-STOP-001",
+      "claim_type": "workflow",
+      "rule": "在记录的七类停止夹具中，按同实例、世代、操作与范围接纳观察，且不因未知而另路补发，可避免无依据停止成功报告。",
+      "required_context": {
+        "runtime": "stop_fixture_v1",
+        "observation_adapter": "controlled_bound_receipt",
+        "candidate_bundle": "X1"
+      },
+      "exclusions": {
+        "live_process_tree": true
+      },
+      "support_refs": [
+        "E-X1-results"
+      ],
+      "counterexample_refs": [
+        "X1 command_denied",
+        "X1 zero_exit_still_alive",
+        "X1 foreign_run_receipt"
+      ],
+      "not_supported": [
+        "真实Windows进程树、端口和锁已停止",
+        "单个修改因素的独立因果效果"
+      ],
+      "scope": {
+        "workspace": "Clark",
+        "project": "tianshu-internal",
+        "namespace_kind": "local-file-not-production-tenant"
+      },
+      "status": "local_supported",
+      "source_task": "tianshu-internal-continuity-20261115-01",
+      "version": 1,
+      "reuse_count": 0,
+      "utility_observations": [],
+      "evidence_family": "same-task-controlled-fixtures",
+      "unknowns": [
+        "真实Windows进程树、端口和锁已停止",
+        "单个修改因素的独立因果效果"
+      ],
+      "admission_reason": "Fixed registered probe exited 0; limited to exact required_context and recorded cases."
+    },
+    {
+      "id": "J-INTERNAL-ORPHAN-001",
+      "claim_type": "workflow",
+      "rule": "在已知孤儿对话ID且按成员和视角成功持久写入的夹具中，重启前读取隔离记录可防止该段被选作global主段。",
+      "required_context": {
+        "runtime": "orphan_restart_fixture_v1",
+        "known_conversation_id": true,
+        "orphan_store_configured": true,
+        "durable_write_succeeded": true
+      },
+      "exclusions": {
+        "provider_id_unknown": true,
+        "persistence_write_failed": true
+      },
+      "support_refs": [
+        "E-X2-results"
+      ],
+      "counterexample_refs": [
+        "X2 unknown-id boundary remains unsolved",
+        "X2 durable-write-failure boundary remains unsolved"
+      ],
+      "not_supported": [
+        "生产持久存储已接入",
+        "未知创建效果恢复已完成",
+        "跨提供商通用正确性"
+      ],
+      "scope": {
+        "workspace": "Clark",
+        "project": "tianshu-internal",
+        "namespace_kind": "local-file-not-production-tenant"
+      },
+      "status": "local_supported",
+      "source_task": "tianshu-internal-continuity-20261115-01",
+      "version": 1,
+      "reuse_count": 0,
+      "utility_observations": [],
+      "evidence_family": "same-task-controlled-fixtures",
+      "unknowns": [
+        "生产持久存储已接入",
+        "未知创建效果恢复已完成",
+        "跨提供商通用正确性"
+      ],
+      "admission_reason": "Fixed registered probe exited 0; limited to exact required_context and recorded cases."
+    },
+    {
+      "id": "J-INTERNAL-HISTORY-001",
+      "claim_type": "mechanical_quality",
+      "rule": "在记录的组件SSR夹具中，已递送回执按自身目标身份生成href，可保留目标退出当前派活列表后的历史查看入口。",
+      "required_context": {
+        "runtime": "receipt_ssr_fixture_v1",
+        "receipt_status": "delivered",
+        "target_identity_preserved": true
+      },
+      "exclusions": {
+        "claim_live_permission_test": true
+      },
+      "support_refs": [
+        "E-X3-results"
+      ],
+      "counterexample_refs": [
+        "X3 delivered-not-offered baseline",
+        "X3 pending/failed controls"
+      ],
+      "not_supported": [
+        "撤权后仍可读取",
+        "浏览器点击、布局和用户理解已通过",
+        "历史目标名称完整保存"
+      ],
+      "scope": {
+        "workspace": "Clark",
+        "project": "tianshu-internal",
+        "namespace_kind": "local-file-not-production-tenant"
+      },
+      "status": "local_supported",
+      "source_task": "tianshu-internal-continuity-20261115-01",
+      "version": 1,
+      "reuse_count": 0,
+      "utility_observations": [],
+      "evidence_family": "same-task-controlled-fixtures",
+      "unknowns": [
+        "撤权后仍可读取",
+        "浏览器点击、布局和用户理解已通过",
+        "历史目标名称完整保存"
+      ],
+      "admission_reason": "Fixed registered probe exited 0; limited to exact required_context and recorded cases."
+    },
+    {
+      "id": "J-INTERNAL-UX-001",
+      "claim_type": "situated_quality",
+      "rule": "将当前可操作状态与历史证据关系分开表达，可能减少团队成员对交付去向的误解。",
+      "required_context": {
+        "workflow": "team_meeting_follow_through"
+      },
+      "exclusions": {},
+      "support_refs": [
+        "review-workflow.json"
+      ],
+      "counterexample_refs": [],
+      "not_supported": [
+        "用户喜欢",
+        "理解成本已降低",
+        "业务效果已改善"
+      ],
+      "scope": {
+        "workspace": "Clark",
+        "project": "tianshu-internal",
+        "namespace_kind": "local-file-not-production-tenant"
+      },
+      "status": "candidate",
+      "source_task": "tianshu-internal-continuity-20261115-01",
+      "version": 1,
+      "reuse_count": 0,
+      "utility_observations": [],
+      "evidence_family": "same-task-controlled-fixtures",
+      "unknowns": [
+        "用户喜欢",
+        "理解成本已降低",
+        "业务效果已改善"
+      ],
+      "admission_reason": "Only model assessment; no situated real outcome, so remains candidate."
+    },
+    {
+      "id": "J-UI-OFFSET-001",
+      "claim_type": "mechanical_quality",
+      "rule": "在已执行的valid ISO时间夹具中，按解析后的时刻排序能保留不同时间偏移事件的先后，同一时刻保留输入次序。",
+      "required_context": {
+        "component": "WorkTimeline.placeBlocks",
+        "timestamps": "valid ISO offsets",
+        "cases": "same message gap and untimed fallback"
+      },
+      "support_refs": [
+        "partner-ui-20261115/sort-red.log",
+        "partner-ui-20261115/sort-green.log",
+        "apps/web/src/components/work/work.test.tsx"
+      ],
+      "counterexample_refs": [
+        "12:00+08:00 occurs before05:00Z despite lexical order"
+      ],
+      "status": "local_supported",
+      "source_task": "partner-ui-20261115",
+      "not_supported": [
+        "缺失或无效时间的真实业务含义",
+        "用户理解或任务完成率改善"
+      ],
+      "scope": {
+        "workspace": "Clark",
+        "project": "tianshu-internal"
+      },
+      "version": 1,
+      "reuse_count": 0
+    },
+    {
+      "id": "J-UI-FOCUS-001",
+      "claim_type": "mechanical_quality",
+      "rule": "在已执行的受控effect/DOM边界测试中，记录当前深链的成功定位并只在明确导航时重置，可避免无关回复到达时再次展开和聚焦已访问回复，同时允许初次目标晚到。",
+      "required_context": {
+        "component": "TeamDeliveryCard",
+        "navigation": "hash change",
+        "test_runtime": "controlled hook/DOM boundary"
+      },
+      "support_refs": [
+        "partner-ui-20261115/task-1-report.md",
+        "partner-ui-20261115/re-review-tasks-1-4.md",
+        "apps/web/src/components/home/partnerTeamCard.behavior.test.tsx"
+      ],
+      "counterexample_refs": [
+        "unchanged #team-reply-A plus unrelated reply B formerly reopened A"
+      ],
+      "status": "local_supported",
+      "source_task": "partner-ui-20261115",
+      "not_supported": [
+        "真实浏览器输入焦点已验收",
+        "跨页未加载回复的API解析"
+      ],
+      "scope": {
+        "workspace": "Clark",
+        "project": "tianshu-internal"
+      },
+      "version": 1,
+      "reuse_count": 0
+    },
+    {
+      "id": "J-UI-DISCLOSURE-001",
+      "claim_type": "situated_quality",
+      "rule": "伙伴主对话统一工作事件、首层突出变化与下一操作、历史明细按需展开，可能更适合持续承接团队工作。",
+      "required_context": {
+        "workflow": "team receipts and meeting follow-through",
+        "authorization": "explicit confirmation retained"
+      },
+      "support_refs": [
+        "partner-ui-20261115/iteration-1.md",
+        "partner-ui-20261115/sources.json",
+        "partner-ui-20261115/re-review-tasks-1-4.md"
+      ],
+      "counterexample_refs": [
+        "Unbounded schedule in nonshrinking header",
+        "Primary transcript reader cannot complete pending confirmation",
+        "Timeline reparenting may lose draft state"
+      ],
+      "status": "candidate",
+      "source_task": "partner-ui-20261115",
+      "not_supported": [
+        "用户喜欢",
+        "真实效率改善",
+        "与Muse/dots/Grok Bot质量相当",
+        "手机视觉验收完成"
+      ],
+      "scope": {
+        "workspace": "Clark",
+        "project": "tianshu-internal"
+      },
+      "version": 1,
+      "reuse_count": 0
+    },
+    {
+      "id": "J-UI-IDENTITY-001",
+      "claim_type": "mechanical_quality",
+      "rule": "在已执行的5个React元素树用例中，将独立事件与消息放在同一平面keyed兄弟列表，保留了事件在分桶移动、空历史、追加、时间状态切换和流式变化前后的父级/类型/key路径。",
+      "required_context": {
+        "component": "WorkTimeline and ConversationTurns",
+        "test_runtime": "actual element builders with useMemo boundary stub",
+        "cases": "five registered key-ancestry/order cases"
+      },
+      "support_refs": [
+        "partner-ui-20261115/fix-timeline-state.md",
+        "apps/web/src/components/work/workTimeline.identity.test.tsx"
+      ],
+      "counterexample_refs": [
+        "prior turn-0 to turn-1 parent movement",
+        "timed to optimistic untimed to timed movement"
+      ],
+      "status": "local_supported",
+      "source_task": "partner-ui-20261115",
+      "not_supported": [
+        "真实浏览器已观察未提交说明保持",
+        "DOM焦点和读记录面板生命周期已验收",
+        "刷新或离线后的草稿持久化"
+      ],
+      "scope": {
+        "workspace": "Clark",
+        "project": "tianshu-internal"
+      },
+      "version": 1,
+      "reuse_count": 0
+    }
+  ],
+  "retrieval_policy": "Filter scope and exact required_context first; unknown conditions or candidate => experiment_hint only; no automatic production activation."
+}

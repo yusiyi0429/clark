@@ -457,10 +457,15 @@ describe("meeting public contract", () => {
     // 已落库 Transcript 可带 source，旧行缺省仍合法
     expect(Value.Check(StoredTranscript, { schemaVersion: "warmap-transcript.v1", meetingId: "m", turns: [{ id: "turn-0001", speakerId: "person-fixture-002", text: "x" }], importedAt: "now", source })).toBe(true);
     expect(Value.Check(StoredTranscript, { schemaVersion: "warmap-transcript.v1", meetingId: "m", turns: [{ id: "turn-0001", speakerId: "person-fixture-002", text: "x" }], importedAt: "now" })).toBe(true);
-    // 确认必须覆盖映射且显式确认加入参与人；discard 无输入
+    // 映射可以全不选（保留原名），仍须显式确认加入参与人；discard 无输入
     expect(Value.Check(ConfirmTranscriptCandidateRequest, { speakerMappings: [{ speakerName: "测试乙", personId: "person-fixture-002" }], confirmAddParticipants: true })).toBe(true);
     expect(Value.Check(ConfirmTranscriptCandidateRequest, { speakerMappings: [{ speakerName: "测试乙", personId: "person-fixture-002" }] })).toBe(false);
-    expect(Value.Check(ConfirmTranscriptCandidateRequest, { speakerMappings: [], confirmAddParticipants: true })).toBe(false);
+    expect(Value.Check(ConfirmTranscriptCandidateRequest, { speakerMappings: [], confirmAddParticipants: true })).toBe(true);
+    expect(Value.Check(ConfirmTranscriptCandidateRequest, { speakerMappings: [], confirmAddParticipants: false })).toBe(false);
+    expect(Value.Check(ConfirmTranscriptCandidateRequest, { speakerMappings: [{ speakerName: "测试乙", personId: "" }], confirmAddParticipants: true })).toBe(false);
+    const mappings = Array.from({ length: 50 }, (_, index) => ({ speakerName: `说话人 ${index + 1}`, personId: `person-${index + 1}` }));
+    expect(Value.Check(ConfirmTranscriptCandidateRequest, { speakerMappings: mappings, confirmAddParticipants: true })).toBe(true);
+    expect(Value.Check(ConfirmTranscriptCandidateRequest, { speakerMappings: [...mappings, { speakerName: "说话人 51", personId: "person-51" }], confirmAddParticipants: true })).toBe(false);
     expect(Value.Check(DiscardTranscriptCandidateRequest, {})).toBe(true);
     expect(Value.Check(DiscardTranscriptCandidateRequest, { extra: true })).toBe(false);
   });

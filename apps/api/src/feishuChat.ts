@@ -41,7 +41,7 @@ export function toFeishuMarkdown(text: string, publicOrigin: string, linkFor: (p
     .replace(/\n{3,}/g, "\n\n")
     .trim();
   const truncated = body.length > MAX_ANSWER_CHARS;
-  if (truncated) body = `${body.slice(0, MAX_ANSWER_CHARS).replace(/\n[^\n]*$/, "")}\n…`;
+  if (truncated) body = body.slice(0, MAX_ANSWER_CHARS).replace(/\n[^\n]*$/, "");
   return { content: body, richDropped, truncated };
 }
 
@@ -116,14 +116,14 @@ export function createFeishuChat(deps: {
     let lastShown = Date.now();
     const result = await homeTurn({ app, q, env }, person, text, {
       via: "feishu",
-      onStart: async () => { progress = await send(openId, "interactive", card(grey("正在想…"))); },
+      onStart: async () => { progress = await send(openId, "interactive", card(grey("正在想"))); },
       onBusy: () => update(progress, card(grey("上一个问题还在回答，答完马上接着答这个。"))),
       onEvent: async (event) => {
         if (event.type === "step" && event.status === "active" && typeof event.label === "string") step = event.label;
         if (Date.now() - lastShown >= PROGRESS_EVERY_MS) {
           lastShown = Date.now();
           const seconds = Math.round((Date.now() - startedAt) / 1000);
-          await update(progress, card(grey(`${step ? `正在${step}` : "正在想"}… ${seconds} 秒`)));
+          await update(progress, card(grey(`${step ? `正在${step}` : "正在想"} ${seconds} 秒`)));
         }
       },
     });

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MeetingCard, MaterialPane, materialMeta, materialTab, previewKind, splitMaterials, buildSupplementForm, truncateText } from "./MeetingCard";
@@ -147,5 +149,19 @@ describe("MeetingCard 材料", () => {
     expect(held).toContain('aria-label="会议记录：妙记或逐字稿与会后复核"');
     expect(held).not.toContain("会后事项从逐字稿整理");
     expect(held).not.toContain("Transcript");
+  });
+});
+
+describe("新首页会议页：看材料（本人 11/18）", () => {
+  const css = readFileSync(fileURLToPath(new URL("../styles/meeting-view.module.css", import.meta.url)), "utf8");
+  /** 以这个选择器开头的那一行规则。 */
+  const rule = (selector: string) => css.split("\n").find((line) => line.startsWith(`${selector} {`)) ?? "";
+
+  it("会议材料预览占满可用高度", () => {
+    // 看材料时阅读页一路排成竖的 flex，预览框（iframe）把页头下面剩下的高度都占了，不再是 70vh 的小框。
+    expect(rule(".root :global(.ts-detail:has([data-material-scroll]))")).toContain("display: flex; flex-direction: column;");
+    expect(rule(".root :global(.ts-detail:has([data-material-scroll]) [data-material-scroll] > article > iframe)")).toContain("flex: 1 0 auto;");
+    // 和正文同宽：材料阅读器左右不再另缩一圈。
+    expect(rule(".root :global(.ts-detail [data-material-scroll])")).toContain("padding-inline: 0;");
   });
 });

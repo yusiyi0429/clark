@@ -136,15 +136,27 @@ describe("预约建会", () => {
     }
   });
 
-  it("没有挂点不能建，结束不晚于开始也不能建", async () => {
+  it("结束不晚于开始、挂点不在选项里都不能建", async () => {
     const t = await createTestApp();
     try {
       await seed(t);
       const member = await t.memberCookie();
-      expect((await book(t, member, body({ anchors: [] }))).statusCode).toBe(400);
       expect((await book(t, member, body({ endsAt: START }))).statusCode).toBe(400);
       expect((await book(t, member, body({ anchors: [{ kind: "mission", id: "not-a-mission" }] }))).statusCode).toBe(400);
       expect(await t.sql("SELECT id FROM meetings")).toEqual([]);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("不挂也能建（本人 11/16：开会默认不绑定）：存成没挂过，会议页照主持人的单元、公司回退", async () => {
+    const t = await createTestApp();
+    try {
+      await seed(t);
+      const created = await book(t, await t.memberCookie(), body({ anchors: [] }));
+      expect(created.statusCode).toBe(200);
+      const [row] = await t.sql("SELECT world_anchors FROM meetings WHERE id = $1", [created.json().card.objectRef.id]);
+      expect(row.world_anchors).toBeNull();
     } finally {
       await t.close();
     }

@@ -1,0 +1,15 @@
+{
+  "verifiedAt": "2026-11-14T17:43:42.648Z",
+  "htmlBytes": 1534056,
+  "renderedVersionScenes": 10,
+  "constructedDocuments": 40,
+  "disabledControls": 48,
+  "inertLinks": 39,
+  "unresolvedExternalAssetUrls": 0,
+  "sourceHashesMatched": {
+    "baseline": 154,
+    "current": 155
+  },
+  "browserRun": false,
+  "limits": "Static HTML/JSON/CSS checks and Node VM controller with DOM boundary stubs only. No browser rendering, layout, screenshots, native-details interaction, focus, mobile or assistive technology acceptance."
+}

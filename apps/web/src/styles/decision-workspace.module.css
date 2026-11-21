@@ -51,37 +51,37 @@
 .errorLine button{padding:4px 10px;border:1px solid #d9a49e;border-radius:8px;background:#fff;color:#a1443c;font:inherit;font-size:12px;cursor:pointer}
 
 /* 「依据」抽屉：浮在阅读页右侧（窄面板时从底部升起），正文不动，关上就回到原处。只有抽屉正文自己滚动。 */
-.drawer{position:absolute;z-index:80;top:56px;right:12px;bottom:12px;display:flex;flex-direction:column;width:min(520px,calc(100% - 24px));overflow:hidden;border:1px solid #e1e6ee;border-radius:18px;background:#fff;box-shadow:0 18px 50px #10203a2e;color:#1d1d1f}
-.drawerHead{display:flex;flex:none;align-items:flex-start;justify-content:space-between;gap:12px;padding:14px 16px 12px;border-bottom:1px solid #eef0f4}
-.drawerHead small{display:block;color:#6e6e73;font-size:11px}
-.drawerHead h2{margin:3px 0 0;font-size:15px;font-weight:600;line-height:1.5;color:#1d1d1f;overflow-wrap:anywhere}
-.drawerClose{display:grid;flex:none;place-items:center;width:30px;height:30px;border:0;border-radius:50%;background:#f1f3f6;color:#4f5866;cursor:pointer}
-.drawerClose:hover{background:#e6eaef}
+.drawer{position:absolute;z-index:80;top:56px;right:12px;bottom:12px;display:flex;flex-direction:column;width:min(520px,calc(100% - 24px));overflow:hidden;border:1px solid var(--hairline);border-radius:18px;background:var(--surface);box-shadow:var(--elev-3);color:var(--ink)}
+.drawerHead{display:flex;flex:none;align-items:flex-start;justify-content:space-between;gap:12px;padding:14px 16px 12px;border-bottom:1px solid var(--rule)}
+.drawerHead small{display:block;color:var(--ink-muted);font-size:11px}
+.drawerHead h2{margin:3px 0 0;font-size:15px;font-weight:600;line-height:1.5;color:var(--ink);overflow-wrap:anywhere}
+.drawerClose{display:grid;flex:none;place-items:center;width:30px;height:30px;border:0;border-radius:50%;background:var(--default-soft);color:var(--ink-muted);cursor:pointer}
+.drawerClose:hover{background:var(--wash-hover)}
 .drawerBody{flex:1;min-height:0;padding:14px 18px 20px;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
-.drawerFoot{display:flex;flex:none;flex-wrap:wrap;gap:8px;padding:10px 16px;border-top:1px solid #eef0f4}
+.drawerFoot{display:flex;flex:none;flex-wrap:wrap;gap:8px;padding:10px 16px;border-top:1px solid var(--rule)}
 .drawerFoot:empty{display:none}
-.drawerAction{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border:1px solid #d9dde5;border-radius:10px;background:#fff;color:#3c4350;font:inherit;font-size:12.5px;text-decoration:none;cursor:pointer}
-.drawerAction:hover{background:#f7f8fa}
-.drawer button:focus-visible,.drawer a:focus-visible{outline:2px solid #007aff80;outline-offset:2px}
-.drawerMeta{margin:0 0 10px;color:#6e6e73;font-size:12px;line-height:1.7}
-.notice{display:block;margin:6px 0 10px;padding:7px 10px;border-radius:9px;background:#fdf4e4;color:#8a6220;font-size:12px;line-height:1.6}
-.muted{margin:0 0 10px;color:#6e6e73;font-size:12.5px;line-height:1.7}
-.muted a{margin-left:6px;color:#0a5dc2}
-.cited{margin:0 0 14px;padding:12px 14px;border-left:3px solid #3a83f7;border-radius:0 12px 12px 0;background:#f2f7ff;color:#1d1d1f;font-size:13.5px;line-height:1.8}
-.cited>small{display:block;margin-bottom:4px;color:#0a5dc2;font-size:11px;font-weight:600}
+.drawerAction{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border:1px solid var(--hairline-strong);border-radius:10px;background:var(--surface);color:var(--ink);font:inherit;font-size:12.5px;text-decoration:none;cursor:pointer}
+.drawerAction:hover{background:var(--neutral-wash)}
+.drawer button:focus-visible,.drawer a:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.drawerMeta{margin:0 0 10px;color:var(--ink-muted);font-size:12px;line-height:1.7}
+.notice{display:block;margin:6px 0 10px;padding:7px 10px;border-radius:9px;background:var(--judgment-wash);color:var(--judgment);font-size:12px;line-height:1.6}
+.muted{margin:0 0 10px;color:var(--ink-muted);font-size:12.5px;line-height:1.7}
+.muted a{margin-left:6px;color:var(--tianshu-blue-secondary)}
+.cited{margin:0 0 14px;padding:12px 14px;border-left:3px solid var(--accent);border-radius:0 12px 12px 0;background:var(--accent-soft);color:var(--ink);font-size:13.5px;line-height:1.8}
+.cited>small{display:block;margin-bottom:4px;color:var(--tianshu-blue-secondary);font-size:11px;font-weight:600}
 .cited p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
 .paragraphs{display:flex;flex-direction:column;gap:2px;margin:0;padding:0;list-style:none}
-.paragraphs>li{display:grid;grid-template-columns:26px minmax(0,1fr);gap:6px;padding:6px 8px;border-radius:9px;color:#3c4350;font-size:13px;line-height:1.8}
-.paragraphs>li[data-cited=true]{background:#eef5ff;color:#1d1d1f}
+.paragraphs>li{display:grid;grid-template-columns:26px minmax(0,1fr);gap:6px;padding:6px 8px;border-radius:9px;color:var(--ink);font-size:13px;line-height:1.8}
+.paragraphs>li[data-cited=true]{background:var(--accent-soft);color:var(--ink)}
 .paragraphs p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
 .paragraphs :is(h1,h2,h3,h4,h5){margin:0;font-size:14px;font-weight:600}
 .paragraphs :is(ul,ol){margin:0;padding-left:20px}
 .paragraphs table{display:block;max-width:100%;overflow-x:auto;border-collapse:collapse;font-size:12px}
 .knowledgeSection{margin:0 0 14px}
-.knowledgeSection>h3{margin:0 0 6px;color:#1d1d1f;font-size:14px;font-weight:600;line-height:1.6}
-.knowledgeNote{margin:0 0 10px;color:#3c4350;font-size:13px;line-height:1.7}
-.knowledgeRetry{padding:4px 12px;border:1px solid #d6dae2;border-radius:8px;background:#fff;color:#1d1d1f;font:inherit;font-size:13px;cursor:pointer}
-.paragraphNo{padding-top:3px;color:#a0a6b0;font-size:11px;font-variant-numeric:tabular-nums;text-align:right}
+.knowledgeSection>h3{margin:0 0 6px;color:var(--ink);font-size:14px;font-weight:600;line-height:1.6}
+.knowledgeNote{margin:0 0 10px;color:var(--ink);font-size:13px;line-height:1.7}
+.knowledgeRetry{padding:4px 12px;border:1px solid var(--hairline-strong);border-radius:8px;background:var(--surface);color:var(--ink);font:inherit;font-size:13px;cursor:pointer}
+.paragraphNo{padding-top:3px;color:var(--ink-faint);font-size:11px;font-variant-numeric:tabular-nums;text-align:right}
 .quoteBlock{margin:0 0 10px;padding:6px 0 6px 12px;border-left:2px solid #c9d4e2;color:#6b7686;font-size:12.5px;line-height:1.7}
 .messageText{margin:0 0 10px;color:#1d1d1f;font-size:14px;line-height:1.8;white-space:pre-wrap;overflow-wrap:anywhere}
 

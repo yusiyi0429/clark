@@ -18,6 +18,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from "react";
 import { CAPTURE_PROCESSOR, CAPTURE_WORKLET_SOURCE } from "./dictationAudio";
+import { publishDictation } from "./dictationSignal";
 import { DictationEngine, type CaptureLike, type EngineDeps, type EngineEvents, type SocketLike } from "./dictationEngine";
 import {
   anchorOffset,
@@ -168,6 +169,12 @@ export function useDictation({ field, value = "", onValue, onCancel }: UseDictat
   const attempt = useRef(0);
   const phaseRef = useRef(phase);
   phaseRef.current = phase;
+  // 正在听时把音量报出去（新首页的伙伴台跟着声音动）；停了、卸了就报「没在听」。
+  useEffect(() => {
+    if (phase !== "listening") return;
+    publishDictation({ level: Math.min(1, Math.max(0, ...levels)) });
+  }, [phase, levels]);
+  useEffect(() => { if (phase !== "listening") return; return () => publishDictation(null); }, [phase]);
   /** 状态同时写进 ref：同一拍里连按两下 ■ 也只收尾一次。 */
   const setPhase = useCallback((next: DictationPhase) => {
     phaseRef.current = next;

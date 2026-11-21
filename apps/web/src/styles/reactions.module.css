@@ -1,0 +1,42 @@
+/* 表情（conversation/Reactions.tsx）：颜色只用现有变量，深色跟着变量走；表情字符的大小用 --type-size（新首页一种字号，app/home-type.css）。 */
+
+/* 面板：一格 36，表情 20。 */
+.dialog { padding: var(--space-1); outline: none; }
+.emojis { display: grid; gap: 2px; }
+.emoji { --type-size: 20px; --type-lh: 1; display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 0; border-radius: var(--r-control); background: none; color: var(--ink-muted); cursor: pointer; }
+.emoji:hover { background: var(--default-soft); }
+.emoji[aria-pressed="true"] { background: var(--default-soft-hover); }
+.emoji:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+
+/* 输入框下面一行的表情按钮：同「+」那一种（.barTool）。 */
+.tool { min-width: 32px; width: 32px; height: 32px; border-radius: 50%; color: var(--ink-muted); }
+.tool:hover { color: var(--ink); }
+
+/* 挂在气泡下面那一行（气泡由 useMessageReaction 设成 position: relative）：放在和下一条之间的空里，不挤动版面；本人的靠右、回答靠左。 */
+.row { position: absolute; top: 100%; left: 0; display: flex; align-items: center; gap: var(--space-1); margin-top: 2px; }
+.row[data-side="end"] { right: 0; left: auto; flex-direction: row-reverse; }
+.chip { --type-lh: 24px; display: inline-flex; align-items: center; height: 24px; padding: 0 6px; border: 0; border-radius: var(--r-capsule, 999px); background: var(--neutral-wash); box-shadow: inset 0 0 0 1px var(--hairline); cursor: pointer; }
+.chip:hover { background: var(--default-soft-hover); }
+.chip:focus-visible, .add:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+/* 新首页的两种对话：这一行挂在气泡底边上（位置由气泡给，conversation-bubbles 的 .edge），只放点过的表情，是压在边上的白底小胶囊。 */
+.row[data-edge] { position: static; margin-top: 0; }
+.row[data-edge] .chip, .byBuddy > .chip { background: var(--surface); box-shadow: 0 0 0 1px var(--hairline), var(--elev-2); }
+/* 每块旁边那一排的按钮（回应、回复、复制；位置在 conversation-bubbles 的 .actions）：28 见方、图标 16，淡色，没有底和边，悬停才有圆底。 */
+.act { min-width: 28px; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--ink-faint); }
+.act:hover { background: var(--default-soft); color: var(--ink-muted); }
+.act:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+/* 右键、长按的浮层里快捷表情下面那一行「回复」「复制」。 */
+.menuActs { display: flex; gap: 2px; margin-top: var(--space-1); padding-top: var(--space-1); box-shadow: inset 0 1px 0 var(--hairline); }
+.menuAct { flex: 1; height: 32px; padding: 0 10px; border: 0; border-radius: var(--r-control); background: none; color: var(--ink-muted); font: inherit; cursor: pointer; }
+.menuAct:hover { background: var(--default-soft); color: var(--ink); }
+.menuAct:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+/* 伙伴点的：只读，和本人点的分开一组。 */
+.byBuddy { display: inline-flex; gap: var(--space-1); }
+.byBuddy > .chip { cursor: default; }
+/* 加表情的小按钮：鼠标移到这条消息上、键盘焦点进来、浮层开着时才出现；手机上不出（长按）。 */
+.add { min-width: 24px; width: 24px; height: 24px; color: var(--ink-faint); opacity: 0; transition: opacity var(--dur-fast) linear; }
+.add:hover { color: var(--ink-muted); }
+:global([data-reactable]):hover .add, :global([data-reactable]):focus-within .add, .add[aria-expanded="true"] { opacity: 1; }
+@media (hover: none) {
+  .add { visibility: hidden; pointer-events: none; }
+}

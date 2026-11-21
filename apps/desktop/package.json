@@ -1,0 +1,23 @@
+{
+  "name": "@warmap/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "天枢桌面版（Windows 先行）：Electron 壳开线上天枢，随包带本机程序，托盘、开机自启、单实例、自动更新由壳管",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "start": "pnpm run build && electron app",
+    "dist": "node scripts/build.mjs && electron-builder --projectDir app --config ../electron-builder.yml --win nsis --publish never"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "electron": "45.0.0",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.8",
+    "esbuild": "0.28.2",
+    "electron-builder": "26.18.0",
+    "electron-updater": "6.8.11"
+  },
+  "author": "Tokenking"
+}

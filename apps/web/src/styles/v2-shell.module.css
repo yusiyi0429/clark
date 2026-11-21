@@ -1,0 +1,120 @@
+/*
+ * 新骨架（components/rail/V2Shell.tsx），照原型 v8.4 的 .app / .rail / .tabs。
+ * 颜色、圆角只用现有 token：墨色 --ink*、细线 --hairline*、强调 --accent；卡片和老首页同一套（home-plan.module.css .card）。
+ */
+.app {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  grid-template-columns: calc(64px + env(safe-area-inset-left, 0px)) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.rail {
+  grid-column: 1;
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 14px 0 16px env(safe-area-inset-left, 0px);
+  border-right: 1px solid var(--hairline);
+  background: color-mix(in oklab, var(--ink) 1.5%, var(--surface));
+}
+.railItem {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  color: var(--ink-faint);
+  text-decoration: none;
+  transition: background var(--dur-fast) ease, color var(--dur-fast) ease;
+}
+.railItem:hover { background: var(--wash-hover); color: var(--ink); }
+.railItem[aria-current="page"] { background: color-mix(in oklab, var(--ink) 7%, transparent); color: var(--ink); }
+.railItem:focus-visible, .tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.badge {
+  position: absolute;
+  top: 4px;
+  right: 2px;
+  display: grid;
+  place-items: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  font-style: normal;
+}
+.grow { flex: 1; }
+.me { display: grid; place-items: center; }
+
+.main {
+  grid-column: 2;
+  grid-row: 1;
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.tabs { display: none; }
+
+.toast {
+  position: fixed;
+  z-index: 80;
+  bottom: 26px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(420px, calc(100vw - 32px));
+  padding: 10px 16px;
+  border: 1px solid #ffffff26;
+  border-radius: 12px;
+  background: #172b45ed;
+  color: #fff;
+  font-size: 13px;
+  backdrop-filter: blur(14px);
+}
+.toastAction { margin-left: 4px; padding: 2px 6px; border: 0; border-radius: 6px; background: none; color: #9cc7ff; font-size: 13px; cursor: pointer; }
+
+@media (max-width: 959px) {
+  .app { display: block; }
+  .rail { display: none; }
+  .main { position: absolute; inset: 0; padding-bottom: calc(82px + env(safe-area-inset-bottom, 0px)); }
+  .tabs {
+    position: fixed;
+    z-index: 40;
+    left: max(14px, env(safe-area-inset-left, 0px));
+    right: max(14px, env(safe-area-inset-right, 0px));
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    height: 58px;
+    border-radius: 29px;
+    background: var(--mat-thick);
+    -webkit-backdrop-filter: blur(var(--mat-blur)) saturate(var(--mat-sat));
+    backdrop-filter: blur(var(--mat-blur)) saturate(var(--mat-sat));
+    box-shadow: var(--mat-edge), 0 10px 30px #29334c1f;
+  }
+  .tab {
+    display: grid;
+    justify-items: center;
+    align-content: center;
+    gap: 3px;
+    color: var(--ink-faint);
+    font-size: 11px;
+    text-decoration: none;
+  }
+  .tab[aria-current="page"] { color: var(--ink); font-weight: 600; }
+  .toast { bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
+}

@@ -5,6 +5,11 @@ packages:
 fetchTimeout: 300000
 allowBuilds:
   '@google/genai': false
+  electron: true
+  electron-winstaller: false
   esbuild: true
   protobufjs: false
   tos-crc64-js: false
+# electron-builder 26.18 声明 @electron/get ^3.0.0、代码却要 3.1 起才有的 ElectronDownloadCacheMode；锁到 3.1.0（apps/desktop 打包用）
+overrides:
+  app-builder-lib>@electron/get: 3.1.0

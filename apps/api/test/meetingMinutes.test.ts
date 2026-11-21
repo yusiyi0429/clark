@@ -32,7 +32,7 @@ function fakeMinutesApi(transcript = TRANSCRIPT): FeishuMinutesApi & {
     listEmpty: false,
     /** 读全文时先做的事（模拟读的过程中会议被取消）。 */
     onRead: null as (() => Promise<void>) | null,
-    async getMinute(token: string, minuteToken: string) { api.calls.push(`get:${token}:${minuteToken}`); return { ...minute, token: minuteToken, meetingId: null }; },
+    async getMinute(token: string, minuteToken: string) { api.calls.push(`get:${token}:${minuteToken}`); return { ...minute, token: minuteToken, meetingId: minuteToken.startsWith("obcnpasted") ? null : minute.meetingId }; },
     async artifactTranscript(token: string, minuteToken: string) {
       api.calls.push(`artifacts:${token}:${minuteToken}`);
       await api.onRead?.();
@@ -44,7 +44,7 @@ function fakeMinutesApi(transcript = TRANSCRIPT): FeishuMinutesApi & {
       if (api.exportError) throw api.exportError;
       return transcript;
     },
-    async listMinutes(token: string, owner: { openId: string }) { api.calls.push(`list:${token}:${owner.openId}`); return api.listEmpty ? [] : [minute]; },
+    async listMinutes(token: string, owner: { openId: string }) { api.calls.push(`list:${token}:${owner.openId}`); return api.listEmpty ? [] : [{ ...minute, ownerOpenId: owner.openId }]; },
     async meetingParticipants(token: string, meetingId: string) { api.calls.push(`participants:${meetingId}`); return ["ou_host", "ou_owner", "ou_guest"]; },
   };
   return api;
@@ -62,6 +62,14 @@ async function scheduledMeeting(t: TestApp, participants: string[] = [HOST]): Pr
   return created.json().cards[0].objectRef.id as string;
 }
 
+
+async function identifiedMeeting(t: TestApp, participants: string[] = [HOST]): Promise<string> {
+  const id = await scheduledMeeting(t, participants);
+  const eventId = `calendar-${id}`;
+  await t.pool.query("UPDATE meetings SET feishu_event_id=$2 WHERE id=$1", [id, eventId]);
+  await t.app.meetingFollowThrough.minutes.onMeetingEnded({ meeting: { calendar_event_id: eventId, id: "vc_1", end_time: "2026-06-01T03:00:00Z" } });
+  return id;
+}
 describe("飞书妙记逐字稿解析", () => {
   it("认「姓名 hh:mm:ss.mmm」发言头，取第一行的开会时刻；正文里的时间不当发言头", () => {
     const parsed = parseFeishuTranscriptText(TRANSCRIPT);
@@ -88,7 +96,7 @@ describe("会开完后自动拿妙记", () => {
     const outcome = recordingOutcome();
     const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED }, undefined, { preflightAgent, outcomeAgent: outcome });
     try {
-      const meetingId = await scheduledMeeting(t);
+      const meetingId = await identifiedMeeting(t);
       let clock = new Date("2026-06-01T11:10:00+08:00");
       await authorize(t, HOST, "ou_host", "测试乙", clock);
       await authorize(t, OWNER, "ou_owner", "测试丙", clock);
@@ -119,7 +127,7 @@ describe("会开完后自动拿妙记", () => {
       expect(row.outcome?.status).toBe("ready");
       expect(outcome.inputs).toHaveLength(1);
       const card = (await t.app.inject({ method: "GET", url: `/api/cards/meetings/${meetingId}`, headers: { cookie: ceo } })).json().cards[0];
-      expect(card.payload).toMatchObject({ minutesStatus: "ready", attendees: { source: "feishu", personIds: [HOST, OWNER] } });
+      expect(card.payload).toMatchObject({ minutesStatus: "failed", minutesFailure: "no_permission", transcript: null, attendees: { source: "feishu", personIds: [HOST, OWNER] } });
       expect(await meetingMinutesReply(t.pool.query.bind(t.pool), meetingId)).toEqual({ status: "ready", reply: null });
 
       // 再轮询不重复拿。
@@ -134,7 +142,7 @@ describe("会开完后自动拿妙记", () => {
     const outcome = recordingOutcome();
     const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED }, undefined, { preflightAgent, outcomeAgent: outcome });
     try {
-      const meetingId = await scheduledMeeting(t);
+      const meetingId = await identifiedMeeting(t);
       const clock = new Date("2026-06-01T11:10:00+08:00");
       await authorize(t, HOST, "ou_host", "测试乙", clock);
       const api = fakeMinutesApi(`${TRANSCRIPT}
@@ -157,7 +165,7 @@ Speaker 3 00:03:00.000
       expect(outcome.inputs[0].transcript.unmappedSpeakers).toEqual([{ id: "speaker:3", name: "Speaker 3" }]);
       const ceo = await t.loginCookie();
       const card = (await t.app.inject({ method: "GET", url: `/api/cards/meetings/${meetingId}`, headers: { cookie: ceo } })).json().cards[0];
-      expect(card.payload.transcript.unmappedSpeakers).toEqual([{ id: "speaker:3", name: "Speaker 3" }]);
+      expect(card.payload.transcript).toBeNull();
       // 同一份妙记不会再对到别的会。
       expect((await t.pool.query("SELECT count(*)::int AS n FROM meetings WHERE minute_token = 'obcn_minute_1'")).rows[0].n).toBe(1);
     } finally {
@@ -169,7 +177,7 @@ Speaker 3 00:03:00.000
     const outcome = recordingOutcome();
     const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED }, undefined, { preflightAgent, outcomeAgent: outcome });
     try {
-      const meetingId = await scheduledMeeting(t);
+      const meetingId = await identifiedMeeting(t);
       const clock = new Date("2026-06-01T11:10:00+08:00");
       // 测试乙的飞书名是「乙」：人员目录的显示名和飞书名都对到测试乙。
       await authorize(t, HOST, "ou_host", "乙", clock);
@@ -194,7 +202,7 @@ Speaker 3 00:03:00.000
       const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED }, undefined, { preflightAgent, outcomeAgent: outcome });
       try {
         // 会是 CEO（测试甲）建的，主持人是测试乙。
-        const meetingId = await scheduledMeeting(t);
+        const meetingId = await identifiedMeeting(t);
         const clock = new Date("2026-06-01T11:15:00+08:00");
         await authorize(t, CEO, "ou_ceo", "测试甲", clock);
         if (hostState === "no_scope") await authorize(t, HOST, "ou_host", "测试乙", clock);
@@ -202,7 +210,7 @@ Speaker 3 00:03:00.000
         const listMinutes = api.listMinutes;
         api.listMinutes = async (token, owner) => {
           if (token === `u-${HOST}`) { api.calls.push(`list:${token}:${owner.openId}`); throw new FeishuApiError(99991679, "missing scope"); }
-          return listMinutes(token, owner);
+          return (await listMinutes(token, owner)).map(item => ({ ...item,ownerOpenId:owner.openId }));
         };
         await createMeetingMinutesService({ pool: t.pool, peopleDirectory: loadPeopleDirectory(t.env), outcomeAgent: outcome, secret: t.env.sessionSecret,
           feishu: { env: feishuEnv, api }, now: () => clock }).tick();
@@ -220,7 +228,7 @@ Speaker 3 00:03:00.000
     const outcome = recordingOutcome();
     const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED }, undefined, { preflightAgent, outcomeAgent: outcome });
     try {
-      const meetingId = await scheduledMeeting(t);
+      const meetingId = await identifiedMeeting(t);
       const clock = new Date("2026-06-01T11:10:00+08:00");
       await createMeetingMinutesService({ pool: t.pool, peopleDirectory: loadPeopleDirectory(t.env), outcomeAgent: outcome, secret: t.env.sessionSecret, now: () => clock }).tick();
       expect(await meetingMinutesReply(t.pool.query.bind(t.pool), meetingId)).toEqual({ status: "manual", reply: "这场会的妙记没能自动拿到，主持人可以在会议页上传妙记。" });
@@ -279,7 +287,7 @@ describe("妙记来源与再读", () => {
   it("妙记读完记下来源", async () => {
     const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED }, undefined, { preflightAgent, outcomeAgent: recordingOutcome() });
     try {
-      const meetingId = await scheduledMeeting(t);
+      const meetingId = await identifiedMeeting(t);
       await authorize(t, HOST, "ou_host", "测试乙", new Date());
       const raw = TRANSCRIPT.replace(/\n/g, "\r\n");
       await tickAfterMeeting(t, fakeMinutesApi(raw), { feishuWebOrigin: "https://example.feishu.cn/" });
@@ -301,7 +309,7 @@ describe("妙记来源与再读", () => {
   it("产物接口无权限时退回导出接口", async () => {
     const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED }, undefined, { preflightAgent, outcomeAgent: recordingOutcome() });
     try {
-      const meetingId = await scheduledMeeting(t);
+      const meetingId = await identifiedMeeting(t);
       await authorize(t, HOST, "ou_host", "测试乙", new Date());
       const api = fakeMinutesApi();
       api.artifactsError = new FeishuApiError(99991679, "Unauthorized");
@@ -326,7 +334,7 @@ describe("妙记来源与再读", () => {
     const api = fakeMinutesApi();
     const t = await feishuApp(api);
     try {
-      const meetingId = await scheduledMeeting(t);
+      const meetingId = await identifiedMeeting(t);
       api.artifactsError = new FeishuApiError(99991679, "Unauthorized");
       api.exportError = new FeishuApiError(99991679, "Unauthorized");
       await tickAfterMeeting(t, api);
@@ -353,7 +361,7 @@ describe("妙记来源与再读", () => {
     const api = fakeMinutesApi();
     const t = await feishuApp(api);
     try {
-      const meetingId = await scheduledMeeting(t);
+      const meetingId = await identifiedMeeting(t);
       await tickAfterMeeting(t, api);
       expect((await getMeetingRow(t.pool.query.bind(t.pool), meetingId))?.minutes_status).toBe("ready");
       api.calls.length = 0;
@@ -369,7 +377,7 @@ describe("妙记来源与再读", () => {
     const api = fakeMinutesApi();
     const t = await feishuApp(api);
     try {
-      const meetingId = await scheduledMeeting(t);
+      const meetingId = await identifiedMeeting(t);
       const host = await t.memberCookie();
       for (const url of [
         "https://example.com/minutes/obcnpasted1",
@@ -398,7 +406,7 @@ describe("妙记来源与再读", () => {
     const api = fakeMinutesApi();
     const t = await feishuApp(api);
     try {
-      const meetingId = await scheduledMeeting(t, [HOST, OWNER]);
+      const meetingId = await identifiedMeeting(t, [HOST, OWNER]);
       await t.pool.query("INSERT INTO member_access (person_id, login_id, passcode_hash, must_change) VALUES ($1, 'ceshib', $2, FALSE)", [OWNER, hashSecret("8642")]);
       const login = await t.app.inject({ method: "POST", url: "/api/auth/login", headers: { origin: t.publicOrigin }, payload: { loginId: "ceshib", passcode: "8642" } });
       expect(login.statusCode).toBe(200);
@@ -420,7 +428,7 @@ describe("妙记来源与再读", () => {
     for (const response of responses) {
       const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED }, undefined, { preflightAgent, outcomeAgent: recordingOutcome() });
       try {
-        const meetingId = await scheduledMeeting(t);
+        const meetingId = await identifiedMeeting(t);
         await authorize(t, HOST, "ou_host", "测试乙", new Date());
         const api = fakeMinutesApi();
         // 产物接口走真实适配层（假 fetch），其余用假实现。
@@ -439,7 +447,7 @@ describe("妙记来源与再读", () => {
   it("自动拉取遇到临时故障（网络、飞书 5xx）照常再取，不记失败", async () => {
     const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED }, undefined, { preflightAgent, outcomeAgent: recordingOutcome() });
     try {
-      const meetingId = await scheduledMeeting(t);
+      const meetingId = await identifiedMeeting(t);
       await authorize(t, HOST, "ou_host", "测试乙", new Date());
       const api = fakeMinutesApi();
       const status = async () => (await t.pool.query("SELECT minutes_status, minutes_failure FROM meetings WHERE id = $1", [meetingId])).rows[0];
@@ -465,7 +473,7 @@ describe("妙记来源与再读", () => {
     const api = fakeMinutesApi();
     const t = await feishuApp(api);
     try {
-      const meetingId = await scheduledMeeting(t);
+      const meetingId = await identifiedMeeting(t);
       api.listEmpty = true;
       await tickAfterMeeting(t, api);
       expect((await getMeetingRow(t.pool.query.bind(t.pool), meetingId))?.minutes_status).toBe("waiting");
@@ -489,7 +497,7 @@ describe("妙记来源与再读", () => {
       const url = "https://example.feishu.cn/minutes/obcnpasted1";
       const tokenOf = async (id: string) => (await t.pool.query("SELECT minute_token FROM meetings WHERE id = $1", [id])).rows[0].minute_token;
       // 已取消的会：先拒，接口一次没调。
-      const cancelled = await scheduledMeeting(t);
+      const cancelled = await identifiedMeeting(t);
       await t.pool.query("UPDATE meetings SET status = 'cancelled' WHERE id = $1", [cancelled]);
       const rejected = await post(t, host, `/api/meetings/${cancelled}/minutes`, { url });
       expect(rejected.statusCode).toBe(409);
@@ -498,13 +506,13 @@ describe("妙记来源与再读", () => {
       expect(api.calls).toEqual([]);
       expect(await tokenOf(cancelled)).toBeNull();
       // 读的过程中会被取消：候选写不进去，妙记还回去。
-      const racing = await scheduledMeeting(t);
+      const racing = await identifiedMeeting(t);
       api.onRead = async () => { await t.pool.query("UPDATE meetings SET status = 'cancelled' WHERE id = $1", [racing]); };
       expect((await post(t, host, `/api/meetings/${racing}/minutes`, { url })).statusCode).toBe(409);
       expect(await tokenOf(racing)).toBeNull();
       // 对的会照样能对上这份妙记。
       api.onRead = null;
-      const right = await scheduledMeeting(t);
+      const right = await identifiedMeeting(t);
       const read = await post(t, host, `/api/meetings/${right}/minutes`, { url });
       expect(read.statusCode).toBe(200);
       expect(await tokenOf(right)).toBe("obcnpasted1");
@@ -528,7 +536,7 @@ describe("刚开完的会快一点找妙记", () => {
   it("开始等妙记后 15 分钟内每 30 秒找一次；过了 15 分钟回到 5 分钟一次的轮询，拿到妙记后不再找", async () => {
     const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED }, undefined, { preflightAgent, outcomeAgent: recordingOutcome() });
     try {
-      const meetingId = await scheduledMeeting(t); // 10:00–11:00
+      const meetingId = await identifiedMeeting(t); // 10:00–11:00
       let clock = new Date("2026-06-01T11:00:30+08:00");
       await authorize(t, HOST, "ou_host", "测试乙", clock);
       const api = fakeMinutesApi();
@@ -601,7 +609,7 @@ describe("自动同步失败才给手动导入", () => {
   it("等妙记最多等 2 小时，过了退回手动导入", async () => {
     const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED }, undefined, { preflightAgent, outcomeAgent: recordingOutcome() });
     try {
-      const meetingId = await scheduledMeeting(t);
+      const meetingId = await identifiedMeeting(t);
       let clock = new Date("2026-06-01T11:10:00+08:00");
       await authorize(t, HOST, "ou_host", "测试乙", clock);
       const api = fakeMinutesApi();
@@ -629,11 +637,11 @@ describe("自动同步失败才给手动导入", () => {
   });
 });
 
-describe("用户自己上传了，自动同步就停下", () => {
-  it("等妙记时上传了候选：轮询和「妙记生成」事件都不再处理这场会，候选不被覆盖", async () => {
+describe("上传的候选与飞书来源并存", () => {
+  it("等妙记时上传了候选：轮询和重复事件挂上原始来源，保留候选原文", async () => {
     const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED }, undefined, { preflightAgent, outcomeAgent: recordingOutcome() });
     try {
-      const meetingId = await scheduledMeeting(t);
+      const meetingId = await identifiedMeeting(t);
       const clock = new Date("2026-06-01T11:10:00+08:00");
       await authorize(t, HOST, "ou_host", "测试乙", clock);
       const api = fakeMinutesApi();
@@ -651,7 +659,7 @@ describe("用户自己上传了，自动同步就停下", () => {
       await minutes.onMinuteGenerated({ event_id: "ev2", minute_token: "obcn_minute_1", minute_source: { source_type: "meeting", source_entity_id: "vc_1" } });
       expect(api.calls.filter((call) => call.startsWith("artifacts:") || call.startsWith("export:"))).toEqual([]);
       const row = (await getMeetingRow(t.pool.query.bind(t.pool), meetingId))!;
-      expect(row).toMatchObject({ status: "scheduled", minute_token: null, transcript: null });
+      expect(row).toMatchObject({ status: "scheduled", minute_token: "obcn_minute_1", minute_binding: "source_id", transcript: null });
       expect(row.transcript_candidate?.source.format).toBe("miaoji_markdown");
     } finally {
       await t.close();
@@ -661,13 +669,13 @@ describe("用户自己上传了，自动同步就停下", () => {
   it("自动拉取读妙记的过程中用户上传了：不覆盖用户的候选", async () => {
     const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED }, undefined, { preflightAgent, outcomeAgent: recordingOutcome() });
     try {
-      const meetingId = await scheduledMeeting(t);
+      const meetingId = await identifiedMeeting(t);
       await authorize(t, HOST, "ou_host", "测试乙", new Date());
       const api = fakeMinutesApi();
       api.onRead = async () => { await uploadMarkdown(t, meetingId); };
       await tickAfterMeeting(t, api);
       const row = (await getMeetingRow(t.pool.query.bind(t.pool), meetingId))!;
-      expect(row).toMatchObject({ status: "scheduled", transcript: null, minute_token: null });
+      expect(row).toMatchObject({ status: "scheduled", transcript: null, minute_token: "obcn_minute_1", minute_binding: "source_id" });
       expect(row.transcript_candidate?.source.format).toBe("miaoji_markdown");
     } finally {
       await t.close();
@@ -694,7 +702,7 @@ describe("用户自己上传了，自动同步就停下", () => {
       expect(back).toMatchObject({ minutes_status: "waiting", minutes_failure: null });
       expect(back.minutes_waiting_since).toEqual(back.ended);
       // 开完早就超过 2 小时：退回手动导入。
-      const old = await scheduledMeeting(t);
+      const old = await identifiedMeeting(t);
       await uploadMarkdown(t, old);
       expect(await discard(old)).toMatchObject({ minutes_status: "manual" });
       expect((await t.app.inject({ method: "GET", url: `/api/cards/meetings/${old}`, headers: { cookie: ceo } })).json().cards[0].payload.minutesManualImport).toBe(true);
@@ -711,9 +719,9 @@ describe("自动挂按飞书会议号收紧，待整理跟着变", () => {
       await authorize(t, HOST, "ou_host", "测试乙", new Date());
       const api = fakeMinutesApi();
       const minutesOf = async (id: string) => (await t.pool.query("SELECT minutes_status, minute_token FROM meetings WHERE id = $1", [id])).rows[0];
-      const setSource = (id: string, feishuMeetingId: string) => t.pool.query("UPDATE meetings SET feishu_meeting_id = $2 WHERE id = $1", [id, feishuMeetingId]);
+      const setSource = (id: string, feishuMeetingId: string) => t.pool.query("UPDATE meetings SET feishu_meeting_id = $2, feishu_live_meeting_id = $2 WHERE id = $1", [id, feishuMeetingId]);
       // 轮询：会议已有飞书会议号、妙记来自别的飞书会（vc_1）就不挂；对上了照常挂。
-      const meetingId = await scheduledMeeting(t);
+      const meetingId = await identifiedMeeting(t);
       await setSource(meetingId, "vc_other");
       await tickAfterMeeting(t, api);
       expect(await minutesOf(meetingId)).toEqual({ minutes_status: "waiting", minute_token: null });
@@ -722,7 +730,7 @@ describe("自动挂按飞书会议号收紧，待整理跟着变", () => {
       expect(await minutesOf(meetingId)).toEqual({ minutes_status: "ready", minute_token: "obcn_minute_1" });
 
       // 「妙记生成」事件按时间对的那支：妙记来自 vc_2、会议是 vc_other，不读全文；会议号对上了才读。
-      const second = await scheduledMeeting(t);
+      const second = await identifiedMeeting(t);
       await setSource(second, "vc_other");
       api.listEmpty = true;
       await tickAfterMeeting(t, api);
@@ -743,20 +751,20 @@ describe("自动挂按飞书会议号收紧，待整理跟着变", () => {
     }
   });
 
-  it("自动挂上后待整理消失，放手后回来", async () => {
+  it("自动挂上后待整理消失，上传的候选继续保留", async () => {
     for (const userUploads of [false, true]) {
       const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED }, undefined, { preflightAgent, outcomeAgent: recordingOutcome() });
       try {
         await authorize(t, HOST, "ou_host", "测试乙", new Date());
         await t.pool.query(`INSERT INTO feishu_minute_inbox (minute_token, owner_id, title, starts_at, ends_at, feishu_meeting_id)
           VALUES ('obcn_minute_1', $1, '接口切换会', '2026-06-01T10:02:10+08:00', '2026-06-01T11:00:13+08:00', 'vc_1')`, [HOST]);
-        const meetingId = await scheduledMeeting(t);
+        const meetingId = await identifiedMeeting(t);
         const api = fakeMinutesApi();
-        // 另起一场：自动拉取读全文时用户上传了候选，自动拉取放手。
+        // 另一种到达顺序：飞书读全文时先收到用户上传的候选。
         if (userUploads) api.onRead = async () => { await uploadMarkdown(t, meetingId); };
         await tickAfterMeeting(t, api);
         const row = (await t.pool.query("SELECT status, meeting_id FROM feishu_minute_inbox WHERE minute_token = 'obcn_minute_1'")).rows[0];
-        expect(row).toEqual(userUploads ? { status: "pending", meeting_id: null } : { status: "attached", meeting_id: meetingId });
+        expect(row).toEqual({ status: "attached", meeting_id: meetingId });
       } finally {
         await t.close();
       }
@@ -933,7 +941,7 @@ describe("在飞书约上的会跟着飞书会议开始和结束", () => {
     }
   });
 
-  it("没开成：到点没收到开始也不进等妙记；预约结束后 2 小时内照样找妙记，找到了照常接管，过了就不找", async () => {
+  it("漏掉场次事件：两小时内搜索，只有时间相近就保留给所有者核对", async () => {
     const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED }, undefined, { preflightAgent, outcomeAgent: recordingOutcome() });
     try {
       const missed = await bookedMeeting(t);
@@ -951,7 +959,7 @@ describe("在飞书约上的会跟着飞书会议开始和结束", () => {
       expect(api.calls.filter((call) => call.startsWith("list:"))).toHaveLength(1);
       expect(await live(t, missed)).toMatchObject({ minutes_status: "none" });
 
-      // 事件丢了、会其实开过：轮询找到妙记照常接管。
+      // 虽然同一时间有妙记，缺少原始场次标识，不能自动挂到预约。
       // 时钟要拨回 11:40，先把没开成那场挪到前一天，免得两场同一时刻的会按时间抢同一份妙记（谁先拿到看数据库排序）。
       await t.pool.query("UPDATE meetings SET scheduled_at = scheduled_at - interval '1 day', ends_at = ends_at - interval '1 day' WHERE id = $1", [missed]);
       const happened = await bookedMeeting(t);
@@ -959,7 +967,7 @@ describe("在飞书约上的会跟着飞书会议开始和结束", () => {
       api.listEmpty = false;
       clock = new Date("2026-06-01T11:40:00+08:00");
       await minutes.tick();
-      expect(await live(t, happened)).toMatchObject({ status: "held", minutes_status: "ready" });
+      expect(await live(t, happened)).toMatchObject({ status: "scheduled", minutes_status: "none" });
     } finally {
       await t.close();
     }

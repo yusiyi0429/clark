@@ -1,7 +1,8 @@
 "use client";
 
 /**
- * 首页的 Mission 详情卡：头部「● Mission 名 / Task 名」+ 右上角「＋ 开启执行事项」；左边 Task 列，右边三栏。
+ * 首页的 Mission 详情卡：头部「● Mission 名 / Task 名」+ 右上角「＋ 开启执行事项」（有交付物面板时挪到面板底部「我的事项」那一行）；左边 Task 列，右边是选中 Task 的交付物面板（panel），
+ * 没选中真 Task（「未归入 Task」、没有 Task、「全部」）时右边是执行事项三栏。
  * - 选某个 Mission：底色是 Mission 色若有若无的渐变，字和按钮都不染色；Mission 有任务卡时名字点进 Mission 卡页。
  *   有 Task 时出左列（选中的 Task 名写在头部「/」后面），没有 Task 时不出左列，三栏列这个 Mission 的全部事项。
  * - 选「全部」：头部写「全部 Mission」，不出 Task 列，三栏列全部事项，卡片小字写它属于哪个 Mission。
@@ -15,13 +16,15 @@ import { ActivityColumns } from "./ActivityColumns";
 import { tone, worldMeta, type Navigate } from "./planFormat";
 import s from "@/styles/home-plan.module.css";
 
-export function MissionDetail({ mission, taskName, tasks, activities, today, weekStart, weekEnd, missionOf, onNavigate }: {
+export function MissionDetail({ mission, taskName, tasks, panel, activities, today, weekStart, weekEnd, missionOf, onNavigate }: {
   /** 聚焦的 Mission；null 是「全部」。 */
   mission: THomePlanMission | null;
   /** 头部「/」后面的名字（选中的 Task 或「未归入 Task」）；没有 Task 列时为 null。 */
   taskName: string | null;
   /** Task 列；没有时为 null。 */
   tasks: ReactNode;
+  /** 选中 Task 的交付物面板；有时右边画它，不画三栏。 */
+  panel: ReactNode;
   activities: THomePlanActivity[];
   today: string;
   weekStart: string;
@@ -41,12 +44,13 @@ export function MissionDetail({ mission, taskName, tasks, activities, today, wee
             : mission?.title ?? "全部 Mission"}
           {taskName ? <><span className={s.sep} aria-hidden="true">/</span><span className={s.current}>{taskName}</span></> : null}
         </h2>
-        <span className={s.start}><StartTaskButton onNavigate={onNavigate} /></span>
+        {/* 有交付物面板时，新建键在面板底部「我的事项」那一行。 */}
+        {panel ? null : <span className={s.start}><StartTaskButton onNavigate={onNavigate} /></span>}
         {meta ? <p className={s.worldMeta} data-world-meta>{meta}</p> : null}
       </header>
       <div className={s.split} data-split={tasks ? true : undefined}>
         {tasks}
-        <ActivityColumns activities={activities} today={today} weekStart={weekStart} weekEnd={weekEnd} missionOf={missionOf} onNavigate={onNavigate} />
+        {panel ?? <ActivityColumns activities={activities} today={today} weekStart={weekStart} weekEnd={weekEnd} missionOf={missionOf} onNavigate={onNavigate} />}
       </div>
     </section>
   );

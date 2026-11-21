@@ -7,6 +7,7 @@ import type { TReadScope, TReadScopeParams } from "@warmap/contracts";
 import { popPosition } from "./citations";
 import c from "@/styles/citations.module.css";
 import s from "@/styles/scope-chip.module.css";
+import { FadeText } from "@/lib/home/overflowFade";
 
 /**
  * 跨对象读取的范围标签（已定设计 5a 第 2 条）：「全员 · 7–10 月」。点开调整谁、哪几个月，「重新读」按新范围再读一遍
@@ -192,7 +193,7 @@ export function ScopeEditor({ scope, onApply, onCancel, large = false, now }: {
         </div>
       </div>
       <div className={s.foot}>
-        <span className={s.preview} data-testid="scope-preview">{label}</span>
+        <FadeText className={s.preview} data-testid="scope-preview">{label}</FadeText>
         <button type="button" className={s.ghost} onClick={onCancel}>取消</button>
         <button type="submit" className={s.primary} disabled={!changed || !valid}>重新读</button>
       </div>

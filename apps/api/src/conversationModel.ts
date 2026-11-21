@@ -90,7 +90,7 @@ export type ConversationModelDefinition = {
   baseUrl: string;
   reasoning: boolean;
   thinkingLevelMap?: Partial<Record<"off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max", string | null>>;
-  input: ("text")[];
+  input: ("text" | "image")[];
   cost: { input: number; output: number; cacheRead: number; cacheWrite: number };
   contextWindow: number;
   maxTokens: number;

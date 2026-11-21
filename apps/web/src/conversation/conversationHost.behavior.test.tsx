@@ -21,6 +21,8 @@ const harness = vi.hoisted(() => ({
   selected: null as { top: number; left: number; text: string } | null,
   toolbar: null as { label?: string; onQuote: () => void } | null,
   selectionOptions: null as unknown,
+  buddy: null as { name: string; form: "classic" | "alive" | "panda" } | null,
+  listening: false,
 }));
 vi.mock("react", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react")>();
@@ -52,8 +54,8 @@ vi.mock("./useTaskGroup", () => ({ useThreadGroup: () => ({ view: { members: [],
 vi.mock("./desk/useDeskLayout", async (importOriginal) => ({ ...(await importOriginal<typeof import("./desk/useDeskLayout")>()), useViewportWidth: () => harness.viewport }));
 vi.mock("./useColumnMode", () => ({ useColumnMode: () => harness.column }));
 vi.mock("./references", () => ({ useReferences: () => null }));
-vi.mock("@/components/coagent/presence", () => ({ useListening: () => false }));
-vi.mock("@/components/coagent/skin", () => ({ useCoAgentSkin: () => ["default"] }));
+vi.mock("@/components/coagent/presence", () => ({ useListening: () => harness.listening }));
+vi.mock("@/components/buddy/useBuddy", () => ({ useBuddy: () => ({ buddy: harness.buddy, loading: false }) }));
 vi.mock("@/components/coagent/PresenceCapsule", () => ({ PresenceCapsule: () => null }));
 vi.mock("./ConversationColumn", () => ({ conversationStyles: {}, ConversationColumn: (props: NonNullable<typeof harness.rail> & { children: ReactNode }) => {
   harness.rail = props; return <aside data-channel={props.channel}>{props.children}</aside>;
@@ -87,6 +89,7 @@ beforeEach(() => {
   harness.states = []; harness.refs = []; harness.dependencies = [];
   harness.column.narrow = false; harness.column.mode = "strip"; harness.conversation = {}; harness.anchor = undefined;
   harness.viewport = 1440; harness.sheet = null; harness.dock = null; harness.jumps = []; harness.selected = null; harness.toolbar = null; harness.selectionOptions = null;
+  harness.buddy = null; harness.listening = false;
   vi.clearAllMocks();
   vi.stubGlobal("document", { querySelectorAll: () => [] });
   vi.stubGlobal("window", { location: { search: "" }, addEventListener: vi.fn(), removeEventListener: vi.fn() });
@@ -383,5 +386,30 @@ describe("议题群聊（巡检 P0-3）", () => {
     const channels = (harness.rail as unknown as { channels: { id: string; label: string }[] }).channels;
     expect(channels.map((channel) => channel.id)).toEqual(["agent", "group"]);
     expect(channels[1].label).toContain("议题群聊");
+  });
+});
+
+describe("伙伴露脸（spec 5.5）", () => {
+  it("有伙伴时私聊标题是伙伴的名字，录音时右列胶囊是本人选的样子；没有伙伴时照旧", () => {
+    const { render } = setup();
+    harness.listening = true;
+    render();
+    const rail = () => harness.rail as unknown as { channels: { id: string; title?: string }[]; coagent?: { props: { skin: string } } };
+    expect(rail().channels[0].title).toBe("Co-Agent");
+    expect(rail().coagent?.props.skin).toBe("classic");
+    harness.buddy = { name: "团团", form: "panda" };
+    render();
+    expect(rail().channels[0].title).toBe("团团");
+    expect(rail().coagent?.props.skin).toBe("panda");
+  });
+
+  it("首页输入条收起时的主按钮也用本人的伙伴（名字和形象）；没有伙伴时传 null", () => {
+    const { props, render } = setup();
+    props.rail = false;
+    render();
+    expect((harness.dock as unknown as { buddy?: unknown }).buddy).toBeNull();
+    harness.buddy = { name: "团团", form: "classic" };
+    render();
+    expect((harness.dock as unknown as { buddy?: unknown }).buddy).toEqual({ name: "团团", form: "classic" });
   });
 });

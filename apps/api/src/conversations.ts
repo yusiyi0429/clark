@@ -24,9 +24,11 @@ import type { IssueSuggest, IssueSuggestContext } from "./issueDrafts.js";
 import type { TurnRecoverySummary } from "./conversationRecovery.js";
 import type { ParsedMaterial } from "./materialParser.js";
 import { roleOf, type SessionRole } from "./memberAccess.js";
+import type { TBuddyPersonality } from "@warmap/contracts";
 import { getIssueRow, projectIssueCard } from "./issues.js";
 import { moveStagedFile } from "./meetingMaterials.js";
 import { cardWithMeetingFacts } from "./meetingCardRead.js";
+import type { MinuteReader } from "./partnerMeetings.js";
 import { getMeetingRow, projectMeetingCard } from "./meetingStore.js";
 import { getMonthlyPlanRow, projectMonthlyPlanCard } from "./monthlyPlans.js";
 import { canReadMission, getMissionRow, projectMissionCard } from "./missions.js";
@@ -76,8 +78,8 @@ export type ConversationRuntime = {
   modelId?: string;
   run(input: {
     scope: TConversationScope;
-    /** 这一轮是谁在问：CEO 用 CEO Agent；成员用 DRI Agent（不带 CEO 决策面工具与首页全局上下文）。 */
-    viewer: { personId: string; displayName: string; role: SessionRole };
+    /** 这一轮是谁在问：CEO 用 CEO Agent；成员用 DRI Agent（不带 CEO 决策面工具与首页全局上下文）。buddy：本人的伙伴（名字和性格），没选伙伴时没有。 */
+    viewer: { personId: string; displayName: string; role: SessionRole; buddy?: { name: string; personality: TBuddyPersonality } };
     message: string;
     currentObject: TReferenceSnapshot | null;
     runId?: string;
@@ -172,7 +174,7 @@ export async function getScopeObject(
   q: Query,
   scope: TConversationScope,
   secret: string,
-  context?: { person: MissionRoundPerson; people: MemoryPerson[]; now: Date },
+  context?: { person: MissionRoundPerson; people: MemoryPerson[]; now: Date; minutes?: MinuteReader },
 ): Promise<{ snapshot: TReferenceSnapshot | null; visible: boolean }> {
   if (scope === "global") return { snapshot: null, visible: true };
   const [objectType, id] = scope.split(":", 2);
@@ -241,7 +243,7 @@ export async function getScopeObject(
   const meeting = objectType === "meeting" ? await getMeetingRow(q, id) : null;
   if (meeting) {
     const viewer = context && { personId: context.person.personId, isCeo: context.person.role === "ceo" };
-    const card = await cardWithMeetingFacts(q, meeting, projectMeetingCard(meeting, secret), viewer);
+    const card = await cardWithMeetingFacts(q, meeting, projectMeetingCard(meeting, secret), viewer, context?.minutes);
     const linkedIssues = (await Promise.all(meeting.issue_ids.map((issueId) => getIssueRow(q, issueId))))
       .flatMap((row) => {
         if (!row) return [];
@@ -314,6 +316,7 @@ export async function resolveReferenceSnapshots(
   references: TCardReference[],
   secret: string,
   person?: MissionRoundPerson,
+  minutes?: MinuteReader,
 ): Promise<
   | { snapshots: TReferenceSnapshot[] }
   | { status: 403 | 404 | 409; code: string; message: string }
@@ -343,7 +346,7 @@ export async function resolveReferenceSnapshots(
     }
     const meeting = objectType === "meeting" ? await getMeetingRow(q, id) : null;
     if (meeting) {
-      const card = await cardWithMeetingFacts(q, meeting, projectMeetingCard(meeting, secret), person && { personId: person.personId, isCeo: person.role === "ceo" });
+      const card = await cardWithMeetingFacts(q, meeting, projectMeetingCard(meeting, secret), person && { personId: person.personId, isCeo: person.role === "ceo" }, minutes);
       if (card.version !== reference.version) {
         return { status: 409, code: "REFERENCE_VERSION_CONFLICT", message: "Card 引用版本已过期" };
       }

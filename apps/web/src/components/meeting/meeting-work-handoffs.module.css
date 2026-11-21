@@ -1,0 +1,78 @@
+.panel, .entry, .picker {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-3);
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.panel { margin-block: var(--space-4); }
+.panel h2 { margin: 0; font-size: var(--text-base); }
+.entry {
+  padding: var(--space-4);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-card);
+  background: var(--surface);
+  scroll-margin-block: var(--space-4);
+}
+.entry p, .picker p { margin: 0; }
+.header { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); color: var(--ink-muted); font-size: var(--text-sm); }
+.header time { color: var(--ink-faint); }
+.title { margin: 0; font-size: var(--text-base); line-height: 1.5; }
+.value { line-height: 1.65; }
+.value, .source blockquote { white-space: pre-wrap; }
+.meta, .source, .note { color: var(--ink-muted); font-size: var(--text-sm); }
+.progress { display: flex; gap: var(--space-2) var(--space-4); flex-wrap: wrap; color: var(--ink-muted); font-size: var(--text-sm); }
+.progress strong { font-weight: 600; }
+.progress [data-state="delivered"] strong { color: var(--confirmed); }
+.progress [data-state="failed"] strong, .failure { color: var(--counter); }
+.next { font-size: var(--text-sm); line-height: 1.65; }
+.source, .receiptDetails { min-width: 0; border-block-start: 1px solid var(--hairline); }
+.entry summary {
+  box-sizing: border-box;
+  min-height: 44px;
+  padding-block: var(--space-2);
+  align-content: center;
+  cursor: pointer;
+  width: fit-content;
+  max-width: 100%;
+  line-height: 1.5;
+}
+.receiptDetails > summary { color: var(--ink-muted); font-size: var(--text-sm); }
+.source blockquote { margin: var(--space-2) 0; padding-inline-start: var(--space-2); border-inline-start: 2px solid var(--hairline-strong); }
+.source p { line-height: 1.65; }
+.entry a { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
+.entry a, .actions button, .entry button, .notice button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-height: 44px;
+  min-width: 44px;
+  max-width: 100%;
+}
+.actions { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; min-width: 0; }
+.receipts { display: grid; list-style: none; margin: 0; padding: 0; }
+.receipts li { display: flex; gap: var(--space-2) var(--space-3); flex-wrap: wrap; align-items: center; padding-block: var(--space-2); }
+.receipts li + li { border-block-start: 1px solid var(--hairline); }
+.receiptBody { display: grid; gap: var(--space-1); min-width: 0; flex: 1 1 12rem; font-size: var(--text-sm); line-height: 1.6; }
+.receipts li > a, .receipts li > button { flex-shrink: 0; }
+.receipts li > a { padding-inline: var(--space-2); }
+.picker fieldset { display: grid; gap: var(--space-2); border: 1px solid var(--hairline); border-radius: var(--r-control); min-width: 0; margin: 0; padding: var(--space-3); }
+.picker legend { font-size: var(--text-sm); }
+.choice { display: flex; align-items: center; gap: var(--space-2); min-height: 44px; cursor: pointer; line-height: 1.6; }
+.choice input { flex-shrink: 0; }
+.note { display: grid; gap: var(--space-1); margin-block: var(--space-1); }
+.note textarea { box-sizing: border-box; min-width: 0; width: 100%; min-height: 88px; font-family: inherit; font-size: var(--field-font); line-height: var(--field-line); color: var(--field-ink); background: var(--field-bg); border: 1px solid var(--field-border); border-radius: var(--field-radius); padding: var(--field-pad-y) var(--field-pad-x); caret-color: var(--field-caret); resize: none; }
+.note textarea::placeholder { color: var(--field-placeholder); }
+.note textarea:hover { border-color: var(--field-border-hover); }
+.note textarea:focus-visible { border-color: var(--field-border-focus); outline: none; box-shadow: var(--field-focus-ring); }
+.actions button, .entry button, .notice button { cursor: pointer; justify-self: start; width: fit-content; color: var(--ink); background: transparent; border: 1px solid var(--hairline-strong); border-radius: var(--r-control); padding: var(--space-2) var(--space-3); font: inherit; line-height: 1.5; }
+.actions button.primary, .entry button.primary { background: var(--solid); color: var(--solid-fg); border-color: var(--solid); }
+.actions button:disabled, .entry button:disabled { opacity: .55; cursor: default; }
+.notice { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; color: var(--counter); overflow-wrap: anywhere; }
+.actions button:focus-visible, .entry:focus-visible, .entry button:focus-visible, .entry summary:focus-visible, .entry a:focus-visible, .notice button:focus-visible { outline: 2px solid var(--focus, var(--ring)); outline-offset: 3px; }
+@media (max-width: 400px) {
+  .entry { padding: var(--space-3); }
+  .receiptBody { flex-basis: 100%; }
+  .picker fieldset { padding: var(--space-2); }
+}
