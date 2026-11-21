@@ -395,7 +395,8 @@ describe("偏好页（外观、通知、缺省预算、伙伴、回收站）", (
 
 describe("挂载表", () => {
   it("六个二级页和月份页都交了", () => {
-    expect(Object.keys(SECONDARY_PAGES).sort()).toEqual(["buddy", "connections", "memory", "preferences", "profile", "roles"]);
+    expect(Object.keys(SECONDARY_PAGES).sort()).toEqual(["buddy", "connections", "materials", "memory", "preferences", "profile", "roles"]);
+    expect(PAGE_TITLE.materials).toBe("对外资料");
     // 连接和技能：两个老页键开同一页，分别落在「连接」「技能」标签。
     expect(PAGE_TITLE.connections).toBe("连接和技能");
     expect(PAGE_TITLE.roles).toBe("连接和技能");

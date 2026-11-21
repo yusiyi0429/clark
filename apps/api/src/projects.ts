@@ -20,7 +20,8 @@ export const CARD_PROJECT = (alias: string) =>
   `COALESCE((SELECT g.project_id FROM project_goals g WHERE g.task_id=${alias}.plan_task_id),${alias}.project_id)`;
 
 type ProjectRow = { id: string; owner_id: string; name: string; origin_mission_id: string | null; archived_at: Date | null; created_at: Date; updated_at: Date;
-  last_activity_at?: Date | null; permission_mode: TProject["permissionMode"]; auto_relay_limit: number | null; auto_relay_paused_at: Date | null; scratch: boolean };
+  last_activity_at?: Date | null; permission_mode: TProject["permissionMode"]; auto_relay_limit: number | null; auto_relay_paused_at: Date | null; scratch: boolean;
+  hidden_from_colleagues: boolean };
 type GoalRow = { task_id: string; project_id: string | null; owner_id: string; period: string; mission_id: string; mission_title: string | null; task_name: string;
   source: TProjectGoal["source"]; linked_at: Date; due_date: string | null };
 /** 挂接连同这件 Task 的验收时间点（按 Task 存的那一份，迁移 290）。 */
@@ -31,7 +32,7 @@ const iso = (time: Date | null | undefined) => time ? new Date(time).toISOString
 export const projectView = (row: ProjectRow, transfer: TProjectTransfer | null = null): TProject => ({ projectId: row.id, name: row.name,
   archivedAt: transfer?.status === "accepted" ? transfer.decidedAt : iso(row.archived_at), createdAt: iso(row.created_at)!,
   lastActivityAt: iso(row.last_activity_at), transfer, permissionMode: row.permission_mode, autoRelayLimit: row.auto_relay_limit,
-  ...(row.scratch ? { scratch: true as const } : {}) });
+  ...(row.scratch ? { scratch: true as const } : {}), ...(row.hidden_from_colleagues ? { hiddenFromColleagues: true as const } : {}) });
 
 /** 最近一次动静：挂接、项目里的卡和事项、专题（建项目本身不算，没有为 null）。 */
 const LAST_ACTIVITY = `(SELECT max(at) FROM (
@@ -94,9 +95,10 @@ export async function ensureScratchProject(q: Query, ownerId: string, now: Date)
   return (await q(`SELECT p.*,${LAST_ACTIVITY} AS last_activity_at FROM projects p WHERE p.owner_id=$1 AND p.scratch`, [ownerId])).rows[0] as ProjectRow;
 }
 
-/** PATCH：改名、归档、恢复（只有现在的负责人）。回的项目不带转交（网页按需另读）。 */
+/** PATCH：改名、归档、恢复、不给同事读（只有现在的负责人）。回的项目不带转交（网页按需另读）。 */
 export async function updateProject(q: Query, ownerId: string, projectId: string,
-  patch: { name?: string; archived?: boolean; permissionMode?: TProject["permissionMode"]; autoRelayLimit?: number | null }, now: Date): Promise<TProject> {
+  patch: { name?: string; archived?: boolean; permissionMode?: TProject["permissionMode"]; autoRelayLimit?: number | null; hiddenFromColleagues?: boolean }, now: Date):
+  Promise<TProject> {
   await ownProject(q, ownerId, projectId);
   // 自动接力的上限（18 节第 12 条）：带了才改；改成不限、或比已经接力的次数大，就恢复自动触发。
   const limit = patch.autoRelayLimit !== undefined;
@@ -104,8 +106,9 @@ export async function updateProject(q: Query, ownerId: string, projectId: string
     permission_mode=COALESCE($6,permission_mode),auto_relay_limit=CASE WHEN $7 THEN $8::int ELSE auto_relay_limit END,
     auto_relay_paused_at=CASE WHEN $7 AND ($8::int IS NULL OR $8::int>auto_relay_count) THEN NULL ELSE auto_relay_paused_at END,
     auto_relay_asked=CASE WHEN $7 AND ($8::int IS NULL OR $8::int>auto_relay_count) THEN false ELSE auto_relay_asked END,
-    updated_at=$5 WHERE id=$1 AND owner_id=$2`,
-  [projectId, ownerId, patch.name?.trim() ?? null, patch.archived ?? null, now, patch.permissionMode ?? null, limit, limit ? patch.autoRelayLimit : null]);
+    hidden_from_colleagues=COALESCE($9,hidden_from_colleagues),updated_at=$5 WHERE id=$1 AND owner_id=$2`,
+  [projectId, ownerId, patch.name?.trim() ?? null, patch.archived ?? null, now, patch.permissionMode ?? null, limit, limit ? patch.autoRelayLimit : null,
+    patch.hiddenFromColleagues ?? null]);
   return projectView(await ownProject(q, ownerId, projectId));
 }
 

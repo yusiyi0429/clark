@@ -7,7 +7,8 @@ import type {
   TRoleRef, TRoleRevisionField, TRoleRevisionView, TRoleTool, TRoleView, TCardDraftView, TLocalModelProfile,
 } from "@warmap/contracts";
 import { browserApi } from "@/lib/api/client";
-import { CloudError, patchCard } from "@/lib/board/cloud";
+import { CloudError, patchCard, unwrap as unwrapWithBody } from "@/lib/board/cloud";
+import { secretsOr } from "@/lib/home/colleagueMaterials";
 import type { CardItem } from "@/lib/board/cards";
 import { sourceIdOf } from "@/lib/local/modelPanel";
 
@@ -53,6 +54,9 @@ const id = (value: string) => ({ path: { id: value } });
 export const listRoles = () => unwrap<RoleListResponse>(browserApi.GET("/api/me/roles") as Promise<Result<RoleListResponse>>);
 export const addPreset = (presetKey: string) => unwrap<RoleView>(browserApi.POST("/api/me/roles", { body: { presetKey } }) as Promise<Result<RoleView>>);
 export const patchRole = (roleId: string, body: PatchRoleRequest) => unwrap<RoleView>(browserApi.PATCH("/api/me/roles/{id}", { params: id(roleId), body }) as Promise<Result<RoleView>>);
+/** 技能的「同事可用」开、关；打开时有像密钥的值抛 MaterialSecrets，技能不变。 */
+export const setRoleSharing = (roleId: string, shared: boolean) =>
+  unwrapWithBody<RoleView>(browserApi.PUT("/api/me/roles/{id}/sharing", { params: id(roleId), body: { shared } }) as Promise<Result<RoleView>>).catch(secretsOr);
 export const listRevisions = (roleId: string) =>
   unwrap(browserApi.GET("/api/me/roles/{id}/revisions", { params: id(roleId) })).then((data) => (data as { revisions: RoleRevisionView[] }).revisions);
 export const listProposals = () =>

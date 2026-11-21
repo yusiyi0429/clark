@@ -6,7 +6,7 @@
  */
 import { useRef, useState } from "react";
 import { Dropdown } from "@heroui/react";
-import { Ellipsis } from "lucide-react";
+import { Check, Ellipsis } from "lucide-react";
 import { CloudError } from "@/lib/board/cloud";
 import { ICON } from "./StateIcon";
 import h from "@/styles/home.module.css";
@@ -18,6 +18,8 @@ export type RowMenuItem = {
   disabled?: boolean;
   /** 删除：红字，先「确认删除？」再做。 */
   danger?: boolean;
+  /** 开关项（「不给同事读」）：打开时行尾画勾。 */
+  checked?: boolean;
   /** 要等回话的：菜单开着等，没成时就地写 failText(error)。 */
   run: () => Promise<unknown> | void;
   failText?: (error: unknown) => string;
@@ -76,7 +78,7 @@ export function RowMenu({ label, items, open, onOpenChange }: { label: string; i
             {items.map((item) => (
               <Dropdown.Item key={item.id} id={item.id} textValue={text(item)} className={h.menuItem} shouldCloseOnSelect={false}
                 data-danger={item.danger ? "" : undefined} data-failed={failed?.id === item.id ? "" : undefined} data-testid={`row-menu-${item.id}`}>
-                {text(item)}
+                <span className={h.grow}>{text(item)}</span>{item.checked ? <Check {...ICON} aria-hidden /> : null}
               </Dropdown.Item>
             ))}
           </Dropdown.Menu>

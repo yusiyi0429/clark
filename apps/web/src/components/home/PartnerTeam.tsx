@@ -20,10 +20,17 @@ export { teamAnchor } from "./PartnerTeamCard";
 type TeamFeed = { received: TTeamDelivery[]; sent: TTeamDelivery[]; fixedReceived: TRequestListItem[]; fixedSent: TRequestListItem[] };
 const emptyFeed: TeamFeed = { received: [], sent: [], fixedReceived: [], fixedSent: [] };
 const FREQUENCY = 20_000;
+/** 有伙伴在答时的刷新间隔。 */
+export const FAST_FREQUENCY = 3_000;
 const HASH = "#team-request-";
 
 function withDelivery<T extends { id: string }>(items: T[], next: T): T[] {
   return [...items.filter((item) => item.id !== next.id), next];
+}
+
+/** 两个盒子里只要有一位收件人的伙伴在答，就快刷。 */
+export function feedInterval(feed: { received: TTeamDelivery[]; sent: TTeamDelivery[] }): number {
+  return [...feed.received, ...feed.sent].some((item) => item.recipients.some((person) => person.buddy?.state === "answering")) ? FAST_FREQUENCY : FREQUENCY;
 }
 
 /** 来件与发件是当前登录人的云端投影。轮次沿用原请求；单个来源暂时失败时，其余卡仍能使用。 */
@@ -52,6 +59,7 @@ function useTeamFeed(viewerId: string | null) {
     return () => controller.abort();
   }, [hash, viewerId, retry]);
 
+  const interval = feedInterval(feed);
   useEffect(() => {
     const controller = new AbortController();
     let sequence = 0;
@@ -70,14 +78,14 @@ function useTeamFeed(viewerId: string | null) {
       setError(failed?.status === "rejected" ? teamError(failed.reason, "同事收发记录暂时未更新") : "");
     };
     const events = ["focus", TEAM_DELIVERY_CHANGED, REQUESTS_CHANGED];
-    const timer = window.setInterval(load, FREQUENCY);
+    const timer = window.setInterval(load, interval);
     events.forEach((event) => window.addEventListener(event, load));
     document.addEventListener("visibilitychange", load);
     void load();
     return () => {
       controller.abort(); window.clearInterval(timer); events.forEach((event) => window.removeEventListener(event, load)); document.removeEventListener("visibilitychange", load);
     };
-  }, [viewerId, retry]);
+  }, [viewerId, retry, interval]);
 
   const focusId = hash && (anchored?.id === hash || feed.received.some((item) => item.id === hash) || feed.sent.some((item) => item.id === hash)) ? hash : "";
   useEffect(() => {

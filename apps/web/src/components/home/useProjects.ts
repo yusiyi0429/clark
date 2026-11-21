@@ -75,6 +75,7 @@ export function useProjects(data: Pick<WorkHomeData, "projects" | "month" | "per
   }, [refresh]);
   const rename = useCallback(async (id: string, name: string) => { await updateProject(id, { name }); await refresh(); }, [refresh]);
   const archive = useCallback(async (id: string, value: boolean) => { await updateProject(id, { archived: value }); await refresh(); }, [refresh]);
+  const hide = useCallback(async (id: string, value: boolean) => { await updateProject(id, { hiddenFromColleagues: value }); await refresh(); }, [refresh]);
   const attach = useCallback(async (taskId: string, projectId: string) => { await attachGoal(projectId, taskId); await refresh(); }, [refresh]);
   /** 改一件目标的验收截止日，null 清掉（退回记下的原验收时间点）。 */
   const setDue = useCallback(async (projectId: string, taskId: string, dueDate: string | null) => { await setGoalDueDate(projectId, taskId, dueDate); await refresh(); }, [refresh]);
@@ -123,8 +124,8 @@ export function useProjects(data: Pick<WorkHomeData, "projects" | "month" | "per
     await refresh();
   }, [refresh]);
   const withdraw = useCallback(async (transferId: string) => { await withdrawTransfer(transferId); await refresh(); }, [refresh]);
-  const actions = useMemo(() => ({ create, rename, archive, remove, attach, setDue, setFolder, setFolders, addFolder, pickFolder, createFolder, transfer, withdraw, renameSub, archiveSub, removeSub, reloadFolders: loadFolders }),
-    [create, rename, archive, remove, attach, setDue, setFolder, setFolders, addFolder, pickFolder, createFolder, transfer, withdraw, renameSub, archiveSub, removeSub, loadFolders]);
+  const actions = useMemo(() => ({ create, rename, archive, hide, remove, attach, setDue, setFolder, setFolders, addFolder, pickFolder, createFolder, transfer, withdraw, renameSub, archiveSub, removeSub, reloadFolders: loadFolders }),
+    [create, rename, archive, hide, remove, attach, setDue, setFolder, setFolders, addFolder, pickFolder, createFolder, transfer, withdraw, renameSub, archiveSub, removeSub, loadFolders]);
   return { all, projects, archived, archivedSubs, bound, boundAll, folderLimit, actions };
 }
 

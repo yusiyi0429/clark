@@ -4,9 +4,10 @@ import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Pool, PoolClient } from "pg";
 import type { TCreateRoleRequest, TPatchRoleRequest, TRoleBrief, TRoleFamily, TRoleKind, TRoleListResponse, TRoleModelTier, TRoleProposalView, TRoleRef,
-  TRoleRevisionField, TRoleRevisionView, TRoleTool, TRoleView } from "@warmap/contracts";
+  TRoleRevisionField, TRoleRevisionView, TRoleTool, TRoleView, TSecretFinding } from "@warmap/contracts";
 import type { Query } from "./meetingStore.js";
 import { UUID_PATTERN } from "./meetingStore.js";
+import { secretLines } from "./secretPatterns.js";
 
 /**
  * 岗位与团队（V2 设计第 19 节）的数据和接口：本人的岗位、组织预设、修改记录、伙伴提的岗位修改。
@@ -17,6 +18,8 @@ import { UUID_PATTERN } from "./meetingStore.js";
 export class RoleError extends Error {
   constructor(public readonly status: 400 | 404 | 409, public readonly code: string, message: string) { super(message); }
 }
+/** 标了同事可用的技能里有像密钥的值（打开开关时、开着再改时）。 */
+export class RoleSecrets extends Error { constructor(readonly findings: TSecretFinding[]) { super("同事可用的技能里不能有像密钥的值，去掉再存"); } }
 
 export const PRESETS_DIR = new URL("./roles/presets/", import.meta.url);
 const FAMILIES = new Set<TRoleFamily>(["general", "dev", "strategy_content"]);
@@ -111,14 +114,20 @@ export async function syncRolePresets(pool: Pool, presets: PresetFile[], now: Da
 
 export type RoleRow = { id: string; owner_id: string | null; preset_key: string | null; preset_version: number | null; name: string; family: TRoleFamily; kind: TRoleKind;
   duties_md: string; practice_md: string; acceptance_md: string; tools: TRoleTool[]; model_tier: TRoleModelTier; version: number; archived_at: Date | null;
-  updated_at: Date; updated_by: string | null };
+  updated_at: Date; updated_by: string | null; shared_with_colleagues: boolean };
 
 export const roleRef = (row: Pick<RoleRow, "id" | "name" | "kind">): TRoleRef => ({ id: row.id, name: row.name, kind: row.kind });
 export const roleBrief = (row: RoleRow): TRoleBrief => ({ id: row.id, name: row.name, kind: row.kind, dutiesMd: row.duties_md, practiceMd: row.practice_md,
   acceptanceMd: row.acceptance_md, tools: row.tools, modelTier: row.model_tier, version: row.version });
 const roleView = (row: RoleRow, names: Map<string, string>): TRoleView => ({ ...roleBrief(row), family: row.family, presetKey: row.preset_key,
   presetVersion: row.preset_version, updatedAt: row.updated_at.toISOString(),
-  updatedBy: row.updated_by ? { personId: row.updated_by, name: names.get(row.updated_by) ?? row.updated_by } : null });
+  updatedBy: row.updated_by ? { personId: row.updated_by, name: names.get(row.updated_by) ?? row.updated_by } : null,
+  ...(row.shared_with_colleagues ? { shared: true as const } : {}) });
+
+/** 职责、做法、验收口径三段里像密钥的行；where 是「技能 · 职责」这类。 */
+const roleSecrets = (row: Pick<RoleRow, "duties_md" | "practice_md" | "acceptance_md">): TSecretFinding[] =>
+  ([["职责", row.duties_md], ["做法", row.practice_md], ["验收口径", row.acceptance_md]] as const)
+    .flatMap(([title, text]) => secretLines(text).map((finding) => ({ where: `技能 · ${title}`, ...finding })));
 
 /** GET /api/me/roles：本人没归档的岗位，加没归档的预设（标明本人已经加过没有）。 */
 export async function listRoles(q: Query, ownerId: string, names: Map<string, string>): Promise<TRoleListResponse> {
@@ -166,6 +175,8 @@ export async function reviseRole(client: PoolClient, row: RoleRow, fields: Parti
     .map((field) => ({ field, before: display(row[FIELD_COLUMNS[field]]), after: display(fields[field]) }));
   if (!changes.length) return false;
   const next = { ...row, ...Object.fromEntries(changes.map(({ field }) => [FIELD_COLUMNS[field], fields[field]])) } as RoleRow;
+  const findings = row.shared_with_colleagues ? roleSecrets(next) : [];
+  if (findings.length) throw new RoleSecrets(findings);
   await client.query(`UPDATE roles SET name=$2,duties_md=$3,practice_md=$4,acceptance_md=$5,tools=$6,model_tier=$7,version=version+1,updated_at=$8,updated_by=$9 WHERE id=$1`,
     [row.id, next.name, next.duties_md, next.practice_md, next.acceptance_md, [...new Set(next.tools)], next.model_tier, now, by]);
   await client.query(`INSERT INTO role_revisions(id,role_id,version,changes,reason,source,proposal_id,created_by,created_at) VALUES($1,$2,$3,$4::jsonb,$5,$6,$7,$8,$9)`,
@@ -190,6 +201,15 @@ export async function patchRole(pool: Pool, ownerId: string, id: string, input: 
   } catch (cause) { await client.query("ROLLBACK").catch(() => undefined); throw cause; }
   finally { client.release(); }
   return roleView((await pool.query("SELECT * FROM roles WHERE id=$1", [id])).rows[0] as RoleRow, names);
+}
+
+/** PUT /api/me/roles/:id/sharing：同事可用开、关；打开时三段里有像密钥的值不改。 */
+export async function setRoleSharing(q: Query, ownerId: string, id: string, shared: boolean, names: Map<string, string>, now: Date): Promise<TRoleView> {
+  const row = await ownRole(q, ownerId, id);
+  const findings = shared ? roleSecrets(row) : [];
+  if (findings.length) throw new RoleSecrets(findings);
+  const updated = (await q("UPDATE roles SET shared_with_colleagues=$3,updated_at=$4 WHERE id=$1 AND owner_id=$2 RETURNING *", [id, ownerId, shared, now])).rows[0] as RoleRow;
+  return roleView(updated, names);
 }
 
 /** DELETE /api/me/roles/:id：归档，卡上的快照不受影响。 */

@@ -325,12 +325,14 @@ const jobWorker = createJobWorker({
   pool,
   handlers: {
     [INTAKE_JOB]: () => scanIntake({ app, pool, env }),
-    ...exampleJobHandlers, ...feishuTokens?.handlers, ...followThroughJobs.handlers, ...docChangeJobs.handlers, ...app.collectionJobs.handlers, ...usageJobs.handlers, ...summaryJobs.handlers, ...ceoNoticeJobs.handlers, ...homePush.handlers, ...app.taskPlacementJobs, ...missionLoadJobs.handlers, ...app.nexusDri.jobs, ...app.monthReviewJobs.handlers, ...app.plannedDueDateJobs.handlers,
+    ...exampleJobHandlers, ...feishuTokens?.handlers, ...followThroughJobs.handlers, ...docChangeJobs.handlers, ...app.collectionJobs.handlers, ...usageJobs.handlers, ...summaryJobs.handlers, ...ceoNoticeJobs.handlers, ...homePush.handlers, ...app.taskPlacementJobs, ...app.teamBuddyAnswerJobs, ...missionLoadJobs.handlers, ...app.nexusDri.jobs, ...app.monthReviewJobs.handlers, ...app.plannedDueDateJobs.handlers,
     ...(env.feishu ? feishuEventJobs(pool, mergeFeishuEventHandlers(followThroughJobs.feishuEvents, docChangeJobs.feishuEvents, app.feishuChat?.events ?? {})) : {}),
     ...(feishuClient ? feishuNotifyJobs({ pool, client: feishuClient, publicOrigin: env.publicOrigin }) : {}),
   },
   recurring: [{ kind: INTAKE_JOB, everyMs: 10_000 }, ...(feishuTokens?.recurring ?? []), ...followThroughJobs.recurring, ...app.collectionJobs.recurring, ...usageJobs.recurring, ...summaryJobs.recurring, ...ceoNoticeJobs.recurring, ...homePush.recurring, ...missionLoadJobs.recurring, ...app.monthReviewJobs.recurring, ...app.plannedDueDateJobs.recurring],
 });
+// 同事来问的代答入队后不等下一轮，直接交给 worker 跑那一条（teamDeliveries.ts）。
+app.jobsNow.run = jobWorker.runNow;
 let feishuEvents: { close: () => void } | undefined;
 app.addHook("onClose", async () => {
   feishuEvents?.close();

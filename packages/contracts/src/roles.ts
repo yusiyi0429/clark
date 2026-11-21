@@ -47,6 +47,8 @@ export const RoleView = Type.Object({
   presetVersion: NullableInteger({ minimum: 1 }),
   updatedAt: Instant,
   updatedBy: Nullable(Person),
+  /** 标了同事可用（同事的伙伴能读）才带。 */
+  shared: Type.Optional(Type.Literal(true)),
 }, strict);
 
 /** 可加的预设岗位；added 是本人已经加过（有没归档的副本）。 */

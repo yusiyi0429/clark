@@ -28,8 +28,9 @@ describe("个人菜单", () => {
       view={{ kind: "home" }} go={() => undefined} />);
     const items = [...html.matchAll(/data-item="([^"]+)"/g)].map((match) => match[1]);
     // 连接、技能合成一项「连接和技能」（11/09 用户定）。
-    expect(items).toEqual(["profile", "buddy", "connections", "memory", "preferences", "mode-manage", "mode-work", "admin", "lock", "logout"]);
+    expect(items).toEqual(["profile", "buddy", "connections", "materials", "memory", "preferences", "mode-manage", "mode-work", "admin", "lock", "logout"]);
     expect(html).toContain('data-item="connections">连接和技能<');
+    expect(html).toContain('data-item="materials">对外资料<');
     expect(html).not.toContain("任务数据质量");
   });
 

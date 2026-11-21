@@ -193,9 +193,9 @@ function HomeFrame({ account }: { account: Account }) {
   // ---- 项目（第 16 节）：首页 v2 的 projects，增改调项目接口（useProjects）----
   const projects = useProjects(data, api.refresh);
   // 左栏行尾「…」菜单（35 条）。
-  const { rename, archive, remove, renameSub, archiveSub, removeSub } = projects.actions;
-  const rowActions = useMemo<RowActions>(() => ({ renameProject: rename, archiveProject: archive, deleteProject: remove, renameSub, archiveSub, deleteSub: removeSub }),
-    [rename, archive, remove, renameSub, archiveSub, removeSub]);
+  const { rename, archive, hide, remove, renameSub, archiveSub, removeSub } = projects.actions;
+  const rowActions = useMemo<RowActions>(() => ({ renameProject: rename, archiveProject: archive, deleteProject: remove, hideProject: hide, renameSub, archiveSub, deleteSub: removeSub }),
+    [rename, archive, hide, remove, renameSub, archiveSub, removeSub]);
   const projectOfTask = (taskId: string) => projects.all.find((project) => project.goals.some((goal) => goal.taskId === taskId)) ?? null;
   // ---- 首页输入框：自动（只在伙伴和各项目之间选，16.4）、伙伴、某个项目；跳进那条对话，那边发出去 ----
   // 自动走 B 的 POST /api/me/route（只按关键词：项目名、挂着的 Task 名和标准）；接口没上时网页按同样的规则自己分。

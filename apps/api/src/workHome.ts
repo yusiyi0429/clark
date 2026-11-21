@@ -115,8 +115,8 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
   const { period, missions, tasks } = await treeTasks(q, deps.planTasks, ownerId, now);
   await syncProjects(deps.pool, ownerId, missions, tasks, now);
   const taskById = new Map(tasks.map((task) => [task.taskId, task]));
-  const projectRows = (await q("SELECT id::text,name,archived_at,created_at,scratch FROM projects WHERE owner_id=$1 ORDER BY created_at,id", [ownerId])).rows as
-    { id: string; name: string; archived_at: Date | null; created_at: Date; scratch: boolean }[];
+  const projectRows = (await q("SELECT id::text,name,archived_at,created_at,scratch,hidden_from_colleagues FROM projects WHERE owner_id=$1 ORDER BY created_at,id",
+    [ownerId])).rows as { id: string; name: string; archived_at: Date | null; created_at: Date; scratch: boolean; hidden_from_colleagues: boolean }[];
   const active = projectRows.filter((row) => !row.archived_at);
   // 本人交出去了的项目（16.7）：本人这边算归档、只读；里面本人以前的子会话不进「其他」。
   const handed = new Set((await handedAway(q, ownerId)).map((row) => row.project_id));
@@ -342,7 +342,7 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
       pipeline: { conversationId: pipelines.get(row.id) ?? null, scope: projectScope(row.id) },
       planning: planningProjects.has(row.id) || projectGoals.some((goal) => planning.has(goal.taskId)), subSessions: mine.map(view), items: items.map(homeItem),
       transfer: transfer ? transferView(transfer, deps.names) : null, unseen: unseenSince(news.get(row.id) ?? null, seen.get(`project:${row.id}`)),
-      ...(row.scratch ? { scratch: true as const } : {}) };
+      ...(row.scratch ? { scratch: true as const } : {}), ...(row.hidden_from_colleagues ? { hiddenFromColleagues: true as const } : {}) };
   });
   // 16.2：有等你的在前；然后是有目标的、按最早的截止日（没日子的排在有日子的后面）；最后按最近动静从近到远。
   const rank = (project: THomeProject) => project.summary.needsYou ? 0 : project.goals.length ? 1 : 2;

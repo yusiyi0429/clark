@@ -6,14 +6,29 @@ import type { TReplyTeamDeliveryRequest, TRequestListItem, TTeamDelivery, TTeamD
 import { monthDayTime } from "@/lib/companyTime";
 import { sizeText } from "@/lib/home/attachments";
 import { publicLink } from "@/lib/home/teamIntent";
-import { replyTeamDelivery, retryRecipient, teamError } from "@/lib/home/teamDelivery";
+import { askTeamOwner, markCorrectionSeen, replyTeamDelivery, retryRecipient, retryTeamBuddy, reviewBuddyReply, teamError } from "@/lib/home/teamDelivery";
 import { emptyTeamFiles, TeamFilePicker, type TeamFiles } from "./PartnerTeamFiles";
 import s from "./partnerTeam.module.css";
 
 export type TeamForward = { text: string; sourceUrl?: string; recipientIds?: string[] };
 const STATUS: Record<TTeamDeliveryRecipient["status"], string> = { pending: "已送达 · 待回复", delivered: "已送达", needs_info: "需补充", answered: "已回复", failed: "送达失败" };
-const REPLY_LABEL: Record<TTeamDeliveryReply["status"], string> = { needs_info: "需要补充或澄清", answered: "回复", clarification: "补充说明" };
+const REPLY_LABEL: Record<TTeamDeliveryReply["status"], string> = { needs_info: "需要补充或澄清", answered: "回复", clarification: "补充说明", follow_up: "追问" };
 export const teamAnchor = (id: string) => "team-request-" + id;
+
+/** 伙伴那条答复上的标记。who 是被问的人的名字，自己看时传「你」。 */
+export function buddyLabel(who: string, state: "unseen" | "seen" | "corrected"): string {
+  return who + "的伙伴答的，" + who + (state === "corrected" ? "改过" : state === "seen" ? "看过了" : "还没看");
+}
+
+/** 收件人那一行的状态词；now 是毫秒。 */
+export function recipientWord(person: TTeamDeliveryRecipient, now: number): string {
+  if (person.status === "pending" && person.buddy?.state === "answering") {
+    const seconds = Math.max(0, Math.floor((now - Date.parse(person.buddy.askedAt)) / 1000));
+    return "伙伴在答 · " + (seconds < 60 ? seconds + " 秒" : Math.floor(seconds / 60) + " 分 " + (seconds % 60) + " 秒");
+  }
+  if (person.status === "pending" && person.buddy?.state === "handoff") return "转本人 · 待回复";
+  return STATUS[person.status];
+}
 
 function Clock({ at }: { at: string }) {
   return <time dateTime={at} title={at}>{monthDayTime(at)}</time>;
@@ -69,7 +84,7 @@ function ReplyForm({ deliveryId, recipientId, kind, onSaved, onClose }: {
     if (locked.current || !canSubmit) return;
     locked.current = true; setBusy(true); setError("");
     const body: TReplyTeamDeliveryRequest = {
-      clientId, status: kind, ...(kind === "clarification" ? { recipientId } : {}), ...(text.trim() ? { text: text.trim() } : {}),
+      clientId, status: kind, ...(kind === "clarification" || kind === "follow_up" ? { recipientId } : {}), ...(text.trim() ? { text: text.trim() } : {}),
       ...(selection.sources.length ? { sourceAttachments: selection.sources.map(({ id, sha256 }) => ({ id, sha256 })) } : {}),
     };
     try { onSaved(await replyTeamDelivery(deliveryId, body, selection.files)); onClose(); }
@@ -78,13 +93,40 @@ function ReplyForm({ deliveryId, recipientId, kind, onSaved, onClose }: {
   };
   return <form className={s.replyForm} aria-label={REPLY_LABEL[kind]} onSubmit={(event) => { event.preventDefault(); void submit(); }}
     onKeyDown={(event) => { if (event.key === "Escape" && !event.nativeEvent.isComposing) { event.preventDefault(); event.stopPropagation(); if (!busy) onClose(); } }}>
-    <label htmlFor={fieldId} className={s.label}>{kind === "needs_info" ? "还缺什么，或想请对方澄清什么？" : kind === "clarification" ? "给这位同事的补充说明" : "你的回复"}
+    <label htmlFor={fieldId} className={s.label}>{kind === "needs_info" ? "还缺什么，或想请对方澄清什么？" : kind === "clarification" ? "给这位同事的补充说明" : kind === "follow_up" ? "追问" : "你的回复"}
       <textarea id={fieldId} autoFocus className={s.field} rows={3} maxLength={20_000} disabled={busy} value={text} onChange={(event) => { changed(); setText(event.target.value); }} />
     </label>
-    <TeamFilePicker selection={selection} disabled={busy} onChange={(next) => { changed(); setSelection(next); }} />
+    {kind === "follow_up" ? null : <TeamFilePicker selection={selection} disabled={busy} onChange={(next) => { changed(); setSelection(next); }} />}
     {error ? <p className={s.error} role="alert">{error}</p> : null}
     <div className={s.actions}><button type="button" className={s.linkButton} disabled={busy} onClick={onClose}>取消</button>
-      <button type="submit" className={s.primary} disabled={busy || !canSubmit}>{busy ? "正在发送" : kind === "answered" ? "提交回复" : kind === "needs_info" ? "请求补充" : "发送说明"}</button></div>
+      <button type="submit" className={s.primary} disabled={busy || !canSubmit}>{busy ? "正在发送" : kind === "answered" ? "提交回复" : kind === "needs_info" ? "请求补充" : kind === "follow_up" ? "追问" : "发送说明"}</button></div>
+  </form>;
+}
+
+/** 被问的人「改一下」：一个输入框，提交是一条更正；没成重试用同一个 clientId。 */
+function CorrectionForm({ deliveryId, replyId, onSaved, onClose }: { deliveryId: string; replyId: string; onSaved: (item: TTeamDelivery) => void; onClose: () => void }) {
+  const [text, setText] = useState("");
+  const [clientId, setClientId] = useState(() => crypto.randomUUID());
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const locked = useRef(false);
+  const fieldId = useId();
+  const submit = async () => {
+    if (locked.current || !text.trim()) return;
+    locked.current = true; setBusy(true); setError("");
+    try { onSaved(await reviewBuddyReply(deliveryId, replyId, { clientId, verdict: "corrected", text: text.trim() })); onClose(); }
+    catch (cause) { setError(teamError(cause, "更正没能送达，请重试")); }
+    finally { locked.current = false; setBusy(false); }
+  };
+  return <form className={s.replyForm} aria-label="更正" onSubmit={(event) => { event.preventDefault(); void submit(); }}
+    onKeyDown={(event) => { if (event.key === "Escape" && !event.nativeEvent.isComposing) { event.preventDefault(); event.stopPropagation(); if (!busy) onClose(); } }}>
+    <label htmlFor={fieldId} className={s.label}>更正
+      <textarea id={fieldId} autoFocus className={s.field} rows={3} maxLength={20_000} disabled={busy} value={text}
+        onChange={(event) => { setClientId(crypto.randomUUID()); setError(""); setText(event.target.value); }} />
+    </label>
+    {error ? <p className={s.error} role="alert">{error}</p> : null}
+    <div className={s.actions}><button type="button" className={s.linkButton} disabled={busy} onClick={onClose}>取消</button>
+      <button type="submit" className={s.primary} disabled={busy || !text.trim()}>{busy ? "正在发送" : "提交"}</button></div>
   </form>;
 }
 
@@ -92,7 +134,9 @@ function Recipient({ delivery, person, sent, onSaved, onForward }: {
   delivery: TTeamDelivery; person: TTeamDeliveryRecipient; sent: boolean; onSaved: (item: TTeamDelivery) => void; onForward: (content: TeamForward) => void;
 }) {
   const [writing, setWriting] = useState<TTeamDeliveryReply["status"] | null>(null);
+  const [correcting, setCorrecting] = useState(false);
   const [retrying, setRetrying] = useState(false);
+  const [acting, setActing] = useState<string | null>(null);
   const [error, setError] = useState("");
   const retry = async () => {
     if (retrying) return;
@@ -101,10 +145,27 @@ function Recipient({ delivery, person, sent, onSaved, onForward }: {
     catch (cause) { setError(teamError(cause, "投递重试失败")); }
     finally { setRetrying(false); }
   };
+  // 伙伴那几个按钮（重试、问本人、没问题、知道了）：同一时间只做一件，没成写在失败行。
+  const act = async (key: string, call: () => Promise<TTeamDelivery>, fallback: string) => {
+    if (acting) return;
+    setActing(key); setError("");
+    try { onSaved(await call()); }
+    catch (cause) { setError(teamError(cause, fallback)); }
+    finally { setActing(null); }
+  };
   const question = delivery.kind === "question";
+  const buddy = person.buddy;
+  const corrected = new Set(person.replies.flatMap((reply) => reply.corrects ? [reply.corrects] : []));
+  const latestBuddy = person.replies.filter((reply) => reply.origin === "buddy").at(-1);
+  const who = sent ? person.displayName : "你";
+  const heading = (reply: TTeamDeliveryReply) => reply.origin === "buddy" ? buddyLabel(who, corrected.has(reply.id) ? "corrected" : reply.reviewedAt ? "seen" : "unseen")
+    : reply.corrects ? person.displayName + " · 更正"
+    : (reply.status === "clarification" || reply.status === "follow_up" ? delivery.sender.displayName : person.displayName) + " · " + REPLY_LABEL[reply.status];
+  const note = person.status === "pending" && buddy?.note && (buddy.state === "handoff" || (sent && (buddy.state === "failed" || buddy.state === "limited"))) ? buddy.note : null;
   return <li className={s.person}>
     <div className={s.personHeading}><strong>{sent ? person.displayName : "我的进度"}</strong>
-      <span className={s.status} data-failed={person.status === "failed" || undefined}>{STATUS[person.status]}</span></div>
+      <span className={s.status} data-failed={person.status === "failed" || undefined}>{recipientWord(person, Date.now())}</span></div>
+    {note ? <p className={s.note}>{note}</p> : null}
     {person.error ? <p className={s.error}>{person.error}</p> : null}
     {error ? <p className={s.error} role="alert">{error}</p> : null}
     {sent && person.status === "failed" ? <button className={s.linkButton} type="button" disabled={retrying} onClick={() => void retry()}>{retrying ? "正在重试" : "重试给" + person.displayName + "的投递"}</button> : null}
@@ -113,16 +174,32 @@ function Recipient({ delivery, person, sent, onSaved, onForward }: {
         {!sent ? <>
           <button type="button" className={s.secondary} onClick={() => setWriting("answered")}>{person.status === "answered" ? "追加回复" : "回复"}</button>
           <button type="button" className={s.linkButton} onClick={() => setWriting("needs_info")}>缺材料或需澄清</button>
-        </> : person.status === "needs_info" ? <button type="button" className={s.secondary} onClick={() => setWriting("clarification")}>给{person.displayName}补充说明</button> : null}
+        </> : <>
+          {person.status === "needs_info" ? <button type="button" className={s.secondary} onClick={() => setWriting("clarification")}>给{person.displayName}补充说明</button> : null}
+          {latestBuddy && buddy?.state !== "answering" && !(buddy?.state === "handoff" && person.status === "pending") ? <button type="button" className={s.secondary} onClick={() => setWriting("follow_up")}>追问</button> : null}
+          {buddy?.state === "failed" ? <button type="button" className={s.secondary} disabled={!!acting}
+            onClick={() => void act("retry", () => retryTeamBuddy(delivery.id, person.personId), "重试没有成功，请再试一次")}>{acting === "retry" ? "正在重试" : "重试"}</button> : null}
+          {buddy?.state === "failed" || buddy?.state === "limited" ? <button type="button" className={s.linkButton} disabled={!!acting}
+            onClick={() => void act("owner", () => askTeamOwner(delivery.id, person.personId), "没有转给本人，请重试")}>问本人</button> : null}
+        </>}
       </div> : null}
-    {person.replies.length ? <details className={s.history}>
+    {person.replies.length ? <details className={s.history} open={latestBuddy ? true : undefined}>
       <summary className={s.historySummary}>{person.replies.length} 条往来<span>查看回复与附件</span></summary>
       <ol className={s.replies} aria-label={person.displayName + "的往来"}>
         {person.replies.map((reply) => <li key={reply.id} id={"team-reply-" + reply.id} tabIndex={-1}>
-          <div className={s.replyHead}><b>{reply.status === "clarification" ? delivery.sender.displayName : person.displayName} · {REPLY_LABEL[reply.status]}</b><Clock at={reply.createdAt} /></div>
+          <div className={s.replyHead}><b>{heading(reply)}</b><Clock at={reply.createdAt} /></div>
           {reply.text ? <p className={s.body}>{reply.text}</p> : null}
           <Attachments files={reply.attachments} />
           {sent && reply.status !== "clarification" && reply.text.trim() ? <button type="button" className={s.linkButton} onClick={() => onForward({ text: reply.text })}><Forward size={14} aria-hidden />转发这条回复</button> : null}
+          {sent && reply.corrects && !reply.correctionSeenAt ? <button type="button" className={s.secondary} disabled={!!acting}
+            onClick={() => void act("seen", () => markCorrectionSeen(delivery.id, reply.id), "没有记上，请重试")}>知道了</button> : null}
+          {!sent && reply.id === latestBuddy?.id && !corrected.has(reply.id) ? correcting
+            ? <CorrectionForm deliveryId={delivery.id} replyId={reply.id} onSaved={onSaved} onClose={() => setCorrecting(false)} />
+            : <div className={s.rowTools}>
+              {!reply.reviewedAt && buddy?.state !== "handoff" ? <button type="button" className={s.secondary} disabled={!!acting}
+                onClick={() => void act("ok", () => reviewBuddyReply(delivery.id, reply.id, { verdict: "ok" }), "没有提交上，请重试")}>没问题</button> : null}
+              <button type="button" className={s.linkButton} onClick={() => setCorrecting(true)}>改一下</button>
+            </div> : null}
         </li>)}
       </ol>
     </details> : null}
@@ -164,6 +241,14 @@ export function TeamDeliveryCard({ delivery, sent, onSaved, onForward }: {
       window.removeEventListener("hashchange", navigate);
     };
   }, [delivery.id, replyIds]);
+  // 有收件人「伙伴在答」时每秒重画一次，状态词里的秒数跟着走；不在答不起定时器。
+  const answering = delivery.recipients.some((person) => person.status === "pending" && person.buddy?.state === "answering");
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (!answering) return;
+    const timer = window.setInterval(() => setTick((tick) => tick + 1), 1_000);
+    return () => window.clearInterval(timer);
+  }, [answering]);
   const question = delivery.kind === "question";
   const title = (sent ? "我" : delivery.sender.displayName) + (question ? "发起的征集" : "分享的资料");
   const source = delivery.sourceUrl && publicLink(delivery.sourceUrl);
