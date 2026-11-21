@@ -47,6 +47,9 @@ const api = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/home/colleagueChats", async (original) => ({ ...(await original<typeof import("@/lib/home/colleagueChats")>()), ...api }));
 import { FriendPanel, FriendRequestView, FriendSettingsSections, GrantRows } from "./FriendSheet";
+import { useHomeRefreshEvents } from "./HomeShell";
+import { COLLEAGUE_CHATS_CHANGED } from "@/lib/home/colleagueChats";
+import { TEAM_DELIVERY_CHANGED } from "@/lib/home/teamDelivery";
 
 const person = { personId: "p", displayName: "晨星", left: false };
 const friend = (fields: Partial<TFriendView>): TFriendView => ({ person, relation: "friends", theirs: { agentAsk: true }, mine: { agentAsk: true }, ...fields });
@@ -122,5 +125,22 @@ describe("好友：勾选单、有人加我、加好友设置、好友面板", (
     handler("grant-agent-ask", "onChange")({ target: { checked: false } });
     await flush();
     expect(api.setFriendGrant).toHaveBeenCalledWith("p", { agentAsk: false });
+  });
+
+  it("首页跟着同事对话变了重读：办完好友请求、回了一句，「等你」那一行跟着消掉", () => {
+    const target = new EventTarget();
+    vi.stubGlobal("window", target);
+    const refresh = vi.fn();
+    hooks.position = 0;
+    useHomeRefreshEvents(refresh);
+    target.dispatchEvent(new Event(COLLEAGUE_CHATS_CHANGED));
+    expect(refresh).toHaveBeenCalledTimes(1);
+    target.dispatchEvent(new Event(TEAM_DELIVERY_CHANGED));
+    expect(refresh).toHaveBeenCalledTimes(2);
+    // 重画一次不重复挂（不然一次变化重读好几遍）。
+    hooks.position = 0;
+    useHomeRefreshEvents(refresh);
+    target.dispatchEvent(new Event(COLLEAGUE_CHATS_CHANGED));
+    expect(refresh).toHaveBeenCalledTimes(3);
   });
 });

@@ -50,6 +50,7 @@ import { usePartnerMeetings } from "@/lib/home/partnerMeetingFeed";
 import { focusList } from "@/lib/home/focus";
 import { isTeamDraft } from "./PartnerTeam";
 import { TEAM_DELIVERY_CHANGED } from "@/lib/home/teamDelivery";
+import { COLLEAGUE_CHATS_CHANGED } from "@/lib/home/colleagueChats";
 import { LeftColumn } from "./LeftColumn";
 import { SeenContext, subIcon, type RowActions } from "./SubRows";
 import { ThreadPane } from "./ThreadPane";
@@ -252,10 +253,7 @@ function HomeFrame({ account }: { account: Account }) {
     if (seenKind && seenId) markSeen(seenKind, seenId, seenMarker);
   }, [seenKind, seenId, seenMarker, markSeen]);
   const changed = useCallback(() => { void api.refresh(); }, [api]);
-  useEffect(() => {
-    window.addEventListener(TEAM_DELIVERY_CHANGED, changed);
-    return () => window.removeEventListener(TEAM_DELIVERY_CHANGED, changed);
-  }, [changed]);
+  useHomeRefreshEvents(changed);
   /**
    * 这个标签页里自动开工没开起来的子会话（卡 id、专题 id）：Task 管线里那一行出「失败」加「手动开始」（5.4.3、9.8，手动开始只有这一处），
    * 不弹提示。开起来了、或换了文件夹和模型（自动再试）就去掉。
@@ -799,6 +797,15 @@ function HomeFrame({ account }: { account: Account }) {
 const PANEL_LABEL: Record<PanelKind, string> = { detail: "详情", file: "文件", sessions: "会话", thread: "会话" };
 
 /** 二级页、月份页的壳（5.4.7）：页头（返回、标题）+ 文档类阅读尺，内容是挂进来的组件。 */
+/** 首页数据跟着重读：同事投递变了；同事对话变了（好友请求办了、回了一句、读到最新），「等你」里那几行跟着消掉。 */
+export function useHomeRefreshEvents(refresh: () => void) {
+  useEffect(() => {
+    const events = [TEAM_DELIVERY_CHANGED, COLLEAGUE_CHATS_CHANGED];
+    events.forEach((event) => window.addEventListener(event, refresh));
+    return () => events.forEach((event) => window.removeEventListener(event, refresh));
+  }, [refresh]);
+}
+
 function SecondaryFrame({ title, trail, go, back = true, children }: { title: string; trail?: React.ReactNode; go: (href: string) => void; back?: boolean; children: React.ReactNode }) {
   return (
     <div className={h.page} data-type-scale="doc" data-testid="secondary-page">
