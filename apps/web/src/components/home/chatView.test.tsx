@@ -120,6 +120,41 @@ describe("同事对话页", () => {
     expect(field.style.height).toBe("300px");
   });
 
+  describe("打开时停在哪", () => {
+    const waiting = msg({ author: "asker", text: "排期谁来定", answer: "answered", wait: { reason: "commit", at, closed: false } });
+    const lines = [q, msg({ author: "buddy", replyTo: q.id }), waiting, msg({ author: "buddy", replyTo: waiting.id })];
+    const view = (messages: TChatMessage[]) => <StrictMode><ChatBody chat={{ id, side: "from", peer: { personId: "p-peer", displayName: "溪南", left: false },
+      peerBuddy: null, relation: "friends", messages, firstWaiting: waiting.id }} buddy={{ name: "Miles", form: "classic" }} actions={actions} /></StrictMode>;
+    /** 日志区 scrollHeight 恒为 1000，scrollTop 记在各元素上；scrollIntoView 记下滚到了谁。 */
+    const scrolling = () => {
+      const tops = new WeakMap<Element, number>();
+      const into: Element[] = [];
+      stub(HTMLElement.prototype, "scrollHeight", { get: () => 1000 });
+      stub(Element.prototype, "scrollTop", { get(this: Element) { return tops.get(this) ?? 0; }, set(this: Element, top: number) { tops.set(this, top); } });
+      stub(Element.prototype, "scrollIntoView", { value(this: Element) { into.push(this); } });
+      return into;
+    };
+    const logOf = (host: HTMLElement) => host.querySelector(`[data-id="${waiting.id}"]`)!.parentElement!.parentElement!;
+
+    it("from 侧停在最早等我的那句（StrictMode 下 effect 跑两遍也不再滚到最底），那句的气泡闪一下", () => {
+      const into = scrolling();
+      const host = mount(view(lines));
+      const row = host.querySelector(`[data-id="${waiting.id}"]`)!;
+      expect(into).toContain(row);
+      expect(logOf(host).scrollTop).not.toBe(1000);
+      expect(row.querySelector("[data-bubble]")!.getAttribute("data-cite-flash")).toBe("true");
+    });
+
+    it("后来多了句子再到最新；同样句数重画不动", () => {
+      scrolling();
+      const host = mount(view(lines));
+      act(() => root!.render(view(lines)));
+      expect(logOf(host).scrollTop).not.toBe(1000);
+      act(() => root!.render(view([...lines, msg({ author: "asker", text: "那就周五" })])));
+      expect(logOf(host).scrollTop).toBe(1000);
+    });
+  });
+
   it("样式不写字号、不出省略号", () => {
     expect(readFileSync(css, "utf8")).not.toMatch(/font-size|font-weight|text-overflow:\s*ellipsis|line-clamp/);
   });

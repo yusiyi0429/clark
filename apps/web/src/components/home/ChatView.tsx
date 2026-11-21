@@ -13,6 +13,7 @@ import { Button as Pressable } from "react-aria-components";
 import type { TChatMessage, TChatView } from "@warmap/contracts";
 import { PersonAvatar } from "@/components/avatar/PersonAvatar";
 import { BuddyMark } from "@/components/buddy/BuddyMark";
+import { briefFlash } from "@/components/meeting/readingScroll";
 import type { Buddy } from "@/components/buddy/useBuddy";
 import { HeroButton } from "@/components/HeroButton";
 import { BuddyBubble, TypingBubble, UserBubble } from "@/conversation/ReplyBubbles";
@@ -90,15 +91,19 @@ export function ChatBody({ chat, buddy, actions }: { chat: TChatView; buddy: Bud
     try { await work(); } finally { setBusy(false); }
   };
 
-  // 打开时停在最早等我的那句（from），否则到最新；后来多了句子再到最新。
+  // 打开时停在最早等我的那句（from，闪一下），否则到最新；之后只在句数变多时到最新。按上次看到的句数判，同一句数再跑（StrictMode 跑两遍）什么都不做。
   const log = useRef<HTMLDivElement>(null);
-  const shown = useRef(false);
+  const counted = useRef<number | null>(null);
   useLayoutEffect(() => {
     const element = log.current;
     if (!element) return;
-    const target = !shown.current && side === "from" && chat.firstWaiting ? element.querySelector(`[data-id="${chat.firstWaiting}"]`) : null;
-    if (target) target.scrollIntoView({ block: "center" }); else element.scrollTop = element.scrollHeight;
-    shown.current = true;
+    const last = counted.current;
+    counted.current = messages.length;
+    const target = last === null && side === "from" && chat.firstWaiting ? element.querySelector<HTMLElement>(`[data-id="${chat.firstWaiting}"]`) : null;
+    if (target) {
+      target.scrollIntoView({ block: "center" });
+      briefFlash(target.querySelector<HTMLElement>("[data-bubble]") ?? target);
+    } else if (last === null || messages.length > last) element.scrollTop = element.scrollHeight;
   }, [messages.length, side, chat.firstWaiting]);
 
   const personMark = <PersonAvatar personId={peer.personId} className={c.avatar}>{[...peer.displayName][0] ?? ""}</PersonAvatar>;
