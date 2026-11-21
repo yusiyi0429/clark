@@ -199,6 +199,13 @@ describe("本机程序：设备令牌和单向上报", { timeout: 30_000 }, () =
       expect(rejected.json().rejected.map((item: { code: string; message: string }) => [item.code, item.message])).toEqual([
         ["INVALID_VERDICT", "第 1 条判达到，要写依据"], ["INVALID_VERDICT", "第 2 条判没达到，要写怎么补"], ["INVALID_VERDICT", "第 2 条判没达到，要写怎么补"]]);
       expect((await f.t.sql("SELECT outcome FROM card_handbacks WHERE task_id=$1", [cardId]))[0].outcome).toBeNull();
+
+      // 本人自己做的卡不排 Agent 验收：空交回照旧记下来
+      const mine = await f.task("自己做的");
+      await f.t.sql("UPDATE tasks SET executor='self' WHERE id=$1", [mine]);
+      const own = f.session(device, { kind: "card", cardId: mine });
+      expect((await f.sync(token, device, [own.item(1, "handback", { summary: " ", criteria: [], outputKeys: [] })])).json().rejected).toEqual([]);
+      expect(await f.t.sql("SELECT status,summary FROM card_handbacks WHERE task_id=$1", [mine])).toEqual([{ status: "done", summary: null }]);
     } finally { await f.close(); }
   });
 

@@ -282,7 +282,6 @@ async function applyType(client: PoolClient, deps: Pick<SyncDeps, "storageDir" |
     }
     case "handback": {
       if (!card || run.kind !== "card") throw new SyncReject("INVALID_SUBJECT", "只有卡的会话交回");
-      if (!item.data.summary.trim() && !item.data.outputKeys.length && !item.data.git) throw new SyncReject("EMPTY_HANDBACK", EMPTY_HANDBACK);
       const queued = await insertHandback(client, owner, item.key, run, card, item.data, at);
       return queued ? { queued } : {};
     }
@@ -449,6 +448,8 @@ async function insertHandback(client: PoolClient, owner: Owner, key: string, run
   const outputs = (await client.query("SELECT id::text FROM local_outputs WHERE task_id=$1 AND client_id=ANY($2::text[]) ORDER BY created_at,id",
     [card.id, data.outputKeys])).rows.map((row) => row.id as string);
   const agent = card.status !== "done" && card.executor !== "self";
+  // 空交回不排 Agent 验收；卡已完成、本人自己做的照旧只记下来
+  if (agent && !data.summary.trim() && !data.outputKeys.length && !data.git) throw new SyncReject("EMPTY_HANDBACK", EMPTY_HANDBACK);
   if (agent && card.executor === null) await client.query("UPDATE tasks SET executor='claude_code' WHERE id=$1", [card.id]);
   const id = randomUUID();
   // git：卡在自己的工作树里做时交回的分支和提交（ADR 0038），在文件夹里做的不带。
