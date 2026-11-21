@@ -100,7 +100,8 @@ const DESCRIPTION: Record<BuddyActionName, string> = {
     + "对上几个人：回这几个人和各自对上的是什么（最多 5 个），请本人说具体一点或挑一个再查。没有列出全部同事的用法。"
     + "本人问到别的同事那边的做法、规矩、验收口径或进度时用它，再用 read_colleague_item 读相关的几份，读过了再答。只在伙伴主线用。",
   ask_colleague_buddy: "替本人去问一位同事的伙伴。只在本人这一轮开口让你去问时用，本人没说就不问。text 只能原样摘本人这一轮说的话，不改写、不加本人没说过的背景。"
-    + "对方要是好友并开了『他的伙伴替他来问』。同一轮对同一位最多问 3 句。回话里把对方伙伴的原话告诉本人；result.needsOwner 不为空就是这一点要对方本人定："
+    + "对方要是好友并开了『他的伙伴替他来问』。同一轮对同一位最多问 3 句。回话里把对方伙伴的原话告诉本人；result.ownerReply 是对方本人回的话，原样告诉本人；"
+    + "result.failed 是对方伙伴没答上来，照实说；result.needsOwner 不为空就是这一点要对方本人定："
     + "回来问本人要不要找他本人，本人说要，请本人在对话里点『问本人』。只在伙伴主线用。",
   read_colleague_item: "读同事资料里的一份全文（personId、itemId 取自 read_colleague_catalog；长的按 nextOffset 接着读）。"
     + "答的时候守这几条：只说读到的，每个要点后面标出处，写成「名字 · 标题 · 日期」；资料里没有的直说没有，不猜，不拿常识补；读不到的照实说读不到；"
@@ -373,7 +374,7 @@ async function colleagueReader(deps: BuddyDeps, colleagues: NonNullable<BuddyDep
 /** 去掉全部空白再比原话（模型摘话时常把换行、空格弄丢）。 */
 const squash = (text: string) => text.replace(/\s+/g, "");
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-type AskedRow = { body: string | null; sources: { label: string }[] | null; category: string | null };
+type AskedRow = { answer_state: string; body: string | null; sources: { label: string }[] | null; category: string | null; owner_body: string | null };
 
 type Args<N extends BuddyActionName> = Static<(typeof BuddyActionParams)[N]>;
 type Handlers = { [N in BuddyActionName]: (deps: BuddyDeps, call: Call, args: Args<N>) => Promise<Outcome> };
@@ -467,13 +468,19 @@ const handlers: Handlers = {
     if (asked.state === "limited") return { summary: "今天问满了", result: { chatId: asked.chatId, sent }, ui };
     const deadline = Date.now() + ASK_WAIT_MS;
     for (;;) {
-      const row = (await deps.q(`SELECT b.body,b.sources,b.category FROM colleague_chat_messages m
-        LEFT JOIN colleague_chat_messages b ON b.reply_to=m.id AND b.author='buddy' WHERE m.id=$1 ORDER BY b.seq LIMIT 1`, [asked.messageId])).rows[0] as AskedRow;
+      const row = (await deps.q(`SELECT m.answer_state,b.body,b.sources,b.category,o.body AS owner_body FROM colleague_chat_messages m
+        LEFT JOIN LATERAL (SELECT body,sources,category FROM colleague_chat_messages WHERE reply_to=m.id AND author='buddy' ORDER BY seq LIMIT 1) b ON true
+        LEFT JOIN LATERAL (SELECT body FROM colleague_chat_messages WHERE reply_to=m.id AND author='owner' ORDER BY seq LIMIT 1) o ON true
+        WHERE m.id=$1`, [asked.messageId])).rows[0] as AskedRow;
       if (row.body !== null) {
         const needsOwner = row.category && Object.hasOwn(CHAT_WAIT_WORD, row.category) ? CHAT_WAIT_WORD[row.category as keyof typeof CHAT_WAIT_WORD] : null;
         return { summary: `${name}的伙伴回了`, ui,
           result: { chatId: asked.chatId, sent, answer: row.body, sources: (row.sources ?? []).map((source) => source.label), needsOwner } };
       }
+      // 不在答了又没有伙伴句：他本人先回了、没答上来、转给他本人了，都不会再有伙伴句，马上回。
+      if (row.owner_body !== null) return { summary: `${name}本人回了`, result: { chatId: asked.chatId, sent, ownerReply: row.owner_body }, ui };
+      if (row.answer_state === "failed") return { summary: `${name}的伙伴没答上来`, result: { chatId: asked.chatId, sent, failed: true }, ui };
+      if (row.answer_state === "asked_owner") return { summary: `转给${name}本人了，他还没回`, result: { chatId: asked.chatId, sent, askedOwner: true }, ui };
       if (Date.now() >= deadline) return { summary: `问了${name}的伙伴，还没回`, result: { chatId: asked.chatId, sent, pending: true }, ui };
       await sleep(ASK_POLL_MS);
     }

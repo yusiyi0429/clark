@@ -62,8 +62,8 @@ async function setup() {
   };
   const bad = (text: string) => failed("ask_colleague_buddy", { personId: 丙, text });
   const buddyAsks = async () => (await f.t.sql("SELECT id FROM colleague_chat_messages WHERE author='asker_buddy' ORDER BY seq")).map((row) => row.id as string);
-  /** 发动作、等库里有这句、跑它的作业、回动作的 result。 */
-  const asked = async (text: string) => {
+  /** 发动作、等库里有这句、跑它的作业（beforeRun 先在作业前做点什么），回动作的 result 加 summary、作业跑完到动作回来花的毫秒。 */
+  const asked = async (text: string, beforeRun?: (messageId: string) => Promise<void>) => {
     const before = (await buddyAsks()).length;
     const pending = act("ask_colleague_buddy", { personId: 丙, text });
     let ids = await buddyAsks();
@@ -71,13 +71,16 @@ async function setup() {
       await new Promise((resolve) => setTimeout(resolve, 50));
       ids = await buddyAsks();
     }
+    await beforeRun?.(ids.at(-1)!);
     await f.t.app.colleagueChatAnswerJobs[CHAT_ANSWER_JOB]({ messageId: ids.at(-1)! }, {} as never);
+    const ran = Date.now();
     const res = await pending;
     if (res.statusCode !== 200) throw new Error(res.body);
-    return res.json().result as { chatId: string; sent: string; answer?: string; sources?: string[]; needsOwner?: string | null; pending?: true };
+    return { ...res.json().result, summary: res.json().summary, waited: Date.now() - ran } as { chatId: string; sent: string; answer?: string; sources?: string[];
+      needsOwner?: string | null; pending?: true; failed?: true; ownerReply?: string; summary: string; waited: number };
   };
   const friends = async () => expect((await f.call("POST", "/api/me/friends/" + 丙 + "/request", {})).statusCode).toBe(200);
-  return { f, fake, get, bad, asked, friends };
+  return { f, fake, get, bad, asked, friends, third };
 }
 
 const sent = "切换那天几点开始，库是 postgres://app:••••@db/x";
@@ -115,6 +118,31 @@ describe("Miles 替你问", { timeout: 120_000 }, () => {
       expect((await s.asked("切换那天")).needsOwner).toBe("要承诺");
       expect((await s.bad("切换"))[1]).toBe("ROUND_LIMIT");
       expect(await s.f.t.sql("SELECT 1 FROM colleague_chat_messages WHERE wait_reason IS NOT NULL")).toEqual([]);
+    } finally { await s.f.close(); }
+  });
+
+  it("对方伙伴没答上来：马上回、说没答上来，不等满", async () => {
+    const s = await setup();
+    try {
+      await s.friends();
+      s.fake.impl.answer = async () => { throw new Error("模型出错"); };
+      const result = await s.asked("切换那天几点开始");
+      expect(result).toMatchObject({ failed: true, summary: "测试丙的伙伴没答上来" });
+      expect(result).not.toHaveProperty("pending");
+      expect(result.waited).toBeLessThan(5_000);
+    } finally { await s.f.close(); }
+  });
+
+  it("对方本人先回了：马上回、带回他本人的话", async () => {
+    const s = await setup();
+    try {
+      await s.friends();
+      const result = await s.asked("切换那天几点开始", async (messageId) => {
+        const chatId = (await s.f.t.sql("SELECT chat_id FROM colleague_chat_messages WHERE id=$1", [messageId]))[0].chat_id as string;
+        expect((await s.f.call("POST", C + "/" + chatId + "/owner-messages", { clientId: randomUUID(), text: "九点开始", replyTo: messageId }, s.third)).statusCode).toBe(200);
+      });
+      expect(result).toMatchObject({ ownerReply: "九点开始", summary: "测试丙本人回了" });
+      expect(result.waited).toBeLessThan(5_000);
     } finally { await s.f.close(); }
   });
 });
