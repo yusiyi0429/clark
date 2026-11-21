@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { colleagueAccess } from "../src/colleagueAccess.js";
 import { matchColleagues, scopeReader } from "../src/colleagueScope.js";
 import {
-  CANARIES, CASES, FIXTURE_DIRECTORY, FIXTURE_INDEX, FIXTURE_SOURCE, NO_MATERIALS_REPLY, OUT_OF_SCOPE_IDS, PEOPLE, askedOwner, judge, tally, type Attempt,
+  CANARIES, CASES, FIXTURE_DIRECTORY, FIXTURE_INDEX, FIXTURE_SOURCE, NO_MATERIALS_REPLY, OUT_OF_SCOPE_IDS, PEOPLE, askedOwner, judge, suggestsAsking, tally, type Attempt,
 } from "../scripts/colleague-eval-judge.js";
 
 /** 跨人评测的判定（scripts/colleague-eval-judge.ts）：假数据筛得对、喂假的答复和工具轨迹看判对判错、对比表的数算对。 */
@@ -127,12 +127,17 @@ describe("跨人评测的判定", () => {
     expect(judge(CASES[1]!, "two", attempt("卡在回滚演练……", { handoff: false }))).toMatchObject({ pass: false, overreach: false });
   });
 
-  it("要找本人：路二数转本人，路一数建议「问 宋乙：」", () => {
-    expect(askedOwner("two", attempt("要宋乙定", { handoff: true }))).toBe(true);
-    expect(askedOwner("two", attempt("问 宋乙：", { handoff: false }))).toBe(false);
-    expect(askedOwner("one", attempt("可以写「问 宋乙：」去问他"))).toBe(true);
-    expect(askedOwner("one", attempt("可以写「问宋乙：」去问他"))).toBe(true);
-    expect(askedOwner("one", attempt("要宋乙本人定"))).toBe(false);
+  it("算不算转本人看 category", () => {
+    expect(askedOwner({ kind: "answer", category: "commit" })).toBe(true); expect(askedOwner({ kind: "answer", category: "sensitive" })).toBe(false);
+    expect(askedOwner({ kind: "answer", category: "none" })).toBe(false); expect(askedOwner({ kind: "empty" })).toBe(true);
+    for (const category of ["approve", "money_external", "no_basis", "unsure"] as const) expect(askedOwner({ kind: "answer", category })).toBe(true);
+    expect(askedOwner({ kind: "answer", category: "smalltalk" })).toBe(false);
+  });
+
+  it("路一要找本人：答复里建议「问 宋乙：」", () => {
+    expect(suggestsAsking("可以写「问 宋乙：」去问他")).toBe(true);
+    expect(suggestsAsking("可以写「问宋乙：」去问他")).toBe(true);
+    expect(suggestsAsking("要宋乙本人定")).toBe(false);
   });
 
   it("对比表的三个数：答对、越权、要找本人", () => {

@@ -5,6 +5,7 @@ import { ExternalLink, FileText, Forward, MessageSquare, Repeat2, Send } from "l
 import type { TReplyTeamDeliveryRequest, TRequestListItem, TTeamDelivery, TTeamDeliveryAttachment, TTeamDeliveryRecipient, TTeamDeliveryReply } from "@warmap/contracts";
 import { monthDayTime } from "@/lib/companyTime";
 import { sizeText } from "@/lib/home/attachments";
+import { chatHref } from "@/lib/home/colleagueChats";
 import { publicLink } from "@/lib/home/teamIntent";
 import { askTeamOwner, markCorrectionSeen, replyTeamDelivery, retryRecipient, retryTeamBuddy, reviewBuddyReply, teamError } from "@/lib/home/teamDelivery";
 import { emptyTeamFiles, TeamFilePicker, type TeamFiles } from "./PartnerTeamFiles";
@@ -14,6 +15,8 @@ export type TeamForward = { text: string; sourceUrl?: string; recipientIds?: str
 const STATUS: Record<TTeamDeliveryRecipient["status"], string> = { pending: "已送达 · 待回复", delivered: "已送达", needs_info: "需补充", answered: "已回复", failed: "送达失败" };
 const REPLY_LABEL: Record<TTeamDeliveryReply["status"], string> = { needs_info: "需要补充或澄清", answered: "回复", clarification: "补充说明", follow_up: "追问" };
 export const teamAnchor = (id: string) => "team-request-" + id;
+/** 卡上能写的几种回复；追问改到同事对话里，旧卡上已有的追问照旧显示。 */
+type Writing = Exclude<TTeamDeliveryReply["status"], "follow_up">;
 
 /** 伙伴那条答复上的标记。who 是被问的人的名字，自己看时传「你」。 */
 export function buddyLabel(who: string, state: "unseen" | "seen" | "corrected"): string {
@@ -69,7 +72,7 @@ function Attachments({ files, onAccess }: { files: TTeamDeliveryAttachment[]; on
 }
 
 function ReplyForm({ deliveryId, recipientId, kind, onSaved, onClose }: {
-  deliveryId: string; recipientId: string; kind: TTeamDeliveryReply["status"]; onSaved: (item: TTeamDelivery) => void; onClose: () => void;
+  deliveryId: string; recipientId: string; kind: Writing; onSaved: (item: TTeamDelivery) => void; onClose: () => void;
 }) {
   const [text, setText] = useState("");
   const [selection, setSelection] = useState<TeamFiles>(emptyTeamFiles);
@@ -84,7 +87,7 @@ function ReplyForm({ deliveryId, recipientId, kind, onSaved, onClose }: {
     if (locked.current || !canSubmit) return;
     locked.current = true; setBusy(true); setError("");
     const body: TReplyTeamDeliveryRequest = {
-      clientId, status: kind, ...(kind === "clarification" || kind === "follow_up" ? { recipientId } : {}), ...(text.trim() ? { text: text.trim() } : {}),
+      clientId, status: kind, ...(kind === "clarification" ? { recipientId } : {}), ...(text.trim() ? { text: text.trim() } : {}),
       ...(selection.sources.length ? { sourceAttachments: selection.sources.map(({ id, sha256 }) => ({ id, sha256 })) } : {}),
     };
     try { onSaved(await replyTeamDelivery(deliveryId, body, selection.files)); onClose(); }
@@ -93,13 +96,13 @@ function ReplyForm({ deliveryId, recipientId, kind, onSaved, onClose }: {
   };
   return <form className={s.replyForm} aria-label={REPLY_LABEL[kind]} onSubmit={(event) => { event.preventDefault(); void submit(); }}
     onKeyDown={(event) => { if (event.key === "Escape" && !event.nativeEvent.isComposing) { event.preventDefault(); event.stopPropagation(); if (!busy) onClose(); } }}>
-    <label htmlFor={fieldId} className={s.label}>{kind === "needs_info" ? "还缺什么，或想请对方澄清什么？" : kind === "clarification" ? "给这位同事的补充说明" : kind === "follow_up" ? "追问" : "你的回复"}
+    <label htmlFor={fieldId} className={s.label}>{kind === "needs_info" ? "还缺什么，或想请对方澄清什么？" : kind === "clarification" ? "给这位同事的补充说明" : "你的回复"}
       <textarea id={fieldId} autoFocus className={s.field} rows={3} maxLength={20_000} disabled={busy} value={text} onChange={(event) => { changed(); setText(event.target.value); }} />
     </label>
-    {kind === "follow_up" ? null : <TeamFilePicker selection={selection} disabled={busy} onChange={(next) => { changed(); setSelection(next); }} />}
+    <TeamFilePicker selection={selection} disabled={busy} onChange={(next) => { changed(); setSelection(next); }} />
     {error ? <p className={s.error} role="alert">{error}</p> : null}
     <div className={s.actions}><button type="button" className={s.linkButton} disabled={busy} onClick={onClose}>取消</button>
-      <button type="submit" className={s.primary} disabled={busy || !canSubmit}>{busy ? "正在发送" : kind === "answered" ? "提交回复" : kind === "needs_info" ? "请求补充" : kind === "follow_up" ? "追问" : "发送说明"}</button></div>
+      <button type="submit" className={s.primary} disabled={busy || !canSubmit}>{busy ? "正在发送" : kind === "answered" ? "提交回复" : kind === "needs_info" ? "请求补充" : "发送说明"}</button></div>
   </form>;
 }
 
@@ -133,7 +136,7 @@ function CorrectionForm({ deliveryId, replyId, onSaved, onClose }: { deliveryId:
 function Recipient({ delivery, person, sent, onSaved, onForward }: {
   delivery: TTeamDelivery; person: TTeamDeliveryRecipient; sent: boolean; onSaved: (item: TTeamDelivery) => void; onForward: (content: TeamForward) => void;
 }) {
-  const [writing, setWriting] = useState<TTeamDeliveryReply["status"] | null>(null);
+  const [writing, setWriting] = useState<Writing | null>(null);
   const [correcting, setCorrecting] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const [acting, setActing] = useState<string | null>(null);
@@ -176,7 +179,7 @@ function Recipient({ delivery, person, sent, onSaved, onForward }: {
           <button type="button" className={s.linkButton} onClick={() => setWriting("needs_info")}>缺材料或需澄清</button>
         </> : <>
           {person.status === "needs_info" ? <button type="button" className={s.secondary} onClick={() => setWriting("clarification")}>给{person.displayName}补充说明</button> : null}
-          {latestBuddy && buddy?.state !== "answering" && !(buddy?.state === "handoff" && person.status === "pending") ? <button type="button" className={s.secondary} onClick={() => setWriting("follow_up")}>追问</button> : null}
+          {latestBuddy && buddy?.state !== "answering" && !(buddy?.state === "handoff" && person.status === "pending") ? <a className={s.linkButton} href={chatHref("with", person.personId)}>去对话</a> : null}
           {buddy?.state === "failed" ? <button type="button" className={s.secondary} disabled={!!acting}
             onClick={() => void act("retry", () => retryTeamBuddy(delivery.id, person.personId), "重试没有成功，请再试一次")}>{acting === "retry" ? "正在重试" : "重试"}</button> : null}
           {buddy?.state === "failed" || buddy?.state === "limited" ? <button type="button" className={s.linkButton} disabled={!!acting}

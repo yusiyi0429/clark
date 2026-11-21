@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Children, isValidElement, type ReactElement, type ReactNode } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import type { TTeamDelivery, TTeamDeliveryRecipient, TTeamDeliveryReply } from "@warmap/contracts";
 
 // 同 partnerTeamCard.behavior.test.tsx：用同步的 hook 替身直接调组件和它的回调，不起浏览器。
@@ -38,6 +39,7 @@ const nodes = (node: ReactNode): Element[] => Children.toArray(node).flatMap((ch
 const textOf = (node: ReactNode): string => Children.toArray(node).map((child) => isValidElement(child)
   ? textOf((child.props as { children?: ReactNode }).children) : String(child ?? "")).join("");
 const button = (tree: ReactNode, label: string) => nodes(tree).find((node) => node.type === "button" && textOf(node.props.children as ReactNode) === label);
+const link = (tree: ReactNode, label: string) => nodes(tree).find((node) => node.type === "a" && textOf(node.props.children as ReactNode) === label);
 const click = (tree: ReactNode, label: string) => (button(tree, label)!.props.onClick as () => unknown)();
 const history = (tree: ReactNode) => nodes(tree).find((node) => node.type === "details");
 
@@ -99,47 +101,29 @@ describe("卡上的伙伴答复", () => {
     expect(textOf(row({ ...answered, replies: [buddyReply, followUp] }, false)())).toContain("明华 · 追问");
   });
 
-  it("发起人：伙伴答过的往来默认展开，有追问；伙伴在答时没有追问", () => {
+  it("发起人：伙伴答过的往来默认展开，有「去对话」；伙伴在答时没有", () => {
     const sent = row(answered, true)();
     expect(history(sent)!.props.open).toBe(true);
-    expect(button(sent, "追问")).toBeDefined();
+    expect(link(sent, "去对话")).toBeDefined();
     const plain = row({ ...base, status: "answered", replies: [{ ...buddyReply, origin: undefined }] }, true)();
     expect(history(plain)!.props.open).not.toBe(true);
-    expect(button(plain, "追问")).toBeUndefined();
+    expect(link(plain, "去对话")).toBeUndefined();
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(Date.parse("2026-11-20T04:00:12Z"));
     const asking = row({ ...answered, buddy: { state: "answering", note: null, askedAt: at } }, true)();
-    expect(button(asking, "追问")).toBeUndefined();
+    expect(link(asking, "去对话")).toBeUndefined();
     expect(textOf(asking)).toContain("伙伴在答 · 12 秒");
-    // 被问的人那边没有追问
-    expect(button(row(answered, false)(), "追问")).toBeUndefined();
+    // 被问的人那边没有
+    expect(link(row(answered, false)(), "去对话")).toBeUndefined();
   });
 
-  it("发起人追问：按现有回复接口发 follow_up，带上这位收件人", async () => {
-    const render = row(answered, true);
-    await click(render(), "追问");
-    const form = sub(render(), "kind");
-    expect(form.props.kind).toBe("follow_up");
-    hooks.values = [];
-    let tree = renderSub(form);
-    expect(textOf(nodes(tree).find((node) => node.type === "label")!.props.children as ReactNode)).toBe("追问");
-    expect(button(tree, "追问")).toBeDefined();
-    type(tree, "那回滚怎么做");
-    api.reply.mockResolvedValue(delivery(answered));
-    tree = renderSub(form);
-    submit(tree);
-    await vi.waitFor(() => expect(saved).toHaveBeenCalled());
-    expect(api.reply).toHaveBeenCalledWith("q", { clientId: expect.any(String), status: "follow_up", recipientId: "lin", text: "那回滚怎么做" }, []);
+  it("旧卡不再出『追问』，原位是『去对话』", () => {
+    const html = renderToStaticMarkup(<>{row({ ...answered, personId: "third" }, true)()}</>);
+    expect(html).not.toContain(">追问<"); expect(html).toContain('href="/me/work/chats/with/third"'); expect(html).toContain("去对话");
   });
 
-  it("追问表单不放附件框（给代答的往来只有正文）；被问的人回复照旧能带附件", async () => {
+  it("被问的人回复照旧能带附件", async () => {
     const filePicker = (tree: ReactNode) => nodes(tree).find((node) => typeof node.type === "function" && "selection" in node.props);
-    const asker = row(answered, true);
-    await click(asker(), "追问");
-    const followUp = sub(asker(), "kind");
-    expect(followUp.props.kind).toBe("follow_up");
-    hooks.values = [];
-    expect(filePicker(renderSub(followUp))).toBeUndefined();
     const owner = row(answered, false);
     await click(owner(), "回复");
     const reply = sub(owner(), "kind");
@@ -207,13 +191,13 @@ describe("卡上的伙伴答复", () => {
     expect(textOf(row(handoff, true)())).toContain("值守安排要本人定");
   });
 
-  it("转本人还没回：问的人那边没有「追问」；本人回过以后、或伙伴答完没转本人，照旧有", () => {
+  it("转本人还没回：问的人那边没有「去对话」；本人回过以后、或伙伴答完没转本人，照旧有", () => {
     const handoff: TTeamDeliveryRecipient = { ...answered, buddy: { state: "handoff", note: "值守安排要本人定", askedAt: at, handoffBy: "buddy" } };
-    expect(button(row(handoff, true)(), "追问")).toBeUndefined();
-    expect(button(row({ ...handoff, buddy: { ...handoff.buddy!, note: "伙伴没答上来", handoffBy: "asker" } }, true)(), "追问")).toBeUndefined();
+    expect(link(row(handoff, true)(), "去对话")).toBeUndefined();
+    expect(link(row({ ...handoff, buddy: { ...handoff.buddy!, note: "伙伴没答上来", handoffBy: "asker" } }, true)(), "去对话")).toBeUndefined();
     const own: TTeamDeliveryReply = { id: "reply-o", status: "answered", text: "我定了，周五值守", attachments: [], createdAt: at };
-    expect(button(row({ ...handoff, status: "answered", replies: [buddyReply, own] }, true)(), "追问")).toBeDefined();
-    expect(button(row(answered, true)(), "追问")).toBeDefined();
+    expect(link(row({ ...handoff, status: "answered", replies: [buddyReply, own] }, true)(), "去对话")).toBeDefined();
+    expect(link(row(answered, true)(), "去对话")).toBeDefined();
   });
 
   it("发起人：没点过知道了的更正带「知道了」，点了就调接口；点过的不带；被问的人那边不带", async () => {
