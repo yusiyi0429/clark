@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { isValidElement, type ReactElement, type ReactNode } from "react";
 
 const ui = vi.hoisted(() => ({ values: [] as unknown[], cursor: 0, post: vi.fn(), del: vi.fn(), get: vi.fn(), ask: vi.fn() }));
@@ -17,6 +19,7 @@ import { ConnectionDialog } from "./ConnectionDialog";
 import { ConnectAgentForm, PersonalTokenForm, connectionState, watchFirstUse } from "./ConnectAgentForm";
 import { OAuthConnectForm } from "./OAuthConnectForm";
 
+const FORM_SOURCE = fileURLToPath(new URL("./ConnectAgentForm.tsx", import.meta.url));
 type Node = ReactElement<Record<string, unknown>>;
 function nodes(value: ReactNode): Node[] {
   if (Array.isArray(value)) return value.flatMap(nodes);
@@ -119,6 +122,28 @@ describe("个人连接对话框", () => {
     expect(JSON.stringify(render())).not.toContain(secret);
   });
 
+  it("生成后令牌和复制按钮就在下载按钮旁边，不收在「手动设置」里；写明令牌只显示这一次；不出省略号", async () => {
+    const secret = "tsm_test_visible";
+    ui.post.mockResolvedValue({ data: { token: secret, view: { id: "token-2", name: "我的笔记本", client: "claude", createdAt: "2026-09-28T00:00:00Z", expiresAt: null, lastUsedAt: null } } });
+    let tree = render();
+    expect(JSON.stringify(tree)).not.toMatch(/…|\.\.\./);
+    (tree.find((node) => node.type === "input")!.props.onChange as (event: { target: { value: string } }) => void)({ target: { value: "我的笔记本" } });
+    tree = render();
+    (named(tree, "生成连接说明")!.props.onPress as () => void)();
+    await vi.waitFor(() => expect(render().some((node) => JSON.stringify(node).includes(secret))).toBe(true));
+    tree = render();
+    const ready = tree.find((node) => node.props["aria-label"] === "连接说明已生成")!;
+    const details = tree.find((node) => node.type === "details")!;
+    const tokenBlock = (all: Node[]) => all.find((node) => node.type === "strong" && node.props.children === "令牌");
+    const outsideDetails = (ready.props.children as ReactNode[]).filter((child) => !(isValidElement(child) && child.type === "details"));
+    expect(tokenBlock(nodes(outsideDetails))).toBeDefined();
+    expect(tokenBlock(nodes(details.props.children as ReactNode))).toBeUndefined();
+    const content = JSON.stringify(tree);
+    expect(content).toContain("令牌只显示这一次");
+    expect(content).not.toContain("只能下载这一次");
+    expect(content).not.toMatch(/…|\.\.\./);
+    expect(readFileSync(FORM_SOURCE, "utf8")).not.toContain("…");
+  });
   it("个人令牌默认 30 天；成员版也不再有每周五自动同步的开关", () => {
     const selected = (tree: Node[]) => tree.find((node) => node.props["aria-labelledby"] === "connection-expiry")!.props.selectedKeys;
     const tree = render();

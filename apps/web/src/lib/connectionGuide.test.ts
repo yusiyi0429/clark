@@ -12,6 +12,13 @@ describe("连接说明文件", () => {
       expect(text, client).not.toContain("文件里有用户的个人令牌");
     }
   });
+  it("三种工具、两种角色的常见失败原因里有「令牌还没换成真的」；说明里不出省略号", () => {
+    for (const role of ["member", "ceo"] as const) for (const client of ["codex", "claude", "other"] as const) {
+      const text = connectionGuide({ role, client, endpoint: "https://t.example/mcp/me", expires: "30 天" });
+      expect(text, `${role}/${client}`).toContain("常见原因是令牌还没换成真的");
+      expect(text, `${role}/${client}`).not.toMatch(/…|\.\.\./);
+    }
+  });
   it("三种工具、两种角色的说明都要求配置写在用户级，不进项目仓库", () => {
     for (const role of ["member", "ceo"] as const) for (const client of ["codex", "claude", "other"] as const) {
       const text = connectionGuide({ role, client, endpoint: "https://t.example/mcp/me", expires: "30 天" });

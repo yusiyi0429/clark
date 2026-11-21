@@ -20,6 +20,7 @@
 .ready>p.muted{color:#69788d;font-size:12px}
 .ready>p.connected{color:#2f7a4f;font-weight:600}
 .ready button svg{margin-right:6px}
+.ready>.commandBlock{justify-self:stretch}
 .manual{justify-self:stretch;min-width:0}
 .manual>summary{width:max-content;max-width:100%;color:#69788d;font-size:12px;cursor:pointer;list-style-position:inside}
 .manual>summary:hover{color:#2369d4}
