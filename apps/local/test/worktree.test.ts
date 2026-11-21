@@ -20,7 +20,7 @@ async function until<T>(fn: () => Promise<T | null | undefined | false> | T | nu
 }
 
 const git = (cwd: string, ...args: string[]) => execFileSync("git", ["-c", "core.quotePath=false", ...args], { cwd, encoding: "utf8" }).trim();
-const PASSING = { summary: "都达到了", criteria: [{ index: 1, verdict: "met", reason: "做了" }] };
+const PASSING = { summary: "都达到了", criteria: [{ index: 1, verdict: "met", reason: "做了", evidence: "见改动" }] };
 
 /**
  * 临时仓库：main 上一个提交（说明文件、假 claude 的配置、忽略它的记录文件）。

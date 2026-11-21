@@ -24,7 +24,7 @@ const FAILING = {
   summary: "第 2 条没截图",
   criteria: [{ index: 1, verdict: "met", reason: "能登录", evidence: "hello.txt" }, { index: 2, verdict: "unmet", reason: "没截图", fix: "补一张登录后的截图" }],
 };
-const PASSING = { summary: "都达到了", criteria: [{ index: 1, verdict: "met", reason: "能登录" }, { index: 2, verdict: "met", reason: "有截图" }] };
+const PASSING = { summary: "都达到了", criteria: [{ index: 1, verdict: "met", reason: "能登录", evidence: "hello.txt" }, { index: 2, verdict: "met", reason: "有截图", evidence: "截图.png" }] };
 const PLAN = {
   summary: "拆两件", steps: [{ title: "改页面" }, { title: "补截图", detail: "登录后截一张" }], risks: ["登录接口可能要改"],
   cards: [
@@ -609,6 +609,36 @@ describe("规划员和验收员", { timeout: 30_000 }, () => {
       await until(() => h.cloud.items.filter((i) => i.type === "card_plan").length === 2 && h.cloud.items.some((i) => i.type === "verdict"));
       expect(h.cloud.items.filter((i) => i.type === "card_plan").map((i) => i.data.revision)).toEqual([1, 2]);
       expect(h.cloud.items.filter((i) => i.type === "verdict")).toHaveLength(1);
+    } finally {
+      await h.t.cleanup();
+    }
+  });
+
+  it("验收要带证据（本机当场拦）：判达到不写依据、没达到不写怎么补都退回，不算交过，改了能重交；空交回不进验收，带一句话的照常", async () => {
+    const h = await setup(3);
+    try {
+      h.fake({});
+      const a = await h.open(h.card("A"));
+      await h.allow(a.id);
+      await h.waitStatus(a.id, "idle");
+      // 空交回：没写做了什么、没点名产出、也不在工作树里（没有提交）
+      const empty = await h.mcp(a.id, "hand_back", { summary: "  ", criteria: [{ index: 1, result: "met", evidence: "hello.txt" }], outputs: [] });
+      expect([empty.isError, empty.content[0]!.text]).toEqual([true, "交回里什么都没有：写一句做了什么，或者点名产出"]);
+      expect(h.cloud.items.some((i) => i.type === "handback")).toBe(false);
+      expect(await h.verifies()).toEqual([]);
+      expect((await h.mcp(a.id, "hand_back", { summary: "做完了", criteria: [{ index: 1, result: "met", evidence: "hello.txt" }], outputs: [] })).isError).toBe(false);
+
+      const v = await until(async () => (await h.verifies())[0]);
+      await until(async () => h.events(v.id).some((e) => e.type === "user_message"));
+      const noEvidence = await h.mcp(v.id, "submit_verdict", { ...PASSING, criteria: [{ ...PASSING.criteria[0], evidence: "  " }, PASSING.criteria[1]] });
+      expect([noEvidence.isError, noEvidence.content[0]!.text]).toEqual([true, "第 1 条判达到，要写依据"]);
+      const noFix = await h.mcp(v.id, "submit_verdict", { ...FAILING, criteria: [{ index: 1, verdict: "unmet", reason: "登录不了" }, FAILING.criteria[1]] });
+      expect([noFix.isError, noFix.content[0]!.text]).toEqual([true, "第 1 条判没达到，要写怎么补"]);
+      const noPersonFix = await h.mcp(v.id, "submit_verdict", { ...FAILING, criteria: [FAILING.criteria[0], { index: 2, verdict: "needs_person", reason: "要本人登录", fix: " " }] });
+      expect(noPersonFix.content[0]!.text).toBe("第 2 条判没达到，要写怎么补");
+      expect(h.cloud.items.some((i) => i.type === "verdict")).toBe(false);
+      // 补上依据再交：没被占住
+      expect((await h.mcp(v.id, "submit_verdict", PASSING)).content[0]!.text).toBe("结论已交：过了。");
     } finally {
       await h.t.cleanup();
     }
