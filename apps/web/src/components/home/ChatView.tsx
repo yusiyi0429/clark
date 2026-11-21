@@ -74,6 +74,15 @@ export function chatQuote(chat: TChatView, choice: "waiting" | string | null): {
   return message ? quoteOf(message) : null;
 }
 
+/**
+ * 这次该怎么滚：prevCount 是上次看到的句数（第一次为 null）。第一次 from 侧有最早等我的那句就停在它（waiting），否则到最新；
+ * 之后只在句数变多时到最新，同一句数再来一次（StrictMode 把 effect 跑两遍）不动。
+ */
+export function scrollPlan(prevCount: number | null, count: number, side: Side, firstWaiting: string | null): "waiting" | "bottom" | "none" {
+  if (prevCount === null) return side === "from" && firstWaiting ? "waiting" : "bottom";
+  return count > prevCount ? "bottom" : "none";
+}
+
 /** 只管显示的那一层：拿到一段对话和几件事，画页头、句子、输入框。 */
 export function ChatBody({ chat, buddy, actions }: { chat: TChatView; buddy: Buddy | null; actions: ChatActions }) {
   const chrome = useViewChrome();
@@ -91,19 +100,19 @@ export function ChatBody({ chat, buddy, actions }: { chat: TChatView; buddy: Bud
     try { await work(); } finally { setBusy(false); }
   };
 
-  // 打开时停在最早等我的那句（from，闪一下），否则到最新；之后只在句数变多时到最新。按上次看到的句数判，同一句数再跑（StrictMode 跑两遍）什么都不做。
+  // 怎么滚见 scrollPlan；waiting 时滚到那行、在气泡上闪一下，那行不在就到最新。
   const log = useRef<HTMLDivElement>(null);
   const counted = useRef<number | null>(null);
   useLayoutEffect(() => {
     const element = log.current;
     if (!element) return;
-    const last = counted.current;
+    const plan = scrollPlan(counted.current, messages.length, side, chat.firstWaiting);
     counted.current = messages.length;
-    const target = last === null && side === "from" && chat.firstWaiting ? element.querySelector<HTMLElement>(`[data-id="${chat.firstWaiting}"]`) : null;
+    const target = plan === "waiting" ? element.querySelector<HTMLElement>(`[data-id="${chat.firstWaiting}"]`) : null;
     if (target) {
       target.scrollIntoView({ block: "center" });
       briefFlash(target.querySelector<HTMLElement>("[data-bubble]") ?? target);
-    } else if (last === null || messages.length > last) element.scrollTop = element.scrollHeight;
+    } else if (plan !== "none") element.scrollTop = element.scrollHeight;
   }, [messages.length, side, chat.firstWaiting]);
 
   const personMark = <PersonAvatar personId={peer.personId} className={c.avatar}>{[...peer.displayName][0] ?? ""}</PersonAvatar>;
@@ -204,7 +213,7 @@ export function ChatBody({ chat, buddy, actions }: { chat: TChatView; buddy: Bud
 }
 
 /** 字框高度随内容：先放开再量 scrollHeight（加上边框）；最矮、最高由样式管，超过最高才在框里滚。 */
-const fitHeight = (field: HTMLTextAreaElement) => {
+export const fitHeight = (field: Pick<HTMLTextAreaElement, "style" | "scrollHeight" | "offsetHeight" | "clientHeight">) => {
   field.style.height = "auto";
   field.style.height = `${field.scrollHeight + field.offsetHeight - field.clientHeight}px`;
 };

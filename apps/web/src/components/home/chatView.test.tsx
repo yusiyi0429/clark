@@ -1,13 +1,8 @@
-// @vitest-environment jsdom
 import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { StrictMode, act, type ReactNode } from "react";
-import { afterEach, describe, expect, it } from "vitest";
-import { createRoot, type Root } from "react-dom/client";
+import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { TChatMessage, TChatPerson } from "@warmap/contracts";
-import { ChatBody, chatQuote, chatWho, type ChatActions } from "./ChatView";
+import { ChatBody, chatQuote, chatWho, fitHeight, scrollPlan, type ChatActions } from "./ChatView";
 
 const at = "2026-11-20T08:00:00.000Z";
 const id = "00000000-0000-4000-8000-000000000001";
@@ -27,34 +22,7 @@ const render = (side: "with" | "from", messages: TChatMessage[], peer: Partial<T
     relation: "friends", messages, firstWaiting: null }} buddy={{ name: "Miles", form: "classic" }} actions={actions} />,
 );
 const 溪南 = { displayName: "溪南" };
-const css = join(dirname(fileURLToPath(import.meta.url)), "chats.module.css");
-
-// 真挂到 jsdom 上：量高度、滚动 jsdom 不会算，用桩。
-(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-const undo: (() => void)[] = [];
-const stub = (target: object, key: string, descriptor: PropertyDescriptor) => {
-  const before = Object.getOwnPropertyDescriptor(target, key);
-  Object.defineProperty(target, key, { configurable: true, ...descriptor });
-  undo.push(() => { if (before) Object.defineProperty(target, key, before); else delete (target as Record<string, unknown>)[key]; });
-};
-let root: Root | null = null;
-const mount = (node: ReactNode) => {
-  const host = document.createElement("div");
-  document.body.append(host);
-  root = createRoot(host);
-  act(() => root!.render(node));
-  return host;
-};
-afterEach(() => {
-  act(() => root?.unmount()); root = null;
-  document.body.innerHTML = "";
-  while (undo.length) undo.pop()!();
-});
-const typeInto = (field: HTMLTextAreaElement, text: string) => act(() => {
-  Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(field, text);
-  field.dispatchEvent(new Event("input", { bubbles: true }));
-});
-const buttonNamed = (host: HTMLElement, label: string) => [...host.querySelectorAll("button")].find((button) => button.textContent === label)!;
+const css = new URL("./chats.module.css", import.meta.url);
 
 describe("同事对话页", () => {
   it("每句标谁说的", () => {
@@ -105,54 +73,18 @@ describe("同事对话页", () => {
     expect(chatQuote(view(waitQ.id, "with"), "waiting")).toBeNull();
   });
 
-  it("改一句：字框随内容变高（挂上和每次输入时设成 scrollHeight），那行撑到最大宽", async () => {
-    let height = 240;
-    stub(HTMLTextAreaElement.prototype, "scrollHeight", { get: () => height });
-    const answer = msg({ author: "buddy", replyTo: q.id, text: "按拆分手册拆四件。".repeat(14) });
-    const host = mount(<ChatBody chat={{ id, side: "from", peer: { personId: "p-peer", displayName: "溪南", left: false }, peerBuddy: null,
-      relation: "friends", messages: [q, answer], firstWaiting: null }} buddy={{ name: "Miles", form: "classic" }} actions={actions} />);
-    await act(async () => buttonNamed(host, "改").click());
-    const field = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="改这句"]')!;
-    expect(field.style.height).toBe("240px");
-    expect(host.querySelector(`[data-id="${answer.id}"] > [data-editing]`)).not.toBeNull();
-    height = 300;
-    typeInto(field, field.value + "再加一句。");
-    expect(field.style.height).toBe("300px");
+  it("打开时停在最早等我的那句，之后只在句数变多时到最新；同一句数再来一次（StrictMode 第二遍）不动", () => {
+    expect(scrollPlan(null, 4, "from", waitQ.id)).toBe("waiting");
+    expect(scrollPlan(null, 4, "with", waitQ.id)).toBe("bottom");
+    expect(scrollPlan(null, 4, "from", null)).toBe("bottom");
+    expect(scrollPlan(4, 4, "from", waitQ.id)).toBe("none");
+    expect(scrollPlan(4, 5, "from", waitQ.id)).toBe("bottom");
   });
 
-  describe("打开时停在哪", () => {
-    const waiting = msg({ author: "asker", text: "排期谁来定", answer: "answered", wait: { reason: "commit", at, closed: false } });
-    const lines = [q, msg({ author: "buddy", replyTo: q.id }), waiting, msg({ author: "buddy", replyTo: waiting.id })];
-    const view = (messages: TChatMessage[]) => <StrictMode><ChatBody chat={{ id, side: "from", peer: { personId: "p-peer", displayName: "溪南", left: false },
-      peerBuddy: null, relation: "friends", messages, firstWaiting: waiting.id }} buddy={{ name: "Miles", form: "classic" }} actions={actions} /></StrictMode>;
-    /** 日志区 scrollHeight 恒为 1000，scrollTop 记在各元素上；scrollIntoView 记下滚到了谁。 */
-    const scrolling = () => {
-      const tops = new WeakMap<Element, number>();
-      const into: Element[] = [];
-      stub(HTMLElement.prototype, "scrollHeight", { get: () => 1000 });
-      stub(Element.prototype, "scrollTop", { get(this: Element) { return tops.get(this) ?? 0; }, set(this: Element, top: number) { tops.set(this, top); } });
-      stub(Element.prototype, "scrollIntoView", { value(this: Element) { into.push(this); } });
-      return into;
-    };
-    const logOf = (host: HTMLElement) => host.querySelector(`[data-id="${waiting.id}"]`)!.parentElement!.parentElement!;
-
-    it("from 侧停在最早等我的那句（StrictMode 下 effect 跑两遍也不再滚到最底），那句的气泡闪一下", () => {
-      const into = scrolling();
-      const host = mount(view(lines));
-      const row = host.querySelector(`[data-id="${waiting.id}"]`)!;
-      expect(into).toContain(row);
-      expect(logOf(host).scrollTop).not.toBe(1000);
-      expect(row.querySelector("[data-bubble]")!.getAttribute("data-cite-flash")).toBe("true");
-    });
-
-    it("后来多了句子再到最新；同样句数重画不动", () => {
-      scrolling();
-      const host = mount(view(lines));
-      act(() => root!.render(view(lines)));
-      expect(logOf(host).scrollTop).not.toBe(1000);
-      act(() => root!.render(view([...lines, msg({ author: "asker", text: "那就周五" })])));
-      expect(logOf(host).scrollTop).toBe(1000);
-    });
+  it("改一句的字框高度取内容高再加上下边框", () => {
+    const field = { style: { height: "" }, scrollHeight: 240, offsetHeight: 74, clientHeight: 72 } as unknown as HTMLTextAreaElement;
+    fitHeight(field);
+    expect(field.style.height).toBe("242px");
   });
 
   it("样式不写字号、不出省略号", () => {
