@@ -2,10 +2,10 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { THomeItem } from "@warmap/contracts";
+import type { TChatListResponse, TChatRow, THomeItem } from "@warmap/contracts";
 import type { HomeProject, SubSession, WorkHomeData } from "@/lib/home/types";
 import { fromHome, projectWorking } from "@/lib/home/projects";
-import { LeftColumn } from "./LeftColumn";
+import { LeftColumn, tabFor } from "./LeftColumn";
 import { HomeMeetingContext, type HomeMeetingState } from "./meetingState";
 import { SeenContext, Subs, planOrder, subDot, subIcon } from "./SubRows";
 import { scopeOf, viewOf } from "./view";
@@ -106,7 +106,7 @@ const withTask = (items: THomeItem[], extra: Partial<HomeProject> = {}) => ({
 describe("左栏：项目（16.2）", () => {
   it("「项目」组头右边一个「+」；项目行只有名字一行，本月目标不写在左栏（47 条）；信息按钮进项目详情", () => {
     const html = render({ data: withTask([]) });
-    expect(html).toMatch(/项目<\/span><button[^>]*aria-label="新建项目"/);
+    expect(html).toMatch(/>项目<\/button><button[^>]*>对话<\/button><\/div><button[^>]*aria-label="新建项目"/);
     expect(html).toContain("首页改版");
     expect(html).not.toContain("11/30 验收");
     expect(html).not.toMatch(/class="[^"]*taskSub/);
@@ -143,7 +143,7 @@ describe("左栏：项目（16.2）", () => {
 
   it("有已归档的（本人 11/16 藏起来）：树里不占一行，「项目」组头「+」左边一个图标「已归档 N」，默认不列", () => {
     const html = render({ data: withTask([]), projects: [], archived: projectsOf(withTask([])).map((project) => ({ ...project, archived: true })) });
-    expect(html).toMatch(/aria-label="项目".*<span>项目<\/span><button[^>]*aria-label="已归档 1"[^>]*aria-pressed="false"[^>]*data-testid="tree-archived".*data-testid="project-add"/);
+    expect(html).toMatch(/aria-label="项目".*>项目<\/button><button[^>]*>对话<\/button><\/div><button[^>]*aria-label="已归档 1"[^>]*aria-pressed="false"[^>]*data-testid="tree-archived".*data-testid="project-add"/);
     expect(html).not.toContain('aria-label="已归档"');
     expect(html).not.toContain('data-testid="tree-project"');
   });
@@ -173,6 +173,31 @@ describe("左栏：项目（16.2）", () => {
     const archivedSubs = [{ kind: "topic", id: "t1", title: "选型", projectId: "p1", projectName: "首页改版", archivedAt: "2026-11-09T02:00:00.000Z" }];
     const html = render({ data: withTask([]), projects: [], archived, ...({ archivedSubs } as object) });
     expect(html).toMatch(/aria-label="已归档 1"[^>]*data-testid="tree-archived"/);
+  });
+});
+
+describe("左栏：项目 | 对话（同事伙伴设计第 1 节）", () => {
+  const chatRow = (fields: Partial<TChatRow>): TChatRow => ({
+    id: "00000000-0000-4000-8000-000000000001", peer: { personId: "p", displayName: "测试研发", left: false }, peerBuddy: null,
+    last: { author: "buddy", text: "好的", at: "2026-11-06T02:00:00.000Z" }, unread: false, waiting: 0, ...fields,
+  });
+  const list: TChatListResponse = { mine: [chatRow({ unread: true })], inbound: [chatRow({ waiting: 1 })], requests: [] };
+
+  it("红框那行是滑块：默认项目；在对话页时停在对话；停在项目、对话有事时亮点", () => {
+    tap.props.clear();
+    render({ chats: list });
+    expect(tap.props.get("tab-projects")?.["aria-pressed"]).toBe(true);
+    expect(tap.props.get("tab-chats-dot")?.["data-tone"]).toBe("attention");
+    render({ view: { kind: "chat", side: "with", personId: "p" }, chats: list });
+    expect(tap.props.get("tab-chats")?.["aria-pressed"]).toBe(true);
+    expect(tap.props.has("chat-find")).toBe(true);
+  });
+
+  it("滑块跟着地址：进对话那边的页停到对话，进项目那边的页回到项目，别的页不动", () => {
+    for (const path of ["/me/work/chats/with/p", "/me/work/chats/from/p", "/me/work/chats/find", "/me/work/chats/requests/p"]) expect(tabFor(viewOf(path)), path).toBe("chats");
+    for (const path of ["/me/work/projects/x", "/me/work/projects/x/info", "/me/work/projects/x/new", "/me/work/tasks/t", "/me/work/tasks/t/info", "/me/work/cards/c", "/me/work/topics/t"])
+      expect(tabFor(viewOf(path)), path).toBe("projects");
+    for (const path of ["/me/work", "/me/work/buddy", "/me/work/meetings", "/me/work/month/2026-11"]) expect(tabFor(viewOf(path)), path).toBeNull();
   });
 });
 

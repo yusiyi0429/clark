@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
-import type { TCardTaskView, TMissionRoundSummary, TWaitingItem, TWorkerResources } from "@warmap/contracts";
+import { CHAT_WAIT_WORD, type TCardTaskView, type TMissionRoundSummary, type TWaitingItem, type TWorkerResources } from "@warmap/contracts";
+import { listChatWaiting } from "./colleagueChatOwner.js";
+import { listFriendRequests } from "./colleagueFriends.js";
 import { openGoalChanges } from "./goalChanges.js";
 import { HOLD_STATES } from "./cardProjection.js";
 import { FEISHU_NOTIFY_KIND } from "./feishu/notify.js";
@@ -19,7 +21,7 @@ import type { RunAsk } from "./localDevices.js";
 /**
  * 首页的「等你」（契约 WaitingItem，设计 9.6）：要本人拿主意、不拿就有事卡住的，才进来。
  * 子会话、规划员、验收员在等批准或回复，受阻的卡，没能自动合回的卡，计划等你开工，会议要确认的，Nexus 推来的会后待定事项，Mission Card 要做的，请你认可，岗位修改建议，
- * 月份（复盘、之前月份还有没了结的），电脑不在线而有活在等本机，订阅额度用完有活停着。
+ * 月份（复盘、之前月份还有没了结的），电脑不在线而有活在等本机，订阅额度用完有活停着，同事来问要我表态的，同事加我好友的。
  */
 
 /** 本机报了订阅额度用完（hold.reason = usage_limit）的会话（别名 r 指 local_runs）：不论还算不算等额度恢复（workers.ts 的 awaitsQuota），都不是等你回复。等预算、等余额的不在这里。 */
@@ -32,7 +34,7 @@ const BLOCKING = new Set<TWaitingItem["kind"]>(["approval", "question", "quota"]
 
 export type WaitingInput = {
   q: Query; person: MissionRoundPerson;
-  deps: Pick<WorkHomeDeps, "meetings" | "nexusConfirmations" | "missionRounds" | "planTasks" | "now" | "names">;
+  deps: Pick<WorkHomeDeps, "meetings" | "nexusConfirmations" | "missionRounds" | "planTasks" | "now" | "names" | "directory">;
   /** 现在是哪个月（公司时区）。 */
   period: string;
   /** 树和「其他」里的子会话，卡的投影，树上的 Task（带月份）。 */
@@ -229,6 +231,19 @@ export async function assembleWaiting(input: WaitingInput): Promise<TWaitingItem
   for (const request of await listPendingTeamRequests(q, ownerId))
     add({ id: `team-request:${request.id}`, kind: "team_request", title: request.title, source: deps.names.get(request.source) ?? request.source,
       at: request.at, open: { kind: "team_request", id: request.id }, answer: "open" });
+  // 同事对话（设计稿第 4 节）：来问我的、有句要我本人表态的，一段一行，逐句结清；问的人已不在名单里的不出。
+  for (const chat of await listChatWaiting(q, ownerId)) {
+    const name = deps.names.get(chat.askerId);
+    if (name === undefined) continue;
+    add({ id: `colleague-chat:${chat.chatId}`, kind: "colleague_chat", title: chat.title, source: CHAT_WAIT_WORD[chat.reason], at: chat.at,
+      person: { personId: chat.askerId, name }, open: { kind: "colleague_chat", id: chat.askerId }, answer: "open", chat: { pushAt: chat.pushAt, pushReason: chat.pushReason } });
+  }
+  // 同事加我好友、等我开放的。
+  for (const request of await listFriendRequests(q, deps.directory, ownerId)) {
+    const name = deps.names.get(request.personId) ?? request.personId;
+    add({ id: `friend-request:${request.personId}`, kind: "friend_request", title: `${name}想加你好友`, source: null, at: request.at,
+      person: { personId: request.personId, name }, open: { kind: "friend_request", id: request.personId }, answer: "open" });
+  }
   for (const item of await deps.nexusConfirmations(ownerId))
     add({ id: `nexus_confirmation:${item.id}`, kind: "nexus_confirmation", title: item.question, source: "会后确认", at: item.createdAt, dueAt: item.expiresAt,
       open: { kind: "nexus_confirmation", id: item.id }, answer: "inline",

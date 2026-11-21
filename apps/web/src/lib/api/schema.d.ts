@@ -6381,6 +6381,297 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/colleague-chats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 本人的同事对话：我去问的、来问我的、加好友的请求 */
+        get: operations["listColleagueChats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/colleague-chats/main-lines": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 主对话里要出现的同事来问的话 */
+        get: operations["listColleagueChatMainLines"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/colleague-chats/{chatId}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 这段对话读到最新 */
+        post: operations["readColleagueChat"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/colleague-chats/with/{personId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 我和这位同事的伙伴的对话 */
+        get: operations["readColleagueChatWith"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/colleague-chats/from/{personId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 这位同事来问我的伙伴的对话 */
+        get: operations["readColleagueChatFrom"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/colleague-chats/with/{personId}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 对这位同事的伙伴说一句 */
+        post: operations["sendColleagueChatMessage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/colleague-chats/{chatId}/messages/{messageId}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 伙伴没答上来的这句再答一次 */
+        post: operations["retryColleagueChatMessage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/colleague-chats/{chatId}/messages/{messageId}/ask-owner": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 这句请他本人回 */
+        post: operations["askColleagueChatOwner"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/colleague-chats/{chatId}/messages/{messageId}/retract": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 收回我的伙伴答的这句 */
+        post: operations["retractColleagueChatMessage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/colleague-chats/{chatId}/messages/{messageId}/correct": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 改我的伙伴答的这句 */
+        post: operations["correctColleagueChatMessage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/colleague-chats/{chatId}/owner-messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 本人在来问我的对话里说一句 */
+        post: operations["sendColleagueChatOwnerMessage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/colleagues": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 找同事 */
+        get: operations["searchColleagues"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/friend-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 本人的加好友设置 */
+        get: operations["readFriendSettings"];
+        /** 改本人的加好友设置 */
+        put: operations["saveFriendSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/friends/{personId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 我和这位同事的好友关系 */
+        get: operations["readFriend"];
+        put?: never;
+        post?: never;
+        /** 删好友 */
+        delete: operations["removeFriend"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/friends/{personId}/request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 加这位同事为好友 */
+        post: operations["requestFriend"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/friends/{personId}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 同意这位同事的好友请求 */
+        post: operations["acceptFriend"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/friends/{personId}/grant": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 改给这位好友的授权 */
+        put: operations["saveFriendGrant"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/meeting-work-handoffs": {
         parameters: {
             query?: never;
@@ -7720,7 +8011,7 @@ export interface components {
                 /** @constant */
                 kind: "open";
                 target: {
-                    kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections" | "transfer" | "nexus_confirmation" | "team_request";
+                    kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections" | "transfer" | "nexus_confirmation" | "team_request" | "colleague_chat" | "friend_request";
                     id: string;
                     round?: boolean;
                     focus?: {
@@ -7734,7 +8025,7 @@ export interface components {
             } | {
                 /** @constant */
                 kind: "refresh";
-                what: ("work_home" | "project" | "sub_session" | "settings" | "trash")[];
+                what: ("work_home" | "project" | "sub_session" | "settings" | "trash" | "colleague_chats")[];
                 id?: string;
             };
         } | {
@@ -20051,7 +20342,7 @@ export interface components {
             }[];
         };
         WaitingTarget: {
-            kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections" | "transfer" | "nexus_confirmation" | "team_request";
+            kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections" | "transfer" | "nexus_confirmation" | "team_request" | "colleague_chat" | "friend_request";
             id: string;
             round?: boolean;
             focus?: {
@@ -20062,12 +20353,12 @@ export interface components {
         };
         WaitingItem: {
             id: string;
-            kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge" | "plan_start" | "acceptance" | "month" | "device" | "quota" | "transfer" | "goal_changed" | "auto_relay" | "nexus_confirmation" | "needs_person" | "team_request";
+            kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge" | "plan_start" | "acceptance" | "month" | "device" | "quota" | "transfer" | "goal_changed" | "auto_relay" | "nexus_confirmation" | "needs_person" | "team_request" | "colleague_chat" | "friend_request";
             title: string;
             source: string | null;
             at: string | null;
             open: {
-                kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections" | "transfer" | "nexus_confirmation" | "team_request";
+                kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections" | "transfer" | "nexus_confirmation" | "team_request" | "colleague_chat" | "friend_request";
                 id: string;
                 round?: boolean;
                 focus?: {
@@ -20122,6 +20413,10 @@ export interface components {
                 quote: string | null;
             };
             summary?: string | null;
+            chat?: {
+                pushAt: string | null;
+                pushReason: ("commit" | "approve" | "money_external" | "asked_owner" | "no_basis" | "unsure") | null;
+            };
         };
         WorkHomeResponse: {
             period: string;
@@ -20353,12 +20648,12 @@ export interface components {
             };
             waiting: {
                 id: string;
-                kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge" | "plan_start" | "acceptance" | "month" | "device" | "quota" | "transfer" | "goal_changed" | "auto_relay" | "nexus_confirmation" | "needs_person" | "team_request";
+                kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge" | "plan_start" | "acceptance" | "month" | "device" | "quota" | "transfer" | "goal_changed" | "auto_relay" | "nexus_confirmation" | "needs_person" | "team_request" | "colleague_chat" | "friend_request";
                 title: string;
                 source: string | null;
                 at: string | null;
                 open: {
-                    kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections" | "transfer" | "nexus_confirmation" | "team_request";
+                    kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections" | "transfer" | "nexus_confirmation" | "team_request" | "colleague_chat" | "friend_request";
                     id: string;
                     round?: boolean;
                     focus?: {
@@ -20413,6 +20708,10 @@ export interface components {
                     quote: string | null;
                 };
                 summary?: string | null;
+                chat?: {
+                    pushAt: string | null;
+                    pushReason: ("commit" | "approve" | "money_external" | "asked_owner" | "no_basis" | "unsure") | null;
+                };
             }[];
             ignoredMeetings?: {
                 id: string;
@@ -23678,6 +23977,13 @@ export interface components {
                 /** Format: date-time */
                 createdAt: string;
             }[];
+            reads?: {
+                itemId: string;
+                title: string;
+                reader: string;
+                /** Format: date */
+                readOn: string;
+            }[];
         };
         SaveColleagueNoteRequest: {
             note: string;
@@ -23699,6 +24005,282 @@ export interface components {
         };
         SetRoleSharingRequest: {
             shared: boolean;
+        };
+        ChatListResponse: {
+            mine: {
+                /** Format: uuid */
+                id: string;
+                peer: {
+                    personId: string;
+                    displayName: string;
+                    left: boolean;
+                };
+                peerBuddy: {
+                    name: string;
+                    form: "classic" | "alive" | "panda" | "miles" | "cmei";
+                } | null;
+                last: {
+                    author: "asker" | "asker_buddy" | "buddy" | "owner";
+                    text: string;
+                    /** Format: date-time */
+                    at: string;
+                };
+                unread: boolean;
+                waiting: number;
+            }[];
+            inbound: {
+                /** Format: uuid */
+                id: string;
+                peer: {
+                    personId: string;
+                    displayName: string;
+                    left: boolean;
+                };
+                peerBuddy: {
+                    name: string;
+                    form: "classic" | "alive" | "panda" | "miles" | "cmei";
+                } | null;
+                last: {
+                    author: "asker" | "asker_buddy" | "buddy" | "owner";
+                    text: string;
+                    /** Format: date-time */
+                    at: string;
+                };
+                unread: boolean;
+                waiting: number;
+            }[];
+            requests: {
+                person: {
+                    personId: string;
+                    displayName: string;
+                    left: boolean;
+                };
+                /** Format: date-time */
+                at: string;
+            }[];
+        };
+        ChatMessage: {
+            /** Format: uuid */
+            id: string;
+            author: "asker" | "asker_buddy" | "buddy" | "owner";
+            text: string;
+            /** Format: date-time */
+            at: string;
+            replyTo: string | null;
+            sources: string[];
+            answer: "answering" | "answered" | "failed" | "limited" | "asked_owner" | null;
+            wait: {
+                reason: "commit" | "approve" | "money_external" | "asked_owner" | "no_basis" | "unsure";
+                /** Format: date-time */
+                at: string;
+                closed: boolean;
+            } | null;
+            seen: boolean;
+            retracted: boolean;
+            correction: {
+                /** Format: uuid */
+                id: string;
+                text: string;
+                /** Format: date-time */
+                at: string;
+            } | null;
+        };
+        ChatPerson: {
+            personId: string;
+            displayName: string;
+            left: boolean;
+        };
+        ChatResponse: {
+            chat: {
+                id: string | null;
+                side: "with" | "from";
+                peer: {
+                    personId: string;
+                    displayName: string;
+                    left: boolean;
+                };
+                peerBuddy: {
+                    name: string;
+                    form: "classic" | "alive" | "panda" | "miles" | "cmei";
+                } | null;
+                relation: "none" | "pending_out" | "pending_in" | "friends";
+                messages: {
+                    /** Format: uuid */
+                    id: string;
+                    author: "asker" | "asker_buddy" | "buddy" | "owner";
+                    text: string;
+                    /** Format: date-time */
+                    at: string;
+                    replyTo: string | null;
+                    sources: string[];
+                    answer: "answering" | "answered" | "failed" | "limited" | "asked_owner" | null;
+                    wait: {
+                        reason: "commit" | "approve" | "money_external" | "asked_owner" | "no_basis" | "unsure";
+                        /** Format: date-time */
+                        at: string;
+                        closed: boolean;
+                    } | null;
+                    seen: boolean;
+                    retracted: boolean;
+                    correction: {
+                        /** Format: uuid */
+                        id: string;
+                        text: string;
+                        /** Format: date-time */
+                        at: string;
+                    } | null;
+                }[];
+                firstWaiting: string | null;
+            };
+        };
+        ChatRow: {
+            /** Format: uuid */
+            id: string;
+            peer: {
+                personId: string;
+                displayName: string;
+                left: boolean;
+            };
+            peerBuddy: {
+                name: string;
+                form: "classic" | "alive" | "panda" | "miles" | "cmei";
+            } | null;
+            last: {
+                author: "asker" | "asker_buddy" | "buddy" | "owner";
+                text: string;
+                /** Format: date-time */
+                at: string;
+            };
+            unread: boolean;
+            waiting: number;
+        };
+        ChatView: {
+            id: string | null;
+            side: "with" | "from";
+            peer: {
+                personId: string;
+                displayName: string;
+                left: boolean;
+            };
+            peerBuddy: {
+                name: string;
+                form: "classic" | "alive" | "panda" | "miles" | "cmei";
+            } | null;
+            relation: "none" | "pending_out" | "pending_in" | "friends";
+            messages: {
+                /** Format: uuid */
+                id: string;
+                author: "asker" | "asker_buddy" | "buddy" | "owner";
+                text: string;
+                /** Format: date-time */
+                at: string;
+                replyTo: string | null;
+                sources: string[];
+                answer: "answering" | "answered" | "failed" | "limited" | "asked_owner" | null;
+                wait: {
+                    reason: "commit" | "approve" | "money_external" | "asked_owner" | "no_basis" | "unsure";
+                    /** Format: date-time */
+                    at: string;
+                    closed: boolean;
+                } | null;
+                seen: boolean;
+                retracted: boolean;
+                correction: {
+                    /** Format: uuid */
+                    id: string;
+                    text: string;
+                    /** Format: date-time */
+                    at: string;
+                } | null;
+            }[];
+            firstWaiting: string | null;
+        };
+        ChatWaitReason: "commit" | "approve" | "money_external" | "asked_owner" | "no_basis" | "unsure";
+        ColleagueSearchResponse: {
+            people: {
+                personId: string;
+                displayName: string;
+                matched: string[];
+                relation: "none" | "pending_out" | "pending_in" | "friends";
+            }[];
+            more: number;
+        };
+        CorrectChatMessageRequest: {
+            /** Format: uuid */
+            clientId: string;
+            text: string;
+        };
+        FriendGrant: {
+            agentAsk: boolean;
+        };
+        FriendRelation: "none" | "pending_out" | "pending_in" | "friends";
+        FriendSettings: {
+            admission: "auto" | "approve";
+            defaults: {
+                agentAsk: boolean;
+            };
+        };
+        FriendView: {
+            person: {
+                personId: string;
+                displayName: string;
+                left: boolean;
+            };
+            relation: "none" | "pending_out" | "pending_in" | "friends";
+            theirs: {
+                agentAsk: boolean;
+            } | null;
+            mine: {
+                agentAsk: boolean;
+            } | null;
+        };
+        MainLine: {
+            /** Format: uuid */
+            chatId: string;
+            /** Format: uuid */
+            messageId: string;
+            peer: {
+                personId: string;
+                displayName: string;
+                left: boolean;
+            };
+            author: "asker" | "asker_buddy";
+            text: string | null;
+            /** Format: date-time */
+            at: string;
+            runId: string | null;
+        };
+        MainLinesResponse: {
+            items: {
+                /** Format: uuid */
+                chatId: string;
+                /** Format: uuid */
+                messageId: string;
+                peer: {
+                    personId: string;
+                    displayName: string;
+                    left: boolean;
+                };
+                author: "asker" | "asker_buddy";
+                text: string | null;
+                /** Format: date-time */
+                at: string;
+                runId: string | null;
+            }[];
+        };
+        OwnerChatMessageRequest: {
+            /** Format: uuid */
+            clientId: string;
+            text: string;
+            /** Format: uuid */
+            replyTo?: string;
+        };
+        SendChatMessageRequest: {
+            /** Format: uuid */
+            clientId: string;
+            text: string;
+            /** @constant */
+            via?: "main";
         };
         ContinueMeetingWork: {
             /** @constant */
@@ -46073,6 +46655,1117 @@ export interface operations {
             };
             /** @description 结果 */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listColleagueChats: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatListResponse"];
+                };
+            };
+            /** @description 结果 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listColleagueChatMainLines: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MainLinesResponse"];
+                };
+            };
+            /** @description 结果 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    readColleagueChat: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                chatId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已读 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 结果 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    readColleagueChatWith: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                personId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatResponse"];
+                };
+            };
+            /** @description 结果 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    readColleagueChatFrom: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                personId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatResponse"];
+                };
+            };
+            /** @description 结果 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    sendColleagueChatMessage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                personId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SendChatMessageRequest"];
+            };
+        };
+        responses: {
+            /** @description 结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatResponse"];
+                };
+            };
+            /** @description 结果 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    retryColleagueChatMessage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                chatId: string;
+                messageId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatResponse"];
+                };
+            };
+            /** @description 结果 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    askColleagueChatOwner: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                chatId: string;
+                messageId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatResponse"];
+                };
+            };
+            /** @description 结果 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    retractColleagueChatMessage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                chatId: string;
+                messageId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatResponse"];
+                };
+            };
+            /** @description 结果 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    correctColleagueChatMessage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                chatId: string;
+                messageId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CorrectChatMessageRequest"];
+            };
+        };
+        responses: {
+            /** @description 结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatResponse"];
+                };
+            };
+            /** @description 结果 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    sendColleagueChatOwnerMessage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                chatId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OwnerChatMessageRequest"];
+            };
+        };
+        responses: {
+            /** @description 结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatResponse"];
+                };
+            };
+            /** @description 结果 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    searchColleagues: {
+        parameters: {
+            query?: {
+                query?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ColleagueSearchResponse"];
+                };
+            };
+            /** @description 结果 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    readFriendSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FriendSettings"];
+                };
+            };
+            /** @description 结果 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    saveFriendSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FriendSettings"];
+            };
+        };
+        responses: {
+            /** @description 结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FriendSettings"];
+                };
+            };
+            /** @description 结果 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    readFriend: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                personId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FriendView"];
+                };
+            };
+            /** @description 结果 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    removeFriend: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                personId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FriendView"];
+                };
+            };
+            /** @description 结果 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    requestFriend: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                personId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FriendView"];
+                };
+            };
+            /** @description 结果 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    acceptFriend: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                personId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FriendGrant"];
+            };
+        };
+        responses: {
+            /** @description 结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FriendView"];
+                };
+            };
+            /** @description 结果 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    saveFriendGrant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                personId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FriendGrant"];
+            };
+        };
+        responses: {
+            /** @description 结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FriendView"];
+                };
+            };
+            /** @description 结果 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 结果 */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

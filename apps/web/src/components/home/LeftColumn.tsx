@@ -4,7 +4,8 @@
  * 左栏（新首页设计 9.1–9.4、5.4.2；11/17 设计 4.1）：
  * 1. 伙伴名片：64 高，只放形象、居中；点了进伙伴主线（总管线），在主线时是选中底、形象变淡。鼠标移上去右边出「⋯」，点开「伙伴」二级页。
  * 2. 「今天」行：House +「11 月 7 日 周六」，就是首页（Esc 也回这里）；不在首页时行尾是等你的计数。下面「会议」（行尾是开会那一颗）、「本月」。
- * 3. 「项目」组头（右边「+」就地新建，左边一个归档图标「已归档 N」，点了在项目后面列出已归档的项目，本人 11/16）→ 项目行（16.2，有等你的在前、本月有目标的按截止、其余按最近活动）→「其他」。
+ * 3. 「项目 | 对话」滑块（同事伙伴设计第 1 节；在对话页时停在对话）。停在项目：右边「+」就地新建，左边一个归档图标「已归档 N」，点了在项目后面列出已归档的项目（本人 11/16）→ 项目行（16.2，有等你的在前、本月有目标的按截止、其余按最近活动）→「其他」；
+ *    对话有事时「对话」后面一颗点。停在对话：右边「+」找人，下面只列对话（ChatList）。
  *    项目行只有项目自己：名字（转交中、预算 80% 时多一行小字），行尾一颗点、信息按钮、「…」；子会话在右边的会话面板。
  *    本人自己做的事项（9.10）列在项目下面，行首是本人 16 的头像，做完的变淡；待归位的事项进「其他」。
  * 4. 本人行：贴底，头像 24 + 名字，点开个人菜单。
@@ -18,7 +19,7 @@ import { BuddyMark } from "@/components/buddy/BuddyMark";
 import type { Buddy } from "@/components/buddy/useBuddy";
 import { BUDDY_HREF, HOME_HREF, MEETINGS_HREF } from "@/lib/home/derive";
 import { projectHref, projectInfoHref, projectLine, type Project } from "@/lib/home/projects";
-import type { THomeItem as HomeItem } from "@warmap/contracts";
+import type { THomeItem as HomeItem, TChatListResponse } from "@warmap/contracts";
 import type { WorkHomeData } from "@/lib/home/types";
 import { PersonAvatar } from "@/components/avatar/PersonAvatar";
 import { PersonRow } from "./PersonMenu";
@@ -32,10 +33,20 @@ import { LOCAL_PROJECT_FOLDER_LIMIT } from "@/lib/local/routes";
 import { showWorkspaceToast } from "@/lib/toast";
 import { RowMenu, conflictText, useLongPress, type RowMenuItem } from "./RowMenu";
 import { ActionsContext, RenameInput, SeenContext, type RowActions } from "./SubRows";
+import { ChatList, chatsDot } from "./ChatList";
+import c from "./chats.module.css";
 import h from "@/styles/home.module.css";
 
 /** 菜单里没成时就地写的话（B 契约 c3366f28 的 409）。 */
 export const deleteProjectFail = (error: unknown) => conflictText(error, { PROJECT_BUSY: null, PROJECT_TRANSFERRING: "正在转交" }, "没删成");
+
+/** 这几种页属于「对话」那边：地址变成它们时滑块停到对话（friendRequest 是有人加我那一页）。 */
+const CHAT_VIEWS: ReadonlySet<string> = new Set(["chat", "chatFind", "friendRequest"]);
+/** 这几种页属于「项目」那边（项目、项目详情、开子会话、Task、Task 详情、卡、专题）：地址变成它们时滑块回到项目。 */
+const PROJECT_VIEWS: ReadonlySet<string> = new Set(["project", "projectInfo", "newSub", "task", "info", "card", "topic"]);
+/** 地址变成这一页时滑块该停哪边；别的页（首页、主线、会议、月份）不动，为 null。 */
+export const tabFor = (view: View): "projects" | "chats" | null =>
+  CHAT_VIEWS.has(view.kind) ? "chats" : PROJECT_VIEWS.has(view.kind) ? "projects" : null;
 
 /**
  * 伙伴门牌（设计 4.1；本人 11/18 方案 A：对话顶上为主，这里退成门牌）：一行 48 高，只放形象、居中（名字只给读屏）；
@@ -56,7 +67,7 @@ function BuddyCard({ buddy, name, view, go }: { buddy: Buddy | null; name: strin
   );
 }
 
-export function LeftColumn({ data, view, buddy, go, phone, account, today, machine = null, trail, top, month, onRetryPlan, projects, archived, actions = null, onCreate, folderLimit = LOCAL_PROJECT_FOLDER_LIMIT, working, seen, onOpen, meetingSlot = null, waitingCount = data.waiting.length, meetingsTrail = null, monthTrail = null }: {
+export function LeftColumn({ data, view, buddy, go, phone, account, today, machine = null, trail, top, month, onRetryPlan, projects, archived, actions = null, onCreate, folderLimit = LOCAL_PROJECT_FOLDER_LIMIT, working, seen, onOpen, meetingSlot = null, waitingCount = data.waiting.length, meetingsTrail = null, monthTrail = null, chats = null }: {
   data: WorkHomeData;
   /** 「今天」行行尾等你的件数：和首页同一份清单（focusList）的全部件数，不是露出来的 5 件。 */
   waitingCount?: number;
@@ -97,6 +108,8 @@ export function LeftColumn({ data, view, buddy, go, phone, account, today, machi
   onOpen?: (kind: SeenKind, id: string, marker: string | null) => void;
   /** 正在后台干活的项目（projectWorking）：标题右边一颗闪的灰点。 */
   working?: ReadonlySet<string>;
+  /** 同事对话两组（useColleagueChats）；没读到是 null。 */
+  chats?: TChatListResponse | null;
 }) {
   const name = buddy?.name?.trim() || "伙伴";
   const atHome = view.kind === "home";
@@ -105,6 +118,12 @@ export function LeftColumn({ data, view, buddy, go, phone, account, today, machi
   const tree = useRef<HTMLDivElement>(null);
   const [naming, setNaming] = useState(false);
   const [archivedOpen, setArchivedOpen] = useState(false);
+  const pageTab = tabFor(view);
+  const [tab, setTab] = useState<"projects" | "chats">(pageTab ?? "projects");
+  // 换到对话那边或项目那边的页时才切（view 每次重画都是新对象，按地址内容比）；地址没变时本人点了另一边就留在那边。
+  const viewKey = JSON.stringify(view);
+  useEffect(() => { if (pageTab) setTab(pageTab); }, [pageTab, viewKey]);
+  const dot = chatsDot(chats);
   // 「随手」项目收在幕后（本人 11/19）：项目和已归档里都不列。
   const listed = projects.filter((project) => !project.scratch);
   const archivedListed = archived.filter((project) => !project.scratch);
@@ -145,28 +164,39 @@ export function LeftColumn({ data, view, buddy, go, phone, account, today, machi
       </button>
       <div className={h.tree} ref={tree} onKeyDown={(event) => treeKeys(event, tree.current)}>
         {onRetryPlan ? <p className={h.planFailed} data-testid="plan-read-failed">本体读取失败<HeroButton variant="ghost" size="sm" onPress={onRetryPlan}>重试</HeroButton></p> : null}
-        <section aria-label="项目" className={h.group}>
+        <section aria-label={tab === "projects" ? "项目" : "对话"} className={h.group}>
           <div className={h.groupHead}>
-            <span>项目</span>
-            {archivedCount ? (
-              <button type="button" className={h.groupAdd} title={`已归档 ${archivedCount}`} aria-label={`已归档 ${archivedCount}`} aria-pressed={archivedOpen}
-                onClick={() => setArchivedOpen(!archivedOpen)} data-testid="tree-archived"><Archive size={14} strokeWidth={1.8} aria-hidden /></button>
-            ) : null}
-            <button type="button" className={h.groupAdd} title="新建项目" aria-label="新建项目" onClick={() => setNaming(true)} data-testid="project-add"><Plus size={14} strokeWidth={1.8} aria-hidden /></button>
+            <div className={c.tabs} role="group" aria-label="左栏">
+              <button type="button" aria-pressed={tab === "projects"} onClick={() => setTab("projects")} data-testid="tab-projects">项目</button>
+              <button type="button" aria-pressed={tab === "chats"} onClick={() => setTab("chats")} data-testid="tab-chats">对话
+                {tab === "projects" && dot ? <span className={h.subDot} data-tone={dot} role="img" aria-label={dot === "attention" ? "等你" : "有新回复"}><i data-tone={dot} aria-hidden data-testid="tab-chats-dot" /></span> : null}
+              </button>
+            </div>
+            {tab === "chats" ? (
+              <button type="button" className={h.groupAdd} title="找人" aria-label="找人" onClick={() => go("/me/work/chats/find")} data-testid="chat-find"><Plus size={14} strokeWidth={1.8} aria-hidden /></button>
+            ) : <>
+              {archivedCount ? (
+                <button type="button" className={h.groupAdd} title={`已归档 ${archivedCount}`} aria-label={`已归档 ${archivedCount}`} aria-pressed={archivedOpen}
+                  onClick={() => setArchivedOpen(!archivedOpen)} data-testid="tree-archived"><Archive size={14} strokeWidth={1.8} aria-hidden /></button>
+              ) : null}
+              <button type="button" className={h.groupAdd} title="新建项目" aria-label="新建项目" onClick={() => setNaming(true)} data-testid="project-add"><Plus size={14} strokeWidth={1.8} aria-hidden /></button>
+            </>}
           </div>
-          {naming ? (
-            <NewProjectDialog withFolders={!phone && localReady} limit={folderLimit} onClose={() => setNaming(false)}
-              onCreate={(name, folderIds) => onCreate(name, folderIds).then((id) => go(projectHref(id)))} />
-          ) : null}
-          {listed.map((project) => <ProjectNode key={project.id} project={project} view={view} go={go} personId={account.personId} working={!!working?.has(project.id)} />)}
+          {tab === "chats" ? (chats ? <ChatList list={chats} view={view} myBuddy={name} go={go} /> : null) : <>
+            {naming ? (
+              <NewProjectDialog withFolders={!phone && localReady} limit={folderLimit} onClose={() => setNaming(false)}
+                onCreate={(name, folderIds) => onCreate(name, folderIds).then((id) => go(projectHref(id)))} />
+            ) : null}
+            {listed.map((project) => <ProjectNode key={project.id} project={project} view={view} go={go} personId={account.personId} working={!!working?.has(project.id)} />)}
+          </>}
         </section>
-        {archivedOpen && archivedCount ? (
+        {tab === "projects" && archivedOpen && archivedCount ? (
           <section aria-label="已归档" className={h.group}>
             <p className={h.groupTitle}>已归档</p>
             {archivedListed.map((project) => <ProjectNode key={project.id} project={project} view={view} go={go} personId={account.personId} />)}
           </section>
         ) : null}
-        {data.other.items.length ? (
+        {tab === "projects" && data.other.items.length ? (
           <section aria-label="其他" className={h.group}>
             <p className={h.groupTitle}>其他</p>
             <Items items={data.other.items} personId={account.personId} go={go} />

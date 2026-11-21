@@ -18,10 +18,13 @@ const hooks = vi.hoisted(() => ({
 vi.mock("react", async (original) => ({ ...(await original<typeof import("react")>()),
   useState: hooks.useState, useRef: hooks.useRef, useCallback: (f: unknown) => f, useMemo: (f: () => unknown) => f(), useEffect: () => undefined,
 }));
-const api = vi.hoisted(() => ({ people: vi.fn(), send: vi.fn() }));
+const api = vi.hoisted(() => ({ people: vi.fn(), send: vi.fn(), chat: vi.fn() }));
 vi.mock("@/components/shell/WorkspaceContext", () => ({ useWorkspace: () => ({ viewerId: "me" }) }));
 vi.mock("@/lib/home/teamDelivery", async (original) => ({ ...(await original<typeof import("@/lib/home/teamDelivery")>()),
   listTeamPeople: api.people, sendTeamDelivery: api.send,
+}));
+vi.mock("@/lib/home/colleagueChats", async (original) => ({ ...(await original<typeof import("@/lib/home/colleagueChats")>()),
+  sendChatMessage: api.chat,
 }));
 import { usePartnerTeam } from "./PartnerTeam";
 import { TeamCompose } from "./PartnerTeamCompose";
@@ -30,7 +33,7 @@ const recipient = { personId: "lin", displayName: "小林", status: "delivered" 
 const one: TTeamDelivery = { id: "00000000-0000-4000-8000-000000000001", kind: "share", text: "", createdAt: "2026-11-13T04:00:00Z",
   dueAt: null, sourceUrl: null, sender: { personId: "me", displayName: "甲" }, attachments: [], recipients: [recipient] };
 const file = new File(["hello"], "反馈.txt", { type: "text/plain" });
-const render = () => { hooks.position = 0; return usePartnerTeam(); };
+const render = () => { hooks.position = 0; return usePartnerTeam(() => undefined); };
 const compose = (surface: ReturnType<typeof render>) => {
   expect(surface.composer?.type).toBe(TeamCompose);
   return surface.composer!.props as Parameters<typeof TeamCompose>[0];
@@ -41,6 +44,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   api.people.mockResolvedValue([{ personId: "lin", displayName: "小林" }, { personId: "tang-1", displayName: "小唐" }, { personId: "tang-2", displayName: "小唐" }]);
   api.send.mockResolvedValue(one);
+  api.chat.mockResolvedValue({});
   vi.stubGlobal("window", { dispatchEvent: vi.fn() });
 });
 afterEach(() => vi.unstubAllGlobals());
@@ -91,5 +95,19 @@ describe("伙伴输入和同事草稿", () => {
     expect(form.draft.unresolved).toEqual(["销售"]);
     expect(form.draft.dueAt).toContain("T23:59");
     expect(api.send).not.toHaveBeenCalled();
+  });
+
+  it("只点一个人、没附件、没截止的问句发进对话；点两个人照旧征集；对方不在覆盖里退回征集", async () => {
+    api.people.mockResolvedValue([{ personId: "lin", displayName: "小林" }, { personId: "zhou", displayName: "小周" }]);
+    const team = render();
+    await team.intercept("问 小林：部署怎么拆", []);
+    expect(api.chat).toHaveBeenCalledWith("lin", expect.objectContaining({ text: "部署怎么拆", via: "main" }));
+    expect(api.send).not.toHaveBeenCalled();
+    expect(render().composer).toBeNull();
+    await render().intercept("问 小林、小周：部署怎么拆", []);
+    expect(api.send).toHaveBeenCalledTimes(1);
+    api.chat.mockRejectedValueOnce(Object.assign(new Error("x"), { code: "PERSON_NOT_FOUND" }));
+    await render().intercept("问 小林：值守是谁", []);
+    expect(api.send).toHaveBeenCalledTimes(2);
   });
 });

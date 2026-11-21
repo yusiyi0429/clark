@@ -7,6 +7,7 @@ import {
   ATTACHMENT_MAX_BYTES, ATTACHMENT_MAX_COUNT, attachmentKind, type TReplyTeamDeliveryRequest, type TReviewBuddyReplyRequest, type TSendTeamDeliveryRequest,
 } from "@warmap/contracts";
 import { colleagueAccess } from "./colleagueAccess.js";
+import { transact } from "./dbTransaction.js";
 import { enqueueJob } from "./jobs.js";
 import { htmlToText } from "./meetingEvidence.js";
 import { MAX_MATERIAL_FILE_BYTES, MaterialParseError, runWorker } from "./materialParser.js";
@@ -46,27 +47,6 @@ const fileFingerprint = (files: Prepared) => files.map(({ fileName, size, sha256
 
 function sameOperation(saved: string, actual: string) {
   if (saved !== actual) throw new TeamDeliveryError(409, "IDEMPOTENCY_CONFLICT", "这次发送标识已用于不同内容，请使用新的发送标识");
-}
-
-export async function transact<T>(pool: Pool, work: (q: Query, createdFiles: string[]) => Promise<T>): Promise<T> {
-  const client = await pool.connect();
-  const createdFiles: string[] = [];
-  let committing = false;
-  try {
-    await client.query("BEGIN");
-    const result = await work((sql, params) => client.query(sql, params), createdFiles);
-    committing = true;
-    await client.query("COMMIT");
-    return result;
-  } catch (cause) {
-    await client.query("ROLLBACK").catch(() => undefined);
-    // 连接在提交时断开，数据库可能已成功；此时不得删除已提交来件的原件。
-    const dbCode = (cause as { code?: string }).code ?? "";
-    if (!committing || /^(?:22|23|40)[0-9A-Z]{3}$/.test(dbCode)) {
-      await Promise.all(createdFiles.map((path) => rm(path, { force: true })));
-    }
-    throw cause;
-  } finally { client.release(); }
 }
 
 async function sourceFile(q: Query, storageDir: string, sharer: string, source: Source) {

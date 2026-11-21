@@ -9,6 +9,7 @@ import multipart from "@fastify/multipart";
 import { loadPeopleDirectory, type PeopleDirectoryEnv } from "./peopleDirectory.js";
 import { createCompanyContext, type CompanyContextEnv } from "./companyContext.js";
 import type { CompanyReader } from "./company.js";
+import type { TurnWords } from "./sourceWords.js";
 import { createPersonalMemory } from "./personalMemory.js";
 import { createMemoryRecall, memoryRecallModels, type MemoryRecall } from "./personalMemoryRecall.js";
 import { createPersonalDistillation } from "./personalDistillation.js";
@@ -136,6 +137,7 @@ import { createTaskPlacementAgent, taskPlacementJobs, type TaskPlacementAgent } 
 import { createColleagueAnswerAgent, type ColleagueAnswerAgent } from "./colleagueAnswerAgent.js";
 import { dbScopeSource, scopeReader } from "./colleagueScope.js";
 import { teamBuddyAnswerJobs } from "./teamBuddyAnswers.js";
+import { colleagueChatAnswerJobs } from "./colleagueChatAnswers.js";
 import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR, type MeetingRecordingService } from "./meetingRecordings.js";
 import { realVoiceprintDeps, type VoiceprintDeps } from "./voiceprints.js";
 import { realDictationDeps, type DictationDeps } from "./dictation.js";
@@ -166,6 +168,8 @@ import { registerTaskPipelineRoutes } from "./routes/taskPipelines.js";
 import { registerProjectRoutes } from "./routes/projects.js";
 import { registerProjectTransferRoutes } from "./routes/projectTransfers.js";
 import { registerBuddyActionRoutes } from "./routes/buddyActions.js";
+import { registerColleagueFriendRoutes } from "./routes/colleagueFriends.js";
+import { registerColleagueChatRoutes } from "./routes/colleagueChats.js";
 import { closeQuestions, collapsePlan, runExtras } from "./buddyActions.js";
 import { recordProjectReply } from "./workSeen.js";
 import { recordTurnFallback, recordTurnModel, turnModels } from "./chatTurnModels.js";
@@ -367,6 +371,8 @@ declare module "fastify" {
     taskPlacementJobs: Record<string, JobHandler>;
     /** 同事来问时被问的人的伙伴先答（team.buddy-answer）；server.ts 注册给 jobs worker。 */
     teamBuddyAnswerJobs: Record<string, JobHandler>;
+    /** 同事对话里被问的人的伙伴逐句作答（colleague.chat-answer）；server.ts 注册给 jobs worker。 */
+    colleagueChatAnswerJobs: Record<string, JobHandler>;
     /** jobs worker 的 runNow：server.ts 建好 worker 后填上，代答入队后用它立即跑（没填时只等轮询）。 */
     jobsNow: { run?: (jobId: string) => Promise<unknown> };
     /** Nexus → DRI 确认；server.ts 启动时调 resume()，把 jobs 注册给 jobs worker。 */
@@ -430,6 +436,7 @@ export async function buildApp({
   colleagueAnswerAgent,
   boardAgents,
   companyReader,
+  turnWords,
   conversationTurnTimeoutMs = CONVERSATION_TURN_TIMEOUT_MS,
   conversationStallTimeoutMs = CONVERSATION_STALL_TIMEOUT_MS,
   conversationHeartbeatMs = CONVERSATION_HEARTBEAT_MS,
@@ -519,6 +526,8 @@ export async function buildApp({
   boardAgents?: Partial<BoardAgents>;
   /** 本体公司事实的读取（测试注入假实现）；缺省按 env 读本体（company.ts）。 */
   companyReader?: CompanyReader;
+  /** 本人这一轮说的话（测试注入假实现）；缺省读伙伴主线里还在跑的那一轮。 */
+  turnWords?: TurnWords;
   conversationTurnTimeoutMs?: number;
   conversationStallTimeoutMs?: number;
   conversationHeartbeatMs?: number;
@@ -922,6 +931,7 @@ export async function buildApp({
     materialStorageDir,
     conversationAttachmentStorageDir,
     conversationTurnTimeoutMs,
+    turnWords,
     conversationStallTimeoutMs,
     conversationHeartbeatMs,
     conversationCompaction,
@@ -986,10 +996,12 @@ export async function buildApp({
   app.decorate("taskPlacementJobs", taskPlacementJobs({ pool, now,
     agent: taskPlacementAgent ?? createTaskPlacementAgent({ query: q, baseUrl: env.piBaseUrl, apiKey: env.piApiKey,
       ...agentModel(env.agentModels, "taskPlacement", { modelId: env.lightModel, thinkingLevel: "off" }) }) }));
-  app.decorate("teamBuddyAnswerJobs", teamBuddyAnswerJobs({ pool, now, people: () => personDisplayNames(peopleDirectory),
-    reader: (ownerId) => scopeReader(dbScopeSource({ q, planTasks: planTaskSource, names: personDisplayNames(peopleDirectory), now: now() }, ownerId)),
-    agent: colleagueAnswerAgent ?? createColleagueAnswerAgent({ query: q, baseUrl: env.piBaseUrl, apiKey: env.piApiKey, pickModelId: env.lightModel,
-      answer: agentModel(env.agentModels, "colleagueAnswer", { modelId: env.heavyModel, thinkingLevel: "low" }) }) }));
+  const colleagueReader = (ownerId: string) => scopeReader(dbScopeSource({ q, planTasks: planTaskSource, names: personDisplayNames(peopleDirectory), now: now() }, ownerId));
+  const colleagueAgent = colleagueAnswerAgent ?? createColleagueAnswerAgent({ query: q, baseUrl: env.piBaseUrl, apiKey: env.piApiKey, pickModelId: env.lightModel,
+    answer: agentModel(env.agentModels, "colleagueAnswer", { modelId: env.heavyModel, thinkingLevel: "low" }) });
+  app.decorate("teamBuddyAnswerJobs", teamBuddyAnswerJobs({ pool, now, people: () => personDisplayNames(peopleDirectory), reader: colleagueReader, agent: colleagueAgent }));
+  app.decorate("colleagueChatAnswerJobs", colleagueChatAnswerJobs({ pool, now, directory: peopleDirectory, people: () => personDisplayNames(peopleDirectory),
+    reader: colleagueReader, agent: colleagueAgent }));
   app.decorate("jobsNow", {});
   app.addHook("onClose", async () => { await battlefieldSummaries.idle(); });
   registerProgressRoutes(app, ctx, battlefieldSummaries);
@@ -1041,6 +1053,8 @@ export async function buildApp({
   registerPartnerMeetingRoutes(app, ctx);
   registerTeamDeliveryRoutes(app, ctx);
   registerColleagueMaterialRoutes(app, ctx);
+  registerColleagueFriendRoutes(app, ctx);
+  registerColleagueChatRoutes(app, ctx);
   registerMeetingWorkHandoffRoutes(app, ctx);
   registerSessionStartRoutes(app, ctx);
   registerTaskPipelineRoutes(app, ctx);

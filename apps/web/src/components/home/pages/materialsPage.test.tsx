@@ -54,6 +54,24 @@ describe("对外资料页", () => {
     expect(text(renderToStaticMarkup(<MaterialsView {...props} roles={[]} />))).toContain("还没有技能");
   });
 
+  it("每份资料下面写谁、哪天；对不上说明、文件、技能的收在『其他』", () => {
+    const reads = [
+      { itemId: "note", title: "说明", reader: "测试乙", readOn: "2026-11-06" },
+      { itemId: `file:${file(1).id}`, title: "资料1.md", reader: "测试丁", readOn: "2026-11-05" },
+      { itemId: "skill:role-做排期", title: "做排期", reader: "测试甲", readOn: "2026-11-04" },
+      { itemId: "task:t1", title: "部署天枢", reader: "测试乙", readOn: "2026-11-07" },
+    ];
+    const html = renderToStaticMarkup(<MaterialsView {...props} materials={{ ...props.materials, reads }} />);
+    expect(html).toContain("测试乙 · 11/6");
+    expect(html).toMatch(/其他[\s\S]*部署天枢 · 测试乙 · 11\/7/);
+    expect(html.indexOf("测试乙 · 11/6")).toBeLessThan(html.indexOf(">文件<"));
+    expect(html.indexOf("测试丁 · 11/5")).toBeGreaterThan(html.indexOf("资料1.md"));
+    expect(html.indexOf("测试丁 · 11/5")).toBeLessThan(html.indexOf(">技能<"));
+    expect(html.indexOf("测试甲 · 11/4")).toBeGreaterThan(html.indexOf("做排期"));
+    expect(html.indexOf("测试甲 · 11/4")).toBeLessThan(html.indexOf(">其他<"));
+    expect(renderToStaticMarkup(<MaterialsView {...props} materials={{ ...props.materials, reads: [] }} />)).not.toContain("其他");
+  });
+
   it("像密钥的值：在出事的地方逐条写第几行", () => {
     const typed = "报价规则\nkey sk-abc123456";
     const html = renderToStaticMarkup(<MaterialsView {...props} note={typed}

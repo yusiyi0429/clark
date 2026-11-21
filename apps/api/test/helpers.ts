@@ -402,6 +402,8 @@ export async function createTestApp(
     boardAgents?: Parameters<typeof buildApp>[0]["boardAgents"];
     /** 本体公司事实的假读取（get_task_context 等）；不注入时按 testEnv 读（没配本体）。 */
     companyReader?: Parameters<typeof buildApp>[0]["companyReader"];
+    /** 本人这一轮说的话的假读取；不注入时读伙伴主线。 */
+    turnWords?: Parameters<typeof buildApp>[0]["turnWords"];
     /** 博查的假实现（对话、/mcp/me 的 web_search 共用）；不注入时没有联网搜索。 */
     webSearch?: Parameters<typeof buildApp>[0]["webSearch"];
   } = {},

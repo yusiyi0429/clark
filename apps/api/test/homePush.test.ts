@@ -97,6 +97,26 @@ describe("飞书推送（新首页 13.2）", () => {
       body: "Claude 订阅额度用完 · 09:00 恢复 · 2 件停着", links: [{ label: "打开天枢", path: "/me/work/settings/connections" }] }]);
   });
 
+  it("飞书：只推四种原因，消息里没有原话；同一段又来一句要承诺再推一次", async () => {
+    t = await createTestApp();
+    await t.sql("INSERT INTO feishu_identities (person_id, open_id) VALUES ($1,'ou_member')", [TEST_MEMBER.personId]);
+    const T0 = "2026-11-07T02:00:00.000Z"; // 上海 10:00
+    const 乙 = TEST_MEMBER.personId;
+    const row = (pushAt: string | null, source: string) => item({ id: "colleague-chat:c1", kind: "colleague_chat", title: "报价单在 sk-abc 那台机器上", source, at: T0,
+      person: { personId: "p", name: "孙铭泽" }, open: { kind: "colleague_chat", id: "p" }, chat: { pushAt, pushReason: pushAt ? "commit" : null } });
+    const waiting = new Map<string, TWaitingItem[]>();
+    const push = pusher(waiting);
+    waiting.set(乙, [row(null, "资料里没有")]);
+    expect(await push(T0)).toEqual([]);
+    waiting.set(乙, [row(T0, "要承诺")]);
+    expect(await push(T0)).toEqual([{ personId: 乙, title: "孙铭泽 · 要承诺", body: "孙铭泽 · 要承诺", links: [{ label: "打开天枢", path: "/me/work/chats/from/p" }] }]);
+    expect(await push(minutes(T0, 11))).toEqual([]);
+    waiting.set(乙, [row(minutes(T0, 20), "要承诺")]);
+    expect(await push(minutes(T0, 21))).toHaveLength(1);
+    // 几件合成一条时，每件的链接名也不带原话。
+    expect(JSON.stringify(pushNotice(乙, [row(T0, "要承诺"), { ...row(T0, "找你本人"), id: "colleague-chat:c2" }]))).not.toContain("sk-abc");
+  });
+
   it("一条里超过 5 件：前 5 件各一个链接，再加一个打开天枢", () => {
     const items = Array.from({ length: 6 }, (_, index) => item({ id: `verdict:card:c-${index}`, kind: "verdict", title: `第 ${index + 1} 件`, open: { kind: "card", id: `c-${index}` } }));
     const notice = pushNotice(TEST_MEMBER.personId, items);

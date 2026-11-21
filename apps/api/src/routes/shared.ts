@@ -41,6 +41,7 @@ import type { ConversationRecall } from "../conversationRecall.js";
 import type { CollectionAgent } from "../collectionAgent.js";
 import type { CollectionDeps } from "../collections.js";
 import type { UsageTracker } from "../usage.js";
+import type { TurnWords } from "../sourceWords.js";
 
 export type AppInstance = FastifyInstance<
   RawServerDefault,
@@ -122,6 +123,8 @@ export type RouteContext = {
   materialStorageDir: string;
   conversationAttachmentStorageDir: string;
   conversationTurnTimeoutMs: number;
+  /** 本人这一轮说的话（伙伴替本人问同事的伙伴时核对用）；测试注入，缺省读伙伴主线（sourceWords.ts 的 turnWordsReader）。 */
+  turnWords?: TurnWords;
   conversationStallTimeoutMs: number;
   conversationHeartbeatMs: number;
   /** 对话历史的后台压缩（conversationCompaction.ts）：轮前换入就绪的快照，轮后需要时在后台压缩。 */

@@ -4,7 +4,9 @@
  * /me/work/cards/<id>、/me/work/topics/<id> 子会话 · /me/work/missions/<id> Mission 详情（只读，14.2）·
  * /me/work/projects/<id> 项目页 · /me/work/projects/<id>/info 项目详情（第 16 节）· /me/work/projects/<id>/new 在项目里开一个子会话（第 68 条）· /me/work/transfers/<id> 别人交给你的项目（只读预览，16.7）·
  * /me/work/settings/<页> 二级页（头像和资料、伙伴、连接、偏好，设计 9.4）· /me/work/month/<YYYY-MM> 月份页（第 10 节）·
- * /me/work/meetings 会议页（接下来、已开完，11/16）· /me/work/meetings/<id> 会议详情（老界面的会议屏幕，只换外壳）。
+ * /me/work/meetings 会议页（接下来、已开完，11/16）· /me/work/meetings/<id> 会议详情（老界面的会议屏幕，只换外壳）·
+ * /me/work/chats/with/<personId> 我和这位同事的伙伴的对话 · /me/work/chats/from/<personId> 这位同事来问我的伙伴的对话 · /me/work/chats/find 找人 ·
+ * /me/work/chats/requests/<personId> 这位同事想加我好友。
  */
 import { createContext, useContext, type ReactNode } from "react";
 import type { BackgroundScope } from "@/lib/home/types";
@@ -25,7 +27,10 @@ export type View =
   | { kind: "card"; id: string }
   | { kind: "topic"; id: string }
   | { kind: "page"; page: PageKey }
-  | { kind: "month"; period: string };
+  | { kind: "month"; period: string }
+  | { kind: "chat"; side: "with" | "from"; personId: string }
+  | { kind: "chatFind" }
+  | { kind: "friendRequest"; personId: string };
 
 export { PAGE_KEYS, PAGE_TITLE, monthHref, pageHref, type PageKey } from "./pageKeys";
 
@@ -40,6 +45,9 @@ export function viewOf(pathname: string): View {
   if (parts[0] === "cards" && parts[1]) return { kind: "card", id: parts[1] };
   if (parts[0] === "topics" && parts[1]) return { kind: "topic", id: parts[1] };
   if (parts[0] === "settings" && isPage(parts[1])) return { kind: "page", page: parts[1] };
+  if (parts[0] === "chats" && parts[1] === "find") return { kind: "chatFind" };
+  if (parts[0] === "chats" && parts[1] === "requests" && parts[2]) return { kind: "friendRequest", personId: parts[2] };
+  if (parts[0] === "chats" && (parts[1] === "with" || parts[1] === "from") && parts[2]) return { kind: "chat", side: parts[1], personId: parts[2] };
   if (parts[0] === "month" && parts[1] && /^\d{4}-\d{2}$/.test(parts[1])) return { kind: "month", period: parts[1] };
   return { kind: "home" };
 }
@@ -47,7 +55,7 @@ export function viewOf(pathname: string): View {
 /** 右栏跟着展示区走：首页和总管线列本人全部（B 的契约 scope=main），项目对话和详情列这个项目的，Task 详情列这件 Task 的，子会话列它自己的；二级页、月份页只显示资源块（resources）。 */
 export function scopeOf(view: View): BackgroundScope {
   switch (view.kind) {
-    case "home": case "buddy": case "mission": case "transfer": case "meeting": case "meetings": return "main";
+    case "home": case "buddy": case "mission": case "transfer": case "meeting": case "meetings": case "chat": case "chatFind": case "friendRequest": return "main";
     case "project": case "projectInfo": return `project:${view.id}`;
     case "newSub": return `project:${view.projectId}`;
     case "task": case "info": return `task:${view.taskId}`;

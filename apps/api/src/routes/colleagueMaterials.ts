@@ -1,15 +1,17 @@
 import { Type } from "@sinclair/typebox";
 import type { FastifyReply } from "fastify";
 import { ColleagueMaterials, SaveColleagueNoteRequest, SecretInMaterialResponse } from "@warmap/contracts";
-import { addFile, MaterialError, readMaterials, removeFile, saveNote } from "../colleagueMaterials.js";
+import { addFile, listReads, MaterialError, readMaterials, removeFile, saveNote } from "../colleagueMaterials.js";
+import { dbScopeSource, scopeReader } from "../colleagueScope.js";
 import { MAX_MATERIAL_FILE_BYTES } from "../materialParser.js";
+import { personDisplayNames } from "../people.js";
 import type { AppInstance, RouteContext } from "./shared.js";
 
 const idParams = Type.Object({ id: Type.String({ minLength: 1 }) });
 
 /** 对外资料（契约 colleagueMaterials.ts）：本人的说明和文件，只动本人自己的。 */
 export function registerColleagueMaterialRoutes(app: AppInstance, ctx: RouteContext): void {
-  const { q, fail, requirePerson } = ctx;
+  const { q, fail, requirePerson, peopleDirectory } = ctx;
   const handle = async <T>(reply: FastifyReply, work: () => Promise<T>) => {
     try { return await work(); } catch (cause) {
       if (cause instanceof MaterialError) {
@@ -20,8 +22,14 @@ export function registerColleagueMaterialRoutes(app: AppInstance, ctx: RouteCont
     }
   };
 
-  app.get("/api/me/colleague-materials", { preHandler: requirePerson, schema: { response: { 200: ColleagueMaterials } } }, async (req) =>
-    readMaterials(q, req.person!.personId));
+  /** 只有读这条带 reads：标题取本人现在的范围目录，不在范围里的不列。 */
+  app.get("/api/me/colleague-materials", { preHandler: requirePerson, schema: { response: { 200: ColleagueMaterials } } }, async (req) => {
+    const ownerId = req.person!.personId;
+    const names = personDisplayNames(peopleDirectory);
+    const { entries } = await scopeReader(dbScopeSource({ q, planTasks: ctx.planTasks, names, now: ctx.now() }, ownerId)).catalog();
+    const titles = new Map(entries.map((entry) => [entry.itemId, entry.title]));
+    return { ...(await readMaterials(q, ownerId)), reads: await listReads(q, ownerId, names, titles) };
+  });
 
   app.put("/api/me/colleague-materials/note", { preHandler: requirePerson, schema: { body: SaveColleagueNoteRequest,
     response: { 200: ColleagueMaterials, 422: SecretInMaterialResponse } } }, async (req, reply) =>

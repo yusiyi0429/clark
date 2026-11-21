@@ -50,6 +50,7 @@ import { usePartnerMeetings } from "@/lib/home/partnerMeetingFeed";
 import { focusList } from "@/lib/home/focus";
 import { isTeamDraft } from "./PartnerTeam";
 import { TEAM_DELIVERY_CHANGED } from "@/lib/home/teamDelivery";
+import { COLLEAGUE_CHATS_CHANGED } from "@/lib/home/colleagueChats";
 import { LeftColumn } from "./LeftColumn";
 import { SeenContext, subIcon, type RowActions } from "./SubRows";
 import { ThreadPane } from "./ThreadPane";
@@ -57,6 +58,10 @@ import { inCenter, threadOpener } from "./ThreadChip";
 import { ForeignTaskInfo, TaskInfo } from "./TaskInfo";
 import { MissionInfo } from "./MissionInfo";
 import { MeetingView } from "./MeetingView";
+import { ChatView } from "./ChatView";
+import { ChatFind } from "./ChatFind";
+import { FriendRequestView } from "./FriendSheet";
+import { useColleagueChats } from "./useColleagueChats";
 import { MeetingsPage, meetingSections, nextMeetingTrail } from "./MeetingsPage";
 import { ProjectInfo } from "./ProjectInfo";
 import { ProjectTrail } from "./ProjectParts";
@@ -222,6 +227,8 @@ function HomeFrame({ account }: { account: Account }) {
     if (effect.kind === "refresh" && effect.what.some((what) => what === "work_home" || what === "project" || what === "sub_session")) void api.refresh();
   });
   useSessionStops(local, here);
+  // 左栏「对话」那边的两组。
+  const chats = useColleagueChats();
   useSessionCommands(local, here);
   // 左栏宽度（24 条）：本人拖过的写在根上的 --home-left，没拖过照 CSS 的 clamp。右边的面板同理（--home-right），放文件时另记一个宽（--home-file）。
   const leftWidth = useLeftWidth();
@@ -246,10 +253,7 @@ function HomeFrame({ account }: { account: Account }) {
     if (seenKind && seenId) markSeen(seenKind, seenId, seenMarker);
   }, [seenKind, seenId, seenMarker, markSeen]);
   const changed = useCallback(() => { void api.refresh(); }, [api]);
-  useEffect(() => {
-    window.addEventListener(TEAM_DELIVERY_CHANGED, changed);
-    return () => window.removeEventListener(TEAM_DELIVERY_CHANGED, changed);
-  }, [changed]);
+  useHomeRefreshEvents(changed);
   /**
    * 这个标签页里自动开工没开起来的子会话（卡 id、专题 id）：Task 管线里那一行出「失败」加「手动开始」（5.4.3、9.8，手动开始只有这一处），
    * 不弹提示。开起来了、或换了文件夹和模型（自动再试）就去掉。
@@ -617,6 +621,9 @@ function HomeFrame({ account }: { account: Account }) {
       case "transfer": return <TransferView key={current.id} id={current.id} go={go} onChanged={api.refresh} />;
       case "meetings": return <MeetingsPage meeting={meeting} go={go} />;
       case "meeting": return <MeetingView key={current.id} id={current.id} go={go} />;
+      case "chat": return <ChatView key={`${current.side}:${current.personId}`} side={current.side} personId={current.personId} buddy={buddy} go={go} />;
+      case "chatFind": return <SecondaryFrame key="chatFind" title="找人" go={go}><ChatFind go={go} /></SecondaryFrame>;
+      case "friendRequest": return <FriendRequestView key={current.personId} personId={current.personId} go={go} />;
       case "buddy": return <BuddyView buddy={buddy} outbox={outbox} consume={consume} onSpeaking={setSpeaking} waiting={data.waiting} go={go} context={buddyContext} onClearContext={() => setBuddyContext(null)}
         subs={subs} projects={projects.all} waitingFolder={waitingFolder} scratchFolder={scratchFolder} />;
       case "mission": {
@@ -684,7 +691,7 @@ function HomeFrame({ account }: { account: Account }) {
         // 项目建好了、文件夹没绑上：照样进项目页，提示一句，文件夹在详情里再加。
         if (folderIds.length) await projects.actions.setFolders(id, folderIds, name).catch(() => showWorkspaceToast({ text: "文件夹没绑上" }));
         return id;
-      }} working={working} seen={seenMarks} onOpen={markSeen}
+      }} working={working} seen={seenMarks} onOpen={markSeen} chats={chats}
       meetingSlot={<MeetingControl meeting={meeting} />}
       today={todayLabel(work.plan?.today ?? null)} machine={machineDot} trail={handheld ? backgroundButton : null}
       waitingCount={waitingCount} meetingsTrail={meetingsTrail} monthTrail={monthTrail}
@@ -788,6 +795,15 @@ function HomeFrame({ account }: { account: Account }) {
 }
 
 const PANEL_LABEL: Record<PanelKind, string> = { detail: "详情", file: "文件", sessions: "会话", thread: "会话" };
+
+/** 首页数据跟着重读：同事投递变了；同事对话变了（好友请求办了、回了一句、读到最新），「等你」里那几行跟着消掉。 */
+export function useHomeRefreshEvents(refresh: () => void) {
+  useEffect(() => {
+    const events = [TEAM_DELIVERY_CHANGED, COLLEAGUE_CHATS_CHANGED];
+    events.forEach((event) => window.addEventListener(event, refresh));
+    return () => events.forEach((event) => window.removeEventListener(event, refresh));
+  }, [refresh]);
+}
 
 /** 二级页、月份页的壳（5.4.7）：页头（返回、标题）+ 文档类阅读尺，内容是挂进来的组件。 */
 function SecondaryFrame({ title, trail, go, back = true, children }: { title: string; trail?: React.ReactNode; go: (href: string) => void; back?: boolean; children: React.ReactNode }) {

@@ -70,6 +70,8 @@ export function waitingHref(item: Pick<WaitingItem, "open"> & Partial<Pick<Waiti
     case "project": return open.focus ? `${projectHref(open.id)}#${askAnchor(open.focus.sessionId)}` : projectHref(open.id);
     case "meeting": return `/me/work/meetings/${encodeURIComponent(open.id)}`;
     case "team_request": return `/me/work/buddy#team-request-${encodeURIComponent(open.id)}`;
+    case "colleague_chat": return `/me/work/chats/from/${encodeURIComponent(open.id)}`;
+    case "friend_request": return `/me/work/chats/requests/${encodeURIComponent(open.id)}`;
     // 具体某张卡去那张卡；拍板人那一侧没有具体的卡（轮次），去原来列着轮次的首页通知栏。
     case "mission_card": return open.round ? "/me" : `/me/mission-cards/${encodeURIComponent(open.id)}`;
     case "role": return pageHref("roles");

@@ -1,11 +1,12 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool } from "pg";
-import type { AnswerInput, ColleagueAnswerAgent, Turn } from "./colleagueAnswerAgent.js";
+import type { AnswerCategory, AnswerInput, ColleagueAnswerAgent, Turn } from "./colleagueAnswerAgent.js";
 import type { ScopeReader } from "./colleagueScope.js";
 import type { JobHandler } from "./jobs.js";
 import type { Query } from "./meetingStore.js";
 import { logEvent } from "./observability.js";
-import { buddyAnswerKey, TEAM_BUDDY_ANSWER_JOB, transact, type BuddyAnswerTrigger } from "./teamDeliveries.js";
+import { transact } from "./dbTransaction.js";
+import { buddyAnswerKey, TEAM_BUDDY_ANSWER_JOB, type BuddyAnswerTrigger } from "./teamDeliveries.js";
 import { BUDDY_NOT_ANSWERED, latestReply } from "./teamDeliveryInbox.js";
 import { shanghaiDate } from "./workdays.js";
 
@@ -29,16 +30,26 @@ const cite = (item: { title: string; updatedAt: string | null }) => {
   return `${item.title}（${Number(month)}/${Number(day)}）`;
 };
 
-/** 一次代答（不碰库，T8 的评测直接调）。被问的人的名字取 reader.owner.name。empty：目录是空的，或挑出来的一份都读不到。 */
-export async function answerForColleague(input: { agent: ColleagueAnswerAgent; reader: ScopeReader; asker: string; today: string; thread: Turn[]; ref: string;
-  signal: AbortSignal }): Promise<{ kind: "answer"; text: string; handoff: string | null; sources: string[] } | { kind: "empty" }> {
-  const { agent, reader, asker, today, thread, ref, signal } = input;
+type ColleagueQuestion = { agent: ColleagueAnswerAgent; reader: ScopeReader; asker: string; today: string; thread: Turn[]; ref: string; signal: AbortSignal };
+type ColleagueAnswer = { kind: "answer"; text: string; handoff: string | null; sources: string[] };
+type ChatExtras = { answer: string; cited: string[]; category: AnswerCategory };
+
+/**
+ * 一次代答（不碰库，T8 的评测直接调）。被问的人的名字取 reader.owner.name。empty：目录是空的，或挑出来的一份都读不到。
+ * 给了 chat（同事对话）：目录空也挑；挑材料判成寒暄就不带材料作答；pending 交给作答；结果另带 answer（不带出处）、cited（「标题（M/D）」，和 sources 一一对应）、category。
+ */
+export function answerForColleague(input: ColleagueQuestion & { chat: { pending: string[] } }): Promise<(ColleagueAnswer & ChatExtras) | { kind: "empty" }>;
+export function answerForColleague(input: ColleagueQuestion): Promise<ColleagueAnswer | { kind: "empty" }>;
+export async function answerForColleague(input: ColleagueQuestion & { chat?: { pending: string[] } }): Promise<(ColleagueAnswer & Partial<ChatExtras>) | { kind: "empty" }> {
+  const { agent, reader, asker, today, thread, ref, signal, chat } = input;
   const owner = reader.owner.name;
   const { entries } = await reader.catalog();
-  if (!entries.length) return { kind: "empty" };
+  if (!entries.length && !chat) return { kind: "empty" };
   const catalog = entries.map(({ itemId, kind, title, updatedAt, under }) => ({ itemId, kind, title, updatedAt, under }));
   const known = new Set(catalog.map((entry) => entry.itemId));
-  const picked = [...new Set((await agent.pick({ owner, asker, today, thread, catalog }, ref, signal)).itemIds)].filter((id) => known.has(id)).slice(0, PICK_MAX);
+  const pick = await agent.pick({ owner, asker, today, thread, catalog }, ref, signal);
+  const smalltalk = Boolean(chat && pick.smalltalk);
+  const picked = smalltalk ? [] : [...new Set(pick.itemIds)].filter((id) => known.has(id)).slice(0, PICK_MAX);
   const materials: AnswerInput["materials"] = [];
   let left = MATERIALS_CHARS;
   for (const id of picked) {
@@ -48,12 +59,12 @@ export async function answerForColleague(input: { agent: ColleagueAnswerAgent; r
     materials.push({ itemId: read.itemId, kind: read.kind, title: read.title, updatedAt: read.updatedAt, text: read.text, truncated: read.truncated });
     left -= read.text.length;
   }
-  if (!materials.length) return { kind: "empty" };
-  const candidate = await agent.answer({ owner, asker, today, thread, materials }, ref, signal);
+  if (!materials.length && !smalltalk) return { kind: "empty" };
+  const candidate = await agent.answer({ owner, asker, today, thread, pending: chat?.pending ?? [], materials }, ref, signal);
   const used = [...new Set(candidate.sources)].filter((id) => materials.some((item) => item.itemId === id));
   const cited = used.map((id) => cite(materials.find((item) => item.itemId === id)!));
   return { kind: "answer", text: cited.length ? `${candidate.answer}\n\n出处：${cited.join("；")}` : candidate.answer,
-    handoff: candidate.handoff ? candidate.reason : null, sources: used };
+    handoff: candidate.handoff ? candidate.reason : null, sources: used, ...(chat ? { answer: candidate.answer, cited, category: candidate.category } : {}) };
 }
 
 export type BuddyAnswerDeps = { pool: Pool; now: () => Date; people: () => ReadonlyMap<string, string>; reader: (ownerId: string) => ScopeReader;
@@ -61,7 +72,7 @@ export type BuddyAnswerDeps = { pool: Pool; now: () => Date; people: () => Reado
 
 const sha = (input: string) => createHash("sha256").update(input).digest("hex");
 /** 同一个触发只落一条伙伴答复：client_id 由去重键算出（重试的作业也用同一个）。 */
-const clientIdOf = (key: string) => {
+export const clientIdOf = (key: string) => {
   const hex = sha(key);
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 };
@@ -95,7 +106,7 @@ const isTrigger = (payload: unknown): payload is BuddyAnswerTrigger => {
 };
 
 /** 一次代答整体限时：到点就中止，并以超时失败。 */
-async function within<T>(ms: number, work: (signal: AbortSignal) => Promise<T>): Promise<T> {
+export async function within<T>(ms: number, work: (signal: AbortSignal) => Promise<T>): Promise<T> {
   const controller = new AbortController();
   let timer: NodeJS.Timeout | undefined;
   const timeout = new Promise<never>((_, reject) => {

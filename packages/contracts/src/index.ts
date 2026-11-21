@@ -79,4 +79,5 @@ export * from "./workIntake.js";
 export * from "./partnerMeetings.js";
 export * from "./teamDeliveries.js";
 export * from "./colleagueMaterials.js";
+export * from "./colleagueChats.js";
 export * from "./meetingWorkHandoffs.js";

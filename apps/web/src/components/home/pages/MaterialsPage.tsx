@@ -5,10 +5,11 @@
  * - 说明：一个多行输入框，离开且内容变了就存。
  * - 文件：每份一行（文件名；大小 · 时间；删除），块标题右边「上传」，满 20 份禁用。
  * - 技能：本人每个技能一行开关，开着就是同事可用。
+ * 同事的伙伴读过全文的：说明、每份文件、每个技能下面各写「谁 · 月/日」；别的条目（Task、项目、会话这些）收在「其他」，一行「标题 · 谁 · 月/日」；没有记录不画。
  * 查出像密钥的值时在出事的那一处下面逐条写第几行，输入框里的字留着、开关回到关；别的失败「失败 · 重试」；成功不弹提示。
  * MaterialsPage 管读、存、失败和密钥提示的状态，MaterialsView 只画。只管本人自己的东西。
  */
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { TSecretFinding } from "@warmap/contracts";
 import { HeroButton } from "@/components/HeroButton";
 import { FailedLine, failureOf, type Failure } from "@/components/work/DecisionBox";
@@ -35,6 +36,14 @@ function FindingLines({ items, where }: { items: TSecretFinding[]; where: boolea
   );
 }
 
+/** 「2026-11-06」→「11/6」。 */
+const monthDay = (day: string) => `${Number(day.slice(5, 7))}/${Number(day.slice(8, 10))}`;
+
+function ReadLines({ lines }: { lines: string[] }) {
+  if (!lines.length) return null;
+  return <div className={p.under}>{lines.map((line, index) => <p key={index} className={p.note}>{line}</p>)}</div>;
+}
+
 export function MaterialsView({ materials, roles, note, busy, findings, failed, onNote, onSaveNote, onUpload, onRemove, onShare }: {
   materials: Materials;
   roles: RoleView[];
@@ -51,6 +60,10 @@ export function MaterialsView({ materials, roles, note, busy, findings, failed, 
   const picker = useRef<HTMLInputElement>(null);
   const now = Date.now();
   const full = materials.files.length >= MAX_FILES;
+  const reads = materials.reads ?? [];
+  const own = new Set(["note", ...materials.files.map((file) => `file:${file.id}`), ...roles.map((role) => `skill:${role.id}`)]);
+  const readsOf = (itemId: string) => reads.filter((read) => read.itemId === itemId).map((read) => `${read.reader} · ${monthDay(read.readOn)}`);
+  const others = reads.filter((read) => !own.has(read.itemId));
   return (
     <>
       {failed ? <FailedLine reason={failed.reason} note={failed.note} onRetry={failed.onRetry} /> : null}
@@ -59,6 +72,7 @@ export function MaterialsView({ materials, roles, note, busy, findings, failed, 
           <textarea className={p.textarea} value={note} maxLength={20000} aria-label="说明" rows={5}
             onChange={(event) => onNote(event.target.value)} onBlur={onSaveNote} />
         </div>
+        <ReadLines lines={readsOf("note")} />
         {findings?.at === "note" ? <FindingLines items={findings.items} where={false} /> : null}
       </Section>
       <Section title="文件" aside={(
@@ -70,10 +84,15 @@ export function MaterialsView({ materials, roles, note, busy, findings, failed, 
       )}>
         {materials.files.length ? (
           <ul className={p.rows}>
-            {materials.files.map((file) => (
-              <Row key={file.id} name={file.fileName} sub={[sizeText(file.size), relative(file.createdAt, now)].filter(Boolean).join(" · ")}
-                action={<HeroButton variant="ghost" size="sm" isDisabled={busy === file.id} onPress={() => onRemove(file.id)}>删除</HeroButton>} />
-            ))}
+            {materials.files.map((file) => {
+              const lines = readsOf(`file:${file.id}`);
+              return (
+                <Row key={file.id} name={file.fileName} sub={[sizeText(file.size), relative(file.createdAt, now)].filter(Boolean).join(" · ")}
+                  action={<HeroButton variant="ghost" size="sm" isDisabled={busy === file.id} onPress={() => onRemove(file.id)}>删除</HeroButton>}>
+                  {lines.length ? lines.map((line, index) => <p key={index} className={p.note}>{line}</p>) : null}
+                </Row>
+              );
+            })}
           </ul>
         ) : <p className={p.empty}>还没有文件</p>}
         {findings?.at === "file" ? <FindingLines items={findings.items} where /> : null}
@@ -81,14 +100,25 @@ export function MaterialsView({ materials, roles, note, busy, findings, failed, 
       <Section title="技能">
         {roles.length ? (
           <ul className={p.rows}>
-            {roles.map((role) => (
-              <SwitchRow key={role.id} name={role.name} checked={role.shared === true} disabled={busy === role.id} onChange={(next) => onShare(role.id, next)} />
-            ))}
+            {roles.map((role) => {
+              const lines = readsOf(`skill:${role.id}`);
+              return (
+                <Fragment key={role.id}>
+                  <SwitchRow name={role.name} checked={role.shared === true} disabled={busy === role.id} onChange={(next) => onShare(role.id, next)} />
+                  {lines.length ? <li><ReadLines lines={lines} /></li> : null}
+                </Fragment>
+              );
+            })}
           </ul>
         ) : <p className={p.empty}>还没有技能</p>}
         {findings && findings.at !== "note" && findings.at !== "file" && roles.some((role) => role.id === findings.at)
           ? <FindingLines items={findings.items} where /> : null}
       </Section>
+      {others.length ? (
+        <Section title="其他">
+          <ReadLines lines={others.map((read) => `${read.title} · ${read.reader} · ${monthDay(read.readOn)}`)} />
+        </Section>
+      ) : null}
     </>
   );
 }

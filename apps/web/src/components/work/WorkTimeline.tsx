@@ -35,15 +35,18 @@ export function conversationDoing({ stage, steps, progress, plan }: { stage: Thi
     ?? STAGE_COPY[stage];
 }
 
-/** afterSequence：按消息序号排的块（转交卡）——插在序号不超过它的最后一条后面，null 排最后；不带这个字段的按时间排。 */
-export type TimedBlock = { key: string; at: string; node: ReactNode; afterSequence?: number | null };
+/**
+ * afterSequence：按消息序号排的块（转交卡）——插在序号不超过它的最后一条后面，null 排最后；不带这个字段的按时间排。
+ * runId：这一轮里发生的块（伙伴替本人问的）——挂在这一轮最后一句提问后面、回答前面；对话里找不到这一轮的提问时照旧按时间。
+ */
+export type TimedBlock = { key: string; at: string; node: ReactNode; afterSequence?: number | null; runId?: string };
 
 /**
  * 每个块插在哪条消息后面（-1 是最前面）。按时间排的：时间不早于那条消息、早于下一条；
  * 对话里有消息不带时间（Chat 读回来的历史）就排不了，全放到最后一条后面，块和块之间仍按时间先后（29 条 C）。
  * 按序号排的见 TimedBlock.afterSequence。
  */
-export function placeBlocks(messages: { createdAt?: string; sequence: number }[], blocks: TimedBlock[]): Map<number, TimedBlock[]> {
+export function placeBlocks(messages: { createdAt?: string; sequence: number; role?: string; runId?: string }[], blocks: TimedBlock[]): Map<number, TimedBlock[]> {
   const untimed = messages.some((message) => !message.createdAt);
   const times = messages.map((message) => Date.parse(message.createdAt ?? ""));
   const placed = new Map<number, TimedBlock[]>();
@@ -55,8 +58,10 @@ export function placeBlocks(messages: { createdAt?: string; sequence: number }[]
     return a.block.at.localeCompare(b.block.at);
   });
   for (const { block } of chronological) {
-    let index = -1;
-    if (block.afterSequence === null || (block.afterSequence === undefined && untimed)) index = messages.length - 1;
+    let index = -1, asked = -1;
+    if (block.runId !== undefined) messages.forEach((message, i) => { if (message.role === "user" && message.runId === block.runId) asked = i; });
+    if (asked >= 0) index = asked;
+    else if (block.afterSequence === null || (block.afterSequence === undefined && untimed)) index = messages.length - 1;
     else if (block.afterSequence !== undefined) messages.forEach((message, i) => { if (message.sequence <= block.afterSequence!) index = i; });
     else {
       const at = Date.parse(block.at);
