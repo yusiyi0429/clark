@@ -202,6 +202,65 @@ describe("首页等你：扩的几种", { timeout: 30_000 }, () => {
     } finally { await f.close(); }
   });
 
+  it("电脑在线、网页没开：派出去 10 分钟没认领的开工、转话、改法合成一行「没送到电脑 · 3 件在等」", async () => {
+    const now = BOARD_NOW;
+    const ago = (minutes: number) => new Date(now.getTime() - minutes * 60_000);
+    const f = await boardFixture({ monthlyNow: () => now }, { boardCloudAgents: false });
+    try {
+      const laptop = await f.local();
+      // 开工：登记了要开工，没有电脑认领。
+      const starting = await roleCard(f, "等开工");
+      await f.t.sql("INSERT INTO session_starts(id,owner_id,kind,card_id,plan_task_id,origin,requested_at) VALUES($1,$2,'card',$3,'task-open','web',$4)",
+        [randomUUID(), TEST_MEMBER.personId, starting, ago(11)]);
+      // 转话：对在跑的会话说一句，没有电脑认领。
+      const talking = await roleCard(f, "在跑");
+      const session = await laptop.send({ kind: "card", cardId: talking }, [status("running", "在跑")]);
+      await f.t.sql("INSERT INTO session_commands(id,owner_id,kind,card_id,run_id,device_id,command,requested_at) VALUES($1,$2,'card',$3,$4,$5,$6::jsonb,$7)",
+        [randomUUID(), TEST_MEMBER.personId, talking, session, laptop.device, JSON.stringify({ type: "message", text: "顺便看下日志" }), ago(11)]);
+      // 改法：验收没过，改法还没送到本机。
+      const failing = await roleCard(f, "没过");
+      const handback = await laptop.handBack(failing);
+      await f.t.sql("UPDATE card_handbacks SET status='done',outcome='fail',return_text='第 1 条没达到，补上方案',finished_at=$2 WHERE id=$1", [handback, ago(12)]);
+      await f.t.sql("UPDATE local_devices SET last_sync_at=$2 WHERE id=$1", [laptop.device, now]);
+
+      expect(await waiting(f, "device")).toEqual([{ id: "device:undelivered", kind: "device", title: "没送到电脑 · 3 件在等", source: null, at: ago(12).toISOString(),
+        open: { kind: "connections", id: "this_computer" }, taskId: null, projectId: null, sessionId: null, deviceId: null, deviceName: null, letter: null, dueAt: null,
+        answer: "open", person: null, month: null, question: null, permission: null }]);
+
+      // 网页开了：认领了开工和转话、送到了改法，再算一次这一行没了。
+      expect((await f.call("POST", "/api/me/session-starts/claim", { deviceId: laptop.device })).json().starts).toHaveLength(1);
+      expect((await f.call("POST", "/api/me/session-commands/claim", { deviceId: laptop.device })).json().commands).toHaveLength(1);
+      expect((await f.call("POST", `/api/me/cards/${failing}/handbacks/${handback}/returned`)).statusCode).toBe(200);
+      expect(await waiting(f, "device")).toEqual([]);
+    } finally { await f.close(); }
+  });
+
+  it("没送到电脑：不到 10 分钟的、认领了还没过期的不出，认领过期了又出；一台在线的电脑都没有时不出这条，照旧出「电脑不在线」", async () => {
+    let now = BOARD_NOW;
+    const ago = (minutes: number) => new Date(now.getTime() - minutes * 60_000);
+    const f = await boardFixture({ monthlyNow: () => now }, { boardCloudAgents: false });
+    try {
+      const laptop = await f.local();
+      const start = randomUUID();
+      await f.t.sql("INSERT INTO session_starts(id,owner_id,kind,card_id,plan_task_id,origin,requested_at) VALUES($1,$2,'card',$3,'task-open','web',$4)",
+        [start, TEST_MEMBER.personId, await roleCard(f, "等开工"), ago(9)]);
+      await f.t.sql("UPDATE local_devices SET last_sync_at=$2 WHERE id=$1", [laptop.device, now]);
+      // 9 分钟前登记的：还不算没送到。
+      expect(await waiting(f, "device")).toEqual([]);
+
+      // 11 分钟前登记、3 分钟前被认领（认领还没过期）。
+      await f.t.sql("UPDATE session_starts SET requested_at=$2,claimed_at=$3,claimed_device=$4 WHERE id=$1", [start, ago(11), ago(3), laptop.device]);
+      expect(await waiting(f, "device")).toEqual([]);
+      // 认领了 6 分钟还没了结（那边的网页关了）：又算没送到。
+      await f.t.sql("UPDATE session_starts SET claimed_at=$2 WHERE id=$1", [start, ago(6)]);
+      expect((await waiting(f, "device")).map((item) => [item.id, item.title])).toEqual([["device:undelivered", "没送到电脑 · 1 件在等"]]);
+
+      // 过了 11 分钟电脑没上报，一台在线的都没有：只出「电脑不在线」。
+      now = new Date(now.getTime() + 11 * 60_000);
+      expect((await waiting(f, "device")).map((item) => [item.id, item.title])).toEqual([["device:this_computer", "电脑不在线 · 1 件在等"]]);
+    } finally { await f.close(); }
+  });
+
   it("额度：一台电脑一条，停着几件、最早几点恢复（截止）；恢复了接着跑的不算；排序是卡住在跑的活的在前（有截止的先），再是有截止的，其余新的在前", async () => {
     const f = await boardFixture({}, { boardCloudAgents: false });
     try {

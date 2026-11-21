@@ -10,6 +10,7 @@ import type { MissionRoundPerson } from "./missionRounds.js";
 import { monthReviewWaiting, reviewDeadline } from "./monthReview.js";
 import { listPendingTeamRequests } from "./teamDeliveryInbox.js";
 import { listProposals } from "./roles.js";
+import { CLAIM_TTL } from "./sessionStarts.js";
 import { CARD_PROJECT } from "./projects.js";
 import { openPlanTask, parseNotifyKey } from "./taskAgreements.js";
 import { DeliverableError } from "./taskDeliverables.js";
@@ -21,7 +22,7 @@ import type { RunAsk } from "./localDevices.js";
 /**
  * 首页的「等你」（契约 WaitingItem，设计 9.6）：要本人拿主意、不拿就有事卡住的，才进来。
  * 子会话、规划员、验收员在等批准或回复，受阻的卡，没能自动合回的卡，计划等你开工，会议要确认的，Nexus 推来的会后待定事项，Mission Card 要做的，请你认可，岗位修改建议，
- * 月份（复盘、之前月份还有没了结的），电脑不在线而有活在等本机，订阅额度用完有活停着，同事来问要我表态的，同事加我好友的。
+ * 月份（复盘、之前月份还有没了结的），电脑不在线而有活在等本机，电脑在线而派出去的没送到，订阅额度用完有活停着，同事来问要我表态的，同事加我好友的。
  */
 
 /** 本机报了订阅额度用完（hold.reason = usage_limit）的会话（别名 r 指 local_runs）：不论还算不算等额度恢复（workers.ts 的 awaitsQuota），都不是等你回复。等预算、等余额的不在这里。 */
@@ -29,6 +30,8 @@ export const HELD = `(COALESCE(r.hold->>'reason','')='usage_limit' AND r.state=A
 /** 「请 X 看」多久以内的还算在等你认可。 */
 const ACCEPTANCE_DAYS = 7;
 const DAY_MS = 24 * 60 * 60_000;
+/** 派出去多久还没送到本机，算「没送到电脑」。 */
+const UNDELIVERED_AFTER_MS = 10 * 60_000;
 /** 卡住正在跑的活的几种，排在最前（设计 9.6）。 */
 const BLOCKING = new Set<TWaitingItem["kind"]>(["approval", "question", "quota"]);
 
@@ -322,6 +325,27 @@ export async function assembleWaiting(input: WaitingInput): Promise<TWaitingItem
   if (waitingForDevice && !input.devices.some((device) => device.online))
     add({ id: "device:this_computer", kind: "device", title: input.devices.length ? `电脑不在线 · ${waitingForDevice} 件在等` : "还没有配对的电脑",
       source: input.devices.length ? null : `${waitingForDevice} 件在等`, at: null, open: { kind: "connections", id: "this_computer" }, answer: "open" });
+  // 没送到电脑：有在线的电脑，但派出去的开工、转话 10 分钟了没有网页认领（没认领或认领过期），验收没过的改法 10 分钟了没送回执行方。
+  // 都要本人电脑上开着天枢网页才送得到。改法照网页自动送的口径（卡的标记是验收未过，受阻的等本人拿主意、不算）；登记了「再改一轮」在等送的算在转话里。
+  if (input.devices.some((device) => device.online)) {
+    const cutoff = new Date(deps.now.getTime() - UNDELIVERED_AFTER_MS);
+    const live = (alias: string) => `(${alias}.kind='card' AND EXISTS (SELECT 1 FROM tasks t WHERE t.id=${alias}.card_id AND t.status NOT IN ('done','returned')
+      AND t.trashed_at IS NULL AND t.archived_at IS NULL) OR ${alias}.kind='topic' AND EXISTS (SELECT 1 FROM research_topics r WHERE r.id=${alias}.topic_id
+      AND r.status='active' AND r.trashed_at IS NULL))`;
+    const sent = ((await q(`SELECT s.requested_at AS at FROM session_starts s WHERE s.owner_id=$1 AND s.closed_at IS NULL AND s.requested_at<$2
+        AND (s.claimed_at IS NULL OR s.claimed_at<$3::timestamptz - interval '${CLAIM_TTL}') AND ${live("s")}
+        AND NOT EXISTS (SELECT 1 FROM local_runs r WHERE r.owner_id=$1 AND r.kind IN ('card','topic') AND (r.task_id=s.card_id OR r.topic_id=s.topic_id)
+          AND r.state NOT IN ('exited','failed','done'))
+      UNION ALL SELECT c.requested_at FROM session_commands c WHERE c.owner_id=$1 AND c.done_at IS NULL AND c.requested_at<$2
+        AND (c.claimed_at IS NULL OR c.claimed_at<$3::timestamptz - interval '${CLAIM_TTL}') AND ${live("c")}`,
+    [ownerId, cutoff, deps.now])).rows as { at: Date }[]).map((row) => row.at.toISOString());
+    const returns = cards.flatMap(({ card }) => card.wait === "review_failed" && card.handback?.returnText && !card.handback.returnedAt
+      && card.handback.relay?.state !== "pending" && card.handback.finishedAt && card.handback.finishedAt < cutoff.toISOString() ? [card.handback.finishedAt] : []);
+    const undelivered = [...sent, ...returns].sort();
+    if (undelivered.length)
+      add({ id: "device:undelivered", kind: "device", title: `没送到电脑 · ${undelivered.length} 件在等`, source: null, at: undelivered[0],
+        open: { kind: "connections", id: "this_computer" }, answer: "open" });
+  }
 
   // 项目转交（16.7）：别人把项目交给本人、发出了还没接手的；点开是只读预览，「接手」「不接」。
   const incoming = (await q(`SELECT t.id::text,t.project_id::text,t.from_id,t.decided_at,p.name FROM project_transfers t JOIN projects p ON p.id=t.project_id
