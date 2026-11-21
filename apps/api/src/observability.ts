@@ -18,8 +18,10 @@ function isSensitive(key: string): boolean {
  * LangSmith 个人/服务 key、OpenAI 式 sk- key、Bearer 头、JWT。
  */
 const SECRET_TEXT = /\blsv2_[A-Za-z0-9_-]{8,}|\bsk-[A-Za-z0-9_-]{16,}|\bBearer\s+[A-Za-z0-9._~+/-]{16,}=*|\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g;
+/** 天枢个人令牌：裸的 tsm_ 串（不带 Bearer 前缀）。 */
+const PERSONAL_TOKEN_TEXT = /\btsm_[A-Za-z0-9_-]+/g;
 export function redactSecretText(text: string): string {
-  return text.replace(SECRET_TEXT, REDACTED);
+  return text.replace(SECRET_TEXT, REDACTED).replace(PERSONAL_TOKEN_TEXT, "tsm_[已遮住]");
 }
 
 export function redactSecrets(value: unknown): unknown {

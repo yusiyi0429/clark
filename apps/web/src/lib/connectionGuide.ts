@@ -54,12 +54,17 @@ export function oauthConnectionGuide(role: "ceo" | "member", client: AgentClient
   ].join("\n");
 }
 
-export function connectionGuide({ role, client, endpoint, token, expires }: { role: "ceo" | "member"; client: AgentClient; endpoint: string; token: string; expires: string }): string {
+/** 说明文件不含令牌：放令牌的地方写占位，由本人自己粘贴，令牌不进 Agent 的对话记录。 */
+const TOKEN_PLACEHOLDER = "<你的天枢令牌>";
+const PASTE_YOURSELF = "这一处请本人自己粘贴令牌，Agent 不要读取或保存令牌";
+
+export function connectionGuide({ role, client, endpoint, expires }: { role: "ceo" | "member"; client: AgentClient; endpoint: string; expires: string }): string {
   const name = clientName(client);
+  const token = TOKEN_PLACEHOLDER;
   const steps = client === "other" ? [
     "天枢是一个远程 MCP 服务（Streamable HTTP，Bearer 令牌）。请按你所在工具自己的方式添加它，名称用 `tianshu`：",
     `- 地址：\`${endpoint}\``,
-    `- 请求头：\`Authorization: Bearer ${token}\``,
+    `- 请求头：\`Authorization: Bearer ${token}\`（${PASTE_YOURSELF}：把 \`${token}\` 换成天枢网页上复制的令牌）`,
     "- 配置写在用户级（所有项目都能用），不要写进项目仓库里的配置文件。",
     "- 以你工具当前的官方文档为准。常见写法供参考：OpenCode 在 `opencode.json` 的 `mcp` 里加一项 `type: \"remote\"`、`url`、`headers`；Cursor 在 `~/.cursor/mcp.json` 的 `mcpServers` 里加 `url` 和 `headers`。",
     "- 添加后按工具要求重新加载或重启。",
@@ -70,11 +75,12 @@ export function connectionGuide({ role, client, endpoint, token, expires }: { ro
     codexConfig(endpoint, token),
     "```",
     "",
-    "   令牌直接写在请求头里，Codex 的桌面 App、IDE 插件和命令行都读这一份，不需要环境变量；`default_tools_approval_mode = \"approve\"` 只对天枢生效，用户叫你写天枢时不用再点一次确认。",
-    "   这个文件在工作目录之外，写入被沙箱挡住时，申请在沙箱外执行，让用户在批准弹窗里点允许；不要让用户自己去改文件。",
+    `   ${PASTE_YOURSELF}：写好后请用户打开这个文件，把 \`${token}\` 换成天枢网页上复制的令牌。`,
+    "   令牌写在请求头里，Codex 的桌面 App、IDE 插件和命令行都读这一份，不需要环境变量；`default_tools_approval_mode = \"approve\"` 只对天枢生效，用户叫你写天枢时不用再点一次确认。",
+    "   这个文件在工作目录之外，写入被沙箱挡住时，申请在沙箱外执行，让用户在批准弹窗里点允许。",
     "2. 请用户完全退出并重新打开 Codex（桌面 App 要从菜单里退出，不只是关窗口）。",
   ] : [
-    `1. 运行：\`claude mcp add --transport http --scope user tianshu ${endpoint} --header "Authorization: Bearer ${token}"\``,
+    `1. 请用户自己在终端运行下面这条命令，运行前把 \`${token}\` 换成天枢网页上复制的令牌（${PASTE_YOURSELF}）：\`claude mcp add --transport http --scope user tianshu ${endpoint} --header "Authorization: Bearer ${token}"\``,
     "   `--scope user` 让用户的所有项目都能用，不只是当前目录。",
     "2. 请用户重新打开 Claude Code。",
   ];
@@ -84,8 +90,8 @@ export function connectionGuide({ role, client, endpoint, token, expires }: { ro
     "这份文件由天枢生成。拿到它的 Agent：请按下面的步骤帮用户完成连接，每做完一步告诉用户结果；需要用户自己操作的地方（比如重新打开），停下来说清楚。",
     "",
     role === "ceo"
-      ? "> 文件里有用户的个人令牌，等同于用户的身份；本说明使用的 CEO 工具只读。只在下面的设置里使用它：不要写进任何项目文件，不要提交到 git，不要贴到别处。设置完成后提醒用户删掉这个文件。"
-      : "> 文件里有用户的个人令牌，等同于用户的身份，只能读写用户自己的执行事项。只在下面的设置里使用它：不要写进任何项目文件，不要提交到 git，不要贴到别处。设置完成后提醒用户删掉这个文件。",
+      ? `> 本说明使用的 CEO 工具只读。凡是写着 \`${token}\` 的地方，${PASTE_YOURSELF}。配置写在用户级，不要写进项目仓库里的文件。`
+      : `> 令牌只能读写用户自己的执行事项。凡是写着 \`${token}\` 的地方，${PASTE_YOURSELF}。配置写在用户级，不要写进项目仓库里的文件。`,
     "",
     "## 连接信息",
     "",
@@ -101,8 +107,8 @@ export function connectionGuide({ role, client, endpoint, token, expires }: { ro
     "## 第二步：确认连上了",
     "",
     role === "ceo"
-      ? "重新打开后，调用 `tianshu` 的 `list_pending`，把待用户处理的事列给用户看，能列出来就算连好了。失败时把报错原文告诉用户；常见原因是令牌已撤销或过期、还没重新打开、地址打不开。"
-      : "重新打开后，调用 `tianshu` 的 `list_my_items`，把用户正在推进的执行事项列给用户看，能列出来就算连好了。失败时把报错原文告诉用户；常见原因是令牌已撤销或过期、还没重新打开、地址打不开。",
+      ? "重新打开后，调用 `tianshu` 的 `list_pending`，把待用户处理的事列给用户看，能列出来就算连好了。失败时把报错原文告诉用户；常见原因是令牌还没换成真的（会报 401）、令牌已撤销或过期、还没重新打开、地址打不开。"
+      : "重新打开后，调用 `tianshu` 的 `list_my_items`，把用户正在推进的执行事项列给用户看，能列出来就算连好了。失败时把报错原文告诉用户；常见原因是令牌还没换成真的（会报 401）、令牌已撤销或过期、还没重新打开、地址打不开。",
     "",
     "## 以后怎么用",
     "",

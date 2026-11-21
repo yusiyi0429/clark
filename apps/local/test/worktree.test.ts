@@ -20,7 +20,7 @@ async function until<T>(fn: () => Promise<T | null | undefined | false> | T | nu
 }
 
 const git = (cwd: string, ...args: string[]) => execFileSync("git", ["-c", "core.quotePath=false", ...args], { cwd, encoding: "utf8" }).trim();
-const PASSING = { summary: "都达到了", criteria: [{ index: 1, verdict: "met", reason: "做了" }] };
+const PASSING = { summary: "都达到了", criteria: [{ index: 1, verdict: "met", reason: "做了", evidence: "见改动" }] };
 
 /**
  * 临时仓库：main 上一个提交（说明文件、假 claude 的配置、忽略它的记录文件）。
@@ -205,7 +205,13 @@ describe("卡在自己的工作树里做", { timeout: 60_000 }, () => {
       expect((await h.call("POST", `/v1/sessions/${a.id}/messages`, { text: "再改改" })).status).toBe(409);
 
       // B 交回、验收，合回时和 A 的 hello.txt 冲突 → 放弃这次合并，主文件夹原样
-      expect((await h.handBack(b.id)).isError).toBe(false);
+      // B 的 summary 写空白、不点名产出：工作树里交回总带提交，不算空交回
+      const rb = await h.mcp(b.id, "hand_back", { summary: "  ", criteria: [{ index: 1, result: "met", evidence: "见改动" }], outputs: [] });
+      expect(rb.isError).toBe(false);
+      const headB = git(main, "rev-parse", wb.branch);
+      expect(rb.content[0]!.text).toContain(`提交 ${headB.slice(0, 7)}`);
+      const itemB = await until(() => h.cloud.items.find((i) => i.type === "handback" && i.data.git?.branch === wb.branch));
+      expect(itemB.data).toMatchObject({ summary: "  ", outputKeys: [], git: { commit: headB } });
       const vb = await h.verifierOf("Card-B");
       await h.waitStatus(vb.id, "done");
       expect(h.events(vb.id).find((e) => e.type === "user_message").text).not.toContain("a.txt");

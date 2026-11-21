@@ -173,7 +173,7 @@ describe("拆卡和验收在本机（第 21 节）", { timeout: 30_000 }, () => 
       const judge = async (cardId: string, criteria: { index: number; verdict: string; fix?: string; fixBy?: string }[]) =>
         (await f.sync({ kind: "verify", cardId, handbackKey: await keyOf(cardId) }, [["verdict", { passed: false, summary: "就差申请号，要你登录商标网查", beyondScope: [],
           modelLabel: "Opus 5.5", roleId: null, roleVersion: null,
-          criteria: criteria.map(({ index, verdict, fix, fixBy }) => ({ index, verdict, reason: verdict === "met" ? "对得上" : "缺", evidence: null, fix: fix ?? null,
+          criteria: criteria.map(({ index, verdict, fix, fixBy }) => ({ index, verdict, reason: verdict === "met" ? "对得上" : "缺", evidence: verdict === "met" ? "A1" : null, fix: fix ?? null,
             ...(fixBy ? { fixBy } : {}) })) }]])).rejected;
       const card = async (title: string) => { const id = await f.card(title); await f.t.sql("UPDATE tasks SET executor='claude_code' WHERE id=$1", [id]); return id; };
       const view = async (cardId: string) => (await f.call("GET", `/api/me/cards/${cardId}`)).json().task.card;
@@ -183,10 +183,10 @@ describe("拆卡和验收在本机（第 21 节）", { timeout: 30_000 }, () => 
       await handBack(a, [{ index: 1, result: "met", evidence: "A1" }, { index: 2, result: "needs_person", evidence: "商标网拦自动访问", need: "登录商标网查这 3 个名字的申请号" }]);
       const brief = (await f.brief(await keyOf(a))).json().markdown as string;
       for (const text of ["第 2 条：要本人补。商标网拦自动访问", "要本人做：登录商标网查这 3 个名字的申请号", "确实只有本人能做的判 needs_person"]) expect(brief).toContain(text);
-      expect(await judge(a, [{ index: 1, verdict: "met" }, { index: 2, verdict: "needs_person" }])).toEqual([]);
+      expect(await judge(a, [{ index: 1, verdict: "met" }, { index: 2, verdict: "needs_person", fix: "本人登录商标网查申请号，查到贴回卡里" }])).toEqual([]);
       expect((await f.t.sql("SELECT outcome,return_text FROM card_handbacks WHERE task_id=$1", [a]))[0]).toEqual({ outcome: "needs_person", return_text: null });
       expect(await view(a)).toMatchObject({ wait: "needs_person", handback: { outcome: "needs_person", headline: "就差申请号，要你登录商标网查", met: 1, total: 2,
-        gaps: [{ index: 2, short: "有评审结论", verdict: "needs_person", fixBy: "person", fix: "登录商标网查这 3 个名字的申请号" }] } });
+        gaps: [{ index: 2, short: "有评审结论", verdict: "needs_person", fixBy: "person", fix: "本人登录商标网查申请号，查到贴回卡里" }] } });
       expect(await f.t.sql("SELECT 1 FROM role_proposals WHERE task_id=$1", [a])).toEqual([]);
       // 首页「等你」一行，第二行是验收员那一句人话；项目动态里一条 card_needs_person 指过去。
       const project = (await f.call("POST", "/api/me/projects", { name: "品牌建设", taskId: "task-open" })).json().projectId as string;
@@ -222,6 +222,23 @@ describe("拆卡和验收在本机（第 21 节）", { timeout: 30_000 }, () => 
     } finally { await f.close(); }
   });
 
+  it("旧数据：已存的交回里判 needs_person 没写 fix 的，卡上缺口的改法用执行方写的 need 补", async () => {
+    const f = await localFixture();
+    try {
+      const a = await f.card("候选名初查");
+      await f.t.sql("UPDATE tasks SET executor='claude_code' WHERE id=$1", [a]);
+      await f.sync({ kind: "card", cardId: a }, [["handback", { summary: "能做的做完了", outputKeys: [],
+        criteria: [{ index: 1, result: "met", evidence: "A1" }, { index: 2, result: "needs_person", evidence: "商标网拦自动访问", need: "登录商标网查这 3 个名字的申请号" }] }]]);
+      // 现在本机和云端都不收 needs_person 不写 fix 的结论：直接写一行规则改之前落下的结论
+      const result = { headline: "就差申请号", beyondScope: [], sourceWordIssues: [], criteria: [
+        { index: 1, verdict: "met", reason: "对得上", evidence: "A1", fix: null },
+        { index: 2, verdict: "needs_person", reason: "缺", evidence: null, fix: null, fixBy: "person" }] };
+      await f.t.sql("UPDATE card_handbacks SET status='done',outcome='needs_person',result=$2::jsonb,finished_at=now() WHERE task_id=$1", [a, JSON.stringify(result)]);
+      expect((await f.call("GET", `/api/me/cards/${a}`)).json().task.card.handback.gaps)
+        .toEqual([{ index: 2, short: "有评审结论", verdict: "needs_person", fixBy: "person", fix: "登录商标网查这 3 个名字的申请号" }]);
+    } finally { await f.close(); }
+  });
+
   it("手机上登记「我来补」「再改一轮」（主循环第 62 条）：等那台电脑认领送到，送到后不再等你补、不再受阻；就到这里记成有缺口通过", async () => {
     const f = await localFixture();
     try {
@@ -229,7 +246,7 @@ describe("拆卡和验收在本机（第 21 节）", { timeout: 30_000 }, () => 
       const handBack = (cardId: string, criteria: unknown[]) => f.sync({ kind: "card", cardId }, [["handback", { summary: "交回", criteria, outputKeys: [] }]]);
       const judge = async (cardId: string, criteria: { index: number; verdict: string; fix?: string; fixBy?: string }[]) =>
         f.sync({ kind: "verify", cardId, handbackKey: await keyOf(cardId) }, [["verdict", { passed: false, summary: "就差申请号，要你查", beyondScope: [], modelLabel: "Opus 5.5",
-          roleId: null, roleVersion: null, criteria: criteria.map(({ index, verdict, fix, fixBy }) => ({ index, verdict, reason: "缺", evidence: null, fix: fix ?? null,
+          roleId: null, roleVersion: null, criteria: criteria.map(({ index, verdict, fix, fixBy }) => ({ index, verdict, reason: "缺", evidence: verdict === "met" ? "A1" : null, fix: fix ?? null,
             ...(fixBy ? { fixBy } : {}) })) }]]);
       const card = async (title: string) => { const id = await f.card(title); await f.t.sql("UPDATE tasks SET executor='claude_code' WHERE id=$1", [id]); return id; };
       const latest = async (cardId: string) => (await f.t.sql("SELECT id::text FROM card_handbacks WHERE task_id=$1 ORDER BY attempt DESC LIMIT 1", [cardId]))[0].id as string;
@@ -308,7 +325,7 @@ describe("拆卡和验收在本机（第 21 节）", { timeout: 30_000 }, () => 
 
       const verify = { kind: "verify", cardId: card, handbackKey: key };
       const verdict = (criteria: { index: number; verdict: string; fix?: string }[]) => ({ passed: criteria.every((item) => item.verdict === "met"), summary: "逐条看过",
-        criteria: criteria.map(({ index, verdict, fix }) => ({ index, verdict, reason: verdict === "met" ? "对得上" : "缺评审结论", evidence: null, fix: fix ?? null })),
+        criteria: criteria.map(({ index, verdict, fix }) => ({ index, verdict, reason: verdict === "met" ? "对得上" : "缺评审结论", evidence: verdict === "met" ? "A1" : null, fix: fix ?? null })),
         beyondScope: [], modelLabel: "claude-sonnet-5", roleId: null, roleVersion: 1 });
       expect((await f.sync(verify, [["verdict", verdict([{ index: 1, verdict: "met" }])]])).rejected.map((item) => item.code)).toEqual(["INVALID_VERDICT"]);
       const failed = await f.sync(verify, [["verdict", verdict([{ index: 1, verdict: "met" }, { index: 2, verdict: "partial", fix: "补上评审会的结论" }])]]);
@@ -440,7 +457,7 @@ describe("拆卡和验收在本机（第 21 节）", { timeout: 30_000 }, () => 
 
       // 验收员验的是交回的那个提交：过了以后卡进准备中，验的提交跟着出来。
       const verdict = { passed: true, summary: "改动对得上", beyondScope: [], modelLabel: "订阅 · Opus", roleId: null, roleVersion: null, commit: "b".repeat(40),
-        criteria: [1, 2].map((index) => ({ index, verdict: "met", reason: "对得上", evidence: null, fix: null })) };
+        criteria: [1, 2].map((index) => ({ index, verdict: "met", reason: "对得上", evidence: "改动", fix: null })) };
       expect((await f.sync({ kind: "verify", cardId: inTree, handbackKey: handback.client_id }, [["verdict", verdict]])).rejected).toEqual([]);
       const after = { ...git, verifiedCommit: "b".repeat(40) };
       expect((await detail(inTree)).handbacks[0]).toMatchObject({ outcome: "pass", git: after });
@@ -628,7 +645,7 @@ describe("拆卡和验收在本机（第 21 节）", { timeout: 30_000 }, () => 
       const keyOf = async (id: string) => (await f.t.sql("SELECT client_id FROM card_handbacks WHERE id=$1", [id]))[0].client_id as string;
       const issue = { quote: "录屏这次先不做", kind: "extra", reason: "交回里多做了一份录屏" };
       const verdict = { passed: false, summary: "标准都达到，但做了原话里不要的", beyondScope: [], modelLabel: "claude-sonnet-5", roleId: null, roleVersion: null,
-        criteria: [1, 2].map((index) => ({ index, verdict: "met", reason: "对得上", evidence: null, fix: null })), sourceWordIssues: [issue] };
+        criteria: [1, 2].map((index) => ({ index, verdict: "met", reason: "对得上", evidence: "改动", fix: null })), sourceWordIssues: [issue] };
 
       const first = await f.machine.handBack(card);
       expect((await f.brief(await keyOf(first))).json().sourceWords).toEqual(["录屏这次先不做"]);

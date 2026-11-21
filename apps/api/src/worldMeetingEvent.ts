@@ -15,6 +15,7 @@ import { WorldClient, WorldError, worldErrorCode, worldRef, type WorldAction, ty
  * - 前次没有写成的事件就按 first 写。幂等键 tianshu-meeting:<会议 ID>:v<revision>:event（10/21 起；更早写成的用的是不带 :event 的旧键）；
  *   结果未知时同键重放台账里的原请求（拍板 3）。
  * - 写完按挂点对象取事件读回：找到这条，正文解析出的 confirmation.payloadHash 和确认的一致、并且按解析出的 payload 重算也一致，才算写成。
+ * - 任务最后一次仍连不上本体：台账记待核验（unverified），之后同键重放台账里的原请求核验（本体同键同请求体回原回执，不会多记一条）。
  * - v2（10/28 决策逐条确认）自动冻结的（confirmedBy 为 null）：trigger「会议决策逐条确认」（没有决策、只写记录时「会议记录生成」），reason 写逐条确认的人；
  *   主持人自己整卡确认的版本照旧「会议记录整卡确认」。
  *   记录正文不能写进本体时（recordText 为 false，等斯一答复）：事件里的 payload 去掉 summary 和 sections，只带已确认的决策和行动项（出处见各条的 sourceRefs 和原文链接），
@@ -37,6 +38,8 @@ export type MeetingEventWrite = {
 export type MeetingEventWorld = {
   /** 写入并读回；返回事件 id 和实际写进去的 subject_refs、occurred_at。 */
   write(input: MeetingEventWrite): Promise<{ eventId: string; subjectRefs: string[]; occurredAt: string }>;
+  /** 这一版最近一次写入是网络错时台账改记待核验；返回这一版的幂等键。 */
+  markUnverified(meetingId: string, revision: number): Promise<string>;
   errorCode(error: unknown): string;
 };
 
@@ -145,6 +148,11 @@ export function createMeetingEventWorld({ client }: { client: WorldClient }): Me
         throw new WorldError(502, "READBACK_MISMATCH", "写入后在挂点对象上没读回这条会议事件，或正文摘要值对不上");
       }
       return { eventId, subjectRefs, occurredAt };
+    },
+    async markUnverified(meetingId, revision) {
+      const key = meetingEventKey(meetingId, revision);
+      await client.markUnverified(key);
+      return key;
     },
     errorCode: worldErrorCode,
   };

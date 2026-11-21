@@ -24,7 +24,9 @@ import type { MeetingEventWorld } from "./worldMeetingEvent.js";
  * - 行动项（拍板 4）：确认时只存进这次的快照，不建执行事项（10/30 起会后分派关掉，执行事项由本人建）。
  *   10/30 之前推成执行事项的行动项带着 taskId，照旧留着，不回改那件执行事项。
  * - 写本体按 revision 串行（jobs worker 逐条执行）：一直写最早一版待写的，前次写成的那条在写的时候现找（写入中又确认了新版，新版指回刚写成的那条）。
- *   NETWORK_ERROR 抛出交给 jobs 按原幂等键重放，任务最后一次仍是网络错误、其他错误都记 failed 和原因（拍板 8：不设正文上限，本体回超长就如实记下）；
+ *   NETWORK_ERROR 抛出交给 jobs 按原幂等键重放，其他错误记 failed 和原因（拍板 8：不设正文上限，本体回超长就如实记下）；
+ *   任务最后一次仍是网络错误：可能已经写进去了，台账记待核验、回执照网络错留着，1 小时后排一条核验（meeting.world_verify）按同一幂等键重放原请求，
+ *   拿到回执照写成收尾，明确的业务错误记 failed；核验仍是网络错按 jobs 退避，最后一次还是网络错仍是待核验、2 小时后再排一条核验，一直试到本体回话，不记失败。
  *   原因记短标签（worldErrorLabel），本体原话只进日志。
  * - 选了不写入：回执 skipped，不发请求；已经写进去的不撤回。
  * - 对象修改（meetingObjectSync）：确认时排好每条的回执（上一版已改成、这次没动的沿用结果），新版确认后旧版还没提交的作废；
@@ -36,6 +38,10 @@ import type { MeetingEventWorld } from "./worldMeetingEvent.js";
  */
 export const MEETING_WORLD_SYNC_KIND = "meeting.world_sync";
 export const MEETING_CARD_FREEZE_KIND = "meeting.card_freeze";
+export const MEETING_WORLD_VERIFY_KIND = "meeting.world_verify";
+const VERIFY_DELAY_MS = 60 * 60_000;
+/** 核验任务最后一次仍连不上本体：隔这么久再排一条。 */
+const VERIFY_AGAIN_MS = 2 * 60 * 60_000;
 export const PENDING_REVIEW: TMeetingItemReview = { status: "pending", by: null, at: null, reason: null };
 
 type Viewer = { personId: string; isCeo: boolean };
@@ -496,9 +502,9 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
   /**
    * 这场会的本体同步（jobs worker 逐条执行）：按 revision 从早到晚，先逐条提交这一版还没提交的对象修改，再写会议事件
    * （content.refs 只列这一版写成的修改；前次写成的那条事件在写的时候现找）。10/21 之前按「先事件后修改」排下、事件已写成的那一版，接着提交剩下的修改。
-   * lastAttempt：任务最后一次重跑，事件和对象修改的网络错误也记失败。
+   * lastAttempt：任务最后一次重跑，对象修改的网络错误也记失败；事件的网络错误记待核验（见文件头）。verify：核验任务在跑。
    */
-  async function syncWorld(meetingId: string, lastAttempt = false): Promise<void> {
+  async function syncWorld(meetingId: string, lastAttempt = false, verify = false): Promise<void> {
     const world = deps.meetingWorld;
     if (!world || !UUID_PATTERN.test(meetingId)) return;
     for (;;) {
@@ -541,9 +547,14 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
         const code = world.errorCode(error);
         logEvent({ event: "meeting.world_event", objectRef: `meeting:${meetingId}`, status: "world_failed", errorCode: code, message: error instanceof Error ? error.message : undefined });
         const label = worldErrorLabel(code);
-        if (code === "NETWORK_ERROR" && !lastAttempt) {
+        if (code === "NETWORK_ERROR") {
           await q("UPDATE meeting_card_syncs SET event_error = $3, updated_at = now() WHERE meeting_id = $1 AND revision = $2", [meetingId, row.revision, label]);
-          throw error;
+          if (!lastAttempt && !verify) throw error;
+          const key = await world.markUnverified(meetingId, row.revision);
+          if (!lastAttempt) throw error;
+          await enqueueJob(q, { kind: MEETING_WORLD_VERIFY_KIND, dedupeKey: `${MEETING_WORLD_VERIFY_KIND}:${key}:${randomUUID()}`, payload: { meetingId },
+            runAt: new Date(now().getTime() + (verify ? VERIFY_AGAIN_MS : VERIFY_DELAY_MS)) });
+          return;
         }
         await q("UPDATE meeting_card_syncs SET event_status = 'failed', event_error = $3, updated_at = now() WHERE meeting_id = $1 AND revision = $2",
           [meetingId, row.revision, label]);
@@ -560,6 +571,7 @@ export function meetingCardConfirmJobs(service: MeetingCardConfirmService): Reco
   const meetingIdOf = (payload: unknown) => String((payload as { meetingId?: unknown }).meetingId);
   return {
     [MEETING_WORLD_SYNC_KIND]: (payload, job) => service.syncWorld(meetingIdOf(payload), job.attempts >= JOB_MAX_ATTEMPTS),
+    [MEETING_WORLD_VERIFY_KIND]: (payload, job) => service.syncWorld(meetingIdOf(payload), job.attempts >= JOB_MAX_ATTEMPTS, true),
     [MEETING_CARD_FREEZE_KIND]: (payload) => service.freeze(meetingIdOf(payload)),
   };
 }

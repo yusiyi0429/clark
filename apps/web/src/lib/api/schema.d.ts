@@ -22889,6 +22889,10 @@ export interface components {
                 personId: string;
                 name: string;
             }[];
+            unknown: {
+                personId: string;
+                name: string;
+            }[];
         };
         TrashItem: {
             kind: "card" | "topic";

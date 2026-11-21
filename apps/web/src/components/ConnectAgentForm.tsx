@@ -12,7 +12,6 @@ import { GUIDE_FILE_NAME, clientName, connectCommands, connectionGuide, type Age
 import f from "@/components/onboarding/foundation.module.css";
 import s from "@/styles/connection-dialog.module.css";
 import { OAuthConnectForm } from "./OAuthConnectForm";
-import { useDots } from "@/lib/home/noEllipsis";
 
 type TokenView = components["schemas"]["PersonalTokenView"];
 type Created = components["schemas"]["CreatePersonalTokenResponse"];
@@ -54,12 +53,11 @@ export function PersonalTokenForm({ role, defaultName = "", activeCount = 0, rev
   onUpdated?: (view: TokenView) => void;
   onDownloaded?: () => void;
 }) {
-  const dots = useDots();
   const [createdRaw, setCreated] = useState<Created | null>(null);
   const created = createdRaw && !revokedIds.includes(createdRaw.view.id) ? createdRaw : null;
   const [name, setName] = useState(defaultName);
   const [client, setClient] = useState<TokenView["client"]>("codex");
-  const [expiresInDays, setExpiresInDays] = useState<30 | 90 | null>(90);
+  const [expiresInDays, setExpiresInDays] = useState<30 | 90 | null>(30);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState("");
@@ -91,7 +89,7 @@ export function PersonalTokenForm({ role, defaultName = "", activeCount = 0, rev
   const endpoint = `${origin}/mcp/me`;
   const download = () => {
     if (!created) return;
-    const text = connectionGuide({ role, client: created.view.client as AgentClient, endpoint, token: created.token, expires: expiryText(created.view.expiresAt) });
+    const text = connectionGuide({ role, client: created.view.client as AgentClient, endpoint, expires: expiryText(created.view.expiresAt) });
     const url = URL.createObjectURL(new Blob([text], { type: "text/markdown;charset=utf-8" }));
     const link = document.createElement("a");
     link.href = url; link.download = GUIDE_FILE_NAME;
@@ -117,17 +115,17 @@ export function PersonalTokenForm({ role, defaultName = "", activeCount = 0, rev
     {actionsTarget === undefined ? <Button variant="primary" isDisabled={busy || !name.trim() || activeCount >= 5} onPress={() => void create()}>生成连接说明</Button> : null}
     {actionsTarget ? createPortal(created
       ? <button type="button" className={f.primary} onClick={download}>下载连接说明<Download size={18} aria-hidden="true" /></button>
-      : <button type="button" className={f.primary} disabled={busy || !name.trim() || activeCount >= 5} onClick={() => void create()}>{busy ? dots("正在生成…") : "生成连接说明"}{busy ? null : <ArrowRight size={18} aria-hidden="true" />}</button>, actionsTarget) : null}
+      : <button type="button" className={f.primary} disabled={busy || !name.trim() || activeCount >= 5} onClick={() => void create()}>{busy ? "正在生成" : "生成连接说明"}{busy ? null : <ArrowRight size={18} aria-hidden="true" />}</button>, actionsTarget) : null}
     {activeCount >= 5 ? <p className={s.muted}>最多 5 个连接</p> : null}
     {created ? <div className={s.ready} aria-label="连接说明已生成">
       <strong>连接说明已生成</strong>
       <p>发给 {clientName(created.view.client)}：「按这个文件帮我连上天枢」</p>
       {actionsTarget === undefined ? <Button variant="primary" onPress={download}><Download size={16} aria-hidden />下载连接说明</Button> : null}
-      <p className={s.muted}>只能下载这一次</p>
-      <p role="status" className={connected ? s.connected : s.muted}>{connected ? "✓ 已连上天枢" : dots("等待连接…")}</p>
+      {commandBlock("令牌", created.token)}
+      <p className={s.muted}>令牌只显示这一次</p>
+      <p role="status" className={connected ? s.connected : s.muted}>{connected ? "✓ 已连上天枢" : "等待连接"}</p>
       <details className={s.manual}><summary>手动设置</summary>
         <div className={s.manualBody}>
-          {commandBlock("令牌", created.token)}
           <p className={s.muted}>连接地址：{endpoint}</p>
           {connectCommands(created.view.client as AgentClient, endpoint, created.token).map(({ label, value }) => commandBlock(label, value))}
           {created.view.client === "codex" ? <p className={s.muted}>保存后完全退出并重新打开 Codex。</p> : null}

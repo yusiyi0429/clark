@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { Value } from "@sinclair/typebox/value";
 import { MeetingCardView, type TMeetingCardView } from "@warmap/contracts";
 import { signActionId } from "../src/actionToken.js";
+import { JOB_MAX_ATTEMPTS } from "../src/jobs.js";
 import { payloadHash } from "../src/meetingCardHash.js";
 import { cardAgent, CEO, confirm, edit, getCard, HOST, ready, retry, setup, worldOf } from "./meetingCardFixture.js";
 import { projection, stubWorld } from "./worldFixture.js";
@@ -13,10 +14,11 @@ type Written = { eventId: string; body: any };
 /**
  * 假本体：挂点 PO（版本 5）；记事件按幂等键去重（同键重放回原回执）；取事件返回 subject_refs 挂到这个对象上的事件（带 content）。
  * network() 为 true 时记事件请求抛网络错误；beforeCommit 在每次记事件（prepare 之后、提交之前）先跑；readable() 为 false 时取事件为空；
- * tampered() 为 true 时读回的正文 payload 被改了一个字（confirmation 原样）。
+ * tampered() 为 true 时读回的正文 payload 被改了一个字（confirmation 原样）；lost() 为 true 时事件记下了、回包丢了（抛网络错误）；
+ * conflict() 为 true 时记事件回 409 VERSION_CONFLICT（什么也不记）。
  */
-function ontology({ network = () => false, beforeCommit, readable = () => true, tampered = () => false }:
-  { network?: () => boolean; beforeCommit?: () => Promise<void>; readable?: () => boolean; tampered?: () => boolean } = {}) {
+function ontology({ network = () => false, beforeCommit, readable = () => true, tampered = () => false, lost = () => false, conflict = () => false }:
+  { network?: () => boolean; beforeCommit?: () => Promise<void>; readable?: () => boolean; tampered?: () => boolean; lost?: () => boolean; conflict?: () => boolean } = {}) {
   const tamper = (text: string) => {
     if (!tampered()) return text;
     const body = JSON.parse(text);
@@ -37,8 +39,10 @@ function ontology({ network = () => false, beforeCommit, readable = () => true, 
       if (call.body.action_type !== "world_record_event") return { receipt_id: `r-${call.body.idempotency_key}`, status: "committed", result: {} };
       await beforeCommit?.();
       if (network()) throw new TypeError("fetch failed");
+      if (conflict()) return Response.json({ error: { code: "VERSION_CONFLICT", message: "版本已前进" } }, { status: 409 });
       const event = recorded.find((item) => item.body.idempotency_key === call.body.idempotency_key)
         ?? recorded[recorded.push({ eventId: `ev-${recorded.length + 1}`, body: call.body }) - 1];
+      if (lost()) throw new TypeError("fetch failed");
       return { receipt_id: `r-${event.eventId}`, status: "committed", result: { event_id: event.eventId } };
     }
     const events = path.match(/^\/v1\/world\/objects\/([^/]+)\/events$/);
@@ -51,7 +55,7 @@ function ontology({ network = () => false, beforeCommit, readable = () => true, 
   });
   // 会议事件的提交（对象修改另见 meetingObjectSync.test.ts）。
   const writes = () => calls.filter((call) => call.url.pathname === "/v1/actions" && call.body.action_type === "world_record_event").map((call) => call.body);
-  return { po, calls, writes };
+  return { po, calls, writes, recorded };
 }
 
 const parsed = (body: any) => JSON.parse(body.params.content.text) as { payload: any; confirmation: any };
@@ -226,25 +230,137 @@ describe("整卡确认与会议事件", () => {
     }
   });
 
-  it("一直连不上本体：任务最后一次仍是网络错误，事件记失败「连不上本体」，能重试", async () => {
-    let down = true;
-    const world = ontology({ network: () => down });
-    const { t, host, meetingId, run } = await setup();
-    try {
+  describe("任务最后一次仍连不上本体：台账记待核验，之后按同一幂等键重放核验", () => {
+    type T = Awaited<ReturnType<typeof setup>>["t"];
+    const keyOf = (meetingId: string) => `tianshu-meeting:${meetingId}:v1:event`;
+    const ledgerStatus = async (t: T, meetingId: string) =>
+      (await t.sql("SELECT status FROM world_sync_ledger WHERE idempotency_key = $1 ORDER BY id DESC LIMIT 1", [keyOf(meetingId)]))[0].status;
+    const failedRows = async (t: T) => (await t.sql("SELECT count(*)::int AS n FROM world_sync_ledger WHERE status = 'failed'"))[0].n;
+    const verifyJobs = (t: T) => t.sql("SELECT dedupe_key, status, attempts, run_at FROM jobs WHERE kind = 'meeting.world_verify' ORDER BY id");
+    /** 这类还在等的任务改成现在就到期；给了 attempts 就把已跑次数拨到这个数（领取时再加一）。 */
+    const due = (t: T, kind: string, attempts?: number) =>
+      t.pool.query("UPDATE jobs SET run_at = now() - interval '1 minute', attempts = COALESCE($2, attempts) WHERE kind = $1 AND status = 'pending'", [kind, attempts ?? null]);
+    /** 确认、第一次写入网络错，然后写入任务最后一次仍网络错。 */
+    async function offlineToLastAttempt(t: T, host: string, meetingId: string, run: () => Promise<void>) {
       await confirm(t, host, meetingId, { draftVersion: await ready(t, host, meetingId), writeToWorld: true });
       await run();
-      expect((await getCard(t, host, meetingId)).sync!.event).toMatchObject({ status: "pending" });
-      await t.app.meetingFollowThrough.cardConfirm.syncWorld(meetingId, true);
-      expect((await getCard(t, host, meetingId)).sync!.event).toMatchObject({ status: "failed", eventId: null, error: "连不上本体" });
-      expect((await worldOf(t, host, meetingId)).world.record).toMatchObject({ status: "failed" });
-      down = false;
-      expect((await retry(t, host, meetingId)).statusCode).toBe(200);
+      await due(t, "meeting.world_sync", JOB_MAX_ATTEMPTS - 1);
       await run();
-      expect((await getCard(t, host, meetingId)).sync!.event).toMatchObject({ status: "succeeded", eventId: "ev-1", error: null });
-      expect(world.writes().length).toBeGreaterThan(1);
-    } finally {
-      await t.close();
+      expect(await t.sql("SELECT status FROM jobs WHERE kind = 'meeting.world_sync'")).toEqual([{ status: "done" }]);
     }
+    /** 待核验时：会议照网络错显示（写入中，不显示失败），台账没有失败，排了一条 1 小时后的核验。 */
+    async function expectUnverified(t: T, host: string, meetingId: string) {
+      expect(await ledgerStatus(t, meetingId)).toBe("unverified");
+      expect(await failedRows(t)).toBe(0);
+      expect((await getCard(t, host, meetingId)).sync!.event).toMatchObject({ status: "pending", eventId: null, error: "连不上本体" });
+      expect((await worldOf(t, host, meetingId)).world.record).toMatchObject({ status: "writing" });
+    }
+
+    it("本体其实已经记下（回包丢了）：核验时同键重放拿回原回执，台账 committed，本体只有一条事件", async () => {
+      let lost = true;
+      const world = ontology({ lost: () => lost });
+      const { t, host, meetingId, run } = await setup();
+      try {
+        const started = Date.now();
+        await offlineToLastAttempt(t, host, meetingId, run);
+        await expectUnverified(t, host, meetingId);
+        const [job] = await verifyJobs(t);
+        expect(job).toMatchObject({ status: "pending", attempts: 0 });
+        expect(String(job.dedupe_key)).toContain(keyOf(meetingId));
+        expect(new Date(job.run_at as Date).getTime() - started).toBeGreaterThanOrEqual(60 * 60_000);
+        // 不到 1 小时不跑。
+        const writes = world.writes().length;
+        await run();
+        expect(world.writes()).toHaveLength(writes);
+
+        lost = false;
+        await due(t, "meeting.world_verify");
+        await run();
+        expect(world.recorded).toHaveLength(1);
+        expect(world.writes().map((body) => body.idempotency_key)).toEqual(world.writes().map(() => keyOf(meetingId)));
+        for (const body of world.writes().slice(1)) expect(body).toEqual(world.writes()[0]);
+        expect(await ledgerStatus(t, meetingId)).toBe("committed");
+        expect((await getCard(t, host, meetingId)).sync!.event).toMatchObject({ status: "succeeded", eventId: "ev-1", error: null });
+        expect((await worldOf(t, host, meetingId)).world.record).toMatchObject({ status: "committed", eventId: "ev-1" });
+        expect((await verifyJobs(t)).map((row) => row.status)).toEqual(["done"]);
+      } finally {
+        await t.close();
+      }
+    });
+
+    it("本体里没有、核验时网络恢复：写入成功，台账 committed，只有一条事件", async () => {
+      let down = true;
+      const world = ontology({ network: () => down });
+      const { t, host, meetingId, run } = await setup();
+      try {
+        await offlineToLastAttempt(t, host, meetingId, run);
+        await expectUnverified(t, host, meetingId);
+        expect(world.recorded).toHaveLength(0);
+        down = false;
+        await due(t, "meeting.world_verify");
+        await run();
+        expect(world.recorded).toHaveLength(1);
+        expect(await ledgerStatus(t, meetingId)).toBe("committed");
+        expect((await getCard(t, host, meetingId)).sync!.event).toMatchObject({ status: "succeeded", eventId: "ev-1", error: null });
+      } finally {
+        await t.close();
+      }
+    });
+
+    it("核验时一直连不上：按退避重试，最后一次仍网络错就 2 小时后再排一条核验，一直是待核验、不记失败，本体回话后写成", async () => {
+      let down = true;
+      const world = ontology({ network: () => down });
+      const { t, host, meetingId, run } = await setup();
+      try {
+        await offlineToLastAttempt(t, host, meetingId, run);
+        await due(t, "meeting.world_verify");
+        await run();
+        // 网络错：核验任务按 jobs 退避等下一次。
+        expect((await verifyJobs(t))[0]).toMatchObject({ status: "pending", attempts: 1 });
+        await expectUnverified(t, host, meetingId);
+        const beforeLast = Date.now();
+        await due(t, "meeting.world_verify", JOB_MAX_ATTEMPTS - 1);
+        await run();
+        // 最后一次仍网络错：这一条正常结束，接着排下一条核验（2 小时后），不会卡住。
+        const [last, next] = await verifyJobs(t);
+        expect([last.status, next.status, next.attempts]).toEqual(["done", "pending", 0]);
+        expect(next.dedupe_key).not.toBe(last.dedupe_key);
+        expect(String(next.dedupe_key)).toContain(keyOf(meetingId));
+        expect(new Date(next.run_at as Date).getTime() - beforeLast).toBeGreaterThanOrEqual(2 * 60 * 60_000);
+        await expectUnverified(t, host, meetingId);
+
+        down = false;
+        await due(t, "meeting.world_verify");
+        await run();
+        expect(world.recorded).toHaveLength(1);
+        expect(await ledgerStatus(t, meetingId)).toBe("committed");
+        expect((await getCard(t, host, meetingId)).sync!.event).toMatchObject({ status: "succeeded", eventId: "ev-1", error: null });
+        expect((await verifyJobs(t)).map((row) => row.status)).toEqual(["done", "done"]);
+      } finally {
+        await t.close();
+      }
+    });
+
+    it("核验时对象版本已前进（409 VERSION_CONFLICT）：记失败「目标已变」，本体里没有事件", async () => {
+      let down = true;
+      let moved = false;
+      const world = ontology({ network: () => down, conflict: () => moved });
+      const { t, host, meetingId, run } = await setup();
+      try {
+        await offlineToLastAttempt(t, host, meetingId, run);
+        down = false;
+        moved = true;
+        await due(t, "meeting.world_verify");
+        await run();
+        expect(await ledgerStatus(t, meetingId)).toBe("failed");
+        expect((await getCard(t, host, meetingId)).sync!.event).toMatchObject({ status: "failed", eventId: null, error: "目标已变" });
+        expect((await worldOf(t, host, meetingId)).world.record).toMatchObject({ status: "failed" });
+        expect(world.recorded).toHaveLength(0);
+        expect((await verifyJobs(t)).map((row) => row.status)).toEqual(["done"]);
+      } finally {
+        await t.close();
+      }
+    });
   });
 
   it("写成但读回对不上：记失败和原因；同一草稿再确认按同一版重写", async () => {

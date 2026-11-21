@@ -171,6 +171,45 @@ describe("本机程序：设备令牌和单向上报", { timeout: 30_000 }, () =
       expect((await f.t.sql("SELECT status FROM tasks WHERE id=$1", [cardId]))[0].status).toBe("done");
       expect((await f.t.sql("SELECT state FROM local_runs WHERE id=$1", [later.sessionId]))[0].state).toBe("running");
       expect((await f.t.sql("SELECT status FROM card_handbacks WHERE task_id=$1", [cardId]))[0].status).toBe("done");
+      // 卡已完成不排 Agent 验收：空交回也照旧记下来
+      expect((await f.sync(token, device, [later.item(3, "handback", { summary: " ", criteria: [], outputKeys: [] })])).json().rejected).toEqual([]);
+      expect(await f.t.sql("SELECT status,summary FROM card_handbacks WHERE task_id=$1 ORDER BY attempt", [cardId]))
+        .toEqual([{ status: "done", summary: "又改了一点" }, { status: "done", summary: null }]);
+    } finally { await f.close(); }
+  });
+
+  it("验收要带证据（云端照样把关）：空交回拒收、不记交回；只有一句话没有附件的照常排验收；判达到不写依据、没达到不写怎么补拒收，交回仍没结论", async () => {
+    const f = await fixture();
+    try {
+      const device = randomUUID();
+      const { token } = await f.pair(device);
+      const cardId = await f.task("写方案");
+      const s = f.session(device, { kind: "card", cardId });
+      const empty = await f.sync(token, device, [s.item(1, "handback", { summary: "  ", criteria: [], outputKeys: [] })]);
+      expect(empty.json().rejected).toEqual([{ key: s.item(1, "handback", null).key, code: "EMPTY_HANDBACK", message: "交回里什么都没有：写一句做了什么，或者点名产出" }]);
+      expect(await f.t.sql("SELECT 1 FROM card_handbacks WHERE task_id=$1", [cardId])).toEqual([]);
+
+      const text = s.item(2, "handback", { summary: "方案写在这句话里：先做题库打分", criteria: [{ index: 1, result: "met", evidence: "见 summary" }], outputKeys: [] });
+      expect((await f.sync(token, device, [text])).json().rejected).toEqual([]);
+      expect((await f.t.sql("SELECT status,output_ids FROM card_handbacks WHERE task_id=$1", [cardId]))[0])
+        .toEqual({ status: expect.stringMatching(/^(queued|running)$/), output_ids: [] });
+
+      const v = f.session(device, { kind: "verify", cardId, handbackKey: text.key });
+      const verdict = (criteria: unknown[]) => ({ passed: false, summary: "逐条看过", beyondScope: [], modelLabel: "订阅 · Opus", roleId: null, roleVersion: null, criteria });
+      const rejected = await f.sync(token, device, [
+        v.item(1, "verdict", verdict([{ index: 1, verdict: "met", reason: "有", evidence: "  ", fix: null }, { index: 2, verdict: "met", reason: "有", evidence: "方案.md", fix: null }])),
+        v.item(2, "verdict", verdict([{ index: 1, verdict: "met", reason: "有", evidence: "方案.md", fix: null }, { index: 2, verdict: "unmet", reason: "没评审", evidence: null, fix: null }])),
+        v.item(3, "verdict", verdict([{ index: 1, verdict: "met", reason: "有", evidence: "方案.md", fix: null }, { index: 2, verdict: "needs_person", reason: "要本人", evidence: null, fix: " " }]))]);
+      expect(rejected.json().rejected.map((item: { code: string; message: string }) => [item.code, item.message])).toEqual([
+        ["INVALID_VERDICT", "第 1 条判达到，要写依据"], ["INVALID_VERDICT", "第 2 条判没达到，要写怎么补"], ["INVALID_VERDICT", "第 2 条判没达到，要写怎么补"]]);
+      expect((await f.t.sql("SELECT outcome FROM card_handbacks WHERE task_id=$1", [cardId]))[0].outcome).toBeNull();
+
+      // 本人自己做的卡不排 Agent 验收：空交回照旧记下来
+      const mine = await f.task("自己做的");
+      await f.t.sql("UPDATE tasks SET executor='self' WHERE id=$1", [mine]);
+      const own = f.session(device, { kind: "card", cardId: mine });
+      expect((await f.sync(token, device, [own.item(1, "handback", { summary: " ", criteria: [], outputKeys: [] })])).json().rejected).toEqual([]);
+      expect(await f.t.sql("SELECT status,summary FROM card_handbacks WHERE task_id=$1", [mine])).toEqual([{ status: "done", summary: null }]);
     } finally { await f.close(); }
   });
 

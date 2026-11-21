@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { FeishuUserToken } from "./tokens.js";
 
 const ACCOUNTS = "https://accounts.feishu.cn";
@@ -10,6 +11,19 @@ export class FeishuApiError extends Error {
     super(message);
     this.name = "FeishuApiError";
   }
+}
+
+/**
+ * 发消息的去重键（飞书「发送消息」接口的 uuid：同一个 uuid 1 小时内最多成功发一条，长度上限 50）。
+ * 对业务上稳定的 key 取 sha256 十六进制前 32 位，同一条消息每次重试都是同一个。
+ */
+export function feishuUuid(key: string): string {
+  return createHash("sha256").update(key).digest("hex").slice(0, 32);
+}
+
+/** 送达未知：超时、断网、5xx、没回包或回包不是 JSON。飞书明确拒收（4xx、code 非 0）的不算。 */
+export function feishuDeliveryUnknown(error: unknown): boolean {
+  return !(error instanceof FeishuApiError) || error.code === 0 || (error.httpStatus ?? 0) >= 500;
 }
 
 export type FeishuUserInfo = { openId: string; unionId?: string; name?: string };
@@ -28,8 +42,8 @@ export type FeishuClient = {
   /** refresh token 只能用一次；成功后旧的立即失效。 */
   refreshUserToken(refreshToken: string): Promise<FeishuUserToken>;
   getUserInfo(userAccessToken: string): Promise<FeishuUserInfo>;
-  /** 以机器人身份发消息（tenant_access_token）。content 是消息体对象，发送时序列化。 */
-  sendMessage(receiveIdType: FeishuReceiveIdType, receiveId: string, msgType: "text" | "interactive" | "post", content: object): Promise<{ messageId: string }>;
+  /** 以机器人身份发消息（tenant_access_token）。content 是消息体对象，发送时序列化。带 uuid 时飞书按它去重（见 feishuUuid）。 */
+  sendMessage(receiveIdType: FeishuReceiveIdType, receiveId: string, msgType: "text" | "interactive" | "post", content: object, options?: { uuid?: string }): Promise<{ messageId: string }>;
   /** 以机器人身份改自己发过的卡片（im:message:update）：飞书私聊里「正在查」原地换成回答。 */
   updateCard(messageId: string, content: object): Promise<void>;
   /** 以本人身份读云文档元数据（drive:drive.metadata:readonly）；读不到的（没权限、已删）不出现在结果里。一次最多 200 份。 */
@@ -60,9 +74,9 @@ function userToken(body: Record<string, unknown>): FeishuUserToken {
   };
 }
 
-function data(body: Record<string, unknown>, what: string): Record<string, unknown> {
+function data(body: Record<string, unknown>, what: string, httpStatus?: number): Record<string, unknown> {
   const code = Number(body.code ?? -1);
-  if (code !== 0) throw new FeishuApiError(code, `${what}失败：${String(body.msg ?? "未知错误")}`);
+  if (code !== 0) throw new FeishuApiError(code, `${what}失败：${String(body.msg ?? "未知错误")}`, httpStatus);
   return (body.data ?? {}) as Record<string, unknown>;
 }
 
@@ -124,14 +138,14 @@ export function createFeishuClient({ appId, appSecret, fetch: fetchImpl = fetch 
         ...(typeof info.name === "string" ? { name: info.name } : {}),
       };
     },
-    async sendMessage(receiveIdType, receiveId, msgType, content) {
+    async sendMessage(receiveIdType, receiveId, msgType, content, options) {
       const response = await fetchImpl(`${OPEN_API}/im/v1/messages?receive_id_type=${receiveIdType}`, {
         method: "POST",
         headers: { authorization: `Bearer ${await tenantToken()}`, "content-type": "application/json; charset=utf-8" },
-        body: JSON.stringify({ receive_id: receiveId, msg_type: msgType, content: JSON.stringify(content) }),
+        body: JSON.stringify({ receive_id: receiveId, msg_type: msgType, content: JSON.stringify(content), ...(options?.uuid ? { uuid: options.uuid } : {}) }),
         signal: AbortSignal.timeout(TIMEOUT_MS),
       });
-      const sent = data(await readJson(response), "发送飞书消息");
+      const sent = data(await readJson(response), "发送飞书消息", response.status);
       return { messageId: String(sent.message_id ?? "") };
     },
     async updateCard(messageId, content) {

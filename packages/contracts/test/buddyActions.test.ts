@@ -27,7 +27,9 @@ describe("伙伴代本人做事（17.4）", () => {
   it("授权、转达草稿、本机停掉、插进对话流的计划清单、界面效果和回执", () => {
     expect(Value.Check(BuddyAuthority, { authority: "full", grantedAt: at })).toBe(true);
     expect(Value.Check(BuddyAuthority, { authority: "none", grantedAt: null })).toBe(true);
-    expect(Value.Check(BuddyMessageDraft, { id: uuid, to: [{ personId: "p-2", name: "晨星" }], text: "周五前给我报价", status: "draft", createdAt: at, sentAt: null, failed: [] })).toBe(true);
+    expect(Value.Check(BuddyMessageDraft, { id: uuid, to: [{ personId: "p-2", name: "晨星" }], text: "周五前给我报价", status: "draft", createdAt: at, sentAt: null, failed: [], unknown: [] })).toBe(true);
+    expect(Value.Check(BuddyMessageDraft, { id: uuid, to: [{ personId: "p-2", name: "晨星" }, { personId: "p-3", name: "溪南" }], text: "周五前给我报价", status: "sent", createdAt: at, sentAt: at,
+      failed: [{ personId: "p-3", name: "溪南" }], unknown: [{ personId: "p-2", name: "晨星" }] })).toBe(true);
     expect(Value.Check(ClaimSessionStopsResponse, { stops: [{ id: uuid, kind: "card", subSessionId: uuid, sessionId: uuid, deviceId: uuid, requestedAt: at }] })).toBe(true);
     const base = { runId: "r-1", scope: "global", sequence: 3 };
     expect(Value.Check(BuddyPlan, { entries: [{ content: "归档", status: "completed" }], collapsed: false })).toBe(true);

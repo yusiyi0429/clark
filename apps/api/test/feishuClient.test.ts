@@ -1,6 +1,10 @@
-import { describe, expect, it } from "vitest";
-import { createFeishuClient, FeishuApiError } from "../src/feishu/client.js";
+import { createHash } from "node:crypto";
+import { describe, expect, it, vi } from "vitest";
+import { createFeishuClient, FeishuApiError, feishuUuid, type FeishuClient } from "../src/feishu/client.js";
 import { feishuDeepLink, linkCardContent, sendFeishuLinkCard, sendFeishuText } from "../src/feishu/messages.js";
+import { FEISHU_NOTIFY_KIND, feishuNotifier, feishuNotifyJobs } from "../src/feishu/notify.js";
+import { createJobWorker } from "../src/jobs.js";
+import { createTestDb } from "./helpers.js";
 
 type Call = { url: string; init?: RequestInit };
 
@@ -71,8 +75,106 @@ describe("飞书开放接口客户端", () => {
     }]);
   });
 
+  it("发消息带 uuid 时请求体里有 uuid，不带时没有这个字段；uuid 是 key 的 sha256 十六进制前 32 位；5xx 记下 HTTP 状态", async () => {
+    let status = 200;
+    const calls: Call[] = [];
+    const fetchImpl = (async (url: string, init?: RequestInit) => {
+      calls.push({ url: String(url), init });
+      if (String(url).includes("tenant_access_token")) return Response.json({ code: 0, tenant_access_token: "t-1", expire: 7200 });
+      return Response.json(status === 200 ? { code: 0, data: { message_id: "om_1" } } : { code: 1500, msg: "internal error" }, { status });
+    }) as typeof fetch;
+    const client = createFeishuClient({ appId: "cli_x", appSecret: "secret", fetch: fetchImpl });
+    const to = { type: "open_id" as const, id: "ou_1" };
+    const uuid = feishuUuid("feishu.notify:k1");
+    expect(uuid).toBe(createHash("sha256").update("feishu.notify:k1").digest("hex").slice(0, 32));
+    await sendFeishuText(client, to, "测试", { uuid });
+    await sendFeishuLinkCard(client, to, { title: "t", body: "b", links: [] }, "https://tianshu.example", { uuid });
+    await sendFeishuText(client, to, "测试");
+    const bodies = calls.slice(1).map((c) => JSON.parse(String(c.init!.body)));
+    expect(bodies[0].uuid).toBe(uuid);
+    expect(bodies[1].uuid).toBe(uuid);
+    expect("uuid" in bodies[2]).toBe(false);
+    status = 503;
+    const error = await sendFeishuText(client, to, "测试").catch((e: unknown) => e);
+    expect(error).toMatchObject({ code: 1500, httpStatus: 503 });
+  });
+
   it("深链接只带站内路径", () => {
     expect(feishuDeepLink("https://tianshu.example", "//evil.example")).toBe("https://tianshu.example/api/auth/feishu/start?next=%2F");
     expect(JSON.stringify(linkCardContent({ title: "t", body: "b", links: [] }, "https://tianshu.example"))).not.toContain("value");
+  });
+});
+
+describe("飞书通知任务", () => {
+  const T0 = new Date("2026-11-21T02:00:00Z");
+  const MINUTE = 60_000;
+  const timeout = () => new DOMException("The operation was aborted due to timeout", "TimeoutError");
+
+  /** 入队一条通知，按给定的首次尝试时间和已尝试次数摆好，用会抛错的假飞书客户端跑 worker。 */
+  async function run(steps: { createdAt: Date; attempts: number; error: () => unknown }, check: (r: {
+    tick: (at: Date) => Promise<number>; row: () => Promise<{ status: string; attempts: number; run_at: Date }>; uuids: (string | undefined)[];
+  }) => Promise<void>) {
+    await createTestDb(async ({ db, pool }) => {
+      const q = pool.query.bind(pool);
+      await q("INSERT INTO feishu_identities (person_id, open_id) VALUES ('p1', 'ou_1')");
+      await feishuNotifier(q)({ personId: "p1", title: "t", body: "b", links: [] }, "k1");
+      await q("UPDATE jobs SET created_at = $1, run_at = $2, attempts = $3", [steps.createdAt, T0, steps.attempts]);
+      const uuids: (string | undefined)[] = [];
+      const client: Pick<FeishuClient, "sendMessage"> = { sendMessage: async (_type, _id, _msgType, _content, options) => {
+        uuids.push(options?.uuid);
+        throw steps.error();
+      } };
+      let clock = T0;
+      const worker = createJobWorker({ pool, handlers: feishuNotifyJobs({ pool, client, publicOrigin: "https://tianshu.example", now: () => clock }), now: () => clock });
+      await check({
+        tick: (at) => { clock = at; return worker.tick(); },
+        row: async () => (await db.query("SELECT status, attempts, run_at FROM jobs WHERE kind = $1", [FEISHU_NOTIFY_KIND])).rows[0],
+        uuids,
+      });
+    }, { migrated: true });
+  }
+
+  it("每次重试发出的 uuid 都一样，是 dedupe_key 算出来的", async () => {
+    await run({ createdAt: T0, attempts: 0, error: timeout }, async ({ tick, row, uuids }) => {
+      expect(await tick(T0)).toBe(1);
+      expect(await row()).toMatchObject({ status: "pending", attempts: 1 });
+      expect(await tick(new Date(T0.getTime() + MINUTE))).toBe(1);
+      expect(await row()).toMatchObject({ status: "pending", attempts: 2 });
+      expect(uuids).toEqual([feishuUuid(`${FEISHU_NOTIFY_KIND}:k1`), feishuUuid(`${FEISHU_NOTIFY_KIND}:k1`)]);
+    });
+  });
+
+  it("第一次尝试 61 分钟后超时：按完成处理并记日志，不再排重试", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await run({ createdAt: new Date(T0.getTime() - 61 * MINUTE), attempts: 2, error: timeout }, async ({ tick, row }) => {
+        expect(await tick(T0)).toBe(1);
+        expect(await row()).toMatchObject({ status: "done", attempts: 3 });
+      });
+      expect(warn.mock.calls.map((c) => String(c[0])).join("\n")).toContain("送达未知，超过飞书去重窗口，不再重发");
+    } finally { warn.mockRestore(); }
+  });
+
+  it("下一次重试会落在第一次尝试 1 小时以后时，送达未知也不再重发；还在窗口里照常重试", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      // 第 4 次在 36 分钟，下一次排在 2 小时以后：超窗，不重发
+      await run({ createdAt: new Date(T0.getTime() - 36 * MINUTE), attempts: 3, error: () => new TypeError("fetch failed") }, async ({ tick, row }) => {
+        await tick(T0);
+        expect(await row()).toMatchObject({ status: "done", attempts: 4 });
+      });
+      // 第 3 次在 6 分钟、飞书 5xx，下一次排在 36 分钟：还在窗口里
+      await run({ createdAt: new Date(T0.getTime() - 6 * MINUTE), attempts: 2, error: () => new FeishuApiError(1500, "internal error", 503) }, async ({ tick, row }) => {
+        await tick(T0);
+        expect(await row()).toMatchObject({ status: "pending", attempts: 3, run_at: new Date(T0.getTime() + 30 * MINUTE) });
+      });
+    } finally { vi.mocked(console.warn).mockRestore(); }
+  });
+
+  it("明确的 4xx 业务错误照退避重试，超窗也一样", async () => {
+    await run({ createdAt: new Date(T0.getTime() - 61 * MINUTE), attempts: 2, error: () => new FeishuApiError(230002, "发送飞书消息失败：bot not in chat", 400) }, async ({ tick, row }) => {
+      await tick(T0);
+      expect(await row()).toMatchObject({ status: "pending", attempts: 3, run_at: new Date(T0.getTime() + 30 * MINUTE) });
+    });
   });
 });

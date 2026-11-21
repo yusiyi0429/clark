@@ -5,18 +5,25 @@ import { FeishuApiError } from "./client.js";
  * 飞书多维表格的适配层（③ 信息收集：大家共填一张表）。天枢这边存一份镜像（collection_entries），
  * 后台同步时经这里建表、写行、读回飞书里的改动。
  * - live：以发起人本人的身份（user access token）调开放接口；要在飞书后台开通的用户身份权限（scope 名以后台为准，上线前核对）：
- *   base:app:create、base:table:create、base:record:create、base:record:update、base:record:retrieve、docs:permission.member:create。
+ *   base:app:create、base:table:read、base:table:create、base:record:create、base:record:update、base:record:retrieve、docs:permission.member:create。
  * - mock：进程内的假表，不调飞书（权限没开通前、测试里用）；没有可打开的链接。
  */
-export type BitableTable = { appToken: string; tableId: string; url: string | null };
+export type BitableApp = { appToken: string; url: string | null };
+export type BitableTable = BitableApp & { tableId: string };
 export type BitableColumn = { name: string; type: "text" | "number" | "checkbox" };
 export type BitableCell = string | number | boolean;
 export type BitableRecord = { recordId: string; fields: Record<string, unknown> };
 
 export type BitableAdapter = {
   readonly mode: "live" | "mock";
-  /** 新建一个多维表格（一张表），并把收件人加成可编辑协作者。 */
-  createTable(input: { accessToken: string; name: string; columns: BitableColumn[]; editorOpenIds: string[] }): Promise<BitableTable>;
+  /** 新建一个多维表格。 */
+  createApp(input: { accessToken: string; name: string }): Promise<BitableApp>;
+  /** 在这个多维表格里找同名的数据表，返回 table_id；没有返回 null。 */
+  findTable(input: { accessToken: string; appToken: string; name: string }): Promise<string | null>;
+  /** 在这个多维表格里新建一张数据表，返回 table_id。 */
+  createTable(input: { accessToken: string; appToken: string; name: string; columns: BitableColumn[] }): Promise<string>;
+  /** 把一个人加成可编辑协作者。 */
+  addEditor(input: { accessToken: string; appToken: string; openId: string }): Promise<void>;
   /** recordId 为空时新增一行，否则覆盖这一行给出的栏。返回这一行的 record_id。 */
   upsertRecord(input: { accessToken: string; table: BitableTable; recordId: string | null; fields: Record<string, BitableCell> }): Promise<string>;
   listRecords(input: { accessToken: string; table: BitableTable }): Promise<BitableRecord[]>;
@@ -47,11 +54,19 @@ export function createMockBitable(): BitableAdapter & { tables: Map<string, { na
   return {
     mode: "mock",
     tables,
-    async createTable({ name, columns }) {
-      const ref = { appToken: `mock_app_${randomUUID().slice(0, 8)}`, tableId: `mock_tbl_${randomUUID().slice(0, 8)}`, url: null };
-      tables.set(`${ref.appToken}/${ref.tableId}`, { name, columns, rows: new Map() });
-      return ref;
+    async createApp() {
+      return { appToken: `mock_app_${randomUUID().slice(0, 8)}`, url: null };
     },
+    async findTable({ appToken, name }) {
+      const found = [...tables].find(([key, item]) => key.startsWith(`${appToken}/`) && item.name === name);
+      return found ? found[0].slice(appToken.length + 1) : null;
+    },
+    async createTable({ appToken, name, columns }) {
+      const tableId = `mock_tbl_${randomUUID().slice(0, 8)}`;
+      tables.set(`${appToken}/${tableId}`, { name, columns, rows: new Map() });
+      return tableId;
+    },
+    async addEditor() {},
     async upsertRecord({ table: ref, recordId, fields }) {
       const rows = table(ref).rows;
       const id = recordId ?? `rec_${randomUUID().slice(0, 10)}`;
@@ -84,19 +99,28 @@ export function createFeishuBitable({ fetch: fetchImpl = fetch }: { fetch?: Fetc
 
   return {
     mode: "live",
-    async createTable({ accessToken, name, columns, editorOpenIds }) {
+    async createApp({ accessToken, name }) {
       const app = (await call(accessToken, "POST", "/bitable/v1/apps", { name })).app as { app_token?: string; url?: string } | undefined;
       if (!app?.app_token) throw new FeishuApiError(0, "新建多维表格没有返回 app_token");
-      const created = await call(accessToken, "POST", `/bitable/v1/apps/${encodeURIComponent(app.app_token)}/tables`, {
+      return { appToken: app.app_token, url: app.url ?? null };
+    },
+    async findTable({ accessToken, appToken, name }) {
+      // 天枢自己新建的多维表格，里面只有默认表和这一张，一页就够。
+      const listed = await call(accessToken, "GET", `/bitable/v1/apps/${encodeURIComponent(appToken)}/tables?page_size=100`);
+      const found = ((Array.isArray(listed.items) ? listed.items : []) as { table_id?: string; name?: string }[]).find((item) => item.name === name);
+      return found?.table_id ?? null;
+    },
+    async createTable({ accessToken, appToken, name, columns }) {
+      const created = await call(accessToken, "POST", `/bitable/v1/apps/${encodeURIComponent(appToken)}/tables`, {
         table: { name, default_view_name: "全部", fields: columns.map((column) => ({ field_name: column.name, type: FIELD_TYPE[column.type] })) },
       });
       const tableId = String(created.table_id ?? "");
       if (!tableId) throw new FeishuApiError(0, "新建数据表没有返回 table_id");
-      for (const openId of editorOpenIds) {
-        await call(accessToken, "POST", `/drive/v1/permissions/${encodeURIComponent(app.app_token)}/members?type=bitable&need_notification=false`,
-          { member_type: "openid", member_id: openId, perm: "edit" });
-      }
-      return { appToken: app.app_token, tableId, url: app.url ?? null };
+      return tableId;
+    },
+    async addEditor({ accessToken, appToken, openId }) {
+      await call(accessToken, "POST", `/drive/v1/permissions/${encodeURIComponent(appToken)}/members?type=bitable&need_notification=false`,
+        { member_type: "openid", member_id: openId, perm: "edit" });
     },
     async upsertRecord({ accessToken, table, recordId, fields }) {
       const base = `/bitable/v1/apps/${encodeURIComponent(table.appToken)}/tables/${encodeURIComponent(table.tableId)}/records`;

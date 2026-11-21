@@ -217,7 +217,7 @@ describe("worker 列表", { timeout: 30_000 }, () => {
 
       // 验收员交了结论以后卡不在验收中，这一行就没了。
       await laptop.send({ kind: "verify", cardId: checking, handbackKey: await keyOf(checking) } as never, [["verdict", { passed: true, summary: "都对上", beyondScope: [],
-        criteria: [1, 2].map((index) => ({ index, verdict: "met", reason: "有", evidence: null, fix: null })), modelLabel: "订阅 · Opus", roleId: null, roleVersion: null }]]);
+        criteria: [1, 2].map((index) => ({ index, verdict: "met", reason: "有", evidence: "产出", fix: null })), modelLabel: "订阅 · Opus", roleId: null, roleVersion: null }]]);
       const after = (await f.call("GET", "/api/me/workers")).json();
       expect([...after.running, ...after.queued].map((entry: { key: string }) => entry.key)).not.toContain(`verify:${checking}`);
     } finally { await f.close(); }

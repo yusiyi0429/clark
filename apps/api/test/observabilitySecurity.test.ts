@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { Value } from "@sinclair/typebox/value";
 import { HealthResponse } from "@warmap/contracts";
-import { logEvent, redactSecrets } from "../src/observability.js";
+import { logEvent, redactSecretText, redactSecrets } from "../src/observability.js";
 import { SESSION_COOKIE, createSessionToken } from "../src/session.js";
 import { buildApp } from "../src/app.js";
 import { migrate } from "../src/migrate.js";
@@ -71,6 +71,11 @@ describe("security boundaries not covered elsewhere", () => {
 });
 
 describe("structured logs and redaction", () => {
+  it("遮住正文里裸的 tsm_ 个人令牌", () => {
+    expect(redactSecretText("Bearer-less tsm_abcDEF123-x")).toBe("Bearer-less tsm_[已遮住]");
+    expect(redactSecrets({ note: "令牌 tsm_testtoken123 贴错地方了" })).toEqual({ note: "令牌 tsm_[已遮住] 贴错地方了" });
+  });
+
   it("clears secrets, full CompanyMemory passages and full Transcripts while keeping safe fields", () => {
     expect(redactSecrets({
       password: "p",

@@ -400,6 +400,16 @@ async function saveTopicVersion(client: PoolClient, run: Pick<RunRow, "id" | "to
   return label;
 }
 
+const EMPTY_HANDBACK = "交回里什么都没有：写一句做了什么，或者点名产出";
+/** 验收结论逐条：判达到要写依据，没达到要写怎么补（本机 submitVerdict 同一句话当场拦）；都写了为 null。 */
+function verdictProblem(criteria: { index: number; verdict: string; evidence?: string | null; fix?: string | null }[]): string | null {
+  for (const item of [...criteria].sort((a, b) => a.index - b.index)) {
+    if (item.verdict === "met" && !item.evidence?.trim()) return `第 ${item.index} 条判达到，要写依据`;
+    if (item.verdict !== "met" && !item.fix?.trim()) return `第 ${item.index} 条判没达到，要写怎么补`;
+  }
+  return null;
+}
+
 /**
  * 本机验收员的结论（第 21 节）：按 handbackKey 找到那次交回，照云端验收的规则落下（cardAcceptance.settleHandback）：
  * 过了进准备中；没过拼好改法写在交回上，网页照原来的「送回」送一次；第二次没过受阻，记一条岗位修改。
@@ -414,6 +424,8 @@ async function applyVerdict(client: PoolClient, owner: Owner, run: RunRow, card:
   const indexes = data.criteria.map((item) => item.index).sort((a, b) => a - b);
   if (indexes.length !== row.criteria.length || indexes.some((index, position) => index !== position + 1))
     throw new SyncReject("INVALID_VERDICT", `完成标准有 ${row.criteria.length} 条，每条判一次`);
+  const unsupported = verdictProblem(data.criteria);
+  if (unsupported) throw new SyncReject("INVALID_VERDICT", unsupported);
   const result = { headline: data.summary, beyondScope: data.beyondScope,
     criteria: [...data.criteria].sort((a, b) => a.index - b.index)
     .map(({ index, verdict, reason, evidence, fix, fixBy }) => ({ index, verdict, reason: reason.trim(), evidence: evidence?.trim() || null, fix: fix?.trim() || null,
@@ -436,6 +448,8 @@ async function insertHandback(client: PoolClient, owner: Owner, key: string, run
   const outputs = (await client.query("SELECT id::text FROM local_outputs WHERE task_id=$1 AND client_id=ANY($2::text[]) ORDER BY created_at,id",
     [card.id, data.outputKeys])).rows.map((row) => row.id as string);
   const agent = card.status !== "done" && card.executor !== "self";
+  // 空交回不排 Agent 验收；卡已完成、本人自己做的照旧只记下来
+  if (agent && !data.summary.trim() && !data.outputKeys.length && !data.git) throw new SyncReject("EMPTY_HANDBACK", EMPTY_HANDBACK);
   if (agent && card.executor === null) await client.query("UPDATE tasks SET executor='claude_code' WHERE id=$1", [card.id]);
   const id = randomUUID();
   // git：卡在自己的工作树里做时交回的分支和提交（ADR 0038），在文件夹里做的不带。

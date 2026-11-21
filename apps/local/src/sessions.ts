@@ -232,6 +232,15 @@ function schemaProblem(schema: TSchema, value: unknown): string | null {
   const e = [...Value.Errors(schema, value)][0];
   return e ? `${e.path || "/"} ${e.message}` : "格式不对";
 }
+/** 验收结论逐条：判达到要写依据，没达到要写怎么补（云端 localSync 同一句话把关）；都写了为 null。 */
+function verdictProblem(criteria: TLocalVerdictCriterion[]): string | null {
+  for (const c of criteria) {
+    if (c.verdict === "met" && !c.evidence?.trim()) return `第 ${c.index} 条判达到，要写依据`;
+    if (["partial", "unmet", "needs_person"].includes(c.verdict) && !c.fix?.trim()) return `第 ${c.index} 条判没达到，要写怎么补`;
+  }
+  return null;
+}
+const EMPTY_HANDBACK = "交回里什么都没有：写一句做了什么，或者点名产出";
 const heldKey = (h: TLocalFolderHolder | null) => (h ? `${h.kind}:${h.id}` : "");
 const textOrNull = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
 /** 完成标准（一行一条）超了 DONE_DEFINITION_LIMITS 时说哪里超了；没超为 null。 */
@@ -2577,6 +2586,8 @@ export class SessionManager {
       const latest = new Map(rec.outputs.filter((o) => o.artifactId).map((o) => [o.artifactId!, o.ref]));
       picked = rec.outputs.filter((o) => !o.artifactId || latest.get(o.artifactId) === o.ref);
     }
+    // 空交回不进验收：没写做了什么、没有产出、也没有提交（工作树里交回总会带提交）
+    if (!input.summary.trim() && !picked.length && rec.workspace?.kind !== "worktree") throw new SessionError("validation", EMPTY_HANDBACK);
     const changed = await this.agreementChanged(rec);
     if (changed) throw new SessionError("conflict", changed);
     const summary = input.summary.slice(0, 4000);
@@ -2864,6 +2875,8 @@ export class SessionManager {
     if (twice.length) throw new SessionError("validation", `第 ${[...new Set(twice)].join("、")} 条判了不止一次`);
     const missing = Array.from({ length: n }, (_, k) => k + 1).filter((i) => !seen.includes(i));
     if (missing.length) throw new SessionError("validation", `第 ${missing.join("、")} 条还没判（完成标准共 ${n} 条）`);
+    const unsupported = verdictProblem(judged);
+    if (unsupported) throw new SessionError("validation", unsupported);
     // 原话对不上的地方（16.8）：quote 必须是某段原话（含本人在卡的子会话里说的）或其中一截
     const words = rec.sourceWords ?? [];
     const issues = (Array.isArray(input.sourceWordIssues) ? input.sourceWordIssues : [])

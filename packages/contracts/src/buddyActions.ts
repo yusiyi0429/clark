@@ -275,6 +275,7 @@ export const BuddyMessageDraft = Type.Object({
   createdAt: Instant,
   sentAt: Nullable(Instant),
   failed: Type.Array(PersonRef),
+  unknown: Type.Array(PersonRef),
 }, strict);
 
 // ───────────────────────── 回收站 ─────────────────────────

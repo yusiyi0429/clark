@@ -9,13 +9,25 @@ import {
   BuddyError, actionList, cancelMessage, claimCommands, claimStops, conversationScope, finishCommand, finishStop, listAudit, listTrash, readAuthority, readMessage, restoreTrash, runAction, sendMessage, undoAction,
   writeAuthority, type BuddyDeps,
 } from "../buddyActions.js";
-import type { FeishuClient } from "../feishu/client.js";
+import { feishuDeliveryUnknown, type FeishuClient } from "../feishu/client.js";
+import type { Query } from "../meetingStore.js";
 import { sendFeishuText } from "../feishu/messages.js";
 import { colleagueIndex, dbScopeSource, scopeReader } from "../colleagueScope.js";
 import { isRealPerson, personDisplayNames } from "../people.js";
 import { projectHistoryReader, turnWordsReader } from "../sourceWords.js";
 import { colleagueChatDeps } from "./colleagueChats.js";
 import { idParams, type AppInstance, type Guard, type RouteContext } from "./shared.js";
+
+/**
+ * 天枢机器人发到对方和机器人的单聊。没发出去的（没关联飞书、查绑定就出错）和飞书明确拒收的（4xx、code 非 0）算收不到；
+ * 送达未知的（超时、断网、5xx 等，见 feishuDeliveryUnknown），消息可能已经到了，算可能已送到。
+ */
+export const feishuDeliver = (q: Query, feishu: FeishuClient | undefined) => async (personId: string, text: string): Promise<"sent" | "unbound" | "unknown"> => {
+  const openId = await q("SELECT open_id FROM feishu_identities WHERE person_id=$1", [personId])
+    .then((result) => result.rows[0]?.open_id as string | undefined, () => undefined);
+  if (!openId || !feishu) return "unbound";
+  return sendFeishuText(feishu, { type: "open_id", id: openId }, text).then(() => "sent" as const, (error) => feishuDeliveryUnknown(error) ? "unknown" as const : "unbound" as const);
+};
 
 /**
  * 伙伴代本人做事（新首页 17.4，契约 buddyActions.ts）：本人的授权、审计和撤销、转达、回收站、「请这台电脑停掉」；
@@ -46,13 +58,7 @@ export function registerBuddyActionRoutes(app: AppInstance, ctx: RouteContext, o
       throw cause;
     }
   };
-  /** 天枢机器人发到对方和机器人的单聊；对方没关联飞书、发送失败都算收不到。 */
-  const deliver = async (personId: string, text: string) => {
-    const openId = (await q("SELECT open_id FROM feishu_identities WHERE person_id=$1", [personId])).rows[0]?.open_id as string | undefined;
-    if (!openId || !options.feishu) return false;
-    await sendFeishuText(options.feishu, { type: "open_id", id: openId }, text);
-    return true;
-  };
+  const deliver = feishuDeliver(q, options.feishu);
 
   app.get("/api/me/buddy-authority", { preHandler: requirePerson, schema: { response: { 200: BuddyAuthority } } }, async (req, reply) => {
     reply.header("Cache-Control", "no-store");

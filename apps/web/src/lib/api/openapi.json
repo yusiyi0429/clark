@@ -139124,7 +139124,8 @@
           "status",
           "createdAt",
           "sentAt",
-          "failed"
+          "failed",
+          "unknown"
         ],
         "properties": {
           "id": {
@@ -139186,6 +139187,26 @@
             ]
           },
           "failed": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "personId",
+                "name"
+              ],
+              "properties": {
+                "personId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "unknown": {
             "type": "array",
             "items": {
               "additionalProperties": false,
