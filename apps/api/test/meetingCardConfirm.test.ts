@@ -307,8 +307,9 @@ describe("整卡确认与会议事件", () => {
       }
     });
 
-    it("核验时一直连不上：按退避重试，最后一次仍网络错就停，一直是待核验，不记失败", async () => {
-      ontology({ network: () => true });
+    it("核验时一直连不上：按退避重试，最后一次仍网络错就 2 小时后再排一条核验，一直是待核验、不记失败，本体回话后写成", async () => {
+      let down = true;
+      const world = ontology({ network: () => down });
       const { t, host, meetingId, run } = await setup();
       try {
         await offlineToLastAttempt(t, host, meetingId, run);
@@ -317,10 +318,24 @@ describe("整卡确认与会议事件", () => {
         // 网络错：核验任务按 jobs 退避等下一次。
         expect((await verifyJobs(t))[0]).toMatchObject({ status: "pending", attempts: 1 });
         await expectUnverified(t, host, meetingId);
+        const beforeLast = Date.now();
         await due(t, "meeting.world_verify", JOB_MAX_ATTEMPTS - 1);
         await run();
-        expect((await verifyJobs(t)).map((row) => row.status)).toEqual(["done"]);
+        // 最后一次仍网络错：这一条正常结束，接着排下一条核验（2 小时后），不会卡住。
+        const [last, next] = await verifyJobs(t);
+        expect([last.status, next.status, next.attempts]).toEqual(["done", "pending", 0]);
+        expect(next.dedupe_key).not.toBe(last.dedupe_key);
+        expect(String(next.dedupe_key)).toContain(keyOf(meetingId));
+        expect(new Date(next.run_at as Date).getTime() - beforeLast).toBeGreaterThanOrEqual(2 * 60 * 60_000);
         await expectUnverified(t, host, meetingId);
+
+        down = false;
+        await due(t, "meeting.world_verify");
+        await run();
+        expect(world.recorded).toHaveLength(1);
+        expect(await ledgerStatus(t, meetingId)).toBe("committed");
+        expect((await getCard(t, host, meetingId)).sync!.event).toMatchObject({ status: "succeeded", eventId: "ev-1", error: null });
+        expect((await verifyJobs(t)).map((row) => row.status)).toEqual(["done", "done"]);
       } finally {
         await t.close();
       }

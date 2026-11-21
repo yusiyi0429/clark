@@ -131,7 +131,8 @@ async function readPeople(q: Query, peopleDirectory: PeopleDirectory, marks: Mar
   return rows.map(({ since: _since, ...row }) => row);
 }
 
-async function readIssues(q: Query, marks: MarkIndex, names: Map<string, string>): Promise<TAdminIssue[]> {
+/** 失败列表，加上其中待核验的那几条（列出来，但不算「本体写入失败」）。 */
+async function readIssues(q: Query, marks: MarkIndex, names: Map<string, string>): Promise<{ issues: TAdminIssue[]; unverified: ReadonlySet<TAdminIssue> }> {
   const [jobs, ledger, meetings] = await Promise.all([
     q(`SELECT id::text, kind, status, attempts, last_error, updated_at FROM jobs
        WHERE status = 'dead' OR (status = 'pending' AND last_error IS NOT NULL) ORDER BY updated_at DESC LIMIT ${LIST_LIMIT}`),
@@ -146,6 +147,7 @@ async function readIssues(q: Query, marks: MarkIndex, names: Map<string, string>
        ORDER BY e.created_at DESC LIMIT ${LIST_LIMIT}`),
   ]);
   const issues: TAdminIssue[] = [];
+  const unverified = new Set<TAdminIssue>();
   for (const row of jobs.rows as { id: string; kind: string; status: string; attempts: number; last_error: string | null; updated_at: Date }[]) {
     if (resolvedSince(marks, "job", row.id, row.updated_at)) continue;
     issues.push({ subject: { type: "job", id: row.id }, status: row.status === "dead" ? "red" : "yellow", name: row.kind, target: null,
@@ -154,9 +156,11 @@ async function readIssues(q: Query, marks: MarkIndex, names: Map<string, string>
   }
   for (const row of ledger.rows as { idempotency_key: string; action_type: string; target_ref: string | null; status: string; error_code: string | null; created_at: Date }[]) {
     if (resolvedSince(marks, "world_write", row.idempotency_key, row.created_at)) continue;
-    issues.push({ subject: { type: "world_write", id: row.idempotency_key }, status: row.status === "failed" ? "red" : "yellow", name: row.action_type,
+    const issue: TAdminIssue = { subject: { type: "world_write", id: row.idempotency_key }, status: row.status === "failed" ? "red" : "yellow", name: row.action_type,
       target: row.target_ref, code: row.status === "unverified" ? "待核验" : row.error_code, attempts: null, at: row.created_at.toISOString(), retryable: false,
-      acknowledged: acknowledged(marks, names, "world_write", row.idempotency_key) });
+      acknowledged: acknowledged(marks, names, "world_write", row.idempotency_key) };
+    issues.push(issue);
+    if (row.status === "unverified") unverified.add(issue);
   }
   for (const row of meetings.rows as { id: string; meeting_id: string; error_code: string | null; created_at: Date }[]) {
     const id = `meeting-event:${row.id}`;
@@ -164,7 +168,7 @@ async function readIssues(q: Query, marks: MarkIndex, names: Map<string, string>
     issues.push({ subject: { type: "world_write", id }, status: "red", name: "meeting_event", target: `meeting:${row.meeting_id}`,
       code: row.error_code, attempts: null, at: row.created_at.toISOString(), retryable: false, acknowledged: acknowledged(marks, names, "world_write", id) });
   }
-  return issues.sort((a, b) => RANK[a.status] - RANK[b.status] || b.at.localeCompare(a.at));
+  return { issues: issues.sort((a, b) => RANK[a.status] - RANK[b.status] || b.at.localeCompare(a.at)), unverified };
 }
 
 /** 最近 7 天：qualitySignals 里的每一项，以及失败的运行。只取信号名、计数、谁、什么时候，不取输入和输出。 */
@@ -193,7 +197,7 @@ async function readQuality(q: Query, marks: MarkIndex, names: Map<string, string
   return signals;
 }
 
-function counters(people: TAdminPersonRow[], issues: TAdminIssue[]): TAdminCounter[] {
+function counters(people: TAdminPersonRow[], issues: TAdminIssue[], unverified: ReadonlySet<TAdminIssue>): TAdminCounter[] {
   const tally = (statuses: TAdminStatus[]): Pick<TAdminCounter, "value" | "status"> => {
     const bad = statuses.filter((status) => status === "red" || status === "yellow");
     return { value: bad.length, status: bad.length ? worst(bad) : "green" };
@@ -204,17 +208,17 @@ function counters(people: TAdminPersonRow[], issues: TAdminIssue[]): TAdminCount
     // 会议链路、推送那条工作流合入后再接，先占位。
     { key: "meeting_stuck", value: 0, status: "none" },
     { key: "delivery_failed", value: 0, status: "none" },
-    { key: "world_failed", ...tally(issues.filter((issue) => issue.subject.type === "world_write").map((issue) => issue.status)) },
+    { key: "world_failed", ...tally(issues.filter((issue) => issue.subject.type === "world_write" && !unverified.has(issue)).map((issue) => issue.status)) },
     { key: "job_failed", ...tally(issues.filter((issue) => issue.subject.type === "job").map((issue) => issue.status)) },
   ];
 }
 
 export async function readAdminOverview(q: Query, peopleDirectory: PeopleDirectory, names: Map<string, string>, viewerId: string, now: Date): Promise<TAdminOverviewResponse> {
   const marks = await readMarks(q);
-  const [people, issues, quality] = await Promise.all([
+  const [people, { issues, unverified }, quality] = await Promise.all([
     readPeople(q, peopleDirectory, marks, names, now), readIssues(q, marks, names), readQuality(q, marks, names, now),
   ]);
-  return { generatedAt: now.toISOString(), viewerId, counters: counters(people, issues), people, issues, quality };
+  return { generatedAt: now.toISOString(), viewerId, counters: counters(people, issues, unverified), people, issues, quality };
 }
 
 export type AdminActionError = { status: number; code: string; message: string };

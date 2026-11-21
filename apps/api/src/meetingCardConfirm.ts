@@ -26,7 +26,7 @@ import type { MeetingEventWorld } from "./worldMeetingEvent.js";
  * - 写本体按 revision 串行（jobs worker 逐条执行）：一直写最早一版待写的，前次写成的那条在写的时候现找（写入中又确认了新版，新版指回刚写成的那条）。
  *   NETWORK_ERROR 抛出交给 jobs 按原幂等键重放，其他错误记 failed 和原因（拍板 8：不设正文上限，本体回超长就如实记下）；
  *   任务最后一次仍是网络错误：可能已经写进去了，台账记待核验、回执照网络错留着，1 小时后排一条核验（meeting.world_verify）按同一幂等键重放原请求，
- *   拿到回执照写成收尾，明确的业务错误记 failed；核验仍是网络错按 jobs 退避，最后一次还是网络错就停在待核验，不记失败。
+ *   拿到回执照写成收尾，明确的业务错误记 failed；核验仍是网络错按 jobs 退避，最后一次还是网络错仍是待核验、2 小时后再排一条核验，一直试到本体回话，不记失败。
  *   原因记短标签（worldErrorLabel），本体原话只进日志。
  * - 选了不写入：回执 skipped，不发请求；已经写进去的不撤回。
  * - 对象修改（meetingObjectSync）：确认时排好每条的回执（上一版已改成、这次没动的沿用结果），新版确认后旧版还没提交的作废；
@@ -40,6 +40,8 @@ export const MEETING_WORLD_SYNC_KIND = "meeting.world_sync";
 export const MEETING_CARD_FREEZE_KIND = "meeting.card_freeze";
 export const MEETING_WORLD_VERIFY_KIND = "meeting.world_verify";
 const VERIFY_DELAY_MS = 60 * 60_000;
+/** 核验任务最后一次仍连不上本体：隔这么久再排一条。 */
+const VERIFY_AGAIN_MS = 2 * 60 * 60_000;
 export const PENDING_REVIEW: TMeetingItemReview = { status: "pending", by: null, at: null, reason: null };
 
 type Viewer = { personId: string; isCeo: boolean };
@@ -550,10 +552,8 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
           if (!lastAttempt && !verify) throw error;
           const key = await world.markUnverified(meetingId, row.revision);
           if (!lastAttempt) throw error;
-          if (!verify) {
-            await enqueueJob(q, { kind: MEETING_WORLD_VERIFY_KIND, dedupeKey: `${MEETING_WORLD_VERIFY_KIND}:${key}:${randomUUID()}`, payload: { meetingId },
-              runAt: new Date(now().getTime() + VERIFY_DELAY_MS) });
-          }
+          await enqueueJob(q, { kind: MEETING_WORLD_VERIFY_KIND, dedupeKey: `${MEETING_WORLD_VERIFY_KIND}:${key}:${randomUUID()}`, payload: { meetingId },
+            runAt: new Date(now().getTime() + (verify ? VERIFY_AGAIN_MS : VERIFY_DELAY_MS)) });
           return;
         }
         await q("UPDATE meeting_card_syncs SET event_status = 'failed', event_error = $3, updated_at = now() WHERE meeting_id = $1 AND revision = $2",
