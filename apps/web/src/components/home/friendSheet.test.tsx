@@ -122,6 +122,9 @@ describe("好友：勾选单、有人加我、加好友设置、好友面板", (
     await flush();
     const html = render(<FriendPanel personId="p" onClose={() => undefined} />);
     expect(html).toMatch(/他开给我的[\s\S]*我开给他的[\s\S]*删除好友/);
+    const [theirs, mine] = html.split("我开给他的");
+    for (const word of ["问他的伙伴", "读他放出来的资料", "我的伙伴替我去问"]) { expect(theirs).toContain(word); expect(mine).not.toContain(word); }
+    for (const word of ["问我的伙伴", "读我放出来的资料", "他的伙伴替他来问"]) { expect(mine).toContain(word); expect(theirs).not.toContain(word); }
     handler("grant-agent-ask", "onChange")({ target: { checked: false } });
     await flush();
     expect(api.setFriendGrant).toHaveBeenCalledWith("p", { agentAsk: false });

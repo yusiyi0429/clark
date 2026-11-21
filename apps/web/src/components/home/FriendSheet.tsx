@@ -24,16 +24,23 @@ const reason = (cause: unknown) => (cause instanceof Error ? cause.message : "")
 /** 好友关系变了：左栏的「想加你好友」跟着重读。 */
 const changed = () => window.dispatchEvent(new Event(COLLEAGUE_CHATS_CHANGED));
 
-export function GrantRows({ value, onChange }: { value: TFriendGrant; onChange?: (next: TFriendGrant) => void }) {
+/** 三行字：mine 是我开给别人的（缺省），theirs 是别人开给我的。 */
+const GRANT_WORDS = {
+  mine: ["问我的伙伴", "读我放出来的资料", "他的伙伴替他来问"],
+  theirs: ["问他的伙伴", "读他放出来的资料", "我的伙伴替我去问"],
+} as const;
+
+export function GrantRows({ value, onChange, side = "mine" }: { value: TFriendGrant; onChange?: (next: TFriendGrant) => void; side?: keyof typeof GRANT_WORDS }) {
+  const [ask, read, agentAsk] = GRANT_WORDS[side];
   return (
     <ul className={c.grants}>
-      <li className={c.grant} data-locked="">问我的伙伴</li>
-      <li className={c.grant} data-locked="">读我放出来的资料</li>
+      <li className={c.grant} data-locked="">{ask}</li>
+      <li className={c.grant} data-locked="">{read}</li>
       <li>
         <label className={c.grant}>
           <input type="checkbox" checked={value.agentAsk} disabled={!onChange} readOnly={!onChange} data-testid="grant-agent-ask"
             onChange={onChange ? (event) => onChange({ ...value, agentAsk: event.target.checked }) : undefined} />
-          他的伙伴替他来问
+          {agentAsk}
         </label>
       </li>
     </ul>
@@ -118,7 +125,7 @@ export function FriendPanel({ personId, onClose }: { personId: string; onClose: 
     body = (
       <>
         <div className={c.grantColumns}>
-          <div><p className={c.grantTitle}>他开给我的</p><GrantRows value={friend.theirs ?? { agentAsk: false }} /></div>
+          <div><p className={c.grantTitle}>他开给我的</p><GrantRows value={friend.theirs ?? { agentAsk: false }} side="theirs" /></div>
           <div>
             <p className={c.grantTitle}>我开给他的</p>
             <GrantRows value={friend.mine ?? { agentAsk: false }} onChange={busy ? undefined : (next) => act(() => setFriendGrant(personId, next))} />
