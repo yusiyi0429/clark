@@ -12,6 +12,12 @@ describe("连接说明文件", () => {
       expect(text, client).not.toContain("文件里有用户的个人令牌");
     }
   });
+  it("三种工具、两种角色的说明都要求配置写在用户级，不进项目仓库", () => {
+    for (const role of ["member", "ceo"] as const) for (const client of ["codex", "claude", "other"] as const) {
+      const text = connectionGuide({ role, client, endpoint: "https://t.example/mcp/me", expires: "30 天" });
+      expect(text, `${role}/${client}`).toContain("配置写在用户级，不要写进项目仓库里的文件");
+    }
+  });
   it("Codex：令牌与工具放行写进 config.toml，不靠环境变量；含验证、用法、「同步本周进展」和删文件提醒，不再设定时同步", () => {
     const text = connectionGuide({ role: "member", client: "codex", endpoint: "https://t.example/mcp/me", expires: "不过期" });
     expect(text).toContain("# 把 Codex 连到天枢");

@@ -90,8 +90,8 @@ export function connectionGuide({ role, client, endpoint, expires }: { role: "ce
     "这份文件由天枢生成。拿到它的 Agent：请按下面的步骤帮用户完成连接，每做完一步告诉用户结果；需要用户自己操作的地方（比如重新打开），停下来说清楚。",
     "",
     role === "ceo"
-      ? `> 本说明使用的 CEO 工具只读。凡是写着 \`${token}\` 的地方，${PASTE_YOURSELF}。`
-      : `> 令牌只能读写用户自己的执行事项。凡是写着 \`${token}\` 的地方，${PASTE_YOURSELF}。`,
+      ? `> 本说明使用的 CEO 工具只读。凡是写着 \`${token}\` 的地方，${PASTE_YOURSELF}。配置写在用户级，不要写进项目仓库里的文件。`
+      : `> 令牌只能读写用户自己的执行事项。凡是写着 \`${token}\` 的地方，${PASTE_YOURSELF}。配置写在用户级，不要写进项目仓库里的文件。`,
     "",
     "## 连接信息",
     "",
