@@ -326,9 +326,11 @@ export async function assembleWaiting(input: WaitingInput): Promise<TWaitingItem
     add({ id: "device:this_computer", kind: "device", title: input.devices.length ? `电脑不在线 · ${waitingForDevice} 件在等` : "还没有配对的电脑",
       source: input.devices.length ? null : `${waitingForDevice} 件在等`, at: null, open: { kind: "connections", id: "this_computer" }, answer: "open" });
   // 没送到电脑：有在线的电脑，但派出去的开工、转话 10 分钟了没有网页认领（没认领或认领过期），验收没过的改法 10 分钟了没送回执行方。
-  // 都要本人电脑上开着天枢网页才送得到。改法照网页自动送的口径（卡的标记是验收未过，受阻的等本人拿主意、不算）；登记了「再改一轮」在等送的算在转话里。
-  if (input.devices.some((device) => device.online)) {
+  // 都要本人电脑上开着天枢网页才送得到。转话只有它指向的那台电脑能认领，只算发给在线电脑的。
+  // 改法照网页自动送的口径（卡的标记是验收未过，受阻的等本人拿主意、不算）；登记了「再改一轮」在等送的算在转话里。
+  if (online.size) {
     const cutoff = new Date(deps.now.getTime() - UNDELIVERED_AFTER_MS);
+    // 条件同 sessionStarts.ts claimStarts，改一处要同步。
     const live = (alias: string) => `(${alias}.kind='card' AND EXISTS (SELECT 1 FROM tasks t WHERE t.id=${alias}.card_id AND t.status NOT IN ('done','returned')
       AND t.trashed_at IS NULL AND t.archived_at IS NULL) OR ${alias}.kind='topic' AND EXISTS (SELECT 1 FROM research_topics r WHERE r.id=${alias}.topic_id
       AND r.status='active' AND r.trashed_at IS NULL))`;
@@ -336,9 +338,9 @@ export async function assembleWaiting(input: WaitingInput): Promise<TWaitingItem
         AND (s.claimed_at IS NULL OR s.claimed_at<$3::timestamptz - interval '${CLAIM_TTL}') AND ${live("s")}
         AND NOT EXISTS (SELECT 1 FROM local_runs r WHERE r.owner_id=$1 AND r.kind IN ('card','topic') AND (r.task_id=s.card_id OR r.topic_id=s.topic_id)
           AND r.state NOT IN ('exited','failed','done'))
-      UNION ALL SELECT c.requested_at FROM session_commands c WHERE c.owner_id=$1 AND c.done_at IS NULL AND c.requested_at<$2
+      UNION ALL SELECT c.requested_at FROM session_commands c WHERE c.owner_id=$1 AND c.done_at IS NULL AND c.requested_at<$2 AND c.device_id=ANY($4::uuid[])
         AND (c.claimed_at IS NULL OR c.claimed_at<$3::timestamptz - interval '${CLAIM_TTL}') AND ${live("c")}`,
-    [ownerId, cutoff, deps.now])).rows as { at: Date }[]).map((row) => row.at.toISOString());
+    [ownerId, cutoff, deps.now, [...online]])).rows as { at: Date }[]).map((row) => row.at.toISOString());
     const returns = cards.flatMap(({ card }) => card.wait === "review_failed" && card.handback?.returnText && !card.handback.returnedAt
       && card.handback.relay?.state !== "pending" && card.handback.finishedAt && card.handback.finishedAt < cutoff.toISOString() ? [card.handback.finishedAt] : []);
     const undelivered = [...sent, ...returns].sort();

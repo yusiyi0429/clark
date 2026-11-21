@@ -261,6 +261,37 @@ describe("首页等你：扩的几种", { timeout: 30_000 }, () => {
     } finally { await f.close(); }
   });
 
+  it("没送到电脑：转话只算发给在线电脑的；登记了「再改一轮」在送的那次交回只算一件", async () => {
+    const now = BOARD_NOW;
+    const ago = (minutes: number) => new Date(now.getTime() - minutes * 60_000);
+    const f = await boardFixture({ monthlyNow: () => now }, { boardCloudAgents: false });
+    try {
+      const away = await f.local("合上的");
+      const here = await f.local("开着的");
+      const talk = async (machine: typeof here, title: string) => {
+        const card = await roleCard(f, title);
+        const session = await machine.send({ kind: "card", cardId: card }, [status("running", title)]);
+        await f.t.sql("INSERT INTO session_commands(id,owner_id,kind,card_id,run_id,device_id,command,requested_at) VALUES($1,$2,'card',$3,$4,$5,$6::jsonb,$7)",
+          [randomUUID(), TEST_MEMBER.personId, card, session, machine.device, JSON.stringify({ type: "message", text: "顺便看下日志" }), ago(11)]);
+      };
+      await talk(away, "发给合上的");
+      await talk(here, "发给开着的");
+      await f.t.sql("UPDATE local_devices SET last_sync_at=$2 WHERE id=$1", [away.device, ago(30)]);
+      await f.t.sql("UPDATE local_devices SET last_sync_at=$2 WHERE id=$1", [here.device, now]);
+      // 发给合上那台的转话只有那台能认领，不算；发给开着那台的算。
+      expect((await waiting(f, "device")).map((item) => [item.id, item.title])).toEqual([["device:undelivered", "没送到电脑 · 1 件在等"]]);
+
+      // 验收没过，从手机登记了「再改一轮」（转话发给开着那台），11 分钟了还没送到：交回和那条转话只算一件，加上前面那条一共 2 件。
+      const failing = await roleCard(f, "没过");
+      const handback = await here.handBack(failing);
+      await f.t.sql("UPDATE card_handbacks SET status='done',outcome='fail',return_text='第 1 条没达到，补上方案',finished_at=$2 WHERE id=$1", [handback, ago(12)]);
+      expect((await f.call("POST", `/api/me/cards/${failing}/handbacks/${handback}/relay`, { kind: "return" })).statusCode).toBe(200);
+      await f.t.sql("UPDATE session_commands SET requested_at=$2 WHERE handback_id=$1", [handback, ago(11)]);
+      await f.t.sql("UPDATE local_devices SET last_sync_at=$2 WHERE id=$1", [here.device, now]);
+      expect((await waiting(f, "device")).map((item) => [item.id, item.title])).toEqual([["device:undelivered", "没送到电脑 · 2 件在等"]]);
+    } finally { await f.close(); }
+  });
+
   it("额度：一台电脑一条，停着几件、最早几点恢复（截止）；恢复了接着跑的不算；排序是卡住在跑的活的在前（有截止的先），再是有截止的，其余新的在前", async () => {
     const f = await boardFixture({}, { boardCloudAgents: false });
     try {
