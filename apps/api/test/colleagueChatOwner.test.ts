@@ -102,15 +102,30 @@ describe("主人那边", { timeout: 60_000 }, () => {
   it("逐件结清：一段一行，回一件只消那一件", async () => {
     const s = await setup();
     try {
-      await s.answered("报价能定吗", "money_external");
+      const price = await s.answered("报价能定吗", "money_external");
       const plan = await s.answered("排期谁来定", "commit");
       const chatId = s.O().slice(C.length + 1);
       expect(await s.waiting()).toMatchObject([{ id: "colleague-chat:" + chatId, title: "报价能定吗", source: "钱和对外", person: { personId: 乙 },
         open: { kind: "colleague_chat", id: 乙 } }]);
-      await s.reply("报价周五定");
+      await s.reply("报价周五定", price.ask);
       expect(await s.waiting()).toMatchObject([{ title: "排期谁来定", source: "要承诺" }]);
       await s.reply("我定", plan.ask);
       expect(await s.waiting()).toEqual([]);
+    } finally { await s.f.close(); }
+  });
+
+  it("没引哪一句就是单说一句：回了一件再补一句，另一件还在等", async () => {
+    const s = await setup();
+    try {
+      const price = await s.answered("报价能定吗", "money_external");
+      await s.answered("排期谁来定", "commit");
+      await s.reply("先按去年的价谈");
+      expect(await s.waiting()).toMatchObject([{ title: "报价能定吗" }]);
+      await s.reply("报价周五定", price.ask);
+      await s.reply("先按去年的价谈");
+      expect(await s.waiting()).toMatchObject([{ title: "排期谁来定", source: "要承诺" }]);
+      expect((await s.f.t.sql("SELECT reply_to FROM colleague_chat_messages WHERE author='owner' ORDER BY seq")).map((row) => row.reply_to))
+        .toEqual([null, price.ask, null]);
     } finally { await s.f.close(); }
   });
 

@@ -40,15 +40,15 @@ async function buddyLine(q: Query, chatId: string, messageId: string) {
 }
 
 /**
- * 回一句：replyTo 没给回最早一句还等他的问句（没有就是单说一句）。那句还等着就结清；伙伴还没答的改成答了，作答作业落伙伴句前重查会放手。
+ * 回一句：replyTo 是回的那句问句，那句还等着就结清；伙伴还没答的改成答了，作答作业落伙伴句前重查会放手。没给 replyTo 是单说一句，不结清哪件。
  */
 export const sendOwnerMessage = (deps: ChatDeps, viewer: string, chatId: string, input: TOwnerChatMessageRequest) =>
   ownerAction(deps, viewer, chatId, async (q, chat, now) => {
     const body = said(input.text);
-    const target = (input.replyTo
-      ? await q("SELECT id FROM colleague_chat_messages WHERE id=$1 AND chat_id=$2 AND answer_state IS NOT NULL FOR UPDATE", [input.replyTo, chat.id])
-      : await q("SELECT id FROM colleague_chat_messages WHERE chat_id=$1 AND wait_reason IS NOT NULL AND wait_closed_at IS NULL ORDER BY seq LIMIT 1 FOR UPDATE",
-        [chat.id])).rows[0] as { id: string } | undefined;
+    const target = input.replyTo
+      ? (await q("SELECT id FROM colleague_chat_messages WHERE id=$1 AND chat_id=$2 AND answer_state IS NOT NULL FOR UPDATE", [input.replyTo, chat.id]))
+        .rows[0] as { id: string } | undefined
+      : undefined;
     if (input.replyTo && !target) throw noMessage();
     // 同一 clientId 落过（重复提交）就什么都不改。
     if (!(await insertOwner(q, chat.id, input.clientId, body, now, { replyTo: target?.id })).rowCount) return;

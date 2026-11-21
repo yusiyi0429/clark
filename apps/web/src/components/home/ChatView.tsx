@@ -63,6 +63,16 @@ export type ChatActions = {
 
 const quoteOf = (message: TChatMessage) => ({ id: message.id, label: `回复 ${[...message.text].slice(0, 20).join("")}` });
 
+/**
+ * 主人这边输入框引的那句：choice 为 "waiting" 时引这段现在最早等我的那句（打开时、每回完一句后都回到它），是句子 id 时引点了「回这句」的那句，
+ * null 是本人点掉了引用（单说一句，不结清哪件）。问的人这边不引。
+ */
+export function chatQuote(chat: TChatView, choice: "waiting" | string | null): { id: string; label: string } | null {
+  const id = chat.side !== "from" ? null : choice === "waiting" ? chat.firstWaiting : choice;
+  const message = id ? chat.messages.find((entry) => entry.id === id) : undefined;
+  return message ? quoteOf(message) : null;
+}
+
 /** 只管显示的那一层：拿到一段对话和几件事，画页头、句子、输入框。 */
 export function ChatBody({ chat, buddy, actions }: { chat: TChatView; buddy: Buddy | null; actions: ChatActions }) {
   const chrome = useViewChrome();
@@ -73,10 +83,8 @@ export function ChatBody({ chat, buddy, actions }: { chat: TChatView; buddy: Bud
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [friendOpen, setFriendOpen] = useState(false);
-  const [quote, setQuote] = useState<{ id: string; label: string } | null>(() => {
-    const waiting = side === "from" && chat.firstWaiting ? byId.get(chat.firstWaiting) : undefined;
-    return waiting ? quoteOf(waiting) : null;
-  });
+  const [choice, setChoice] = useState<"waiting" | string | null>("waiting");
+  const quote = chatQuote(chat, choice);
   const run = async (work: () => Promise<unknown>) => {
     setBusy(true);
     try { await work(); } finally { setBusy(false); }
@@ -143,7 +151,7 @@ export function ChatBody({ chat, buddy, actions }: { chat: TChatView; buddy: Bud
         onSubmit={async (text) => { if (await actions.correct(message.id, text)) setEditing(null); }} />;
       else acts = [...(message.correction ? [] : [button("改", () => setEditing(message.id))]), button("收回", () => actions.retract(message.id))];
     } else if (side === "from" && isQuestion(message)) {
-      acts = [button("回这句", () => setQuote(quoteOf(message)))];
+      acts = [button("回这句", () => setChoice(message.id))];
     }
     return (
       <Fragment key={message.id}>
@@ -157,8 +165,9 @@ export function ChatBody({ chat, buddy, actions }: { chat: TChatView; buddy: Bud
 
   const send = async (text: string, files: File[]) => {
     if (files.length) { showWorkspaceToast({ text: "对话里不带文件" }); return false; }
-    const ok = await actions.send(text, side === "from" ? quote?.id : undefined);
-    if (ok) setQuote(null);
+    const ok = await actions.send(text, quote?.id);
+    // 发完回到「引最早等我的那句」：读回来的这段里还有等着的就引下一件。
+    if (ok) setChoice("waiting");
     return ok;
   };
   return (
@@ -182,7 +191,7 @@ export function ChatBody({ chat, buddy, actions }: { chat: TChatView; buddy: Bud
       {readOnly ? null : (
         <div className={c.composer}>
           <InputBar textRequired placeholder={side === "with" ? `发给${peer.displayName}的伙伴` : `回${peer.displayName}`} onSend={send}
-            quote={quote ? { key: quote.id, label: quote.label, onClear: () => setQuote(null) } : null} />
+            quote={quote ? { key: quote.id, label: quote.label, onClear: () => setChoice(null) } : null} />
         </div>
       )}
     </div>

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { TChatMessage, TChatPerson } from "@warmap/contracts";
-import { ChatBody, chatWho, type ChatActions } from "./ChatView";
+import { ChatBody, chatQuote, chatWho, type ChatActions } from "./ChatView";
 
 const at = "2026-11-20T08:00:00.000Z";
 const id = "00000000-0000-4000-8000-000000000001";
@@ -59,6 +59,18 @@ describe("同事对话页", () => {
     expect(render("from", [q, msg({ author: "buddy", replyTo: q.id, retracted: true })], 溪南)).not.toMatch(/>收回<|>改</);
     const left = render("with", [q], { ...溪南, left: true }); expect(left).toContain("已离开"); expect(left).not.toContain("发给溪南的伙伴");
     expect(render("from", [q, msg({ author: "buddy", replyTo: q.id })], { ...溪南, left: true })).not.toMatch(/回这句|>收回<|>改<|回溪南/);
+  });
+
+  it("主人这边的引用：缺省引最早等我的那句；回完一件（读回来的这段换了最早等我的）就引下一件；点掉就不引", () => {
+    const plan = msg({ author: "asker", text: "排期谁来定", answer: "answered", wait: { reason: "commit", at, closed: false } });
+    const view = (firstWaiting: string | null, side: "with" | "from" = "from") => ({ id, side, peer: { personId: "p", displayName: "测试研发", left: false },
+      peerBuddy: null, relation: "friends" as const, messages: [waitQ, plan], firstWaiting });
+    expect(chatQuote(view(waitQ.id), "waiting")?.id).toBe(waitQ.id);
+    expect(chatQuote(view(plan.id), "waiting")).toMatchObject({ id: plan.id, label: "回复 排期谁来定" });
+    expect(chatQuote(view(null), "waiting")).toBeNull();
+    expect(chatQuote(view(waitQ.id), null)).toBeNull();
+    expect(chatQuote(view(waitQ.id), plan.id)?.id).toBe(plan.id);
+    expect(chatQuote(view(waitQ.id, "with"), "waiting")).toBeNull();
   });
 
   it("样式不写字号、不出省略号", () => {
