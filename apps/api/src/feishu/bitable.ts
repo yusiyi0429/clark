@@ -18,8 +18,10 @@ export type BitableAdapter = {
   readonly mode: "live" | "mock";
   /** 新建一个多维表格。 */
   createApp(input: { accessToken: string; name: string }): Promise<BitableApp>;
-  /** 在这个多维表格里找同名的数据表，没有才新建。返回 table_id。 */
-  ensureTable(input: { accessToken: string; appToken: string; name: string; columns: BitableColumn[] }): Promise<string>;
+  /** 在这个多维表格里找同名的数据表，返回 table_id；没有返回 null。 */
+  findTable(input: { accessToken: string; appToken: string; name: string }): Promise<string | null>;
+  /** 在这个多维表格里新建一张数据表，返回 table_id。 */
+  createTable(input: { accessToken: string; appToken: string; name: string; columns: BitableColumn[] }): Promise<string>;
   /** 把一个人加成可编辑协作者。 */
   addEditor(input: { accessToken: string; appToken: string; openId: string }): Promise<void>;
   /** recordId 为空时新增一行，否则覆盖这一行给出的栏。返回这一行的 record_id。 */
@@ -55,9 +57,11 @@ export function createMockBitable(): BitableAdapter & { tables: Map<string, { na
     async createApp() {
       return { appToken: `mock_app_${randomUUID().slice(0, 8)}`, url: null };
     },
-    async ensureTable({ appToken, name, columns }) {
+    async findTable({ appToken, name }) {
       const found = [...tables].find(([key, item]) => key.startsWith(`${appToken}/`) && item.name === name);
-      if (found) return found[0].slice(appToken.length + 1);
+      return found ? found[0].slice(appToken.length + 1) : null;
+    },
+    async createTable({ appToken, name, columns }) {
       const tableId = `mock_tbl_${randomUUID().slice(0, 8)}`;
       tables.set(`${appToken}/${tableId}`, { name, columns, rows: new Map() });
       return tableId;
@@ -100,13 +104,14 @@ export function createFeishuBitable({ fetch: fetchImpl = fetch }: { fetch?: Fetc
       if (!app?.app_token) throw new FeishuApiError(0, "新建多维表格没有返回 app_token");
       return { appToken: app.app_token, url: app.url ?? null };
     },
-    async ensureTable({ accessToken, appToken, name, columns }) {
-      const base = `/bitable/v1/apps/${encodeURIComponent(appToken)}/tables`;
+    async findTable({ accessToken, appToken, name }) {
       // 天枢自己新建的多维表格，里面只有默认表和这一张，一页就够。
-      const listed = await call(accessToken, "GET", `${base}?page_size=100`);
+      const listed = await call(accessToken, "GET", `/bitable/v1/apps/${encodeURIComponent(appToken)}/tables?page_size=100`);
       const found = ((Array.isArray(listed.items) ? listed.items : []) as { table_id?: string; name?: string }[]).find((item) => item.name === name);
-      if (found?.table_id) return found.table_id;
-      const created = await call(accessToken, "POST", base, {
+      return found?.table_id ?? null;
+    },
+    async createTable({ accessToken, appToken, name, columns }) {
+      const created = await call(accessToken, "POST", `/bitable/v1/apps/${encodeURIComponent(appToken)}/tables`, {
         table: { name, default_view_name: "全部", fields: columns.map((column) => ({ field_name: column.name, type: FIELD_TYPE[column.type] })) },
       });
       const tableId = String(created.table_id ?? "");

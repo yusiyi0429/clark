@@ -466,7 +466,8 @@ function recordFields(row: CollectionRow, entry: EntryRow, weekStart: string, na
  * 和飞书多维表格同步一个收集任务：表跟着收集任务走，只有新建的收集第一次同步时建表（收件人加成可编辑）；
  * 每周固定的后续各轮沿用这张表，每人每轮追加一行、带「周」这一栏（D-46）。天枢这边改过的行推上去，
  * 再把飞书里改过的行读回来（天枢这边没有待推的改动时才覆盖）。失败只记 sync_error，下一分钟再试；
- * 建表每步做完就存，重试从没做完的那步接着做，不重复建。
+ * 建表每步做完就存，重试从没做完的那步接着做，不重复建；这一轮刚建的多维表格不用找同名表。
+ * 表齐了就推行、读行，加编辑权限放在最后，有人加不上只记 sync_error，不挡数据同步。
  */
 export async function syncCollection(deps: CollectionDeps, collectionId: string): Promise<void> {
   const q: Query = (sql, params) => deps.pool.query(sql, params);
@@ -477,23 +478,17 @@ export async function syncCollection(deps: CollectionDeps, collectionId: string)
     if (!accessToken) throw new Error("发起人还没有授权飞书");
     const save = (next: StoredBitable) => q("UPDATE collections SET bitable = $2::jsonb WHERE id = $1", [row.id, JSON.stringify(next)]);
     let stored = row.bitable;
+    const fresh = !stored;
     if (!stored) {
       stored = { ...(await deps.bitable.createApp({ accessToken, name: row.title })), editors: [] };
       await save(stored);
     }
-    const tableId = stored.tableId ?? await deps.bitable.ensureTable({ accessToken, appToken: stored.appToken, name: row.title, columns: columnsOf(row) });
-    if (!stored.tableId) {
+    let tableId = stored.tableId;
+    if (!tableId) {
+      tableId = (fresh ? null : await deps.bitable.findTable({ accessToken, appToken: stored.appToken, name: row.title }))
+        ?? await deps.bitable.createTable({ accessToken, appToken: stored.appToken, name: row.title, columns: columnsOf(row) });
       stored = { ...stored, tableId };
       await save(stored);
-    }
-    if (stored.editors) {
-      const editors = [...stored.editors];
-      const openIds = (await q("SELECT open_id FROM feishu_identities WHERE person_id = ANY($1::text[])", [row.recipient_ids])).rows.map((item) => item.open_id as string);
-      for (const openId of openIds.filter((id) => !editors.includes(id))) {
-        await deps.bitable.addEditor({ accessToken, appToken: stored.appToken, openId });
-        editors.push(openId);
-        await save({ ...stored, editors });
-      }
     }
     const table: BitableTable = { appToken: stored.appToken, tableId, url: stored.url };
     const names = deps.names();
@@ -514,6 +509,15 @@ export async function syncCollection(deps: CollectionDeps, collectionId: string)
       if (JSON.stringify(values) === JSON.stringify(cleanValues(row.fields, entry.values))) continue;
       await q(`UPDATE collection_entries SET "values" = $3::jsonb, edited = TRUE, last_edit_at = $4, version = version + 1, synced_version = synced_version + 1, updated_at = now()
         WHERE request_id = $1 AND person_id = $2 AND version = $5`, [entry.request_id, entry.person_id, JSON.stringify(values), deps.now(), entry.version]);
+    }
+    if (stored.editors) {
+      const editors = [...stored.editors];
+      const openIds = (await q("SELECT open_id FROM feishu_identities WHERE person_id = ANY($1::text[])", [row.recipient_ids])).rows.map((item) => item.open_id as string);
+      for (const openId of openIds.filter((id) => !editors.includes(id))) {
+        await deps.bitable.addEditor({ accessToken, appToken: stored.appToken, openId });
+        editors.push(openId);
+        await save({ ...stored, editors });
+      }
     }
     if (row.sync_error) await q("UPDATE collections SET sync_error = NULL WHERE id = $1", [row.id]);
   } catch (error) {
