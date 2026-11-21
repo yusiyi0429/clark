@@ -59,7 +59,7 @@ export function PersonalTokenForm({ role, defaultName = "", activeCount = 0, rev
   const created = createdRaw && !revokedIds.includes(createdRaw.view.id) ? createdRaw : null;
   const [name, setName] = useState(defaultName);
   const [client, setClient] = useState<TokenView["client"]>("codex");
-  const [expiresInDays, setExpiresInDays] = useState<30 | 90 | null>(90);
+  const [expiresInDays, setExpiresInDays] = useState<30 | 90 | null>(30);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState("");
@@ -91,7 +91,7 @@ export function PersonalTokenForm({ role, defaultName = "", activeCount = 0, rev
   const endpoint = `${origin}/mcp/me`;
   const download = () => {
     if (!created) return;
-    const text = connectionGuide({ role, client: created.view.client as AgentClient, endpoint, token: created.token, expires: expiryText(created.view.expiresAt) });
+    const text = connectionGuide({ role, client: created.view.client as AgentClient, endpoint, expires: expiryText(created.view.expiresAt) });
     const url = URL.createObjectURL(new Blob([text], { type: "text/markdown;charset=utf-8" }));
     const link = document.createElement("a");
     link.href = url; link.download = GUIDE_FILE_NAME;
