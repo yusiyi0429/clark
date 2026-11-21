@@ -23977,6 +23977,13 @@ export interface components {
                 /** Format: date-time */
                 createdAt: string;
             }[];
+            reads?: {
+                itemId: string;
+                title: string;
+                reader: string;
+                /** Format: date */
+                readOn: string;
+            }[];
         };
         SaveColleagueNoteRequest: {
             note: string;

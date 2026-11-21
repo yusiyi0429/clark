@@ -28,7 +28,7 @@ describe("对外资料", { timeout: 45_000 }, () => {
     const f = await boardFixture();
     try {
       expect((await f.call("GET", base, undefined, "")).statusCode).toBe(401);
-      expect((await f.call("GET", base)).json()).toEqual({ note: "", noteUpdatedAt: null, files: [] });
+      expect((await f.call("GET", base)).json()).toEqual({ note: "", noteUpdatedAt: null, files: [], reads: [] });
 
       const saved = await f.call("PUT", base + "/note", { note: "部署先看拆分手册" });
       expect(saved.statusCode, saved.body).toBe(200);
@@ -93,6 +93,20 @@ describe("对外资料", { timeout: 45_000 }, () => {
       expect(shared.statusCode).toBe(422);
       expect(shared.json()).toMatchObject({ code: "SECRET_IN_MATERIAL", findings: [{ where: "技能 · 做法", line: 1 }] });
       expect((await listedRole(f, role.id)).shared).toBeUndefined();
+    } finally { await f.close(); }
+  });
+
+  it("读了我哪份：只给我看，写谁、哪天；已经不在范围里的不列", async () => {
+    const f = await boardFixture();
+    try {
+      const third = await thirdCookie(f);
+      expect((await f.call("PUT", base + "/note", { note: "部署先看拆分手册" }, third)).statusCode).toBe(200);
+      for (const item of ["note", "file:gone"]) {
+        await f.t.sql(`INSERT INTO colleague_reads(reader_id,owner_id,item_id,read_on,read_at) VALUES($1,$2,$3,'2026-11-06','2026-11-06T02:00:00Z')`,
+          [TEST_MEMBER.personId, THIRD.personId, item]);
+      }
+      expect((await f.call("GET", base, undefined, third)).json().reads).toEqual([{ itemId: "note", title: "说明", reader: "测试乙", readOn: "2026-11-06" }]);
+      expect((await f.call("GET", base)).json().reads).toEqual([]);
     } finally { await f.close(); }
   });
 

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { TColleagueMaterials, TSecretFinding } from "@warmap/contracts";
+import type { TColleagueMaterials, TColleagueRead, TSecretFinding } from "@warmap/contracts";
 import { cleanupMaterialTemp, MaterialParseError, parseMaterialBatch } from "./materialParser.js";
 import { UUID_PATTERN, type Query } from "./meetingStore.js";
 import { secretLines } from "./secretPatterns.js";
@@ -27,6 +27,17 @@ export async function readMaterials(q: Query, ownerId: string): Promise<TColleag
     [ownerId])).rows as { id: string; file_name: string; size: number; chars: number; created_at: Date }[];
   return { note: note?.body ?? "", noteUpdatedAt: note?.updated_at.toISOString() ?? null,
     files: files.map((file) => ({ id: file.id, fileName: file.file_name, size: file.size, chars: file.chars, createdAt: file.created_at.toISOString() })) };
+}
+
+/**
+ * 同事的伙伴读了本人哪份全文（colleague_reads，读全文成功时记），最近 100 条。
+ * titles 是本人现在的范围目录（itemId → 标题），不在里面的（收起的、删掉的）不列；names 是读的人的名字，找不到写 id。
+ */
+export async function listReads(q: Query, ownerId: string, names: ReadonlyMap<string, string>, titles: ReadonlyMap<string, string>): Promise<TColleagueRead[]> {
+  const rows = (await q(`SELECT reader_id,item_id,read_on::text AS read_on FROM colleague_reads WHERE owner_id=$1 ORDER BY read_at DESC LIMIT 100`,
+    [ownerId])).rows as { reader_id: string; item_id: string; read_on: string }[];
+  return rows.filter((row) => titles.has(row.item_id))
+    .map((row) => ({ itemId: row.item_id, title: titles.get(row.item_id)!, reader: names.get(row.reader_id) ?? row.reader_id, readOn: row.read_on }));
 }
 
 /** 存说明；去掉首尾空白后为空就删掉那一行。 */
