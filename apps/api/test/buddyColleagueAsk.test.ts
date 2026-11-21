@@ -4,7 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { AnswerInput, ColleagueAnswerAgent, PickInput } from "../src/colleagueAnswerAgent.js";
+import type { ChatService } from "../src/chatService.js";
 import { CHAT_ANSWER_JOB } from "../src/colleagueChats.js";
+import { turnWordsReader } from "../src/sourceWords.js";
 import { boardFixture, THIRD } from "./boardFixture.js";
 import { TEST_CEO, TEST_MEMBER } from "./helpers.js";
 
@@ -144,5 +146,13 @@ describe("Miles 替你问", { timeout: 120_000 }, () => {
       expect(result).toMatchObject({ ownerReply: "九点开始", summary: "测试丙本人回了" });
       expect(result.waited).toBeLessThan(5_000);
     } finally { await s.f.close(); }
+  });
+
+  it("本人这一轮说的话只认这一轮：别的轮还标着在跑的不算", async () => {
+    const message = (runId: string, content: string, extra: object = {}) => ({ sequence: 1, role: "user", content, referencesSnapshot: [], attachments: [], runId,
+      createdAt: "2026-11-06T02:00:00.000Z", ...extra });
+    const chat = { history: async () => ({ scope: "global", messages: [message("old-run", "以前那轮卡住的话", { running: true }), message("this-run", "帮我问问丙的伙伴")] }) };
+    const words = turnWordsReader({ q: (async () => ({ rows: [] })) as never, chat: chat as unknown as ChatService, conversationTurnTimeoutMs: 60_000 });
+    expect(await words(乙, "this-run")).toEqual(["帮我问问丙的伙伴"]);
   });
 });

@@ -104,12 +104,12 @@ export async function recentOwnerWords(q: Query, history: ProjectHistory, ownerI
     .map((message) => message.content.trim()).slice(-SOURCE_TURNS);
 }
 
-/** 本人这一轮说的话（Miles 替你问只准原样带它）：伙伴主线里还在跑的那一轮本人的话。 */
+/** 本人这一轮说的话（Miles 替你问只准原样带它）：伙伴主线里 runId 是这一轮的本人的话；别的轮哪怕还标着在跑也不算，这一轮没标在跑也算。 */
 export type TurnWords = (ownerId: string, runId: string) => Promise<string[]>;
 export function turnWordsReader(deps: { q: Query; chat?: ChatService; conversationTurnTimeoutMs: number }): TurnWords {
   return async (ownerId, runId) => {
     const history = deps.chat ? await deps.chat.history(pipelineViewer(ownerId), runId) as TConversationHistory
       : await getConversationHistory(deps.q, ownerId, "global", deps.conversationTurnTimeoutMs);
-    return history.messages.filter((message) => message.role === "user" && message.running && message.content.trim()).map((message) => message.content.trim());
+    return history.messages.filter((message) => message.role === "user" && message.runId === runId && message.content.trim()).map((message) => message.content.trim());
   };
 }
