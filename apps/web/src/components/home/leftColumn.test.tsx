@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { TChatListResponse, TChatRow, THomeItem } from "@warmap/contracts";
 import type { HomeProject, SubSession, WorkHomeData } from "@/lib/home/types";
 import { fromHome, projectWorking } from "@/lib/home/projects";
-import { LeftColumn } from "./LeftColumn";
+import { LeftColumn, tabFor } from "./LeftColumn";
 import { HomeMeetingContext, type HomeMeetingState } from "./meetingState";
 import { SeenContext, Subs, planOrder, subDot, subIcon } from "./SubRows";
 import { scopeOf, viewOf } from "./view";
@@ -191,6 +191,13 @@ describe("左栏：项目 | 对话（同事伙伴设计第 1 节）", () => {
     render({ view: { kind: "chat", side: "with", personId: "p" }, chats: list });
     expect(tap.props.get("tab-chats")?.["aria-pressed"]).toBe(true);
     expect(tap.props.has("chat-find")).toBe(true);
+  });
+
+  it("滑块跟着地址：进对话那边的页停到对话，进项目那边的页回到项目，别的页不动", () => {
+    for (const path of ["/me/work/chats/with/p", "/me/work/chats/from/p", "/me/work/chats/find", "/me/work/chats/requests/p"]) expect(tabFor(viewOf(path)), path).toBe("chats");
+    for (const path of ["/me/work/projects/x", "/me/work/projects/x/info", "/me/work/projects/x/new", "/me/work/tasks/t", "/me/work/tasks/t/info", "/me/work/cards/c", "/me/work/topics/t"])
+      expect(tabFor(viewOf(path)), path).toBe("projects");
+    for (const path of ["/me/work", "/me/work/buddy", "/me/work/meetings", "/me/work/month/2026-11"]) expect(tabFor(viewOf(path)), path).toBeNull();
   });
 });
 

@@ -42,6 +42,11 @@ export const deleteProjectFail = (error: unknown) => conflictText(error, { PROJE
 
 /** 这几种页属于「对话」那边：地址变成它们时滑块停到对话（friendRequest 是有人加我那一页）。 */
 const CHAT_VIEWS: ReadonlySet<string> = new Set(["chat", "chatFind", "friendRequest"]);
+/** 这几种页属于「项目」那边（项目、项目详情、开子会话、Task、Task 详情、卡、专题）：地址变成它们时滑块回到项目。 */
+const PROJECT_VIEWS: ReadonlySet<string> = new Set(["project", "projectInfo", "newSub", "task", "info", "card", "topic"]);
+/** 地址变成这一页时滑块该停哪边；别的页（首页、主线、会议、月份）不动，为 null。 */
+export const tabFor = (view: View): "projects" | "chats" | null =>
+  CHAT_VIEWS.has(view.kind) ? "chats" : PROJECT_VIEWS.has(view.kind) ? "projects" : null;
 
 /**
  * 伙伴门牌（设计 4.1；本人 11/18 方案 A：对话顶上为主，这里退成门牌）：一行 48 高，只放形象、居中（名字只给读屏）；
@@ -113,11 +118,11 @@ export function LeftColumn({ data, view, buddy, go, phone, account, today, machi
   const tree = useRef<HTMLDivElement>(null);
   const [naming, setNaming] = useState(false);
   const [archivedOpen, setArchivedOpen] = useState(false);
-  const chatView = CHAT_VIEWS.has(view.kind);
-  const [tab, setTab] = useState<"projects" | "chats">(chatView ? "chats" : "projects");
-  // 换到对话那边的页时才切（view 每次重画都是新对象，按地址内容比）；停在对话页时本人点回项目就留在项目。
+  const pageTab = tabFor(view);
+  const [tab, setTab] = useState<"projects" | "chats">(pageTab ?? "projects");
+  // 换到对话那边或项目那边的页时才切（view 每次重画都是新对象，按地址内容比）；地址没变时本人点了另一边就留在那边。
   const viewKey = JSON.stringify(view);
-  useEffect(() => { if (chatView) setTab("chats"); }, [chatView, viewKey]);
+  useEffect(() => { if (pageTab) setTab(pageTab); }, [pageTab, viewKey]);
   const dot = chatsDot(chats);
   // 「随手」项目收在幕后（本人 11/19）：项目和已归档里都不列。
   const listed = projects.filter((project) => !project.scratch);
