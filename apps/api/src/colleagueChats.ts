@@ -8,7 +8,7 @@ import { enqueueJob } from "./jobs.js";
 import type { Query } from "./meetingStore.js";
 import type { PeopleDirectory } from "./peopleDirectory.js";
 import { maskSecrets } from "./secretPatterns.js";
-import { transact } from "./teamDeliveries.js";
+import { transact } from "./dbTransaction.js";
 import { ANSWERING_TIMEOUT_MS } from "./teamDeliveryInbox.js";
 
 /**

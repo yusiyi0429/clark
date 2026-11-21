@@ -9,7 +9,7 @@ import { logEvent } from "./observability.js";
 import type { PeopleDirectory } from "./peopleDirectory.js";
 import { maskSecrets } from "./secretPatterns.js";
 import { answerForColleague, clientIdOf, within } from "./teamBuddyAnswers.js";
-import { transact } from "./teamDeliveries.js";
+import { transact } from "./dbTransaction.js";
 import { shanghaiDate } from "./workdays.js";
 
 /**

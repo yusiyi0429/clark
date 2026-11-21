@@ -3,7 +3,7 @@ import { CHAT_PUSH_REASONS, type TChatView, type TChatWaitReason, type TCorrectC
 import { ChatError, chatFor, readChat, type ChatDeps } from "./colleagueChats.js";
 import type { Query } from "./meetingStore.js";
 import { maskSecrets } from "./secretPatterns.js";
-import { transact } from "./teamDeliveries.js";
+import { transact } from "./dbTransaction.js";
 
 /**
  * 被问的人（主人）在来问他的对话里（设计稿第 4 节）：回某一句、改伙伴答的一句、收回伙伴答的一句；等你一段一行、逐句结清。

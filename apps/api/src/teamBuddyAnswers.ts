@@ -5,7 +5,8 @@ import type { ScopeReader } from "./colleagueScope.js";
 import type { JobHandler } from "./jobs.js";
 import type { Query } from "./meetingStore.js";
 import { logEvent } from "./observability.js";
-import { buddyAnswerKey, TEAM_BUDDY_ANSWER_JOB, transact, type BuddyAnswerTrigger } from "./teamDeliveries.js";
+import { transact } from "./dbTransaction.js";
+import { buddyAnswerKey, TEAM_BUDDY_ANSWER_JOB, type BuddyAnswerTrigger } from "./teamDeliveries.js";
 import { BUDDY_NOT_ANSWERED, latestReply } from "./teamDeliveryInbox.js";
 import { shanghaiDate } from "./workdays.js";
 
