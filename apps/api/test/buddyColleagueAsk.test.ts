@@ -82,7 +82,7 @@ async function setup() {
       needsOwner?: string | null; pending?: true; failed?: true; ownerReply?: string; summary: string; waited: number };
   };
   const friends = async () => expect((await f.call("POST", "/api/me/friends/" + 丙 + "/request", {})).statusCode).toBe(200);
-  return { f, fake, get, bad, asked, friends, third };
+  return { f, fake, get, bad, asked, friends, third, runId };
 }
 
 const sent = "切换那天几点开始，库是 postgres://app:••••@db/x";
@@ -103,7 +103,11 @@ describe("Miles 替你问", { timeout: 120_000 }, () => {
       expect((await s.bad("他上周还说预算超了，切换几点开始"))[1]).toBe("NOT_OWNER_WORDS");
       expect(await s.asked("切换那天几点开始，库是 postgres://app:hunter2@db/x")).toMatchObject({ sent, answer: "按拆分手册拆四件", needsOwner: null });
       expect(await s.f.t.sql("SELECT author,via,body FROM colleague_chat_messages ORDER BY seq LIMIT 1")).toEqual([{ author: "asker_buddy", via: "main", body: sent }]);
-      expect((await s.get(C + "/main-lines")).items).toMatchObject([{ author: "asker_buddy", text: sent }]);
+      expect((await s.get(C + "/main-lines")).items).toMatchObject([{ author: "asker_buddy", text: sent, runId: s.runId }]);
+      // 本人从主线直接发的那句不是哪一轮里伙伴替他问的，不带 runId，主线照时间排。
+      expect((await s.f.call("POST", `${C}/with/${丙}/messages`, { clientId: randomUUID(), text: "演练记录交到哪？", via: "main" })).statusCode).toBe(200);
+      expect((await s.get(C + "/main-lines")).items.map((line: { author: string; runId: unknown }) => [line.author, line.runId]))
+        .toEqual([["asker_buddy", s.runId], ["asker", null]]);
       const audit = await s.f.t.sql("SELECT args FROM buddy_actions WHERE action='ask_colleague_buddy'");
       expect(audit).toEqual([{ args: { personId: 丙, text: "切换那天几点开始，库是 postgres://app:••••@db/x" } }]);
       expect(JSON.stringify(audit)).not.toContain("hunter2");

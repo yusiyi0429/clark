@@ -24248,6 +24248,7 @@ export interface components {
             text: string | null;
             /** Format: date-time */
             at: string;
+            runId: string | null;
         };
         MainLinesResponse: {
             items: {
@@ -24264,6 +24265,7 @@ export interface components {
                 text: string | null;
                 /** Format: date-time */
                 at: string;
+                runId: string | null;
             }[];
         };
         OwnerChatMessageRequest: {

@@ -201,7 +201,8 @@ export function usePartnerTeam(go: (href: string) => void) {
     for (const line of items.mainLines) {
       const open = () => go(chatHref("with", line.peer.personId));
       const words = line.author === "asker" ? `已发给${line.peer.displayName}的伙伴` : `${buddyName}替你问${line.peer.displayName}的伙伴`;
-      entries.push({ key: "colleague-chat:" + line.messageId, at: line.at, node: <div>
+      // 伙伴替你问的挂在那一轮提问后面（runId）；本人直接发的照时间。
+      entries.push({ key: "colleague-chat:" + line.messageId, at: line.at, ...(line.author === "asker_buddy" && line.runId ? { runId: line.runId } : {}), node: <div>
         <div className={h.line}><button type="button" className={h.lineLink} onClick={open}>{words}</button></div>
         {line.author === "asker_buddy" && line.text ? <p className={s.mainQuote}>{line.text}</p> : null}
       </div> });

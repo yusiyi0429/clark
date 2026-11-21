@@ -52,9 +52,10 @@ export const SendChatMessageRequest = Type.Object({ clientId: Id, text: Said, vi
 export const OwnerChatMessageRequest = Type.Object({ clientId: Id, text: Said, replyTo: Type.Optional(Id) }, strict);
 export const CorrectChatMessageRequest = Type.Object({ clientId: Id, text: Said }, strict);
 
+/** runId：伙伴替本人问的那一轮（主线提问和回答同一个）；本人直接发的为 null。 */
 export const MainLine = Type.Object({
   chatId: Id, messageId: Id, peer: ChatPerson, author: Type.Union([Type.Literal("asker"), Type.Literal("asker_buddy")]),
-  text: Type.Union([Type.String(), Type.Null()]), at: Instant,
+  text: Type.Union([Type.String(), Type.Null()]), at: Instant, runId: Type.Union([Type.String(), Type.Null()]),
 }, strict);
 export const MainLinesResponse = Type.Object({ items: Type.Array(MainLine) }, strict);
 

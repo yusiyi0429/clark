@@ -324,6 +324,18 @@ describe("对话里插块和锚点", () => {
     expect(placed.get(0)?.map((block) => block.key)).toEqual(["mid"]);
     expect(placed.get(1)?.map((block) => block.key)).toEqual(["late"]);
   });
+  it("带 runId 的块（Miles 替你问）挂在这一轮最后一句提问后面、回答前面；不带 runId 或这一轮对不上的照旧按时间", () => {
+    const t0 = Date.parse("2026-11-21T02:00:00Z");
+    const chat = [
+      { sequence: 1, role: "user", runId: "R", createdAt: new Date(t0).toISOString() },
+      { sequence: 2, role: "assistant", runId: "R", createdAt: new Date(t0 + 1).toISOString() },
+    ];
+    const asked = (runId?: string) => placeBlocks(chat, [{ key: "asked", at: new Date(t0 + 10_000).toISOString(), node: null, ...(runId ? { runId } : {}) }]);
+    expect(asked("R").get(0)?.map((block) => block.key)).toEqual(["asked"]);
+    expect(asked("R").has(1)).toBe(false);
+    expect(asked().get(1)?.map((block) => block.key)).toEqual(["asked"]);
+    expect(asked("other").get(1)?.map((block) => block.key)).toEqual(["asked"]);
+  });
   it("按序号排的块（转交卡）：Chat 读回来的消息不带时间，插在序号不超过 afterSequence 的最后一条后面；null 排最后；对话还没读回来时在最前", () => {
     const chat = [{ sequence: 1 }, { sequence: 2 }, { sequence: 3 }];
     const transfer = (afterSequence: number | null) => [{ key: "transfer", at: "2020-01-01T00:00:00Z", node: null, afterSequence }];

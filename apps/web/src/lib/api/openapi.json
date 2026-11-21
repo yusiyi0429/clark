@@ -147694,7 +147694,8 @@
           "peer",
           "author",
           "text",
-          "at"
+          "at",
+          "runId"
         ],
         "properties": {
           "chatId": {
@@ -147752,6 +147753,16 @@
           "at": {
             "format": "date-time",
             "type": "string"
+          },
+          "runId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -147773,7 +147784,8 @@
                 "peer",
                 "author",
                 "text",
-                "at"
+                "at",
+                "runId"
               ],
               "properties": {
                 "chatId": {
@@ -147831,6 +147843,16 @@
                 "at": {
                   "format": "date-time",
                   "type": "string"
+                },
+                "runId": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               }
             }
