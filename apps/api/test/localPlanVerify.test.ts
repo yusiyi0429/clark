@@ -183,10 +183,10 @@ describe("拆卡和验收在本机（第 21 节）", { timeout: 30_000 }, () => 
       await handBack(a, [{ index: 1, result: "met", evidence: "A1" }, { index: 2, result: "needs_person", evidence: "商标网拦自动访问", need: "登录商标网查这 3 个名字的申请号" }]);
       const brief = (await f.brief(await keyOf(a))).json().markdown as string;
       for (const text of ["第 2 条：要本人补。商标网拦自动访问", "要本人做：登录商标网查这 3 个名字的申请号", "确实只有本人能做的判 needs_person"]) expect(brief).toContain(text);
-      expect(await judge(a, [{ index: 1, verdict: "met" }, { index: 2, verdict: "needs_person", fix: "登录商标网查这 3 个名字的申请号" }])).toEqual([]);
+      expect(await judge(a, [{ index: 1, verdict: "met" }, { index: 2, verdict: "needs_person", fix: "本人登录商标网查申请号，查到贴回卡里" }])).toEqual([]);
       expect((await f.t.sql("SELECT outcome,return_text FROM card_handbacks WHERE task_id=$1", [a]))[0]).toEqual({ outcome: "needs_person", return_text: null });
       expect(await view(a)).toMatchObject({ wait: "needs_person", handback: { outcome: "needs_person", headline: "就差申请号，要你登录商标网查", met: 1, total: 2,
-        gaps: [{ index: 2, short: "有评审结论", verdict: "needs_person", fixBy: "person", fix: "登录商标网查这 3 个名字的申请号" }] } });
+        gaps: [{ index: 2, short: "有评审结论", verdict: "needs_person", fixBy: "person", fix: "本人登录商标网查申请号，查到贴回卡里" }] } });
       expect(await f.t.sql("SELECT 1 FROM role_proposals WHERE task_id=$1", [a])).toEqual([]);
       // 首页「等你」一行，第二行是验收员那一句人话；项目动态里一条 card_needs_person 指过去。
       const project = (await f.call("POST", "/api/me/projects", { name: "品牌建设", taskId: "task-open" })).json().projectId as string;
@@ -219,6 +219,23 @@ describe("拆卡和验收在本机（第 21 节）", { timeout: 30_000 }, () => 
       await judge(c, [{ index: 1, verdict: "met" }, { index: 2, verdict: "needs_person", fix: "本人拍板" }]);
       await handBack(c, [{ index: 1, result: "met", evidence: "" }, { index: 2, result: "met", evidence: "" }]);
       expect((await f.brief(await keyOf(c))).json().failStreak).toBe(1);
+    } finally { await f.close(); }
+  });
+
+  it("旧数据：已存的交回里判 needs_person 没写 fix 的，卡上缺口的改法用执行方写的 need 补", async () => {
+    const f = await localFixture();
+    try {
+      const a = await f.card("候选名初查");
+      await f.t.sql("UPDATE tasks SET executor='claude_code' WHERE id=$1", [a]);
+      await f.sync({ kind: "card", cardId: a }, [["handback", { summary: "能做的做完了", outputKeys: [],
+        criteria: [{ index: 1, result: "met", evidence: "A1" }, { index: 2, result: "needs_person", evidence: "商标网拦自动访问", need: "登录商标网查这 3 个名字的申请号" }] }]]);
+      // 现在本机和云端都不收 needs_person 不写 fix 的结论：直接写一行规则改之前落下的结论
+      const result = { headline: "就差申请号", beyondScope: [], sourceWordIssues: [], criteria: [
+        { index: 1, verdict: "met", reason: "对得上", evidence: "A1", fix: null },
+        { index: 2, verdict: "needs_person", reason: "缺", evidence: null, fix: null, fixBy: "person" }] };
+      await f.t.sql("UPDATE card_handbacks SET status='done',outcome='needs_person',result=$2::jsonb,finished_at=now() WHERE task_id=$1", [a, JSON.stringify(result)]);
+      expect((await f.call("GET", `/api/me/cards/${a}`)).json().task.card.handback.gaps)
+        .toEqual([{ index: 2, short: "有评审结论", verdict: "needs_person", fixBy: "person", fix: "登录商标网查这 3 个名字的申请号" }]);
     } finally { await f.close(); }
   });
 

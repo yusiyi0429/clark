@@ -171,6 +171,10 @@ describe("本机程序：设备令牌和单向上报", { timeout: 30_000 }, () =
       expect((await f.t.sql("SELECT status FROM tasks WHERE id=$1", [cardId]))[0].status).toBe("done");
       expect((await f.t.sql("SELECT state FROM local_runs WHERE id=$1", [later.sessionId]))[0].state).toBe("running");
       expect((await f.t.sql("SELECT status FROM card_handbacks WHERE task_id=$1", [cardId]))[0].status).toBe("done");
+      // 卡已完成不排 Agent 验收：空交回也照旧记下来
+      expect((await f.sync(token, device, [later.item(3, "handback", { summary: " ", criteria: [], outputKeys: [] })])).json().rejected).toEqual([]);
+      expect(await f.t.sql("SELECT status,summary FROM card_handbacks WHERE task_id=$1 ORDER BY attempt", [cardId]))
+        .toEqual([{ status: "done", summary: "又改了一点" }, { status: "done", summary: null }]);
     } finally { await f.close(); }
   });
 
