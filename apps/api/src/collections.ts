@@ -512,12 +512,20 @@ export async function syncCollection(deps: CollectionDeps, collectionId: string)
     }
     if (stored.editors) {
       const editors = [...stored.editors];
-      const openIds = (await q("SELECT open_id FROM feishu_identities WHERE person_id = ANY($1::text[])", [row.recipient_ids])).rows.map((item) => item.open_id as string);
-      for (const openId of openIds.filter((id) => !editors.includes(id))) {
-        await deps.bitable.addEditor({ accessToken, appToken: stored.appToken, openId });
-        editors.push(openId);
+      const people = (await q("SELECT person_id, open_id FROM feishu_identities WHERE person_id = ANY($1::text[])", [row.recipient_ids])).rows as { person_id: string; open_id: string }[];
+      // 逐个试，一个人加不上不挡后面的人；试完再把没加上的一起报出去，下一轮只补这些人。
+      const failures: string[] = [];
+      for (const person of people.filter((item) => !editors.includes(item.open_id))) {
+        try {
+          await deps.bitable.addEditor({ accessToken, appToken: stored.appToken, openId: person.open_id });
+        } catch (error) {
+          failures.push(`${nameOf(names, person.person_id)}（${(error as Error).message || String(error)}）`);
+          continue;
+        }
+        editors.push(person.open_id);
         await save({ ...stored, editors });
       }
+      if (failures.length) throw new Error(`加编辑权限没加上：${failures.join("；")}`);
     }
     if (row.sync_error) await q("UPDATE collections SET sync_error = NULL WHERE id = $1", [row.id]);
   } catch (error) {

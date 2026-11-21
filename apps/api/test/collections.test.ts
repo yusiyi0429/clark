@@ -357,21 +357,25 @@ describe("③ 信息收集", () => {
     expect(calls).toEqual(["createApp", "createTable", "findTable"]);
   });
 
-  it("三个收件人里第二个加权限失败：下一轮只补没加上的，不给已加上的重加", async () => {
+  it("三个收件人里第二个加权限失败：第一、三个照样加上，记 sync_error；下一轮只补没加上的，不给已加上的重加", async () => {
     const { launch, tick, bitable, sql } = await setup();
     await sql("INSERT INTO feishu_identities (person_id, open_id) VALUES ($1, 'ou_b'), ($2, 'ou_c'), ($3, 'ou_d')", [TEST_MEMBER.personId, THIRD.personId, FOURTH.personId]);
     const { calls, fail } = track(bitable);
     fail.add("addEditor:ou_c");
     await launch("收一下这周的开销", { recipientIds: [TEST_MEMBER.personId, THIRD.personId, FOURTH.personId] });
     const [failed] = await sql("SELECT bitable, sync_error FROM collections");
+    expect(failed.sync_error).toContain("测试丙");
     expect(failed.sync_error).toContain("addEditor:ou_c 失败");
-    expect(failed.bitable.editors).not.toContain("ou_c");
+    expect([...failed.bitable.editors].sort()).toEqual(["ou_b", "ou_d"]);
+    const editorCalls = () => calls.filter((name) => name.startsWith("addEditor:"));
+    expect(editorCalls().sort()).toEqual(["addEditor:ou_b", "addEditor:ou_c", "addEditor:ou_d"]);
 
+    const before = editorCalls().length;
     await tick();
     const [synced] = await sql("SELECT bitable, sync_error FROM collections");
     expect(synced.sync_error).toBeNull();
     expect([...synced.bitable.editors].sort()).toEqual(["ou_b", "ou_c", "ou_d"]);
-    expect(calls.filter((name) => name.startsWith("addEditor:")).sort()).toEqual(["addEditor:ou_b", "addEditor:ou_c", "addEditor:ou_c", "addEditor:ou_d"]);
+    expect(editorCalls().slice(before)).toEqual(["addEditor:ou_c"]);
     expect(calls.filter((name) => !name.startsWith("addEditor:"))).toEqual(["createApp", "createTable"]);
   });
 
