@@ -10,13 +10,13 @@
 import { Fragment, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Popover } from "@heroui/react";
 import { Button as Pressable } from "react-aria-components";
-import { CHAT_WAIT_WORD, type TChatMessage, type TChatView } from "@warmap/contracts";
+import type { TChatMessage, TChatView } from "@warmap/contracts";
 import { PersonAvatar } from "@/components/avatar/PersonAvatar";
 import { BuddyMark } from "@/components/buddy/BuddyMark";
 import type { Buddy } from "@/components/buddy/useBuddy";
 import { HeroButton } from "@/components/HeroButton";
 import { BuddyBubble, TypingBubble, UserBubble } from "@/conversation/ReplyBubbles";
-import { askChatOwner, correctMessage, ownerReply, retractMessage, retryChatAnswer, sendChatMessage } from "@/lib/home/colleagueChats";
+import { CHAT_WAIT_WORD, askChatOwner, correctMessage, ownerReply, retractMessage, retryChatAnswer, sendChatMessage } from "@/lib/home/colleagueChats";
 import { showWorkspaceToast } from "@/lib/toast";
 import h from "@/styles/home.module.css";
 import c from "./chats.module.css";

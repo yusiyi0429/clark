@@ -1,5 +1,10 @@
-import type { TChatListResponse, TChatView, TColleagueSearchResponse, TCorrectChatMessageRequest, TFriendGrant, TFriendSettings, TFriendView, TMainLine, TOwnerChatMessageRequest, TSendChatMessageRequest } from "@warmap/contracts";
+import type { TChatListResponse, TChatView, TChatWaitReason, TColleagueSearchResponse, TCorrectChatMessageRequest, TFriendGrant, TFriendSettings, TFriendView, TMainLine, TOwnerChatMessageRequest, TSendChatMessageRequest } from "@warmap/contracts";
 import { browserApi } from "@/lib/api/client";
+
+/** 伙伴转给本人的六种原因怎么说（与 packages/contracts 的 CHAT_WAIT_WORD 同一套字；网页只从 contracts 引类型，所以在这里放一份）。 */
+export const CHAT_WAIT_WORD: Record<TChatWaitReason, string> = {
+  commit: "要承诺", approve: "要批准", money_external: "钱和对外", asked_owner: "找你本人", no_basis: "资料里没有", unsure: "没把握",
+};
 
 /** 同事对话变了（发了一句、伙伴替本人问了）：读对话的地方跟着重读。 */
 export const COLLEAGUE_CHATS_CHANGED = "colleague-chats-changed";
