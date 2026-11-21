@@ -64,6 +64,8 @@ async function seedRuntime(app: TestApp) {
   await ledger("key-replayed-0000001", "committed", null, hoursAgo(4));
   await ledger("key-failed-000000001", "failed", "CONTRACT_MISMATCH", hoursAgo(3));
   await ledger("key-network-00000001", "network_error", "NETWORK_ERROR", hoursAgo(2));
+  // 会议写本体最后一次仍连不上：待核验。
+  await ledger("key-unverified-00001", "unverified", "NETWORK_ERROR", hoursAgo(1.5));
   // 会后事件指向会议；测试里不建整场会，绕过外键只插这一行。
   const client = await app.pool.connect();
   try {
@@ -113,7 +115,7 @@ describe("管理员视图", () => {
       { key: "feishu_auth", value: 2, status: "red" },
       { key: "meeting_stuck", value: 0, status: "none" },
       { key: "delivery_failed", value: 0, status: "none" },
-      { key: "world_failed", value: 3, status: "red" },
+      { key: "world_failed", value: 4, status: "red" },
       { key: "job_failed", value: 2, status: "red" },
     ]);
 
@@ -138,7 +140,11 @@ describe("管理员视图", () => {
       ["world_write", "meeting_event", "red", false],
       ["job", "feishu.refresh", "yellow", false],
       ["world_write", "record_external_event", "yellow", false],
+      ["world_write", "record_external_event", "yellow", false],
     ]);
+    // 待核验和网络错分开显示。
+    expect(view.issues.filter((issue) => issue.subject.type === "world_write" && issue.status === "yellow").map((issue) => [issue.subject.id, issue.code]))
+      .toEqual([["key-unverified-00001", "待核验"], ["key-network-00000001", "NETWORK_ERROR"]]);
     expect(view.issues.map((issue) => issue.subject.id)).not.toContain("key-replayed-0000001");
 
     expect(view.quality.map((item) => [item.signal, item.personName, item.count])).toEqual([
@@ -173,7 +179,7 @@ describe("管理员视图", () => {
     // 已解决：这次失败不再列出，计数跟着少。
     const resolved = (await act(admin, { action: "resolve", clientId: randomUUID(), subject: { type: "world_write", id: "key-failed-000000001" } })).json() as TAdminOverviewResponse;
     expect(resolved.issues.map((issue) => issue.subject.id)).not.toContain("key-failed-000000001");
-    expect(counter(resolved, "world_failed")).toEqual({ key: "world_failed", value: 2, status: "red" });
+    expect(counter(resolved, "world_failed")).toEqual({ key: "world_failed", value: 3, status: "red" });
 
     // 重试：dead 回到 pending、次数清零；重放不再重跑；已经不是 dead 的 409。
     const retry = { action: "retry", clientId: randomUUID(), subject: { type: "job", id: dead.id } };

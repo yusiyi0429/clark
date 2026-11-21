@@ -138,7 +138,7 @@ async function readIssues(q: Query, marks: MarkIndex, names: Map<string, string>
     // 同一幂等键只看最近一次：重放成功了就不算失败。
     q(`SELECT * FROM (SELECT DISTINCT ON (instance, idempotency_key) idempotency_key, action_type, target_ref, status, error_code, created_at
          FROM world_sync_ledger ORDER BY instance, idempotency_key, id DESC) latest
-       WHERE status IN ('failed', 'network_error') ORDER BY created_at DESC LIMIT ${LIST_LIMIT}`),
+       WHERE status IN ('failed', 'network_error', 'unverified') ORDER BY created_at DESC LIMIT ${LIST_LIMIT}`),
     // 会后事件：同一场会之后有写成功的版本就不算。
     q(`SELECT e.id::text, e.meeting_id::text, e.error_code, e.created_at FROM world_meeting_events e
        WHERE e.status = 'failed' AND NOT EXISTS (SELECT 1 FROM world_meeting_events later
@@ -155,7 +155,7 @@ async function readIssues(q: Query, marks: MarkIndex, names: Map<string, string>
   for (const row of ledger.rows as { idempotency_key: string; action_type: string; target_ref: string | null; status: string; error_code: string | null; created_at: Date }[]) {
     if (resolvedSince(marks, "world_write", row.idempotency_key, row.created_at)) continue;
     issues.push({ subject: { type: "world_write", id: row.idempotency_key }, status: row.status === "failed" ? "red" : "yellow", name: row.action_type,
-      target: row.target_ref, code: row.error_code, attempts: null, at: row.created_at.toISOString(), retryable: false,
+      target: row.target_ref, code: row.status === "unverified" ? "待核验" : row.error_code, attempts: null, at: row.created_at.toISOString(), retryable: false,
       acknowledged: acknowledged(marks, names, "world_write", row.idempotency_key) });
   }
   for (const row of meetings.rows as { id: string; meeting_id: string; error_code: string | null; created_at: Date }[]) {

@@ -258,6 +258,11 @@ export class WorldClient {
     const result = await this.q("SELECT request_body FROM world_sync_ledger WHERE instance = $1 AND idempotency_key = $2 ORDER BY id DESC LIMIT 1", [this.instance, key]);
     return result.rows[0]?.request_body ?? null;
   }
+  /** 这个键最近一次写入是网络错时改记 unverified（可能已经写进去了，待同键重放核验）。 */
+  async markUnverified(key: string): Promise<void> {
+    await this.q(`UPDATE world_sync_ledger SET status = 'unverified' WHERE id = (SELECT id FROM world_sync_ledger WHERE instance = $1 AND idempotency_key = $2 ORDER BY id DESC LIMIT 1)
+      AND status = 'network_error'`, [this.instance, key]);
+  }
   /** build 每次重新读取当前头；网络重放优先使用台账中的完整请求。 */
   async write(key: string, build: () => Promise<WorldAction>): Promise<WorldReceipt> {
     if (this.readOnly) throw new WorldError(403, "WORLD_READ_ONLY", "该实例写死只读，不写本体");
