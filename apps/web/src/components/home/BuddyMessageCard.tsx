@@ -2,7 +2,7 @@
 
 /**
  * 伙伴要转达给同事的一句话（17.4 send_message 先出的卡，buddy_message）：选项框写收件人和要转达的话，「发出（推荐）/ 不发」。
- * 发出由天枢机器人转达；答过的收成一行（已发出 / 不发），有人没收到写在后面。别处已经答过（409）就重读一次照它显示。
+ * 发出由天枢机器人转达；答过的收成一行（已发出 / 不发），有人没收到、可能已送到写在后面。别处已经答过（409）就重读一次照它显示。
  */
 import { useEffect, useState } from "react";
 import type { TBuddyMessageDraft } from "@warmap/contracts";
@@ -15,7 +15,8 @@ const names = (people: TBuddyMessageDraft["to"]) => people.map((person) => perso
 export function buddyMessageResolved(draft: TBuddyMessageDraft): string | null {
   if (draft.status === "cancelled") return "不发";
   if (draft.status !== "sent") return null;
-  return draft.failed.length ? `已发出 · ${names(draft.failed)} 没收到` : "已发出";
+  return ["已发出", draft.failed.length ? `${names(draft.failed)} 没收到` : "", draft.unknown.length ? `${names(draft.unknown)} 可能已送到` : ""]
+    .filter(Boolean).join(" · ");
 }
 
 export function BuddyMessageCard({ draftId }: { draftId: string }) {

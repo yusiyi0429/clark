@@ -46,12 +46,12 @@ export function registerBuddyActionRoutes(app: AppInstance, ctx: RouteContext, o
       throw cause;
     }
   };
-  /** 天枢机器人发到对方和机器人的单聊；对方没关联飞书、发送失败都算收不到。 */
-  const deliver = async (personId: string, text: string) => {
+  /** 天枢机器人发到对方和机器人的单聊；对方没关联飞书算收不到，飞书出错或超时（抛错）由 sendMessage 记成可能已送到。 */
+  const deliver = async (personId: string, text: string): Promise<"sent" | "unbound" | "unknown"> => {
     const openId = (await q("SELECT open_id FROM feishu_identities WHERE person_id=$1", [personId])).rows[0]?.open_id as string | undefined;
-    if (!openId || !options.feishu) return false;
+    if (!openId || !options.feishu) return "unbound";
     await sendFeishuText(options.feishu, { type: "open_id", id: openId }, text);
-    return true;
+    return "sent";
   };
 
   app.get("/api/me/buddy-authority", { preHandler: requirePerson, schema: { response: { 200: BuddyAuthority } } }, async (req, reply) => {

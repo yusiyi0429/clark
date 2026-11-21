@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { FeishuClient } from "../src/feishu/client.js";
 import { BOARD_NOW, boardFixture, THIRD } from "./boardFixture.js";
@@ -16,6 +17,7 @@ import { TEST_CEO, TEST_MEMBER } from "./helpers.js";
  */
 
 const TOKEN = "chat-token";
+const PEOPLE_SEED = fileURLToPath(new URL("./fixtures/company-people-colleagues.json", import.meta.url));
 const running = (title: string) => ["status", { status: "running", title, agent: "claude-code", modelLabel: "订阅 · Sonnet" }] as [string, unknown];
 
 /** 本人在项目对话里说一句（没接 Chat，存在天枢自己 scope 为 project:<id> 的对话里）。 */
@@ -26,6 +28,7 @@ const say = (f: Awaited<ReturnType<typeof boardFixture>>, projectId: string, mes
 async function fixture(seed: Parameters<typeof boardFixture>[1] = {}) {
   const sent: { id: string; text: string }[] = [];
   const feishuClient = { sendMessage: async (_type: string, id: string, _msgType: string, content: { text: string }) => {
+    if (id === "ou_timeout") throw new Error("The operation was aborted due to timeout");
     sent.push({ id, text: content.text });
     return { messageId: "om_test" };
   } } as unknown as FeishuClient;
@@ -258,6 +261,21 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
     } finally { await f.close(); }
   });
 
+  it("转达按收件人分开记：没关联飞书的记收不到，飞书出错或超时的记可能已送到，都不重发", async () => {
+    const f = await fixture({ companyPeopleSeed: PEOPLE_SEED });
+    try {
+      await f.grant();
+      await f.t.sql("INSERT INTO feishu_identities (person_id, open_id) VALUES ($1, 'ou_third'), ('person-fixture-004', 'ou_timeout')", [THIRD.personId]);
+      const id = (await f.ok("send_message", { toPersonIds: [THIRD.personId, TEST_CEO.personId, "person-fixture-004"], text: "周五对一下" })).result!.draftId as string;
+      const sent = (await f.call("POST", `/api/me/buddy-messages/${id}/send`)).json();
+      expect(sent).toMatchObject({ status: "sent", failed: [{ personId: TEST_CEO.personId, name: "测试甲" }],
+        unknown: [{ personId: "person-fixture-004", name: "测试丁" }] });
+      expect(await f.t.sql("SELECT failed_ids, unknown_ids FROM buddy_messages WHERE id=$1", [id]))
+        .toEqual([{ failed_ids: [TEST_CEO.personId], unknown_ids: ["person-fixture-004"] }]);
+      expect(f.sent).toEqual([{ id: "ou_third", text: "测试乙请我转达：周五对一下" }]);
+      expect((await f.call("GET", `/api/me/buddy-messages/${id}`)).json()).toMatchObject({ unknown: [{ personId: "person-fixture-004", name: "测试丁" }] });
+    } finally { await f.close(); }
+  });
   it("服务凭据轮换：旧凭据在换的过程中照样认，别的不认；配了来源地址只认那些地址来的", async () => {
     const f = await fixture({ internalChatTokensPrevious: ["old-token"], internalCallerAllowlist: ["127.0.0.1", "10.0.0.0/8"] });
     try {

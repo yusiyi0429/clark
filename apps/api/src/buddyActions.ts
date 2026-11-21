@@ -1052,14 +1052,14 @@ export async function undoAction(deps: BuddyDeps, ownerId: string, id: string): 
 
 // ───────────────────────── 转达 ─────────────────────────
 
-type MessageRow = { id: string; to_ids: string[]; text: string; status: TBuddyMessageDraft["status"]; failed_ids: string[]; created_at: Date; sent_at: Date | null };
+type MessageRow = { id: string; to_ids: string[]; text: string; status: TBuddyMessageDraft["status"]; failed_ids: string[]; unknown_ids: string[]; created_at: Date; sent_at: Date | null };
 const messageView = (row: MessageRow, names: Map<string, string>): TBuddyMessageDraft => {
   const ref = (personId: string) => ({ personId, name: names.get(personId) ?? personId });
   return { id: row.id, to: row.to_ids.map(ref), text: row.text, status: row.status, createdAt: row.created_at.toISOString(),
-    sentAt: row.sent_at?.toISOString() ?? null, failed: row.failed_ids.map(ref) };
+    sentAt: row.sent_at?.toISOString() ?? null, failed: row.failed_ids.map(ref), unknown: row.unknown_ids.map(ref) };
 };
 async function ownMessage(q: Query, ownerId: string, id: string): Promise<MessageRow> {
-  const row = UUID_PATTERN.test(id) ? (await q("SELECT id::text,to_ids,text,status,failed_ids,created_at,sent_at FROM buddy_messages WHERE id=$1 AND owner_id=$2",
+  const row = UUID_PATTERN.test(id) ? (await q("SELECT id::text,to_ids,text,status,failed_ids,unknown_ids,created_at,sent_at FROM buddy_messages WHERE id=$1 AND owner_id=$2",
     [id, ownerId])).rows[0] as MessageRow | undefined : undefined;
   if (!row) throw new BuddyError(404, "NOT_FOUND", "没有这句话");
   return row;
@@ -1069,17 +1069,17 @@ export async function readMessage(q: Query, ownerId: string, id: string, names: 
 }
 export async function cancelMessage(q: Query, ownerId: string, id: string, names: Map<string, string>) {
   await ownMessage(q, ownerId, id);
-  const row = (await q("UPDATE buddy_messages SET status='cancelled' WHERE id=$1 AND status='draft' RETURNING id::text,to_ids,text,status,failed_ids,created_at,sent_at",
+  const row = (await q("UPDATE buddy_messages SET status='cancelled' WHERE id=$1 AND status='draft' RETURNING id::text,to_ids,text,status,failed_ids,unknown_ids,created_at,sent_at",
     [id])).rows[0] as MessageRow | undefined;
   if (!row) throw new BuddyError(409, "NOT_DRAFT", "这句话已经发出或不发了");
   return messageView(row, names);
 }
 /**
- * 发出：先把草稿改成已发（两处同时点只有一处发），再由天枢机器人逐个发；收不到的（没关联飞书、发送失败）记在 failed。
- * deliver 回 false 是这个人收不到。
+ * 发出：先把草稿改成已发（两处同时点只有一处发），再由天枢机器人逐个发；没关联飞书的记在 failed，
+ * 飞书出错或超时的可能已经收到，记在 unknown。都不重发。
  */
 export async function sendMessage(q: Query, ownerId: string, id: string, names: Map<string, string>, now: Date,
-  deliver: (personId: string, text: string) => Promise<boolean>): Promise<TBuddyMessageDraft> {
+  deliver: (personId: string, text: string) => Promise<"sent" | "unbound" | "unknown">): Promise<TBuddyMessageDraft> {
   const draft = await ownMessage(q, ownerId, id);
   if (draft.status !== "draft") throw new BuddyError(409, "NOT_DRAFT", "这句话已经发出或不发了");
   if ((await sentToday(q, ownerId, now)) >= BUDDY_DAILY_MESSAGES) throw new BuddyError(429, "DAILY_LIMIT", `今天已经转达了 ${BUDDY_DAILY_MESSAGES} 条，明天再发`);
@@ -1087,9 +1087,14 @@ export async function sendMessage(q: Query, ownerId: string, id: string, names: 
     throw new BuddyError(409, "NOT_DRAFT", "这句话已经发出或不发了");
   const text = `${names.get(ownerId) ?? ownerId}请我转达：${draft.text}`;
   const failed: string[] = [];
-  for (const personId of draft.to_ids) if (!(await deliver(personId, text).catch(() => false))) failed.push(personId);
-  await q("UPDATE buddy_messages SET failed_ids=$2 WHERE id=$1", [id, failed]);
-  return messageView({ ...draft, status: "sent", sent_at: now, failed_ids: failed }, names);
+  const unknown: string[] = [];
+  for (const personId of draft.to_ids) {
+    const result = await deliver(personId, text).catch(() => "unknown" as const);
+    if (result === "unbound") failed.push(personId);
+    else if (result === "unknown") unknown.push(personId);
+  }
+  await q("UPDATE buddy_messages SET failed_ids=$2,unknown_ids=$3 WHERE id=$1", [id, failed, unknown]);
+  return messageView({ ...draft, status: "sent", sent_at: now, failed_ids: failed, unknown_ids: unknown }, names);
 }
 
 // ───────────────────────── 回收站 ─────────────────────────

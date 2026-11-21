@@ -13,7 +13,7 @@ const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " "
 const chen = { personId: "chen-chenxing", name: "陈晨星" };
 const xinan = { personId: "chen-xinan", name: "陈溪南" };
 const draft = (patch: Partial<TBuddyMessageDraft> = {}): TBuddyMessageDraft => ({
-  id: "00000000-0000-4000-8000-0000000000a1", to: [chen, xinan], text: "接口文档周一前给我", status: "draft", createdAt: "2026-11-08T02:00:00Z", sentAt: null, failed: [], ...patch,
+  id: "00000000-0000-4000-8000-0000000000a1", to: [chen, xinan], text: "接口文档周一前给我", status: "draft", createdAt: "2026-11-08T02:00:00Z", sentAt: null, failed: [], unknown: [], ...patch,
 });
 
 describe("伙伴代本人做事（17.4）", () => {
@@ -22,6 +22,8 @@ describe("伙伴代本人做事（17.4）", () => {
     expect(open).toMatch(/转达给 陈晨星、陈溪南.*接口文档周一前给我.*发出.*推荐.*不发/);
     expect(buddyMessageResolved(draft({ status: "sent" }))).toBe("已发出");
     expect(buddyMessageResolved(draft({ status: "sent", failed: [xinan] }))).toBe("已发出 · 陈溪南 没收到");
+    expect(buddyMessageResolved(draft({ status: "sent", unknown: [chen] }))).toBe("已发出 · 陈晨星 可能已送到");
+    expect(buddyMessageResolved(draft({ status: "sent", failed: [xinan], unknown: [chen] }))).toBe("已发出 · 陈溪南 没收到 · 陈晨星 可能已送到");
     expect(buddyMessageResolved(draft({ status: "cancelled" }))).toBe("不发");
     expect(buddyMessageResolved(draft())).toBeNull();
   });
