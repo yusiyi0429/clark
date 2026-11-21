@@ -109,7 +109,7 @@ export function ChatBody({ chat, buddy, actions }: { chat: TChatView; buddy: Bud
   const row = (key: string, mine: boolean, mark: ReactNode, who: string | null, body: ReactNode, acts: ReactNode[] = []) => (
     <div key={key} className={c.row} data-mine={mine || undefined} data-id={key}>
       {mine ? null : <span className={c.mark}>{mark}</span>}
-      <div className={c.body}>
+      <div className={c.body} data-editing={editing === key || undefined}>
         {who ? <div className={c.who}>{who}</div> : null}
         {body}
         {acts.length && !readOnly ? <div className={c.acts}>{acts}</div> : null}
@@ -198,14 +198,23 @@ export function ChatBody({ chat, buddy, actions }: { chat: TChatView; buddy: Bud
   );
 }
 
+/** 字框高度随内容：先放开再量 scrollHeight（加上边框）；最矮、最高由样式管，超过最高才在框里滚。 */
+const fitHeight = (field: HTMLTextAreaElement) => {
+  field.style.height = "auto";
+  field.style.height = `${field.scrollHeight + field.offsetHeight - field.clientHeight}px`;
+};
+
 /** 主人改伙伴的一句：就地出预填原话的框。 */
 function EditBox({ text, onSubmit, onCancel }: { text: string; onSubmit: (text: string) => Promise<void>; onCancel: () => void }) {
   const [value, setValue] = useState(text);
   const [busy, setBusy] = useState(false);
+  const field = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => { if (field.current) fitHeight(field.current); }, []);
   const changed = !!value.trim() && value.trim() !== text.trim();
   return (
     <div className={c.edit}>
-      <textarea className={c.field} value={value} rows={3} aria-label="改这句" onChange={(event) => setValue(event.target.value)} autoFocus />
+      <textarea ref={field} className={c.field} value={value} aria-label="改这句" autoFocus
+        onChange={(event) => { setValue(event.target.value); fitHeight(event.target); }} />
       <div className={c.acts}>
         <button type="button" disabled={busy || !changed} onClick={() => { setBusy(true); void onSubmit(value.trim()).finally(() => setBusy(false)); }}>提交</button>
         <button type="button" disabled={busy} onClick={onCancel}>取消</button>
