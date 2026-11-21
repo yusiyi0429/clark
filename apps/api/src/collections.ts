@@ -7,7 +7,7 @@ import type {
 import { signActionId, type ActionScope } from "./actionToken.js";
 import type { CollectionAgent } from "./collectionAgent.js";
 import { withTimeout } from "./delivery/requestAgent.js";
-import type { BitableAdapter, BitableCell, BitableColumn, BitableTable } from "./feishu/bitable.js";
+import type { BitableAdapter, BitableApp, BitableCell, BitableColumn, BitableTable } from "./feishu/bitable.js";
 import { cellText } from "./feishu/bitable.js";
 import type { FeishuEnv } from "./feishu/config.js";
 import type { FeishuNotify } from "./feishu/notify.js";
@@ -56,8 +56,10 @@ const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"];
 type CollectionRow = {
   id: string; initiator_id: string; prompt: string; scenario: TCollectionScenario; title: string; fields: TCollectionField[];
   recipient_ids: string[]; deadline_at: Date; weekly: boolean; status: TCollectionView["status"]; version: number;
-  bitable: BitableTable | null; sync_error: string | null; created_at: Date; sent_at: Date | null;
+  bitable: StoredBitable | null; sync_error: string | null; created_at: Date; sent_at: Date | null;
 };
+/** 建表分三步、每步做完就存：多维表格、数据表、逐个加好的协作者（editors）。早先一次建完存下的没有 editors，当作已加齐。 */
+type StoredBitable = BitableApp & { tableId?: string; editors?: string[] };
 type RoundRow = { request_id: string; collection_id: string; seq: number; week_start: string; opens_at: Date; deadline_at: Date; reminded_at: Date | null };
 type EntryRow = {
   request_id: string; person_id: string; values: Record<string, string>; draft_from: "weekly_review" | null; draft_review_id: string | null;
@@ -463,7 +465,8 @@ function recordFields(row: CollectionRow, entry: EntryRow, weekStart: string, na
 /**
  * 和飞书多维表格同步一个收集任务：表跟着收集任务走，只有新建的收集第一次同步时建表（收件人加成可编辑）；
  * 每周固定的后续各轮沿用这张表，每人每轮追加一行、带「周」这一栏（D-46）。天枢这边改过的行推上去，
- * 再把飞书里改过的行读回来（天枢这边没有待推的改动时才覆盖）。失败只记 sync_error，下一分钟再试。
+ * 再把飞书里改过的行读回来（天枢这边没有待推的改动时才覆盖）。失败只记 sync_error，下一分钟再试；
+ * 建表每步做完就存，重试从没做完的那步接着做，不重复建。
  */
 export async function syncCollection(deps: CollectionDeps, collectionId: string): Promise<void> {
   const q: Query = (sql, params) => deps.pool.query(sql, params);
@@ -472,12 +475,27 @@ export async function syncCollection(deps: CollectionDeps, collectionId: string)
   try {
     const accessToken = deps.bitable.mode === "mock" ? "mock" : deps.feishu ? await readUserAccessToken(q, deps.feishu, row.initiator_id, deps.now()) : null;
     if (!accessToken) throw new Error("发起人还没有授权飞书");
-    let table = row.bitable;
-    if (!table) {
-      const openIds = (await q("SELECT open_id FROM feishu_identities WHERE person_id = ANY($1::text[])", [row.recipient_ids])).rows.map((item) => item.open_id as string);
-      table = await deps.bitable.createTable({ accessToken, name: row.title, columns: columnsOf(row), editorOpenIds: openIds });
-      await q("UPDATE collections SET bitable = $2::jsonb WHERE id = $1", [row.id, JSON.stringify(table)]);
+    const save = (next: StoredBitable) => q("UPDATE collections SET bitable = $2::jsonb WHERE id = $1", [row.id, JSON.stringify(next)]);
+    let stored = row.bitable;
+    if (!stored) {
+      stored = { ...(await deps.bitable.createApp({ accessToken, name: row.title })), editors: [] };
+      await save(stored);
     }
+    const tableId = stored.tableId ?? await deps.bitable.ensureTable({ accessToken, appToken: stored.appToken, name: row.title, columns: columnsOf(row) });
+    if (!stored.tableId) {
+      stored = { ...stored, tableId };
+      await save(stored);
+    }
+    if (stored.editors) {
+      const editors = [...stored.editors];
+      const openIds = (await q("SELECT open_id FROM feishu_identities WHERE person_id = ANY($1::text[])", [row.recipient_ids])).rows.map((item) => item.open_id as string);
+      for (const openId of openIds.filter((id) => !editors.includes(id))) {
+        await deps.bitable.addEditor({ accessToken, appToken: stored.appToken, openId });
+        editors.push(openId);
+        await save({ ...stored, editors });
+      }
+    }
+    const table: BitableTable = { appToken: stored.appToken, tableId, url: stored.url };
     const names = deps.names();
     const entries = (await q(`SELECT e.*, to_char(r.week_start, 'YYYY-MM-DD') AS week_start FROM collection_entries e JOIN collection_rounds r ON r.request_id = e.request_id
       WHERE r.collection_id = $1 AND r.deadline_at > $2::timestamptz - interval '14 days'`, [row.id, deps.now()])).rows as (EntryRow & { week_start: string })[];

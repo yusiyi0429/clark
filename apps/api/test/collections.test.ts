@@ -33,6 +33,24 @@ const agent: CollectionAgent = {
 let t: TestApp | undefined;
 afterEach(async () => { await t?.close(); t = undefined; });
 
+/** 记下假多维表格每一步的调用；fail 里的步骤抛一次错，lose 里的步骤飞书那边做成了、回来时抛一次错（像存库没存上）。 */
+function track(bitable: ReturnType<typeof createMockBitable>) {
+  const calls: string[] = [];
+  const fail = new Set<string>(), lose = new Set<string>();
+  const { createApp, ensureTable, addEditor } = bitable;
+  const step = async <T>(name: string, run: () => Promise<T>) => {
+    calls.push(name);
+    if (fail.delete(name)) throw new Error(`假飞书：${name} 失败`);
+    const result = await run();
+    if (lose.delete(name)) throw new Error(`假存库：${name} 之后没存上`);
+    return result;
+  };
+  bitable.createApp = (input) => step("createApp", () => createApp(input));
+  bitable.ensureTable = (input) => step("ensureTable", () => ensureTable(input));
+  bitable.addEditor = (input) => step(`addEditor:${input.openId}`, () => addEditor(input));
+  return { calls, fail, lose };
+}
+
 async function setup(collectionsEnabled = true) {
   const dir = await mkdtemp(join(tmpdir(), "warmap-collections-test-"));
   const seed = join(dir, "people.json");
@@ -286,18 +304,73 @@ describe("③ 信息收集", () => {
 
   it("每周固定的后续各轮沿用第一轮建的那张表，每人每轮追加一行、带「周」；只有新建的收集才新建表（D-46）", async () => {
     const { launch, tick, clock, bitable, sql } = await setup();
+    await sql("INSERT INTO feishu_identities (person_id, open_id) VALUES ($1, 'ou_b'), ($2, 'ou_c')", [TEST_MEMBER.personId, THIRD.personId]);
+    const { calls } = track(bitable);
     const first = await launch("每周收一下这周的开销");
     expect(bitable.tables.size).toBe(1);
     clock.now = new Date(MONDAY_10.getTime() + 7 * 24 * HOUR + 60_000);
     await tick();
     expect((await sql("SELECT count(*)::int AS n FROM collection_rounds WHERE collection_id = $1", [first.id]))[0].n).toBe(2);
     expect(bitable.tables.size).toBe(1);
+    expect([...calls].sort()).toEqual(["addEditor:ou_b", "addEditor:ou_c", "createApp", "ensureTable"]);
     const [table] = [...bitable.tables.values()];
     expect([...table.rows.values()].map((row) => `${row["填写人"]}·${row["周"]}`).sort())
       .toEqual(["测试丙·10/19 周", "测试丙·10/26 周", "测试乙·10/19 周", "测试乙·10/26 周"]);
 
     await launch("收一下这周的开销");
     expect(bitable.tables.size).toBe(2);
+  });
+
+  it("建表那一步失败：下一轮不再建新的多维表格，在同一个里建表", async () => {
+    const { launch, tick, bitable, sql } = await setup();
+    const { calls, fail } = track(bitable);
+    fail.add("ensureTable");
+    await launch("收一下这周的开销");
+    const [failed] = await sql("SELECT bitable, sync_error FROM collections");
+    expect(failed.sync_error).toContain("ensureTable 失败");
+    expect(failed.bitable.tableId).toBeUndefined();
+    expect(bitable.tables.size).toBe(0);
+
+    await tick();
+    const [synced] = await sql("SELECT bitable, sync_error FROM collections");
+    expect(synced.sync_error).toBeNull();
+    expect(calls.filter((name) => name === "createApp")).toHaveLength(1);
+    expect(synced.bitable.appToken).toBe(failed.bitable.appToken);
+    expect([...bitable.tables.keys()]).toEqual([`${failed.bitable.appToken}/${synced.bitable.tableId}`]);
+    expect([...bitable.tables.values()][0].rows.size).toBe(2);
+  });
+
+  it("建表成功但表的 id 没存上：下一轮找到同名表接着用，不再建表", async () => {
+    const { launch, tick, bitable, sql } = await setup();
+    const { lose } = track(bitable);
+    lose.add("ensureTable");
+    await launch("收一下这周的开销");
+    expect((await sql("SELECT bitable FROM collections"))[0].bitable.tableId).toBeUndefined();
+    const [key] = [...bitable.tables.keys()];
+
+    await tick();
+    const [synced] = await sql("SELECT bitable, sync_error FROM collections");
+    expect(synced.sync_error).toBeNull();
+    expect([...bitable.tables.keys()]).toEqual([key]);
+    expect(`${synced.bitable.appToken}/${synced.bitable.tableId}`).toBe(key);
+  });
+
+  it("三个收件人里第二个加权限失败：下一轮只补没加上的，不给已加上的重加", async () => {
+    const { launch, tick, bitable, sql } = await setup();
+    await sql("INSERT INTO feishu_identities (person_id, open_id) VALUES ($1, 'ou_b'), ($2, 'ou_c'), ($3, 'ou_d')", [TEST_MEMBER.personId, THIRD.personId, FOURTH.personId]);
+    const { calls, fail } = track(bitable);
+    fail.add("addEditor:ou_c");
+    await launch("收一下这周的开销", { recipientIds: [TEST_MEMBER.personId, THIRD.personId, FOURTH.personId] });
+    const [failed] = await sql("SELECT bitable, sync_error FROM collections");
+    expect(failed.sync_error).toContain("addEditor:ou_c 失败");
+    expect(failed.bitable.editors).not.toContain("ou_c");
+
+    await tick();
+    const [synced] = await sql("SELECT bitable, sync_error FROM collections");
+    expect(synced.sync_error).toBeNull();
+    expect([...synced.bitable.editors].sort()).toEqual(["ou_b", "ou_c", "ou_d"]);
+    expect(calls.filter((name) => name.startsWith("addEditor:")).sort()).toEqual(["addEditor:ou_b", "addEditor:ou_c", "addEditor:ou_c", "addEditor:ou_d"]);
+    expect(calls.filter((name) => name === "createApp" || name === "ensureTable")).toEqual(["createApp", "ensureTable"]);
   });
 
   it("对话入口：判断场景 → 起草收集表 → 等你确认，回答后面挂草稿卡；不支持的场景停在第一步", async () => {
@@ -362,6 +435,7 @@ describe("飞书多维表格适配层（live，假 fetch）", () => {
     const calls: { method: string; url: string; body: unknown }[] = [];
     const replies: Record<string, unknown>[] = [
       { code: 0, data: { app: { app_token: "app1", url: "https://x.feishu.cn/base/app1" } } },
+      { code: 0, data: { items: [{ table_id: "tbl0", name: "数据表" }], has_more: false } },
       { code: 0, data: { table_id: "tbl1" } },
       { code: 0, data: {} },
       { code: 0, data: { record: { record_id: "rec1" } } },
@@ -373,25 +447,41 @@ describe("飞书多维表格适配层（live，假 fetch）", () => {
       return new Response(JSON.stringify(replies.shift()));
     }) as typeof globalThis.fetch;
     const live = createFeishuBitable({ fetch });
-    const table = await live.createTable({ accessToken: "u", name: "开销", columns: [{ name: "用途", type: "text" }, { name: "本周开销", type: "number" }], editorOpenIds: ["ou_1"] });
-    expect(table).toEqual({ appToken: "app1", tableId: "tbl1", url: "https://x.feishu.cn/base/app1" });
+    const app = await live.createApp({ accessToken: "u", name: "开销" });
+    expect(app).toEqual({ appToken: "app1", url: "https://x.feishu.cn/base/app1" });
+    const tableId = await live.ensureTable({ accessToken: "u", appToken: "app1", name: "开销", columns: [{ name: "用途", type: "text" }, { name: "本周开销", type: "number" }] });
+    expect(tableId).toBe("tbl1");
+    await live.addEditor({ accessToken: "u", appToken: "app1", openId: "ou_1" });
+    const table = { appToken: "app1", tableId, url: app.url };
     expect(await live.upsertRecord({ accessToken: "u", table, recordId: null, fields: { 用途: "午饭" } })).toBe("rec1");
     const records = await live.listRecords({ accessToken: "u", table });
     expect(records.map((record) => [record.recordId, cellText(Object.values(record.fields)[0])])).toEqual([["rec1", "午饭"], ["rec2", "12"]]);
     expect(calls.map((call) => `${call.method} ${call.url.replace("https://open.feishu.cn/open-apis", "")}`)).toEqual([
       "POST /bitable/v1/apps",
+      "GET /bitable/v1/apps/app1/tables?page_size=100",
       "POST /bitable/v1/apps/app1/tables",
       "POST /drive/v1/permissions/app1/members?type=bitable&need_notification=false",
       "POST /bitable/v1/apps/app1/tables/tbl1/records",
       "GET /bitable/v1/apps/app1/tables/tbl1/records?page_size=500",
       "GET /bitable/v1/apps/app1/tables/tbl1/records?page_size=500&page_token=p2",
     ]);
-    expect(calls[1].body).toEqual({ table: { name: "开销", default_view_name: "全部", fields: [{ field_name: "用途", type: 1 }, { field_name: "本周开销", type: 2 }] } });
-    expect(calls[2].body).toEqual({ member_type: "openid", member_id: "ou_1", perm: "edit" });
+    expect(calls[2].body).toEqual({ table: { name: "开销", default_view_name: "全部", fields: [{ field_name: "用途", type: 1 }, { field_name: "本周开销", type: 2 }] } });
+    expect(calls[3].body).toEqual({ member_type: "openid", member_id: "ou_1", perm: "edit" });
+  });
+
+  it("多维表格里已有同名的表：用它的 id，不再建表", async () => {
+    const calls: string[] = [];
+    const fetch = (async (url: string, init: RequestInit) => {
+      calls.push(`${init.method ?? "GET"} ${url.replace("https://open.feishu.cn/open-apis", "")}`);
+      return new Response(JSON.stringify({ code: 0, data: { items: [{ table_id: "tbl0", name: "数据表" }, { table_id: "tbl1", name: "开销" }], has_more: false } }));
+    }) as typeof globalThis.fetch;
+    const live = createFeishuBitable({ fetch });
+    expect(await live.ensureTable({ accessToken: "u", appToken: "app1", name: "开销", columns: [{ name: "用途", type: "text" }] })).toBe("tbl1");
+    expect(calls).toEqual(["GET /bitable/v1/apps/app1/tables?page_size=100"]);
   });
 
   it("接口返回业务错误时抛出，不吞掉", async () => {
     const live = createFeishuBitable({ fetch: (async () => new Response(JSON.stringify({ code: 99991672, msg: "no permission" }))) as unknown as typeof globalThis.fetch });
-    await expect(live.createTable({ accessToken: "u", name: "x", columns: [], editorOpenIds: [] })).rejects.toThrow("no permission");
+    await expect(live.createApp({ accessToken: "u", name: "x" })).rejects.toThrow("no permission");
   });
 });
