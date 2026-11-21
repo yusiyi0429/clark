@@ -796,7 +796,6 @@ function HomeFrame({ account }: { account: Account }) {
 
 const PANEL_LABEL: Record<PanelKind, string> = { detail: "详情", file: "文件", sessions: "会话", thread: "会话" };
 
-/** 二级页、月份页的壳（5.4.7）：页头（返回、标题）+ 文档类阅读尺，内容是挂进来的组件。 */
 /** 首页数据跟着重读：同事投递变了；同事对话变了（好友请求办了、回了一句、读到最新），「等你」里那几行跟着消掉。 */
 export function useHomeRefreshEvents(refresh: () => void) {
   useEffect(() => {
@@ -806,6 +805,7 @@ export function useHomeRefreshEvents(refresh: () => void) {
   }, [refresh]);
 }
 
+/** 二级页、月份页的壳（5.4.7）：页头（返回、标题）+ 文档类阅读尺，内容是挂进来的组件。 */
 function SecondaryFrame({ title, trail, go, back = true, children }: { title: string; trail?: React.ReactNode; go: (href: string) => void; back?: boolean; children: React.ReactNode }) {
   return (
     <div className={h.page} data-type-scale="doc" data-testid="secondary-page">
