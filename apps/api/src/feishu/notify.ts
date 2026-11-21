@@ -1,12 +1,14 @@
 import type { Pool } from "pg";
-import { enqueueJob, type JobHandler } from "../jobs.js";
+import { enqueueJob, JOB_BACKOFF_MS, type JobHandler } from "../jobs.js";
 import type { Query } from "../meetingStore.js";
-import type { FeishuClient } from "./client.js";
+import { feishuDeliveryUnknown, feishuUuid, type FeishuClient } from "./client.js";
 import { sendFeishuLinkCard, type FeishuLinkCard } from "./messages.js";
 
 /**
  * 飞书通知（送达通道的飞书那一半）：按人发一张带「跳回天枢」按钮的消息卡片，不接卡片回调。
  * 走 jobs：入队按 dedupeKey 去重（同一件事只发一次），发送失败按 jobs 的退避重试；这个人没有关联飞书账号时直接算完成。
+ * 每次发送都带同一个飞书 uuid（由 dedupe_key 算出），回包丢了重发也只出一条。飞书只按 uuid 去重 1 小时，
+ * 所以送达未知、而下一次重试会落在第一次尝试（入队时间）1 小时以后时，不再重发，按完成处理。
  */
 export const FEISHU_NOTIFY_KIND = "feishu.notify";
 
@@ -18,6 +20,8 @@ export type PeerSource = "acceptor" | "collection" | "doc_change";
  */
 export const PEER_SOURCES_MUTED_BY_SWITCH: ReadonlySet<PeerSource> = new Set<PeerSource>([]);
 
+const FEISHU_UUID_WINDOW_MS = 60 * 60_000;
+
 export type FeishuNotice = FeishuLinkCard & { personId: string; source?: PeerSource };
 export type FeishuNotify = (notice: FeishuNotice, dedupeKey: string) => Promise<void>;
 
@@ -28,15 +32,24 @@ export function feishuNotifier(q: Query): FeishuNotify {
   };
 }
 
-export function feishuNotifyJobs({ pool, client, publicOrigin }: { pool: Pool; client: Pick<FeishuClient, "sendMessage">; publicOrigin: string }): Record<string, JobHandler> {
+export function feishuNotifyJobs({ pool, client, publicOrigin, now = () => new Date() }: {
+  pool: Pool; client: Pick<FeishuClient, "sendMessage">; publicOrigin: string; now?: () => Date;
+}): Record<string, JobHandler> {
   return {
-    [FEISHU_NOTIFY_KIND]: async (payload) => {
+    [FEISHU_NOTIFY_KIND]: async (payload, job) => {
       const notice = payload as FeishuNotice;
       if (notice.source && PEER_SOURCES_MUTED_BY_SWITCH.has(notice.source)
         && (await pool.query("SELECT 1 FROM person_settings WHERE person_id=$1 AND NOT feishu", [notice.personId])).rowCount) return;
       const openId = (await pool.query("SELECT open_id FROM feishu_identities WHERE person_id = $1", [notice.personId])).rows[0]?.open_id as string | undefined;
       if (!openId) return;
-      await sendFeishuLinkCard(client, { type: "open_id", id: openId }, { title: notice.title, body: notice.body, links: notice.links }, publicOrigin);
+      try {
+        await sendFeishuLinkCard(client, { type: "open_id", id: openId }, { title: notice.title, body: notice.body, links: notice.links }, publicOrigin,
+          { uuid: feishuUuid(job.dedupe_key) });
+      } catch (error) {
+        const nextTry = now().getTime() + (JOB_BACKOFF_MS[job.attempts - 1] ?? 0);
+        if (!feishuDeliveryUnknown(error) || nextTry - job.created_at.getTime() <= FEISHU_UUID_WINDOW_MS) throw error;
+        console.warn(`送达未知，超过飞书去重窗口，不再重发：${job.dedupe_key}，${(error as Error).message || String(error)}`);
+      }
     },
   };
 }

@@ -38,10 +38,10 @@ export function linkCardContent(card: FeishuLinkCard, publicOrigin: string): obj
   };
 }
 
-export function sendFeishuText(client: Pick<FeishuClient, "sendMessage">, to: FeishuReceiver, text: string) {
-  return client.sendMessage(to.type, to.id, "text", { text });
+export function sendFeishuText(client: Pick<FeishuClient, "sendMessage">, to: FeishuReceiver, text: string, options?: { uuid?: string }) {
+  return client.sendMessage(to.type, to.id, "text", { text }, options);
 }
 
-export function sendFeishuLinkCard(client: Pick<FeishuClient, "sendMessage">, to: FeishuReceiver, card: FeishuLinkCard, publicOrigin: string) {
-  return client.sendMessage(to.type, to.id, "interactive", linkCardContent(card, publicOrigin));
+export function sendFeishuLinkCard(client: Pick<FeishuClient, "sendMessage">, to: FeishuReceiver, card: FeishuLinkCard, publicOrigin: string, options?: { uuid?: string }) {
+  return client.sendMessage(to.type, to.id, "interactive", linkCardContent(card, publicOrigin), options);
 }

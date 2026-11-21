@@ -11,7 +11,7 @@ export const JOB_BACKOFF_MS = [60_000, 5 * 60_000, 30 * 60_000, 2 * 60 * 60_000]
 export const JOB_MAX_ATTEMPTS = JOB_BACKOFF_MS.length + 1;
 const DEFAULT_LEASE_MS = 5 * 60_000;
 
-export type JobRow = { id: string; kind: string; dedupe_key: string; attempts: number; payload: unknown };
+export type JobRow = { id: string; kind: string; dedupe_key: string; attempts: number; payload: unknown; created_at: Date };
 export type JobHandler = (payload: unknown, job: JobRow) => Promise<void>;
 
 /** 示例 kind：什么也不做，用来验证 worker 链路；真实任务各自注册自己的 kind。 */
@@ -69,7 +69,7 @@ export function createJobWorker({
          LIMIT $3
          FOR UPDATE SKIP LOCKED
        )
-       RETURNING id::text, kind, dedupe_key, attempts, payload`,
+       RETURNING id::text, kind, dedupe_key, attempts, payload, created_at`,
       [kinds, at, batchSize, leaseMs],
     );
     return result.rows as JobRow[];
@@ -118,7 +118,7 @@ export function createJobWorker({
     const result = await q(
       `UPDATE jobs SET status = 'running', attempts = attempts + 1, lease_until = $3::timestamptz + make_interval(secs => $4::double precision / 1000), updated_at = now()
        WHERE id = $1 AND kind = ANY($2::text[]) AND status = 'pending'
-       RETURNING id::text, kind, dedupe_key, attempts, payload`,
+       RETURNING id::text, kind, dedupe_key, attempts, payload, created_at`,
       [id, kinds, now(), leaseMs],
     );
     const job = result.rows[0] as JobRow | undefined;
