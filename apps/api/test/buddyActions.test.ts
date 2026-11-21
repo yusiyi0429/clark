@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import type { FeishuClient } from "../src/feishu/client.js";
+import { FeishuApiError, type FeishuClient } from "../src/feishu/client.js";
 import { BOARD_NOW, boardFixture, THIRD } from "./boardFixture.js";
 import { letterOf, seqOf } from "../src/subSessionLetters.js";
 import { actionList, runAction, sendMessage, type BuddyDeps } from "../src/buddyActions.js";
@@ -30,6 +30,7 @@ async function fixture(seed: Parameters<typeof boardFixture>[1] = {}) {
   const sent: { id: string; text: string }[] = [];
   const feishuClient = { sendMessage: async (_type: string, id: string, _msgType: string, content: { text: string }) => {
     if (id === "ou_timeout") throw new Error("The operation was aborted due to timeout");
+    if (id === "ou_rejected") throw new FeishuApiError(230013, "Bot has NO availability to this user.", 400);
     sent.push({ id, text: content.text });
     return { messageId: "om_test" };
   } } as unknown as FeishuClient;
@@ -275,6 +276,19 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
         .toEqual([{ failed_ids: [TEST_CEO.personId], unknown_ids: ["person-fixture-004"] }]);
       expect(f.sent).toEqual([{ id: "ou_third", text: "测试乙请我转达：周五对一下" }]);
       expect((await f.call("GET", `/api/me/buddy-messages/${id}`)).json()).toMatchObject({ unknown: [{ personId: "person-fixture-004", name: "测试丁" }] });
+    } finally { await f.close(); }
+  });
+  it("转达时飞书明确拒收的（4xx、code 非 0）：消息肯定没到，记收不到，不记可能已送到", async () => {
+    const f = await fixture({ companyPeopleSeed: PEOPLE_SEED });
+    try {
+      await f.grant();
+      await f.t.sql("INSERT INTO feishu_identities (person_id, open_id) VALUES ($1, 'ou_third'), ('person-fixture-004', 'ou_rejected')", [THIRD.personId]);
+      const id = (await f.ok("send_message", { toPersonIds: [THIRD.personId, "person-fixture-004"], text: "周五对一下" })).result!.draftId as string;
+      const sent = (await f.call("POST", `/api/me/buddy-messages/${id}/send`)).json();
+      expect(sent).toMatchObject({ status: "sent", failed: [{ personId: "person-fixture-004", name: "测试丁" }], unknown: [] });
+      expect(await f.t.sql("SELECT failed_ids, unknown_ids FROM buddy_messages WHERE id=$1", [id]))
+        .toEqual([{ failed_ids: ["person-fixture-004"], unknown_ids: [] }]);
+      expect(f.sent).toEqual([{ id: "ou_third", text: "测试乙请我转达：周五对一下" }]);
     } finally { await f.close(); }
   });
   it("转达时查飞书绑定就出错的：消息没发出去，记收不到（本人可以重发），不记可能已送到", async () => {

@@ -9,7 +9,7 @@ import {
   BuddyError, actionList, cancelMessage, claimCommands, claimStops, conversationScope, finishCommand, finishStop, listAudit, listTrash, readAuthority, readMessage, restoreTrash, runAction, sendMessage, undoAction,
   writeAuthority, type BuddyDeps,
 } from "../buddyActions.js";
-import type { FeishuClient } from "../feishu/client.js";
+import { feishuDeliveryUnknown, type FeishuClient } from "../feishu/client.js";
 import type { Query } from "../meetingStore.js";
 import { sendFeishuText } from "../feishu/messages.js";
 import { colleagueIndex, dbScopeSource, scopeReader } from "../colleagueScope.js";
@@ -19,14 +19,14 @@ import { colleagueChatDeps } from "./colleagueChats.js";
 import { idParams, type AppInstance, type Guard, type RouteContext } from "./shared.js";
 
 /**
- * 天枢机器人发到对方和机器人的单聊。还没发出去的（没关联飞书、查绑定就出错）算收不到，本人可以重发；
- * 飞书发送那一步出错或超时，消息可能已经到了，算可能已送到。
+ * 天枢机器人发到对方和机器人的单聊。没发出去的（没关联飞书、查绑定就出错）和飞书明确拒收的（4xx、code 非 0）算收不到；
+ * 送达未知的（超时、断网、5xx 等，见 feishuDeliveryUnknown），消息可能已经到了，算可能已送到。
  */
 export const feishuDeliver = (q: Query, feishu: FeishuClient | undefined) => async (personId: string, text: string): Promise<"sent" | "unbound" | "unknown"> => {
   const openId = await q("SELECT open_id FROM feishu_identities WHERE person_id=$1", [personId])
     .then((result) => result.rows[0]?.open_id as string | undefined, () => undefined);
   if (!openId || !feishu) return "unbound";
-  return sendFeishuText(feishu, { type: "open_id", id: openId }, text).then(() => "sent" as const, () => "unknown" as const);
+  return sendFeishuText(feishu, { type: "open_id", id: openId }, text).then(() => "sent" as const, (error) => feishuDeliveryUnknown(error) ? "unknown" as const : "unbound" as const);
 };
 
 /**
