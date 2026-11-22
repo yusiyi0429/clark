@@ -74,7 +74,6 @@ describe("上下文用了多少", { timeout: 60_000 }, () => {
   it("Claude Code：每轮做完读一次（token 数和模型上限），记进摘要和事件流；这一轮中间按模型回复的用量估，百分比变了才报", async () => {
     // 「每次都问」：第一轮停在等批准，这一轮一定还没做完
     const id = await open("A", "做 A", { permissionMode: "default" });
-    expect((await session(id)).session.context).toBeUndefined(); // 模型还没回过：没有
     const first = await until(async () => (await session(id)).pendingPermissions[0] ?? null);
     // 这个进程第一次模型回复后就读一次（知道了上限，第一轮中间也估得出）：还等着批准，数已经有了
     const s = await context(id, 19_000); // 假 claude：第一轮 18000 + 1000

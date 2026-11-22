@@ -120,7 +120,9 @@ describe("读文件给预览、列改过的文件", { timeout: 40_000 }, () => {
     expect(r0.status, JSON.stringify(r0.body)).toBe(200);
     await idle(r0.body.id);
     const r = await files(r0.body.id);
-    expect(r.files.map((f: any) => [f.path, f.sources])).toEqual([["hello.txt", ["tool"]]]);
+    // 「留一份」的快照也可能记到同一个文件，来源里有工具就行
+    expect(r.files.map((f: any) => f.path)).toEqual(["hello.txt"]);
+    expect(r.files[0].sources).toContain("tool");
     await call("POST", `/v1/sessions/${r0.body.id}/kill`, {});
   });
 

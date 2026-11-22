@@ -93,6 +93,7 @@ export class Shadow {
       child.stderr.setEncoding("utf8").on("data", (d: string) => { if (err.length < 4000) err += d; });
       child.on("error", fail);
       child.on("close", (code) => done({ code: code ?? 1, out: Buffer.concat(out), err }));
+      child.stdin.on("error", () => { /* git 已退出时写 stdin 会 EPIPE，由 close 处理 */ });
       child.stdin.end(o.input ?? "");
     });
   }
