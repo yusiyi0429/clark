@@ -53,6 +53,6 @@ describe("伙伴代本人做事（17.4）", () => {
     expect(Value.Check(BuddyActionParams.read_colleague_catalog, { query: "研" })).toBe(false);
     expect(Value.Check(BuddyActionParams.read_colleague_item, { personId: "p-2", itemId: "task:a:b" })).toBe(true);
     expect(Value.Check(BuddyActionParams.read_colleague_item, { personId: "p-2" })).toBe(false);
-    expect(MAIN_ONLY_ACTIONS).toEqual(["open_session", "tell_session", "read_colleague_catalog", "read_colleague_item"]);
+    expect(MAIN_ONLY_ACTIONS).toEqual(["open_session", "tell_session", "read_colleague_catalog", "read_colleague_item", "ask_colleague_buddy"]);
   });
 });
