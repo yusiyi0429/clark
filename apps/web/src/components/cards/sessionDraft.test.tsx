@@ -41,7 +41,14 @@ describe("「正在写」的草稿（流畅感第 1、2 条，契约 LocalSessio
     const stop = new AbortController();
     void runner.watch(session.id, { after: 0, signal: stop.signal, onEvent: (event) => { events.push(event); if (event.type === "assistant_text") seen.push(`text:${event.text.length}`); },
       onDraft: (draft) => { seen.push(`draft:${draft.text.length}`); } });
-    const until = async (check: () => boolean) => { for (let i = 0; i < 400 && !check(); i++) await new Promise((resolve) => setTimeout(resolve, 2)); };
+    // 按时间等，不按次数：Windows 计时器一跳约 15ms、Linux 约 1ms，按次数在 Linux 上等不到草稿推完（约 2 秒）
+    const until = async (check: () => boolean) => {
+      const end = Date.now() + 5000;
+      while (!check()) {
+        if (Date.now() > end) throw new Error("等了 5 秒没等到");
+        await new Promise((resolve) => setTimeout(resolve, 2));
+      }
+    };
     // 批了要的权限、答了它问的那句，下一步就是那段带表格的回答。
     await until(() => events.some((event) => event.type === "permission_request"));
     const request = events.find((event) => event.type === "permission_request");
@@ -56,7 +63,7 @@ describe("「正在写」的草稿（流畅感第 1、2 条，契约 LocalSessio
     expect(drafts).toEqual([...drafts].sort((a, b) => a - b));
     const lastText = seen.lastIndexOf(seen.filter((item) => item.startsWith("text:")).at(-1)!);
     expect(seen.slice(0, lastText).filter((item) => item.startsWith("draft:")).length).toBe(drafts.length);
-  });
+  }, 15000);
 
   it("页面：有草稿就画「正在写」那段，「在做什么」那一行在它下面（这一轮还没完，11/16）；按草稿出过的那段换成真的时不再整段淡入", () => {
     const at = new Date().toISOString();
